@@ -7,8 +7,9 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: PR42/main3cb3764c INTEGRATED/VERIFIED в LOCAL/TEST;
-C3-M4.3-POLZA-RUNTIME-R1 выдан C3 для подготовки provider bridge без live запуска.
+Последнее решение ниже: PR43/main29dc1608 INTEGRATED/VERIFIED в LOCAL/TEST;
+Polza provider bridge принят. C6-M4-LIVE-PREP-R1 готовит конкретный TEST cutover
+и finite smoke без deploy/paid/send в подготовительной выдаче.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1181,6 +1182,145 @@ APPROVED. CI исполняет настоящий adapter с подменённ
 Это выполнение принятого минимального scope, не пересмотр LOCKED архитектуры.
 Остальные роли HOLD. Новый paid/live/data/deploy допуск не выдан; подготовить
 конкретный smoke plan/enable/disable для следующей приёмки. Ledger неизменён.
+
+**Post-merge решение C0 от 2026-11-06: provider runtime INTEGRATED/VERIFIED LOCAL/TEST.**
+PR43 слит владельцем: main29dc16084f0ee0d01e5f96e7226995480e189a22,
+treeb70eb0348577c812f4f587d995c724e3c0e989e4 exact accepted source5372e4dc.
+Push/main CI42168468085 attempt1:12/12 SUCCESS,1059actualPG partition,
+unit3569+155subtests,fullfoundation/durable/native/M4/cleanup gates PASS.
+C0 проверил source до merge и actual main/tree/parents после него.
+Это завершает source-реализацию одного Polza/GPT-v2 provider bridge;
+не закрывает live pilot или внешний provider/data admission.
+
+C6-M4-LIVE-PREP-R1 готовит следующий существующий сценарий: отдельный
+TEST/asm_test/schema0016 scope и ограниченный Telegram→Polza→reply smoke,
+с сохранением прежней LOCAL/asm_local среды и чистым TEXT-only разговором.
+Точный операторский пакет и актуальные read-only prerequisites — до одного
+owner допуска на cutover+finite smoke. Текущая подготовка не выполняет
+deploy/migrations/enable/modelPOST/send. Scope архитектуры не расширяется.
+
+## Решение C0 от 2026-11-07 — C0-M4-OWNER-EXPERIMENT-20261107 / REVISED
+
+После результата public-contract NOT_PROVEN владелец явно поручил проверить
+ИИ сейчас без ожидания поддержки, указав стоимость ожидания работающей ВМ.
+Это отдельное принятие ограниченного экспериментального риска; прежний owner
+допуск99fb865a на synthetic TEST/10мин/4POST/10RUB сохраняется.
+
+**Узко пересмотрено:** требование внешнего contract proof total visible+reasoning
+cap до этого одного runtime smoke. Прежнее ограничение experimental profile
+«не может быть runtime» из решения29.10 для этой одной текущей TEST session
+получает явное исключение. C0 принимает max_tokens512 total-output как
+рабочую гипотезу для измерения, а не как проверенное свойство Polza.
+C0-M4-ROUTE-CAP-01 остаётся NOT_PROVEN/WAIVED_FOR_THIS_OWNER_SESSION.
+
+Не нужен новый adapter/DDL/registry или изменение accepted source. Для этого
+исключения existing RuntimeRoute.output_cap_includes_reasoning=true означает
+admitted assumption; обязательные evidence поля честно указывают
+OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION, NOT_PROVEN, CONDITIONAL_ESTIMATE.
+Private receipt связывает полный instruction SHA, это решение, existing
+intent/session UUID и review fingerprint. Raw metadata TOTAL_OUTPUT_INCLUDING_REASONING
+сохраняется как declared scope гипотезы; public acceptance всегда помечает
+его ASSUMED и не использует как provider proof. Это scoped operator-policy
+exception, не разрешение скрывать assumptions или ослаблять DTO validators.
+
+Последствие:10RUB ограничивает программный admission по принятому условному
+reserve, но не доказывает верхнюю границу фактического provider списания.
+Расход/usage/history измеряются, unknown держит резерв; активный запрос нельзя
+объявлять отозванным. Owner согласие не увеличивает общий бюджет150 и не
+освобождает прежние holds. Вне этой session прежний reviewed-route gate
+продолжает действовать; production/реальные клиентские данные не разрешены.
+
+Исполнение — existing R4/TEST0016/synthetic TEXT, exact openai/gpt-6-luna /
+openai/flex/no fallback/OpenAI family, owner Resume и native/currentness/
+tenant/rights/schema/metering/UNKNOWN/no-resend/ACK-drain guards без изменений.
+Один вопрос/один run≤2POST/1READ, после результата ранний disable/verified
+return; max4POST/10RUB/600s и8historyGET/4replies прежние. Actual successful
+sample не превращается в universal cap proof или полный M4/production PASS.
+Точные поля/порядок/возврат — CURRENT HANDOFF. Нового owner подтверждения,
+обращения в support, отдельного quality probe или полного CI для неизменённого
+кода не требуется. Решение ждать support из instruction8bf747b1 этим заменено.
+
+
+## Решение C0 от 2026-11-08 — C0-M4-FOLLOWUP-01 / REVISED
+
+Для завершения уже разрешённого владельцем Telegram→AI→reply smoke C0 принимает
+ровно одно продолжение после offline-проверки. Это явное изменение границы
+operator admission: прежний запрет нового окна из instruction9d7f50 заменён
+одним child window до600s, максимум2POST/1READ/1reply для нового synthetic TEXT.
+Изменение необходимо, поскольку повторный R4 enable и reuse истёкшего UUID
+намеренно запрещены; новая DB session допускается существующей schema0016.
+Повтор старого run и восстановление его admission не разрешаются.
+
+Existing intent/root admission остаётся тем же. Child session UUID создаётся
+один раз в private continuation receipt до первого эффекта; receipt связывает
+parent session, старые run/call/hold, их fingerprints и новый config. Старые
+settings/dates/UUID/journal/UNKNOWN не переписываются. Child cap=2*текущий
+call reservation, только если он помещается одновременно в остаток прежних
+10RUB и общего150RUB с учётом всех distinct confirmed costs/holds. Родительские
+calls+child calls остаются<=4; никаких новых10/150RUB или повторного child.
+Это программный conditional admission, не подтверждённый внешний потолок.
+
+Узкое operator watch исключение допускает ровно одну закреплённую неизменную
+завершённую UNKNOWN model-call запись старой terminal попытки без result/outbox/
+send. Её reserve удерживается. Новый/лишний/изменённый/исчезнувший UNKNOWN,
+неизвестная отправка или drift baseline останавливают продолжение.
+Исключение применяется только к admission readiness/watch этого child;
+не к product runtime/SQL и не к прежнему return/drain. Временная in-flight
+reservation нового вызова до его deadline сама по себе не означает terminal
+UNKNOWN; incoming message, TOOLS или selected result не являются успехом send.
+
+Принятая owner experimental cap assumption из C0-M4-OWNER-EXPERIMENT-20261107
+распространяется только на этот связанный child; NOT_PROVEN/CONDITIONAL_ESTIMATE
+сохраняются. Model/provider/max_tokens512/no fallback остаются прежними.
+Полный bounded порядок и private write-set — CURRENT HANDOFF.
+Бизнес/tenant/native/owner/currentness/ACK/no-resend guards не меняются.
+После попытки disable/fence/stop и сохранение evidence; восстановление старой
+среды не объявляется без штатного успешного drain/return. Неизвестный старый
+LLM расход не исчезает ни при успешном новом reply, ни при остановке среды.
+C6 реализует/проверяет/выполняет эту конкретную дельту без нового общего approval
+или ожидания поддержки; иной live retry/новое окно потребует отдельного решения.
+
+
+## Решение C0 от 2026-11-12 — функциональный AI reply принят; штатный rights refresh / ACCEPTED
+
+C0 принимает **FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST** по private
+owner-reported receipt и подтверждению получения сообщения владельцем.
+Это приёмка результата Telegram→AI candidate→canonical commit→Telegram reply
+в текущем пути через ПК, не независимая fresh VM attestation и не общий M4 VERIFIED.
+Частный helper/его дополнительные HTTP-error diagnostics не интегрируются этой
+приёмкой и не объявляются production-реализацией.
+
+Выявлен source defect: ai_delivery_select проверяет telegram_can_send с TTL30s
+ещё до создания Outbox/SEND_AI_TEXT, тогда как штатный worker обновляет права
+только на последнем send-пути. Состояние может устареть за время ожидания модели.
+C0 принимает узкое исправление C3-M4-PRECOMMIT-RIGHTS-R1: реальное наблюдение прав
+по доверенному job/claim/scope перед COMMIT reply, короткие транзакции до/после
+HTTP, generation/observation-version/currentness проверки. Финальный send probe,
+TTL30s и все текущие guards сохраняются. Привилегированный периодический цикл
+операторского помощника не становится частью приложения; fake timestamps/
+cached can_reply=true не заменяют настоящее наблюдение.
+
+Для этой связанной DB-границы C0 резервирует additive migration
+0017_ai_reply_rights.py, predecessor0016. Исторические миграции0001–0016 immutable.
+Одна активная выдача C3, точный write-set/тесты в CURRENT HANDOFF.
+Существующие права runtime не расширяются до migrator/BYPASSRLS.
+LLM output по-прежнему candidate; бизнесовые факты/права определяет structured state.
+
+RECEIVER_ACK_UNRESOLVED и сохранённые UNKNOWN расходы остаются OPEN; новая
+доставка не разрешает повторять старый run/send или запускать прежний consumer.
+До безопасного reuse receiver нужен отдельный разбор сохранённых cursor/status/
+fence/ingress facts. Это не отменяет принятую доставку ответа и не требует новой
+платной демонстрации ради отчёта. Старый LOCAL return не объявлен выполненным.
+
+По явному предпочтению владельца автономный Telegram transport **DEFERRED**;
+для разработки остаётся PC/Happ/SSH. Это продолжает уже ограниченный IMPL-004,
+а не отменяет будущую эксплуатационную подготовку пилота.
+После интеграции узкого runtime исправления следующая продуктовая выдача —
+M5.1 configuration domain (Service/Rule/Workflow/Draft/Validation/Release).
+Её зависимости — принятые M4 contracts; открытый ACK остановленного исторического
+receiver ограничивает его reuse, не запрещает разработку домена на synthetic data.
+Общий M4/production статус не повышать по одному функциональному ответу.
+
 
 ## Что пересмотрено относительно baseline
 

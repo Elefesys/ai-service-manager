@@ -258,6 +258,7 @@ async def test_real_runtime_gateway_metering_and_expiration_controls(
     runtime.database.complete = complete
     runtime.database._command = AsyncMock()
     runtime.database.commit = AsyncMock(return_value=object())
+    runtime.database.messaging.ai_reply_probe = AsyncMock(return_value=None)
     runtime.stop = AsyncMock(side_effect=stop)
     c = claim()
     before = set(asyncio.all_tasks())
@@ -469,17 +470,17 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
 
     old = catalog.source_catalog(catalog.ROOT, "0013")
     middle = catalog.source_catalog(catalog.ROOT, "0014")
-    current = catalog.source_catalog(catalog.ROOT, "0016")
+    current = catalog.source_catalog(catalog.ROOT, "0017")
     assert (len(old["functions"]), len(middle["functions"]), len(current["functions"])) == (
         167,
         175,
-        190,
+        194,
     )
     assert (len(old["columns"]), len(middle["columns"]), len(current["columns"])) == (45, 47, 49)
-    body = current["functions"]["platform.ai_provider_schema_profile()"]["body"]
+    body = current["functions"]["platform.ai_reply_rights_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 189,
+        "other_functions": 193,
         "tables": 49,
         "result": "PASS",
     }

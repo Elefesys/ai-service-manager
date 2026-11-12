@@ -95,7 +95,7 @@ def test_unused_downgrade_refuses_before_ddl_and_restores_narrow_delta():
 def test_current_application_requires_successor_and_historical_0014_stays_separate():
     from asm.foundation import DATABASE_SCHEMA_REVISION
 
-    assert DATABASE_SCHEMA_REVISION == "0016"
+    assert DATABASE_SCHEMA_REVISION == "0017"
 
 
 def compile_statements(statements):

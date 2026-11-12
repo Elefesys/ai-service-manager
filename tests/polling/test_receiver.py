@@ -1,5 +1,6 @@
 import asyncio
 import json
+import ssl
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -338,6 +339,109 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                     {"update_id": 1, "business_message": {"text": "x" * MAX_EVENT}}
                 )
         self.assertEqual(calls, [])
+
+    async def test_raw_tls_errors_are_classified_without_wire_retry_or_secret(self):
+        class InterruptedTLS(httpx.AsyncByteStream):
+            def __init__(self, error):
+                self.error = error
+
+            async def __aiter__(self):
+                yield b'{"ok":true,'
+                raise self.error
+
+        for error_type in (ssl.SSLError, ssl.SSLEOFError, ssl.SSLCertVerificationError):
+            for stage in ("open", "read"):
+                with self.subTest(error=error_type.__name__, stage=stage):
+                    requests = []
+                    error = error_type(1, "private-token-in-underlying-error")
+
+                    def reply(request):
+                        requests.append(request)
+                        if stage == "open":
+                            raise error
+                        return httpx.Response(200, stream=InterruptedTLS(error))
+
+                    wire = await self.make_wire(reply)
+                    with self.assertRaises(PollingError) as caught:
+                        await wire.poll(None)
+                    self.assertEqual(str(caught.exception), "PROVIDER_UNAVAILABLE")
+                    self.assertIsNone(caught.exception.__cause__)
+                    self.assertEqual(len(requests), 1)
+
+    async def test_receiver_recovers_after_raw_tls_read_failure(self):
+        class InterruptedTLS(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b'{"ok":true,'
+                raise ssl.SSLError(1, "private TLS detail")
+
+        polls, states, delays = [], [], []
+        ingress = DurableIngress()
+
+        def reply(request):
+            if request.url.path.endswith("/getMe"):
+                return httpx.Response(200, json={"ok": True, "result": {"id": 123, "is_bot": True}})
+            if request.url.path.endswith("/getWebhookInfo"):
+                return httpx.Response(200, json={"ok": True, "result": {"url": ""}})
+            self.assertTrue(request.url.path.endswith("/getUpdates"))
+            polls.append(json.loads(request.content))
+            if len(polls) == 1:
+                return httpx.Response(200, stream=InterruptedTLS())
+            return httpx.Response(
+                200, json={"ok": True, "result": [event()] if len(polls) == 2 else []}
+            )
+
+        async def sleep(delay):
+            delays.append(delay)
+            if states[-1]["state"] == "RUNNING":
+                raise asyncio.CancelledError
+
+        async def ready():
+            pass
+
+        ingress.ready = ready
+        receiver = Receiver(await self.make_wire(reply), ingress, states.append)
+        with mock.patch("scripts.telegram_polling_receiver.asyncio.sleep", sleep):
+            with self.assertRaises(asyncio.CancelledError):
+                await receiver.run()
+        self.assertEqual([x["state"] for x in states], ["RETRYING", "ACK_PENDING", "RUNNING"])
+        self.assertEqual(states[0]["code"], "PROVIDER_UNAVAILABLE")
+        self.assertEqual(delays, [2, 0.25, 0.25])
+        self.assertEqual([x.get("offset") for x in polls], [None, None, 12])
+        self.assertEqual(ingress.calls, [11])
+        self.assertEqual(ingress.receipts, {11})
+        self.assertEqual((receiver.durable_deliveries, receiver.confirmed), (1, 1))
+        self.assertIsNone(receiver.pending)
+
+    async def test_raw_tls_after_durable_ack_does_not_claim_confirmation(self):
+        polls = []
+
+        def reply(request):
+            polls.append(json.loads(request.content))
+            if len(polls) == 2:
+                raise ssl.SSLError(1, "private TLS detail")
+            return httpx.Response(
+                200, json={"ok": True, "result": [event()] if len(polls) == 1 else []}
+            )
+
+        ingress = DurableIngress()
+        receiver = Receiver(await self.make_wire(reply), ingress, lambda _: None)
+        await receiver.step()
+        with self.assertRaisesRegex(PollingError, "PROVIDER_UNAVAILABLE"):
+            await receiver.step()
+        self.assertIsNone(receiver.pending)
+        self.assertEqual((receiver.durable_deliveries, receiver.confirmed), (1, 0))
+        await receiver.step()
+        self.assertEqual([x.get("offset") for x in polls], [None, 12, None])
+        self.assertEqual(ingress.calls, [11])
+        self.assertEqual(receiver.confirmed, 0)
+
+    async def test_wire_cancellation_is_not_converted_to_retry(self):
+        def reply(_):
+            raise asyncio.CancelledError
+
+        wire = await self.make_wire(reply)
+        with self.assertRaises(asyncio.CancelledError):
+            await wire.poll(None)
 
 
 class JsonTests(unittest.TestCase):

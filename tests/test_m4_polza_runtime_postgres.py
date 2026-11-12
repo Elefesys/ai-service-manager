@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -39,16 +40,16 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def provider_pg(pg):
     await migrate("upgrade", "0015")
-    await migrate("upgrade", "0016")
-    await migrate("upgrade", "0016")
-    pg.schema_revision = "0016"
+    await migrate("upgrade", "0017")
+    await migrate("upgrade", "0017")
+    pg.schema_revision = "0017"
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
         await migrate("downgrade", "0015")
         with pytest.raises(RuntimeError, match="schema"):
             await runtime.check()
-        await migrate("upgrade", "0016")
+        await migrate("upgrade", "0017")
         await runtime.check()
         yield pg
     finally:
@@ -67,7 +68,16 @@ async def command(h, cfg, enable=True):
 
 
 async def setup(
-    h, tmp_path, *, kind="reply", read=False, failure=None, send_unknown=False, max_calls=4
+    h,
+    tmp_path,
+    *,
+    kind="reply",
+    read=False,
+    failure=None,
+    send_unknown=False,
+    max_calls=4,
+    rights=True,
+    observe_hook=None,
 ):
     cid, source, scope = await source_turn(h, telegram=True)
     await refresh_synthetic_observation(h, cid)
@@ -89,6 +99,8 @@ async def setup(
         requests.append(method)
         body = json.loads(request.content)
         if method == "getBusinessConnection":
+            if observe_hook is not None:
+                await observe_hook()
             return httpx.Response(
                 200,
                 json={
@@ -99,7 +111,7 @@ async def setup(
                         "user_chat_id": int(OWNER),
                         "date": 1789990000,
                         "is_enabled": True,
-                        "rights": {"can_reply": True},
+                        "rights": {"can_reply": rights},
                     },
                 },
             )
@@ -168,7 +180,7 @@ async def test_provider_end_to_end_and_exact_replay(provider_pg, tmp_path, kind,
         if kind == "reply":
             send = await claim_job(h, d["send_job_id"])
             await worker.execute(send)
-            assert requests == ["getBusinessConnection", "sendMessage"]
+            assert requests == ["getBusinessConnection", "getBusinessConnection", "sendMessage"]
             assert (
                 await scalar(
                     h, "SELECT status FROM app.outbox_events WHERE id=:id", id=d["outbox_id"]
@@ -197,7 +209,7 @@ async def test_disabled_session_refuses_new_external_admission(provider_pg, tmp_
             send = await claim_job(h, d["send_job_id"])
             with pytest.raises(MessagingError):
                 await worker.execute(send)
-        assert not requests
+        assert requests == ([] if phase == "before_model" else ["getBusinessConnection"])
     finally:
         await worker.ai.telegram.aclose()
 
@@ -284,7 +296,8 @@ async def test_wait_releases_transactions_and_invalidates_stale_candidate(
         assert (await enrollment(h, source))["selected_kind"] == (
             "reply" if change == "manual_parallel" else None
         )
-        assert len(wire.posts) == 1 and not requests
+        assert len(wire.posts) == 1
+        assert requests == (["getBusinessConnection"] if change == "manual_parallel" else [])
     finally:
         wire.release.set()
         if not task.done():
@@ -314,13 +327,13 @@ async def test_telegram_unknown_is_durable_and_never_resent(provider_pg, tmp_pat
 
                 from scripts.native_context_db_catalog import capture_source
 
-                mods, _ = capture_source(Path("."), "0016")
+                mods, _ = capture_source(Path("."), "0017")
                 statements = []
                 mods["0016"]["op"].execute = statements.append
                 mods["0016"]["downgrade"]()
                 for sql in statements:
                     await c.execute(text(sql))
-        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0016"
+        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0017"
     finally:
         await worker.ai.telegram.aclose()
 
@@ -382,24 +395,26 @@ async def test_unknown_reservation_and_call_cap_survive_restart(provider_pg, tmp
 async def test_committed_result_lost_ack_never_regenerates(provider_pg, tmp_path):
     h = provider_pg
     cfg, worker, wire, requests, source, _ = await setup(h, tmp_path)
-    original = worker.ai.database._command
     losses = 0
 
-    async def lost(claim, operation, **payload):
+    async def lost(name):
         nonlocal losses
-        value = await original(claim, operation, **payload)
-        if operation == "COMMIT":
+        if name == "ai_reply_after_commit" and losses == 0:
             losses += 1
             raise SQLAlchemyError("CONTROLLED COMMIT ACK LOSS")
-        return value
 
-    worker.ai.database._command = lost
+    h.kernel._barrier = lost
     try:
         claim, d = await run_turn(h, worker, source)
         assert d["selected_kind"] == "reply" and losses == len(wire.posts) == 1
         await worker.execute(claim)
-        assert await enrollment(h, source) == d and len(wire.posts) == 1 and not requests
+        assert (
+            await enrollment(h, source) == d
+            and len(wire.posts) == 1
+            and requests == ["getBusinessConnection"]
+        )
     finally:
+        h.kernel._barrier = None
         await worker.ai.telegram.aclose()
 
 
@@ -424,12 +439,12 @@ async def test_concurrent_enrollment_and_provider_client_cannot_cross_session(
         claim = await h.kernel.claim_job("provider-enrollment", ai=True)
         assert claim.job_id == (await enrollment(h, source))["job_id"]
         await worker.execute(claim)
-        assert len(wire.posts) == 1 and not requests
+        assert len(wire.posts) == 1 and requests == ["getBusinessConnection"]
         # A separate client identity in the same tenant is still outside the binding.
         _, other, _ = await source_turn(h, telegram=True)
         with pytest.raises(MessagingError):
             await worker.execute(other)
-        assert len(wire.posts) == 1 and not requests
+        assert len(wire.posts) == 1 and requests == ["getBusinessConnection"]
     finally:
         await worker.ai.telegram.aclose()
 
@@ -540,7 +555,9 @@ async def test_current_provider_verifier_rejects_public_execute_grant(provider_p
         transaction = await c.begin()
         try:
             await c.execute(
-                text("GRANT EXECUTE ON FUNCTION platform.ai_provider_schema_profile() TO PUBLIC")
+                text(
+                    "GRANT EXECUTE ON FUNCTION platform.ai_reply_rights_schema_profile() TO PUBLIC"
+                )
             )
             with pytest.raises(Exception) as caught:
                 await assert_current_schema(c)
@@ -577,6 +594,76 @@ async def test_confirmed_call_cap_survives_worker_restart(provider_pg, tmp_path)
         )
         await restarted.execute(first)
         _, second = await run_turn(h, restarted, await next_source(h, cfg, scope))
-        assert second["selected_kind"] is None and len(wire.posts) == 1 and not requests
+        assert (
+            second["selected_kind"] is None
+            and len(wire.posts) == 1
+            and requests == ["getBusinessConnection"]
+        )
+    finally:
+        await worker.ai.telegram.aclose()
+
+
+@pytest.mark.parametrize("fault", ["revoked", "session", "context", "connection"])
+async def test_precommit_observation_refusal_keeps_confirmed_cost_and_reservation(
+    provider_pg, tmp_path, fault
+):
+    h = provider_pg
+
+    async def during_http():
+        assert (
+            await scalar(
+                h,
+                "SELECT count(*) FROM pg_stat_activity WHERE usename='asm_runtime' AND state='idle in transaction'",
+            )
+            == 0
+        )
+        if fault == "session":
+            await command(h, cfg, False)
+        elif fault == "context":
+            await incoming(h, next(COUNTER), **scope)
+        elif fault == "connection":
+            # A trusted concurrent lifecycle invalidates the original probe.
+            await scalar(
+                h,
+                "UPDATE platform.telegram_connection_state SET generation=generation+1,observation_version=observation_version+1 WHERE connection_id=:id RETURNING connection_id",
+                id=cfg.connection_id,
+            )
+
+    cfg, worker, wire, requests, source, scope = await setup(
+        h, tmp_path, rights=fault != "revoked", observe_hook=during_http
+    )
+    try:
+        claim, d = await run_turn(h, worker, source)
+        assert d["selected_kind"] is None and d["outbox_id"] is None
+        assert len(wire.posts) == 1 and requests == ["getBusinessConnection"]
+        run = (await query(h, "SELECT * FROM platform.ai_runs WHERE job_id=:id", id=claim.job_id))[
+            0
+        ]
+        calls = await query(
+            h, "SELECT * FROM platform.ai_provider_calls WHERE run_id=:id", id=run["id"]
+        )
+        assert len(calls) == run["calls_used"] == 1 and run["result"] is None
+        assert (
+            run["cost_reserved"] > 0
+            and Decimal(calls[0]["budget"]["cost_reserved"]) == run["cost_reserved"]
+        )
+        assert calls[0]["completion"]["kind"] == "OUTPUT"
+        assert calls[0]["completion"]["cost"]["status"] == "CONFIRMED"
+        if fault == "revoked":
+            state = (
+                await query(
+                    h,
+                    "SELECT * FROM platform.telegram_connection_state WHERE connection_id=:id",
+                    id=cfg.connection_id,
+                )
+            )[0]
+            assert state["can_reply"] is False and state["error_code"] is None
+        await worker.execute(claim)
+        assert len(wire.posts) == 1 and requests == ["getBusinessConnection"]
+        assert (
+            await query(
+                h, "SELECT * FROM platform.ai_provider_calls WHERE run_id=:id", id=run["id"]
+            )
+        ) == calls
     finally:
         await worker.ai.telegram.aclose()

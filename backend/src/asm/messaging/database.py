@@ -532,6 +532,40 @@ class MessagingDatabase:
         await self.checkpoint("start_after_commit")
         return result
 
+    async def ai_reply_probe(self, claim: JobClaim, run_id: UUID) -> "TelegramProbe | None":
+        from asm.telegram.database import TelegramProbe
+
+        require_uuid(run_id)
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute(
+                "SELECT platform.ai_reply_rights_probe(:job,:token,:run)", {"run": run_id}
+            )
+        return TelegramProbe.model_validate(raw) if raw is not None else None
+
+    async def commit_ai_reply(
+        self,
+        claim: JobClaim,
+        run_id: UUID,
+        probe: "TelegramProbe",
+        observation: dict[str, object],
+        result: dict[str, object],
+    ) -> Any:
+        require_uuid(run_id)
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute(
+                "SELECT platform.ai_reply_rights_commit(:job,:token,:run,:generation,:version,CAST(:observation AS jsonb),CAST(:result AS jsonb))",
+                {
+                    "run": run_id,
+                    "generation": probe.generation,
+                    "version": probe.observation_version,
+                    "observation": json.dumps(observation, allow_nan=False),
+                    "result": json.dumps(result, allow_nan=False),
+                },
+            )
+            await self.checkpoint("ai_reply_before_commit")
+        await self.checkpoint("ai_reply_after_commit")
+        return raw
+
     async def replay_context_work(self, job_id: UUID, claim_token: UUID) -> ContextWorkResult:
         require_uuid(job_id)
         require_uuid(claim_token)

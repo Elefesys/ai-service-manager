@@ -188,7 +188,7 @@ async def cleanup_material(c):
 async def ingress_projection(h, p, bot):
     revision = await sql(h, "SELECT version_num FROM platform.alembic_version")
     # Frozen predecessor lanes still exercise their original writer directly.
-    if revision in {"0012", "0013", "0014", "0015", "0016"} and "codec" not in p:
+    if revision in {"0012", "0013", "0014", "0015", "0016", "0017"} and "codec" not in p:
         p = v2_fixture(p, bot)
     return p
 

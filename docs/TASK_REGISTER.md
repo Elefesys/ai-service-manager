@@ -2,7 +2,708 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, fixture lifetime repair / 2026-11-05
+## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS / 2026-11-12
+
+C3 source candidate реализован: fresh claim-bound Telegram observation перед
+canonical Reply COMMIT, HTTP вне transaction; additive0017/current profile,
+без изменения applied0001–0016, TTL30 или final-send admission.
+Local actualPG123PASS (35runtime/22delivery/9schema/32provider/25rights),
+red/green reproducer подтверждён; runner unit123PASS, Ruff/mypy/OpenAPI PASS.
+Один полный CI финального Draft PR — следующий gate; результат фиксируется
+в C3 receipt. Только code/test: VM/deploy/paid/Telegram API не выполнялись.
+[Подробности и пределы результата](tasks/M4_HANDOFF.md#результат-реализации-c3--source-candidate).
+
+CI первого candidate4b265b5e/run43145427952 выявил APPLICATION_FULL_CATALOG_PIN:
+все194function bodies/security/roles/nonfunction PASS, declared=independent,
+но локальная БД была C, а pinned CI PG18.6 — en_US.utf8. Порядок functions в
+full catalog отличается. Current full pin исправлен по независимому actual CI
+каталогу b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538;
+SQL, grants, RLS и verifier body не меняются. Сначала local en_US проверка,
+затем финальный fullCI исправленного child. Неизменённого rerun нет.
+
+Дополнительная current0017 совместимость общих PG fixtures: точный native/AI
+function inventory в tenancy, Telegram codec fixture, native policy profile
+selector и full current snapshots при отказах historical0007/0010/0011 downgrade.
+Проверены103generic actualPG cases PASS;7current-native actualPG PASS;
+229targeted unit PASS после pin correction. Historical guards не ослаблены.
+
+C0 принимает FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST:
+AI reply дошёл до клиента через текущий PC transport. Evidence owner-reported;
+private report не публикуется. Общий M4 VERIFIED не объявлен.
+C6-M4-LIVE-PREP-R1: REVIEW / функциональный результат принят,
+C6-M4-ACK-01: OPEN_OPERATIONAL (inbound ACK/fence; исторический return не выполнен).
+Старые UNKNOWN/holds сохраняются; новый model/send для повторной демонстрации не нужен.
+
+Единственная активная code выдача C3: обновить реальные права Telegram перед
+canonical reply COMMIT, сохранив TTL30/final-send/currentness/claim/tenant guards.
+Source defect: commit требует свежесть до создания SEND_AI_TEXT, а refresh сейчас
+только внутри send handler. [Точный HANDOFF](tasks/M4_HANDOFF.md).
+C0 резервировал additive0017_ai_reply_rights/down_revision0016; старые миграции
+immutable. Prepared branch c3/m4-precommit-rights-r1; start=commit HANDOFF,
+parentb5c3490841811b3c0b4270af0dfa6109273c0df4; app accepted29dc1608.
+Targeted realPG/unit → один fullCI → Draft PR/main. VM/paid/live не нужны.
+C6 private helper не становится production кодом и целиком в Git не переносится.
+
+Автономный transport DEFERRED по владельцу, путь через ПК допустим для разработки.
+После source fix/integration следующая продуктовая выдача M5.1 configuration
+domain; ACK ограничивает reuse исторического receiver, не synthetic domain work.
+C3 IN_PROGRESS; остальные HOLD, включая C6 live. Main29dc1608 неизменён.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, FOLLOWUP-01 live continuation / 2026-11-08
+
+C0 принял offline этап по private owner-reported receipt; public VM dump отсутствует.
+[Решение FOLLOWUP-01](decisions/IMPL-004-m4-pilot-ai.md) явно разрешает один
+child window≤600s для нового synthetic TEXT/run≤2POST/1READ/1reply.
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md) содержит точный порядок исполнения C6.
+
+Existing intent, old terminal UNKNOWN и hold сохраняются. Child UUID создаётся
+один раз, parent/root ledger остаётся общим; max_calls2/max_rub2*reservation
+только внутри остатков прежних10/150RUB и общего4calls.
+Existing one UNKNOWN допускается лишь как exact immutable operator-watch
+baseline без result/outbox/send; новый/изменённый/лишний UNKNOWN→STOP.
+No replay/reset/re-enable старой session. Cap assumption явно перенесена
+только на этот child; фактическое provider списание не гарантируется.
+
+C6: private runner/targeted checks → exact Polza9d7f50 overlay в worker →
+штатные fresh guards/enable → один TEXT → SENT/ACK либо конкретная ошибка →
+disable/fence/stop/save. Без нового промежуточного C0 approval/docs-only круга.
+Прежний drain/return не меняется: при old UNKNOWN restore не объявлять,
+старые writers не запускать. Поддержка исключена.
+C0 source/DDL/VM/paid/send изменений0;4docs only; прежние430tests исторические.
+C6 IN_PROGRESS/execute,остальные HOLD,M4/live открыт; main29dc1608 сохранён.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, offline AI request check / 2026-11-07
+
+C0 добавил bounded Polza failure log и исполняемый offline inspector первого
+сохранённого запроса. Source-only change; private VM receipt/docs.patch не
+публикуются. Команда, scope и write-set — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+C6: existing config + точный READ ONLY PreparedRun export + original reserved_at
+→ network-none local assembly → конкретный stage/detail или OFFLINE_WIRE_VALID.
+Не собирать новый snapshot, не вызывать PREPARE, не запускать consumer/HTTP,
+не переписывать UNKNOWN/hold/window. Успех локальной сборки не доказывает provider
+acceptance; исходная утраченная причина не восстановлена новым logging.
+Следующий live continuation сохраняет старую попытку/резерв; offline helper
+сам не разрешает новое execution window.
+
+430 controlled tests PASS/0skips,Python3.13.17,httpx0.28.1,locked deps;
+ruff PASS,mypy polza.py PASS. No actualPG/VM/paid/send; fullCI/build NOT_RUN.
+Public delta: polza.py + offline script/test +3docs.
+Private C6: exact overlay/read-only export/one offline check; повторный review
+до этой проверки не нужен. Parent2a1369c8; app29dc1608/R4/transport repair прежние.
+Owner цель/допуск/cap assumption сохраняются; поддержку не ждать.
+C6 IN_PROGRESS/offline,остальные HOLD,M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, receiver TLS repair → один AI reply / 2026-11-07
+
+Owner требует один Telegram→ИИ→ответ клиенту; ожидание поддержки исключено.
+Допуск680b0e0a/10RUB experimental сохраняется. Прежний запрет transport
+изменений снят для конкретного исправления, новый owner/C0 approval не нужен.
+
+Последний C6 owner observer:7polls/AI OFF→raw ssl.SSLError в accepted Wire.api.
+C0 воспроизвёл необработанное исключение и исправил receiver: импорт ssl и
+catch SSL вместе с HTTPX→существующий PROVIDER_UNAVAILABLE/backoff.
+22tests PASS/0skips (18existing+4new); old source даёт8ожидаемых TLS errors
+в3causal tests. Python3.12.14/httpx0.28.1,MockTransport,не actual VM/E2E.
+
+Exact script/test/hash и bounded deployment — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+C6: сохранить R4/app source и state → explicit transport-only repair/pins
+при same intent/UUID → целевые проверки в3.13 → fresh normal receiver poll →
+сразу existing configure/enable → один вопрос/один run → disable/verified return.
+Разрешена необходимая узкая адаптация private common/receiver_control/operator/
+compose pins; без framework,пересборки приложения или нового C0 review круга.
+Unknown HostConfig fields из observer разобрать по existing snapshots;
+TLS/cert verification,ACK/no-resend и business guards не отключать.
+
+127.0.0.1:18080 — configured SSH Console/auth origin; TLS failure произошёл
+в Telegram receiver,не в browser→Console. Домен менять не назначено.
+C0 изменяет receiver/tests/AGENTS+3docs; C6 public receipt3docs,private repair.
+Main/build29dc1608/treeb70eb034 unchanged; current instruction child680b0e0a.
+Main integration/fullCI repair отдельно после этой изолированной пробы.
+C0 VM/Polza/Telegram calls0. C6 IN_PROGRESS/execute, остальные HOLD,M4/live открыт.
+Один run≤2POST/1READ; existing session600s/4POST/10RUB/8historyGET/4replies;
+balance150/обычный тариф/ledger/UNKNOWN/volumes сохранены,cap assumption прежняя.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner разрешил experimental TEST smoke / 2026-11-07
+
+**C0-M4-OWNER-EXPERIMENT-20261107: владелец явно отказался от ожидания поддержки и
+поручил проверить ИИ сейчас. Повторный допуск не требуется.**
+C0 разрешил configure/enable текущего одного synthetic TEST session.
+C0-M4-ROUTE-CAP-01 NOT_PROVEN / WAIVED_FOR_THIS_OWNER_SESSION; он больше не
+blocker этой пробы. В [IMPL-004](decisions/IMPL-004-m4-pilot-ai.md) зафиксировано
+узкое REVISED условие допуска; provider contract не объявлен доказанным.
+
+Existing RuntimeRoute используется без изменения source: true — явно
+admitted working hypothesis, output_cap_evidence=OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION/
+NOT_PROVEN, billing=CONDITIONAL_ESTIMATE. Private admission receipt связывает
+owner decision/intent/session/review hashes; raw scope metadata не выдавать за
+VERIFIED. Вне этого единственного сеанса прежние gates действуют.
+
+C6: fresh штатные scope/Resume/transport/window → exact saved catalog≤24h
+(только при expiry один price-only-compatible refresh) → local RuntimeRoute
+validation → сразу R4 configure/enable → один synthetic вопрос/один run
+≤2POST/1READ → один reply/known cost либо STOP → ранний disable/verified return.
+Готовые evidence поля и полный порядок — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Не ждать очередного C0 docs review, не писать support, не повторять standalone
+quality/prepare/cutover/receive, не менять код/DDL/CI и не строить новый helper framework.
+
+Owner balance150RUB/обычный тариф сохранены. Existing session upper limits
+600s/4POST/10RUB,8historyGET/4replies; operational scope один вопрос/ранний stop.
+10RUB — conditional admission,не proven external billing ceiling.
+Reserve0.471974416/call,×4=1.887897664; price-only refresh пересчитывается.
+Ledger confirmed0.37505230,holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED. No reset UUID/holds/new150.
+
+Те же TEST0016/R4/source29dc1608/treeb70eb034; обе группы volumes/receipts,
+tenant/native/rights/schema/metering/no-fallback/no-resend/ACK guards сохранены.
+C0 actual VM/model/Telegram NOT_RUN; C6 возвращает observed E2E/cost/cleanup.
+Branch c6/m4-live-prep-r1, instruction child8bf747b1c60527478ec667a064df3abe8e32659b;
+C0 изменяет4docs включая IMPL-004, C6 receipt только прежние3docs.
+C6 IN_PROGRESS/execute,остальные HOLD; C0-M4-LIVE-OP-01 CLOSED,M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / BLOCKED, public evidence принято; нужен ответ Polza / 2026-11-07
+
+**C0 принял final receipt04da14ce; C6-M4-PUBLIC-CONTRACT-R1 завершён,
+NOT_PROVEN подтверждён. C0-M4-ROUTE-CAP-01 OPEN; configure/enable BLOCKED.**
+Независимо: exact outer/inner ZIP CRC/size/SHA, body399936bytes,
+attempt/result URL/UTC PASS;19request schemas/18refs,11nodes,
+все106descriptions сверены с raw OpenAPI — PASS. C0 новых provider/Telegram/
+VM/PG/runtime действий не выполнял. Это не proof нарушения лимита Polza.
+
+Источник исчерпан; дальнейший поиск/повтор GET/metadata/paid probe не назначены.
+Следующий минимальный шаг — ответ поддержки Polza про max_tokens512 как
+общий visible+hidden-reasoning cap на openai/gpt-6-luna/openai/flex.
+Готовый вопрос владельцу и критерии review — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Сообщение не отправлено; C6 не поручено писать support. После ответа решение
+принимает C0. Validator true/код/лимиты/selector/SyntheticRoute не изменять.
+
+Баланс150RUB и обычный тариф OWNER_REPORTED уже приняты. Owner99fb865a/
+10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies остаются.
+Partial route review/TEXT/no fallback сохранены; conditional reserve
+0.471974416/call,×4=1.887897664 не стал proven ceiling.
+Ledger confirmed0.37505230,holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED;UUID/holds без reset.
+
+Последний TEST0016/AI OFF/old-writer-fence snapshot не выдается за fresh check;
+обе группы volumes/R4/private inputs/receipts сохранить. Completed helpers
+не повторять; return только verified ACK/drain. После contract review —
+fresh scope/transport/window/catalog≤24h,без фиктивного checked_at.
+
+Branch c6/m4-live-prep-r1; instruction sole child04da14cee64bf0cb6998aa72a5ec275929637c7c.
+Main/build29dc1608/treeb70eb034 неизменны,только3docs;нет нового PR/CI/
+product/DDL/dependency/architecture changes. C0-M4-LIVE-OP-01 CLOSED.
+C6-M4-LIVE-PREP-R1 BLOCKED; C6/остальные HOLD до решения C0, M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, public contract NOT_PROVEN; enable BLOCKED / 2026-11-07
+
+**C6-M4-PUBLIC-CONTRACT-R1=NOT_PROVEN; C0-M4-ROUTE-CAP-01 OPEN.**
+Разрешённый OpenAPI источник получен OWNER_PC: HTTP200/complete399936bytes,
+UTC07.11.2026 12:26:32.2291123Z–12:26:34.1107431Z.
+Exact SHA/UTC/URL/size/CRC проверены,19request schemas/internal refs просмотрены.
+В контракте нет необходимого mapping Polza max_tokens=N→общий
+visible+hidden-reasoning capN для openai/gpt-6-luna/openai/flex.
+Это недостаточность evidence, не утверждение о нарушении cap провайдером.
+
+[Final receipt,точные schema paths и raw evidence](tasks/M4_HANDOFF.md).
+Этот источник завершён; повторный GET/поиск/metadata preflight не нужен.
+Следующий ограниченный вариант определяет C0; configure/enable BLOCKED,
+reviewed true/RuntimeRoute не создавались. Новых owner facts/ключа/сообщений
+или paid approval для прежнего scope не запрашивается.
+
+C0 partial route review/owner balance150RUB и обычный тариф сохраняются.
+Catalog aef50578…ff2a,original timestamp/freshness≤24h не обновлены;
+route/model/selector/no fallback/TEXT/input guards неизменны.
+Conditional reserve0.471974416/call,×4=1.887897664RUB не стал proven ceiling.
+Owner10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies прежние.
+Ledger confirmed0.37505230,UNKNOWN holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED;UUID/holds не сбрасывались.
+
+C6 actions:local ZIP/schema review и3docs; new provider/model/Telegram calls0,
+VM/configure/enable0. Last accepted snapshot TEST0016/AI OFF/old writers fenced,
+R4/private inputs/обе группы volumes сохранены; fresh VM state не перечитывалось.
+Source/main29dc1608/treeb70eb034; product/DDL/dependencies/CI/architecture unchanged.
+Receipt sole child3be03cf75da0b1a26842cecc74b0ca62df6d2179,descendant7e92fc98,
+branch c6/m4-live-prep-r1,expected-sha/force=false. History preserved;
+новый PR/full CI/runtime tests не нужны и не запускались.
+C6 REVIEW — final evidence ожидает решения C0; остальные HOLD; M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, actual scope/metadata PASS; route review перед enable / 2026-11-07
+
+Owner provider preflight завершён: FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF,
+blockers=[],SSH exit0. Actual accepted scope подтвердил current owner Resume,
+TEST0016/provider_sessions0. Receiver RUNNING/polls89/durable1/confirmed1/
+ack_pending=false/age85.2s; это snapshot,не постоянный transport/drain proof.
+Catalog exact openai/gpt-6-luna/openai/flex, tools/schema/image supported,
+key authenticated/limit allows10RUB. Original inputs/R4/journal/runtime
+UNCHANGED. CatalogGET1/keyGET1,model/history/Telegram API helpercalls0.
+Private receipts/provider-preflight-r1 сохранён, повторять helper не нужно.
+
+Следующий gate — fresh C0-reviewed RuntimeRoute,предусмотренный R4 README.
+Конкретный candidate/rates/primary sources и unresolved output-cap mapping —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). Current catalog exposes max_tokens;
+exact total visible+reasoning cap не объявлен доказанным только по support.
+Не подставлять output_cap_includes_reasoning=true автоматически,не обходить
+validator/не менять пределы. Это route review,не повторный owner paid допуск.
+От владельца нужны current available balance≥10RUB и стандартный tariff факт.
+Key limit не доказывает эти факты.
+
+Conditional reserve при принятом total cap и search exclusion:
+0.471974416/call,1.887897664/4calls;Decimal calculation,не actual charge.
+AI OFF/configure/enable/model smoke NOT_RUN;private RuntimeRoute ещё не создан.
+После review — same intent configure/finite smoke/disable/verified drain/return.
+Completed prepare/repair/receive не повторять. ВМ/PC tunnel сохранить.
+Old writers fenced,обе группы данных/volumes/UUID/holds/R4/source сохранены;
+cold-start template IPAM и PC dependency остаются открытыми.
+
+Owner99fb865a/C0 instruction963baf72;10мин/4POST/10RUB внутри150,
+2POST/1READ/run,8historyGET/4replies,один route/no fallback,synthetic TEXT.
+Source29dc1608/treeb70eb034. Ledger/architecture/product/DDL/dependencies/CI
+не менялись. Sole child2144dabe9b71d1e63ce06fabeb2d71f83486fcd3,branch c6/m4-live-prep-r1,
+только3docs,новый PR/hosted CI не запускались. C0-M4-LIVE-OP-01 CLOSED,
+C6 IN_PROGRESS/route review ожидается;остальные HOLD;M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED — R4 host_scan.** C0 подтвердил receipt a0763b65,
+sole parent 9eafae98 / три docs, ZIP CRC / 27 hashes / exact manifest.
+Независимый повтор: 17 controls PASS / 76 negative subcases / 0 skips,
+17 Python AST PASS на 3.12.14. Включены все 10 R3 controls + 7 новых.
+21 из 23 R3 files byte-identical; operator/cleanup/consumer fences неизменны.
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_b271fdd4718c81918bff22915f73d7dd&account_id=personal), 91712 bytes,
+SHA256 6a9e64dc1113c58941a890a888e465d09621895f62ae9acb54f9ac3766452243.
+Accepted R4 manifest:
+`422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38`.
+Прежние 40 R2 controls NOT_RERUN; actual R4 VM identity/PG/live C0 NOT_RUN.
+
+C6: одна полная read-only проверка обеих system identities/остальных relevant
+processes/read errors/checkpoint/window/old containers+receiver → отдельно
+pinned R4 continuation → прежний TEST/AI OFF/cutover/smoke/disable/return.
+При других blockers вернуть все известные причины одним проходом до эффектов;
+не обходить guard и не расширять исключения по имени. R2/R3/flags/receipts
+сохранены; первый UUID только после guards, существующий не заменять.
+Owner допуск 99fb865a сохраняется, повтор не требуется.
+Полный scope/limits/evidence — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Ветка c6/m4-live-prep-r1; instruction child a0763b65, следующий receipt child
+этого instruction. Build29dc1608/treeb70eb034 прежние. Один сеанс
+10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies; synthetic
+TEXT-only/no fallback/OFF-EVAL_ONLY/UNKNOWN/ACK-drain fences прежние.
+Product/DDL/dependencies/CI/архитектура/ledger не меняются; новый PR/CI не нужны.
+C6 IN_PROGRESS, остальные HOLD; C0-M4-LIVE-OP-01 CLOSED, M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, networkd host guard R4 candidate / 2026-11-07
+
+R3 resume stopped до эффектов:
+`READ_ONLY_R3_PROCESS_AND_CHECKPOINT / ACTUAL_HOST_PROCESS_IDENTITY_UNPROVEN`.
+User-run read-only diagnostic: PRISTINE, unverified1, verified waiter1,
+read_errors_or_omitted0. PID739 fully passes R3; оставшийся PID646 root/PPID1
+принадлежит networkd-dispatcher.service. Его exact argv/flag/script trust
+NOT_PROVEN: старые script-trust booleans относятся к unattended script.
+R3 placement/poller stop/setup archive/remove/capture NOT_REACHED.
+Нового UUID/TEST/0016/cutover/provider effects нет в этой попытке.
+
+[R4 REVIEW ZIP](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal),84621bytes/28entries/27files.
+SHA256 10d02d0ea4b5f652aa7f303e358961e6646df874175d2a10b57742fc4803ebe4;
+manifest422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38.
+21из23R3files unchanged; README+host_scan changed. Добавлена одна static
+networkd identity со всеми R3 trust/namespace/argv/PID guards, без исключения
+по root/PID/unit name. R2/R3 immutable; product/operator/DB/cleanup/fences прежние.
+17targeted controls PASS/76negative subcases/0skips,17Python AST/CRC/hashes PASS
+на Python3.12.14, fake /proc; прежние40R2controls NOT_RERUN. Actual R4 VM/PG/live
+NOT_RUN. Полный receipt/точные helper hashes — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Next: C0 review R4, затем exact fresh read-only identities/checkpoints/window и
+отдельно pinned continuation. Owner допуск99fb865a сохраняется; нового запроса
+нет. R3 acceptance не переносится автоматически на новый manifest. Не отключать
+Ubuntu service, не обходить UNKNOWN/ACK/drain guards, не повторять старый helper.
+Прежний TEST/AI OFF/cutover/synthetic smoke/disable/return scope и limits неизменны.
+Ветка c6/m4-live-prep-r1, receipt sole child9eafae98356fa7f04e0b44566a5fbd154396bf3c;
+build29dc1608/treeb70eb034, только три docs. Product/DDL/CI/dependencies/
+архитектура/ledger без изменений; новый PR/hosted CI не нужны.
+C6 REVIEW, остальные HOLD; C0-M4-LIVE-OP-01 CLOSED, actual M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R3 принят C0; продолжить exact resume / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED — host_scan R3.** C0 подтвердил sole-parent99fb865a/
+three-docs delta receipt ea1572eba и exact R3 ZIP/CRC/23file hashes/manifest.
+Повтор C0:10controls PASS/39negative subcases/0skips,15Python files AST PASS,
+Python3.12.14.15из17R2files byte-identical; operator/cleanup/fence не менялись.
+Прежние40controls NOT_RERUN; actual VM identity/R3/Docker/PG/live C0 NOT_RUN.
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_5df24a89e9c081918ff5b1760b8c92d0&account_id=personal),83973bytes,
+SHA256 c3482d34261f166e47246e9ef284fed37b87367d8847acb4b917faf9b77ffc28.
+
+Accepted R3 manifest30955f6ac41d2b82e8629270e0699a89497de9879d51a726365f6a82ed2f2116;
+archive/metadata остаются неизменны, новый review зафиксирован внешне.
+Owner допуск99fb865a сохраняется; повтор на тот же scope не нужен.
+C6: exact read-only VM identity/checkpoints/window → отдельно pinned R3 resume,
+сохраняя R2/private inputs/receipts → прежние TEST/AI OFF/cutover/synthetic
+smoke/disable/verified return. Нулевой snapshot/exit0 старого poller не заменяет
+ACK/drain proof; partial/UNKNOWN не повторять. Новый intent только после guards.
+Полный порядок/limits/write-set — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Ветка c6/m4-live-prep-r1; instruction child ea1572eba, следующий receipt child
+нового instruction. Build29dc1608/treeb70eb034 прежние.10мин/4POST/10RUB внутри150,
+2POST/1READ/run,8historyGET/4replies; no fallback, synthetic TEXT-only,
+AI OFF/EVAL_ONLY, ledger/UNKNOWN/fences сохранены. Product/DDL/CI/dependencies/
+архитектура без изменений; новый PR/hosted CI не нужны. C6 IN_PROGRESS,
+остальные HOLD. C0-M4-LIVE-OP-01 CLOSED; M4/live остаётся открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, host-process guard R3 candidate / 2026-11-07
+
+Owner допуск99fb865a остаётся; выполнение остановлено до нового intent/TEST/
+cutover/provider effects. R2 принят и сохранён. На ВМ последовательные guards
+выявили два завершённых setup containers, отдельный old polling receiver,
+затем непроверенный host process. Последний STOP:
+`VERIFY_OLD_RECEIVER_ZERO_ACTIVITY / UNVERIFIED_HOST_WRITER_OR_RECEIVER`.
+Poller stop/archive/remove/capture этим запуском не достигнуты.
+PID739/root/PPID1/unattended-upgr — вероятный системный waiter; exact VM
+identity ещё не доказана. Не отключать службу Ubuntu ради guard PASS.
+
+C6 подготовил [R3 REVIEW](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal):
+76170bytes/24entries/23manifest files, ZIP SHA256
+b7be391f8595a9c697bc84cbb4e9174e2a36033498a48e197db09a49be7f3678.
+Единственная runtime дельта host_scan: узкая exception по exact argv, root UID,
+PPID1, systemd cgroup, namespaces, interpreter/script/parent trust и stable PID.
+Посторонний Python остаётся blocker. R2/cleanup/evidence/source29dc1608/treeb70e
+не переписаны. 10 targeted controls PASS/39negative subcases/0skips,
+syntax15files/manifest/CRC PASS; fake /proc, actual VM/R3/PG/live NOT_RUN.
+Прежние40controls не повторялись. Новый manifest ещё не C0 reviewed.
+
+Следующее: C0 review дельты и hashes; затем exact read-only process identity,
+checkpoint/window recheck и отдельно pinned продолжение. Не менять accepted
+R2/approval задним числом и не повторять старый helper вслепую. Повторный owner
+допуск на тот же scope не нужен. Лимиты/UNKNOWN/UUID/consumer fence неизменны.
+Полный receipt и next step — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Этот docs receipt — child99fb865a; только три разрешённых docs. Product/DDL/CI/
+архитектура/dependencies/ledger без изменений; new PR/hosted CI не нужны.
+C6 REVIEW, остальные HOLD. Actual live остаётся открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner допуск получен; TEST cutover + smoke / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED; C0-M4-LIVE-OP-01 CLOSED.**
+Приёмка уже выполнена в C0/M3; новый C0 сверил сохранённое evidence с receipt
+fd37004c и точными bytes R2, затем перенёс результат в единый реестр.
+[C0 acceptance](https://chatgpt.com/library?file_id=libfile_53702f51eba88191bc8914097bb5fceb&account_id=personal):
+64193bytes, SHA256 ecc6398ebdd14da502260318ddfb109e9e8d251e29bf1cfec345561137c65c86.
+Сохранённый независимый прогон17/17 PASS/22subcases и syntax12files принят;
+он не выдаётся за повторный прогон в новом чате. Исходные23controls остаются
+evidence C6. Архивы/manifest digests и совпадение принятого R2 проверены.
+
+Accepted application29dc16084f0ee0d01e5f96e7226995480e189a22,
+treeb70eb0348577c812f4f587d995c724e3c0e989e4; actual main/CI42168468085
+push attempt1/12jobs SUCCESS подтверждены без нового CI. Docs source отличается
+от build source; product/DDL/CI/dependencies/архитектура/ledger неизменны.
+
+**OWNER_CUTOVER_AND_SMOKE_APPROVED — 07.11.2026.** Владелец ответил
+«разрешаю» на единый запрос C0; повторного разрешения на согласованные steps
+не требуется. C6 продолжает принятую последовательность R2:
+отдельный persistent TEST/asm_test/0016 с AI OFF → точный consumer cutover →
+synthetic TEXT/owner reconciliation+Resume → fresh route/key review →
+10мин/4POST/10RUB внутри150,2POST/1READ заrun,8historyGET/4replies →
+disable/verified drain/return с сохранением обеих сред.
+Полный scope/ограничения — [CURRENT HANDOFF](tasks/M4_HANDOFF.md), commands —
+[принятый R2](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal).
+Coordination base4d15b8d3459d907f9a0246cc4331afe257b2f776; ветка
+`c6/m4-live-prep-r1`, build/source29dc1608 неизменен. Допуск привязать к
+проверенным private intent/manifest в approval.json по README R2; старые
+pending-approval фразы для этого одного TEST-сеанса больше не блокируют stages.
+Свежий route/key/account review≤24h, synthetic TEXT-only и все runtime/fence/
+UNKNOWN guards обязательны.10RUB учитываются внутри прежнего150 с prior spend/
+holds, без замены UUID/обнуления бюджета. Write-set — прежние три docs и private R2 state/
+receipts; новый PR/hosted CI не нужны. Вернуть actual stage/usage/cost/cleanup/
+return evidence на review C0. C6 IN_PROGRESS, остальные HOLD. До фактического
+исполнения actual PG/VM/Windows/Happ/live NOT_RUN; M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
+
+C6 исправил C0-M4-LIVE-OP-01 по instruction e17e5ebc: private
+M4_TEST_OPERATOR_R2 возвращён на review C0; live/cutover HOLD.
+Same-session disable и verified-ID stop новых worker/receiver выполняются
+независимо для session/worker/watch errors и обработанных прерываний.
+Primary/cleanup outcomes раздельные; stop подтверждается либо UNKNOWN.
+Сохраняются UUID/бюджет/holds/ACK records; повтор enable и automatic old restore
+не допускаются. SIGKILL/host loss и уже допущенный HTTP не объявлены отменёнными.
+
+[R2 ZIP](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal):60610bytes,18entries,17manifest files.
+SHA256 121fe08290f43bd532afa5b9eea3e9034b5a7c3201d8c2fdc496e13ed70b8ba3.
+R1/C0 evidence неизменны; все три original faults повторены, R2 regressions PASS.
+40 controls/0skips (23 прежних+17 новых), actual Compose parser и syntax PASS.
+Реальный enable control flow, fake DB/Docker; это не actual PG/VM proof.
+Полный receipt, manifest hash/commands/limitations — [HANDOFF](tasks/M4_HANDOFF.md).
+
+Write-set — прежние3docs/private package. Accepted29dc1608/treeb70eb034,
+product/DDL/CI/dependencies/архитектура unchanged. Live/VM/paid/Telegram/PR/CI=0;
+owner generic preflight не повторялся. C6 REVIEW, остальные HOLD.
+Следующий шаг review C0, затем owner exact cutover+finite smoke; сейчас владельцу
+пакет не запускать. M4/live открыт, AI OFF/EVAL_ONLY и ledger/holds прежние.
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, enable cleanup repair / 2026-11-06
+
+C0 review receipt 2aba15ab завершён: private M4_TEST_OPERATOR_R1 требует
+ограниченной правки **C0-M4-LIVE-OP-01 / P1**; live/cutover HOLD.
+C6 продолжает c6/m4-live-prep-r1. Missing operator path реализован; текущий
+недостаток — неполное аварийное завершение enable, не новая задача приложения.
+
+C0 проверил исходный ZIP/CRC/size/SHA256, все 15 manifest digests, docs-only
+delta и границы accepted source. Повторены 18 доступных helper controls: PASS;
+три fault injections на исходном enable подтвердили дефект. Полный frozen
+runtime/Compose/PowerShell/PG/VM C0 не повторял; ограничения явно сохранены.
+
+Session/worker stages находятся вне cleanup; при lost ACK disable/stop
+пропускаются. Ошибка disable внутри watch cleanup также пропускает stop и
+скрывает primary failure. C6 исправляет общий cleanup, независимые попытки
+закрытия сессии/остановки новых worker+receiver, сохранение UNKNOWN и отдельные
+primary/cleanup результаты. Нужны regressions трёх faults, interruption,
+normal expiry и concurrent explicit disable. Полная выдача — CURRENT HANDOFF.
+
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_c575ba8ae9b0819191f84334a51da495&account_id=personal),
+SHA256 f864ccb344aa6b4a67fd02c6ecd79a8e70c781ec693b6500fe7965be560de85a.
+Исходный R1 не менять задним числом; новый private bundle с новыми digests.
+Repo write-set: HANDOFF / TASK_REGISTER / M4_RUNTIME_PILOT; accepted
+29dc16084f0ee0d01e5f96e7226995480e189a22 / tree b70eb0348577c812f4f587d995c724e3c0e989e4
+и product/DDL/CI/dependencies/архитектура frozen. Новый PR/общий CI не нужны.
+C6 IN_PROGRESS, остальные HOLD; live действия и расход на эту правку = 0.
+Будущий finite smoke и ledger/holds прежние; M4/live ещё открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, private operator package / 2026-11-06
+
+C6 реализовал M4_TEST_OPERATOR_R1 по instruction015af6d9; private executable
+package готов для review C0, прежний missing-operator-path закрыт реализацией.
+Accepted code29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4
+не изменён. Repository delta — только M4_RUNTIME_PILOT/HANDOFF/TASK_REGISTER;
+branch c6/m4-live-prep-r1. Product/DDL/CI/dependencies/архитектура frozen.
+
+[Private operator ZIP](https://chatgpt.com/library?file_id=libfile_680ff1db569c819199fe65be1d2929d9&account_id=personal):50981bytes,16entries;
+SHA256 bbebbf134935b7f5046cbe64ae07aab0f87d6bfb23d7f6a13724f9b23c0c9e4c.
+Manifest/CRC PASS; actual bindings/secrets не включены. Полный receipt и
+files/commands/limits — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Реализованы отдельный persistent TEST Compose, plan/check и mutating stages,
+PC/Happ/SSH adapter, MATERIAL/current0016 native paths, один receiver/fence,
+finite session/disable/return. Исторические helpers и принятый receiver/opaque
+relay сохранены; новые adapters имеют отдельные hashes. UNKNOWN не вызывает
+автоматический old-consumer restart, новый session/budget или resend.
+
+23 bounded controls/0skips, actual Compose2.39.4 effective-model parser,
+PowerShell7.5.4 parser, Python3.13 syntax/import/CLI, accepted native profile,
+source/hash/UID/private-file и positive/negative return tests PASS.
+NOT_RUN: actual Docker engine/PG/build/deploy/migrate/policy/session SQL,
+Windows SSH/Happ/VM/live smoke и fresh account/route review. Fake executor не
+является actual evidence. Direct SSH/live/provider/Telegram/PR/hostedCI=0.
+Owner inventory принят ранее, generic preflight не повторялся.
+
+C6 **REVIEW**, остальные HOLD. Следующий шаг — review C0, затем один owner
+допуск на конкретный cutover+finite smoke. Владельцу пока не запускать mutating
+команды из ZIP. Fresh private route/key/TEST inputs подставляются близко к
+запуску;10мин/4POST/10RUB внутри150,2POST1READ/8historyGET/4replies прежние.
+AI OFF/EVAL_ONLY, ledger/UNKNOWN holds и старые volumes/receipts сохраняются.
+M4/live остаётся открыт; INTEGRATED/VERIFIED по live не заявлены.
+
+## История — C0 уточнение scope, executable operator package / 2026-11-06
+
+C0 принял [receipt7f7a3142](https://github.com/Elefesys/ai-service-manager/blob/7f7a3142d401886a65228a6304ec5d71ce4bd239/docs/tasks/M4_HANDOFF.md):
+basic owner inventory gap CLOSED.2ZIP/CRC/size/SHA256,10manifest files и
+16owner records независимо сверены C0; C0 SSH=0.
+LOCAL/asm_local/0013/API200/MATERIAL/nativeON/nontext и нулевые current product
+windows подтверждены supplied evidence. Telegram TIMEOUT observed; cause UNKNOWN.
+Новый TEST scope/consumer/source-image pairing пока не доказаны.
+
+**C6 продолжает ту же задачу и ветку c6/m4-live-prep-r1.**
+Scope расширен с docs до одного private executable M4_TEST_OPERATOR_R1 package:
+TEST compose override, bounded wrapper/PC-session/target/policy adapters,
+launcher, manifest и offline validation. Необходимые companion files внутри
+этого scope допускаются без нового согласования размещения.
+Repo write-set остаётся M4_RUNTIME_PILOT/HANDOFF/TASK_REGISTER.
+Product/DDL/CI/dependencies/accepted build source не меняются.
+
+Accepted code29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4
+и PR43 LOCAL/TEST INTEGRATED/VERIFIED сохраняются. Новый instruction commit —
+sole child7f7a3142; docs/operator artifacts не build source.
+Исторические helpers/receipts и старые volumes неизменны; новые target adapters
+имеют собственные digests. Сохранить MATERIAL/native/ACK/UNKNOWN guards,
+проверить effective Compose и единственный consumer/return fence.
+Полная выдача и критерии — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+C6 IN_PROGRESS; остальные роли HOLD. Нового PR/общего CI/повторного VM preflight
+не требуется. Подготовить конкретный проверенный пакет до одного owner допуска.
+Текущая выдача не исполняет live deploy/migrate/seed/policy/enable/model/send.
+Future10мин/4POST/10RUB внутри150 и прежний ledger/holds сохраняются.
+M4/live ещё открыт; старый LOCAL не чинить стиранием истории или ослаблением guards.
+
+
+## История — C6-M4-LIVE-PREP-R1 / BLOCKED, owner preflight received / 2026-11-06
+
+Accepted PR43 runtime остаётся INTEGRATED/VERIFIED LOCAL/TEST:
+code29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4.
+Instructions a170da0975bcd0d73b0f3372fb8ec4a9cecc0956; ветка c6/m4-live-prep-r1;
+только3разрешённых docs. Предыдущий receipt8fca2c70; product/architecture frozen.
+
+**C6 BLOCKED: TEST_OPERATOR_ADAPTATION_REQUIRED; basic VM inventory gap CLOSED.**
+Owner preflight06.11.2026 13:25:26UTC,SSH0:8containers running/API200,
+LOCAL/asm_local/schema0013; current windows0/0; один binding/один nontext dialog;
+MATERIAL1/nativeON1; API/worker Telegram TIMEOUT. Checkout clean5c074beb,
+image/source pairing NOT_PROVEN; Compose receiver0 не доказывает отсутствие
+host/webhook consumer. Fresh TEST binding/account/route review NOT_RUN.
+
+[Owner evidence](https://chatgpt.com/library?file_id=libfile_c713f00b60048191991da601d6e841fb&account_id=personal)
+—5511bytes,SHA2569b4626752db1fe6b968a1e0f3e1670e3670f07e7e0c8e391a6d3230c3b9dcb78;
+16records/4entries/CRC/manifest PASS. Это supplied result, не прямой SSH C6.
+[Предыдущий preflight package](https://chatgpt.com/library?file_id=libfile_7a9662c704e48191b4507a58b2aec3ea&account_id=personal)
+и его offline evidence сохранены; actual0016/live готовность не объявлена.
+
+C0 получает предусмотренный выдачей concrete missing-operator-path receipt:
+private persistent TEST compose override и узкая PC/polling/MATERIAL/native
+адаптация старых helpers с fresh intent/source/image proof и одним consumer.
+Нового product API/migration/grant/framework не требуется. Wrapper ещё не готов.
+Точные files/дельта/границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Общий повтор preflight не нужен; после executable package — fresh account/route
+review и одно exact cutover+smoke согласование через C0, не approval неполного плана.
+
+Future smoke10мин/4POST/10RUB внутри150, clean TEXT, owner context/Resume,
+disable/UNKNOWN/history preservation и single-consumer rollback — в runbook.
+Owner read-only preflight1; C6 directSSH0. Deploy/migrate/DBwrites/services/policy/
+enable/catalog/key-metadata/model/history/send/PR/hostedCI=0.
+AI OFF/EVAL_ONLY; ledger/holds без изменений. Остальные роли HOLD; M4/live открыт.
+
+## История — PR43 INTEGRATED / VERIFIED LOCAL/TEST; C6-M4-LIVE-PREP-R1 / 2026-11-06
+
+C0 подтвердил owner merge PR43:
+main **29dc16084f0ee0d01e5f96e7226995480e189a22**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4** exact accepted candidate;
+parents3cb3764c+5372e4dc.
+[Push/main CI42168468085](https://github.com/Elefesys/ai-service-manager/actions/runs/42168468085),
+attempt1:12SUCCESS,unit3569+155subtests,generic860,partition1059PG
+(860generic+105native+94M4),foundation/durable complete-evidence gates PASS.
+Current source и весь provider bridge **INTEGRATED/VERIFIED LOCAL/TEST**.
+M4/live pilot открыт. Post-merge ZIP payloads повторно не аудировались;
+independent1059phase audit принят на exact same tree до merge.
+[Post-merge evidence](https://chatgpt.com/library?file_id=libfile_4d93ab8879a08191916c6d9ebd84c591&account_id=personal)
+—101104bytes,SHA256 b6f805245acb85822462b21ad654c16c7b545cec610bf6a4b33fcefeef03dd45.
+
+**Следующая задача C6-M4-LIVE-PREP-R1 — TODO/ASSIGNED C6.**
+Подготовить минимальный исполнимый TEST cutover и Telegram→Polza→reply smoke.
+C3 работу завершил; остальные роли HOLD. Source/build base29dc1608/treeb70eb034;
+старт инструкций — immutable CURRENT commit, ветка c6/m4-live-prep-r1.
+Write-set: M4_RUNTIME_PILOT.md,HANDOFF,TASK_REGISTER; private evidence вне Git.
+Нового PR/CI,product/DDL/infra изменения в подготовке нет.
+
+Критичные факты: прежний live M3 был LOCAL/asm_local/schema0013; provider требует
+TEST/asm_test/schema0016 и чистый TEXT-only scope. C6 готовит отдельный TEST
+путь с сохранением старых данных/receipts и одним активным bot consumer.
+Read-only VM preflight и по необходимости1catalogGET+1key-metadataGET разрешены;
+model/history/send,deploy/migrate/seed/enable/изменение сервисов пока0.
+Предлагаемый будущий smoke10мин/4POST/10RUB входит в общий150; это план,
+не новый paid допуск. Подготовить команды и возврат, затем один конкретный
+owner допуск на TEST cutover+smoke. Полное задание — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Main/historical refs и ledger/UNKNOWN holds неизменны после owner merge.
+AI defaultOFF/EVAL_ONLY; архитектура и IMPL-004 не пересматриваются.
+
+## История — C0 ACCEPTED FOR OWNER MERGE / PR43 / 2026-11-06
+
+**C0 принимает source5372e4dc: fixture lifetime repair и всю продуктовую
+реализацию Polza runtime в LOCAL/TEST. PR43 готов к owner merge;
+статус REVIEW / C0 ACCEPTED. INTEGRATED и post-merge VERIFIED ещё ожидаются.**
+
+Принят source **5372e4dc395a32e649a84e0eea7b4992b9940126**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** — same tree.
+Main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**.
+[C3 receipt b18d8500](https://github.com/Elefesys/ai-service-manager/blob/b18d85009409a015c1e0bd1aa66f2e69a3433a41/docs/tasks/M4_HANDOFF.md);
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43).
+C0 receipt docs-only; execution head и main не изменены.
+
+[CI42157829822](https://github.com/Elefesys/ai-service-manager/actions/runs/42157829822)
+attempt1:12SUCCESS. C0 независимо проверил1059actualPG
+(860generic+105native+94M4), все setup/call/teardown, complete disjoint partition,
+foundation full tail/primary0/cleanup0, native cleanup и5empty M4 inventories.
+Hosted unit3569+155subtests,frontend398/browser54 PASS.
+Source review: explicit provider composition, finite durable admission/holds,
+tuple/currentness/rights/native/send guards,0016/down0015,private operator sources
+и defaultOFF/EVAL_ONLY. Blockers нет. Fixture cleanup и concurrency приняты;
+historical timeout attribution по-прежнему UNKNOWN.
+
+C0 завершил недостающую независимую проверку foundation ZIP/source/phase journal.
+[Acceptance evidence](https://chatgpt.com/library?file_id=libfile_2af3135c1034819199a29d288346abe6&account_id=personal)
+—12487361bytes,SHA256 efa88e8fbaece6bbfb96a6751b47654de1a52a2047b52783065bf41703016756.
+21manifest files/22entries;3original ZIP. Остальные9ZIP/отдельные C3 files
+сохраняются по ссылкам b18d8500. Сборка единого65-file C3 archive не требуется;
+не заявляется, что C0 её выполнил. C0 local app rerun NOT_RUN:
+Python3.13 недоступен offline. Новых CI/paid/live вызовов нет.
+
+**Дальше:** владелец переводит PR43 из Draft и выполняет Create a merge commit
+принятого head; C0 проверяет actual main и штатный post-merge CI.
+C3 новых заданий не получает, остальные роли HOLD. Затем — подготовка
+ограниченного живого TEST-сценария и отдельный owner допуск.
+M4/live остаётся открыт; текущая source-приёмка не разрешает live/paid/VM/deploy.
+Полный review и пределы evidence — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Ledger150/unknown holds неизменны; main/historical refs не изменены C0.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
+
+**Repair source готов к review C0: closed-fixture retention устранён по control,
+CI42157829822 attempt1 —12SUCCESS/1059actualPG PASS.**
+Source **5372e4dc395a32e649a84e0eea7b4992b9940126**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**,
+sole parent assignment **6ceb44f28bef38ef42a6203920fc74e4b5f93df3**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** — same tree.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT,
+existing branch FF с17f94c16; post-CI source changes/retries=0.
+Этот receipt — docs-only child source; execution head не двигается.
+
+Пять разрешённых paths,292+/343−: browser finally очищает три pinned
+FastAPI classifiers после client/lifespan/resource cleanup, включая error/
+cancellation/partial setup. Отдельные bounded offline controls:
+после12closed instances до repair app0/DB12/runtime12/auth12, после **0/0/0/0**.
+GC collect(2) только в reachability controls; обычная fixture/timed case,
+production lifecycle, dependencies/maxsize и GC policy прежние.
+Heavy tracing удалён; finite timestamps/PID/outcome/GC durations сохранены.
+Все6schema fixes, exact business oracles, literal1059PG order,
+observer2s/lock3s/statement3500ms/auth4s и runner anchors прежние.
+
+Offline120PASS=8lifecycle+36foundation+58admission+18schema/consumer;
+Ruff/format/diff/AST PASS; localPG NOT_RUN_LOCAL.
+Hosted unit3569+155subtests,frontend398,browser54 PASS.
+ActualPG1059=860generic+105native+94M4,все phases:
+native/M4 проверены в artifacts; generic raw log860unique PASSED и
+FOUNDATION_COMPLETE_EVIDENCE_PASS. Проверенный hosted gate требует
+exact setup/call/teardown,0skip/xfail/missing call,full tail и primary0/cleanup0.
+Все3concurrency cases:2real HTTP requests/2observed blocked backends,
+200/200 либо200/409 и version2/receipt1/audit2 PASS.
+Both-blocked0.046954/0.060719/0.046760s; GC gen0/1/0 durations
+0.000391/0.013298/0.000381s в ограниченных окнах. Historical timeout UNKNOWN.
+Normal-durable0016 и Docker29:6lifecycles/12assertions каждый PASS;
+native cleanup PASS,5M4 inventories пусты.
+
+**Ограничение evidence: execution environment стала unavailable в конце CI.**
+11original ZIP проверены SHA256/size/CRC,10source snapshots exact350blobs/modes.
+Финальный foundation ZIP сохранён, hosted gate/full job log проверены через
+GitHub; независимая локальная распаковка/phase audit и единый manifest ZIP
+не завершены. Сохранены65files, в том числе12original CI ZIP и11full logs.
+[Offline proof](https://chatgpt.com/library?file_id=libfile_3e71b9535940819181cbce0b14b22b9c&account_id=personal),
+[foundation ZIP](https://chatgpt.com/library?file_id=libfile_11bcd2d56efc8191b6a0bbe9dd0d3937&account_id=personal);
+полные ссылки/digests/границы проверки — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Оставшаяся упаковка/evidence audit BLOCKED инфраструктурой; source edit
+или повтор CI для неё не нужны. Прежние C3/C0 archives сохранены.
+
+**Статус C3:REVIEW; общая source-приёмка provider runtime остаётся за C0.**
+INTEGRATED/VERIFIED и закрытие M4/live не объявляются; остальные роли HOLD.
+Main3cb3764c,42historical C3/24C2refs и product/migrations/pins/consumer/
+workflows/dependencies/architecture frozen; defaultOFF/EVAL_ONLY.
+Paid/model/catalog/history/Telegram/VM/deploy/merge=0.
+Ledger150:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C0 fixture lifetime repair assignment 6ceb44f2 / 2026-11-05
 
 C0 подтвердил receipt **2c0c47911691131539b01063cf5f463ab9fc40af**,
 source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**,

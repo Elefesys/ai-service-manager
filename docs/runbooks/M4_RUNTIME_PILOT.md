@@ -1,9 +1,339 @@
 # M4 Polza runtime: plan / enable / disable
 
-Этот путь остаётся **EVAL_ONLY**, default OFF. Эта реализация и CI не разрешают
-живой запуск. В C3-M4.3-POLZA-RUNTIME-R1: model POST / catalog GET / history GET /
-Telegram send = **0 / 0 / 0 / 0**, VM/deploy = 0. Ниже — процедура для будущего
-отдельно согласованного теста владельца.
+## CURRENT — functional AI reply принят; live остановлен, code repair C3 / 2026-11-12
+
+C0 принял FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST по private
+owner-reported evidence и подтверждению получения ответа владельцем.
+Delivery confirmation, AI disable и записанные stops не означают подтверждённый
+inbound ACK: RECEIVER_ACK_UNRESOLVED остаётся, старый return не выполнен.
+Сохранить holds/receipts/cursor; не reset/resend/restart ради повторного PASS.
+Новый запуск ВМ или платный запрос для source-задачи не нужен.
+
+[CURRENT HANDOFF](../tasks/M4_HANDOFF.md): C3 переносит реальное обновление прав
+до COMMIT reply в штатный claim-bound runtime. TTL30s и final send-check прежние,
+HTTP вне transaction, additive0017 без изменения applied0001–0016.
+Private операторский loop — evidence временного assisted теста, не новая служба.
+Новый код/0017 ещё не развёрнуты; текущая TEST VM не объявляется migrated.
+
+C6-M4-ACK-01 OPEN_OPERATIONAL: до reuse receiver отдельно сверить сохранённые
+status/cursor/fence/ingress facts. Чтение saved snapshot не является fresh ACK.
+Автономная сеть DEFERRED по владельцу; PC/Happ/SSH остаётся development transport.
+После узкого code-fix перейти к M5.1; не смешивать разработку конфигурации с
+возвратом исторического stopped контура. Private VM metadata в public Git не переносить.
+
+
+## C3 candidate0017: штатное наблюдение прав перед COMMIT
+
+Для нового Telegram candidate reply runtime сначала получает job/claim/run-bound
+probe в короткой transaction. Затем существующий TelegramClient выполняет
+getBusinessConnection без открытой DB transaction. Вторая transaction повторно
+проверяет lease/run deadline/session/context/binding/generation/version,
+сохраняет observation через CAS и выбирает canonical reply/Outbox только при
+разрешённых правах. Negative/unknown observation не является send permit.
+Отдельный privileged refresh-loop больше не входит в runtime path.
+
+Это наблюдение входит в уже сохранённый deadline; продления окна, нового model
+POST после rights refusal и повторной отправки нет. Cost/usage/reservation
+сохраняются. No_reply/handoff, CONTROLLED и historical DB-only path не вызывают
+новый Telegram HTTP. Replay/lost-ACK распознаёт сохранённый receipt до HTTP.
+SEND_AI_TEXT по-прежнему требует отдельный свежий probe/observe и same-transaction
+admission перед send. TTL30s не менялся.
+
+Current source требует schema0017/profile194functions/49tables/708columns.
+Upgrade0016→0017 добавляет две узкие runtime capability и разрешает уже
+существующие job probe поля для PROCESS_TURN/AI_GENERATE; таблиц/колонок новых нет.
+Downgrade0017→0016 очищает только ephemeral AI_GENERATE probe metadata,
+восстанавливает прежние current dispatcher/check/profile; canonical results,
+usage/cost/Outbox и final-send probes не удаляются. Used0016 downgrade guards
+остаются. Наличие миграции в PR не означает её применение на TEST VM.
+
+Проверено локально на realPG с mocked HTTP:123M4cases PASS, включая25rights
+и32provider. FullCI/source identity — в C3 return; этот текст не является
+fresh VM attestation или ACK reconciliation. Текущие OPEN/DEFERRED ниже сохраняются.
+
+CI первого candidate4b265b5e/run43145427952 выявил APPLICATION_FULL_CATALOG_PIN:
+все194function bodies/security/roles/nonfunction PASS, declared=independent,
+но локальная БД была C, а pinned CI PG18.6 — en_US.utf8. Порядок functions в
+full catalog отличается. Current full pin исправлен по независимому actual CI
+каталогу b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538;
+SQL, grants, RLS и verifier body не меняются. Сначала local en_US проверка,
+затем финальный fullCI исправленного child. Неизменённого rerun нет.
+
+Дополнительная current0017 совместимость общих PG fixtures: точный native/AI
+function inventory в tenancy, Telegram codec fixture, native policy profile
+selector и full current snapshots при отказах historical0007/0010/0011 downgrade.
+Проверены103generic actualPG cases PASS;7current-native actualPG PASS;
+229targeted unit PASS после pin correction. Historical guards не ослаблены.
+
+## История — одно child continuation FOLLOWUP-01 / 2026-11-08
+
+[Решение C0](../decisions/IMPL-004-m4-pilot-ai.md) и
+[точный порядок C6](../tasks/M4_HANDOFF.md) разрешают ровно один новый synthetic
+run после offline-проверки. Не повторять использованные R4 enable/activate.
+Создать private linked child config/journal/outcome с новым UUID однократно,
+сохранить старый intent/session/UNKNOWN/hold и исходные файлы.
+
+Child≤600s/2POST/1READ/1reply, до4historyGET; child budget=2*current reservation
+в пределах остатков прежних10/150RUB и4total calls. Смена UUID не даёт новой quota.
+На admission/watch допускается только одна exact immutable старая UNKNOWN
+model-call запись без result/outbox/send. Любое отличие/новый UNKNOWN→STOP.
+In-flight новый call до его deadline не является terminal failure; успешный
+конец — SENT/ACK, не получение клиентского сообщения, TOOLS или selected result.
+Worker должен реально загрузить polza.py9d7f50(hash в HANDOFF); bounded
+AI_PROVIDER_FAILURE сохранять до cleanup/recreate. Private данные не публиковать.
+
+После результата disable/fence/stop. Исходный R4 drain/return остаётся строгим:
+с сохранённым UNKNOWN он может отказать; тогда RETURN_NOT_PERFORMED и старые
+writers OFF, без ложного restore. Новое retry/window здесь не разрешено.
+Проверить только конкретную private continuation дельту и выполнить; support/
+новый общий checklist/full CI неизменённого app не нужны.
+
+
+## История — failure log и проверка сохранённого wire без сети / 2026-11-07
+
+[Текущая выдача](../tasks/M4_HANDOFF.md) содержит source scope и команду.
+Private исходные PreparedRun/RuntimeSettings и reserved_at проверяются через
+`scripts/m4_offline_wire_check.py` в existing image с read-only source overlay,
+`--network none`, без ключа и consumer. JSON mode0600, absolute paths.
+DTO берётся из READ ONLY данных, не из нового PREPARE/fixture.
+OFFLINE_WIRE_VALID проверяет только локальную сборку; отдельные flags показывают
+freshness/session/deadline на исходный момент. Ничего не переавторизуется.
+
+Polza.complete пишет один `AI_PROVIDER_FAILURE` при исключении:
+статические labels, stage, HTTP status, transport type и hashed correlation.
+Сохранить bounded log до удаления/recreate stopped worker. Raw exception,
+provider body, переписку и ключи не выгружать в публичный GitHub.
+UNKNOWN и резерв сохраняются при любой диагностике, включая сбой logging.
+Инспектор не снимает STOP и не продлевает session.
+
+C0 validation:430 controlled tests PASS/0skips,ruff/mypy PASS; не live evidence.
+Причина прошлой попытки от нового logging задним числом не появляется.
+C6 выполняет один offline check и возвращает конкретный результат.
+
+
+## История — receiver TLS repair и немедленный finite AI smoke / 2026-11-07
+
+Последний C6 observer сделал7Telegram polls и завершился на raw ssl.SSLError;
+AI был OFF. C0 исправил Wire.api в scripts/telegram_polling_receiver.py:
+SSL exception теперь классифицируется existing PROVIDER_UNAVAILABLE.
+22local tests PASS/0skips; actual live ещё не выполнен.
+Repair SHA2565b5079e9a4e6c1794f74ffb651b835869e3580aecbaa90bbb36f3436508bae79.
+
+C6 разрешены exact private transport repair/loading/pin adaptation поверх
+сохранённого R4, same intent/session/checkpoints; old app source29dc1608 и
+images/DB/volumes неизменны. Не выдавать patched bytes за исходный R4.
+Полный порядок — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md). Эта дельта уже
+принята для isolated TEST,повторный owner/C0 review до исполнения не нужен.
+
+Existing receiver после repair→свежий обычный poll→configure/enable по680b0e0a
+→один synthetic вопрос→один AI reply либо точная ошибка→ранний disable/
+verified ACK-drain/return. No extra observer loops/fullCI/app rebuild/support.
+Не отключать TLS verification;offset/ACK/no-resend/UNKNOWN guards сохранены.
+Другой network/privilege identity drift не игнорировать; разобрать saved diff.
+
+Console127.0.0.1:18080 — намеренный SSH/auth origin; для этой ошибки адрес
+не менять. Telegram/Polza endpoints вызываются серверными процессами.
+Owner assumption cap512,limits600s/4POST/10RUB/8historyGET/4replies прежние;
+фактический план один run≤2POST/1READ. Баланс/тариф/ключ не спрашивать повторно.
+Фактический runtime result/cost/cleanup возвращает C6; C0 live NOT_RUN.
+
+
+## История — owner-authorized experimental TEST: configure/enable разрешены / 2026-11-07
+
+**C0-M4-OWNER-EXPERIMENT-20261107: владелец выбрал ограниченную проверку сейчас,
+без ожидания поддержки. C0 разрешил один текущий TEST session.**
+[Явное REVISED решение](../decisions/IMPL-004-m4-pilot-ai.md) заменяет только
+обязательность внешнего total-output proof для этой пробы. Contract gap остаётся
+NOT_PROVEN/WAIVED_FOR_THIS_OWNER_SESSION; не выдавать его за исправленный факт.
+
+Private RuntimeRoute сохраняет accepted формат и source. Поле
+output_cap_includes_reasoning=true — admitted hypothesis; evidence явно
+OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION, NOT_PROVEN; billing CONDITIONAL_ESTIMATE.
+Внешний private admission receipt связывает intent/session/review hash/owner
+decision. Raw output_cap_scope хранится как declared assumed scope, не VERIFIED.
+Готовые поля и точный scope — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+
+C6 продолжает существующий R4: fresh scope/Resume/transport/window, saved
+catalog≤24h и local validation → configure → foreground enable.
+Использовать existing key/intent/session; completed helpers не повторять.
+При expired catalog один bounded refresh с прежними non-price properties,
+price-only recomputation; timestamp не выдумывать.
+Если private approval expired — сохранить прежнее evidence и привязать
+текущий owner допуск к тому же intent/R4/короткому окну, не обходить guard.
+
+После ACTIVE один новый synthetic TEXT → один run≤2POST/1READ и один reply
+либо STOP → сразу disable → verified ACK/drain/return. Второй вопрос не нужен.
+Не ждать истечения600s после результата. No retry/regeneration/resend при UNKNOWN;
+source/DDL/worker guards/accepted R4 не патчить. No support/standalone quality probe.
+
+Существующие session upper limits600s/4POST/10RUB/8historyGET/4replies неизменны.
+10RUB — conditional admission,не гарантированный provider billing cap.
+Owner balance150/обычный тариф подтверждены. Prior ledger0.37505230 confirmed,
+7.585505548 holds,142.039442152 remaining;reported0.00743079 UNSETTLED.
+Новое списание/unknown учитывать отдельно, UUID/holds не сбрасывать.
+Source/main29dc1608/treeb70eb034,обе группы volumes/receipts сохранить.
+C0 actual live NOT_RUN; C6 выполняет и возвращает observed result/cost/return.
+Один successful run не становится production approval/доказательством всех cap.
+
+
+## История — C0 принял public evidence; configure/enable BLOCKED / 2026-11-07
+
+C6-M4-PUBLIC-CONTRACT-R1 завершён, NOT_PROVEN подтверждён C0:
+19request schemas/18refs,11selected nodes и106описаний raw OpenAPI сверены;
+ZIP CRC/size/SHA и owner attempt/result correspondence PASS.
+Body399936bytes/SHA256487cef588cb1469504804bc83c74221b65938eb7d70e46ac0708d2a2ac677792.
+[Сохранённый evidence](https://chatgpt.com/library?file_id=libfile_cade71a981808191bc38c54a5280522b&account_id=personal).
+
+C0-M4-ROUTE-CAP-01 OPEN: max_tokens для openai/gpt-6-luna/openai/flex не
+подтверждён как общий visible+hidden-reasoning cap512. Это недостаток contract
+evidence, не утверждение о нарушении лимита. Не заполнять reviewed true ради PASS.
+Источники больше не опрашивать. C6 HOLD; новых PC/SSH/model команд нет.
+
+Следующий шаг — один вопрос поддержке Polza, подготовленный для владельца в
+[CURRENT HANDOFF](../tasks/M4_HANDOFF.md). Он не отправлен автоматически.
+Ответ должен явно относиться к текущему endpoint/model/selector и total cap.
+После него C0 завершит review либо предложит минимальное явное изменение;
+код/validator/cap512/4POST/10RUB и маршрут сейчас неизменны.
+
+Баланс150RUB/обычный тариф и прежний owner допуск приняты; повтор не нужен.
+TEST AI OFF, old writers fenced; обе группы volumes/R4/private inputs/receipts/
+UUID/UNKNOWN сохранить. Это последний accepted snapshot, не новая проверка ВМ.
+Completed helpers не повторять; возврат только по verified ACK/drain procedure.
+В ожидании не делать catalog refresh. Перед будущим enable — fresh scope/
+transport/window и actual catalog GET≤24h; новый timestamp не продлевает старый GET.
+
+Ledger confirmed0.37505230,holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED;баланс не обнуляет расход.
+Owner10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies;
+synthetic TEXT/no fallback,disable/drain/return остаются.
+Main/build29dc1608/treeb70eb034,product/DDL/CI/архитектура без изменений.
+C0 runtime/VM/PG/HTTP/tests NOT_RUN; M4/live открыт.
+
+
+## История — public contract NOT_PROVEN; configure/enable BLOCKED / 2026-11-07
+
+One-shot PC GET завершён:HTTP200/complete399936bytes,
+UTC2026-11-07T12:26:32.2291123Z–12:26:34.1107431Z.
+Body SHA256487cef588cb1469504804bc83c74221b65938eb7d70e46ac0708d2a2ac677792.
+[Review evidence ZIP](https://chatgpt.com/library?file_id=libfile_cade71a981808191bc38c54a5280522b&account_id=personal),
+SHA25618ae78a8b98abcfb194c3af3dc1cb3526c51ac603ddc18e4b92d90dd16ef74fe.
+Original owner ZIP сохранён побайтово; parse/CRC/size/SHA/receipt checks PASS.
+
+**C6-M4-PUBLIC-CONTRACT-R1=NOT_PROVEN.** Request path
+/v1/chat/completions→ChatCompletionRequestDto и все19reachable request schemas
+проверены локально. max_tokens описан общо,max_completion_tokens как
+альтернатива; ReasoningDto.max_tokens — Anthropic-style; exclude скрывает
+reasoning. Provider routing/parameter support и response usage не определяют
+общий generation cap. Exact pointers/короткие выдержки —
+[CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+
+Недостающий mapping:Polza max_tokens=N при openai/gpt-6-luna и
+provider.only=[openai/flex] ограничивает visible+hidden reasoning вместе.
+Это не утверждение о неправильной работе Polza. C0-M4-ROUTE-CAP-01 OPEN;
+RuntimeRoute true/configure/enable не подставлять. Следующий ограниченный
+вариант выбирает C0. Этот источник больше не запрашивать; новая PC/SSH
+команда владельцу сейчас не нужна. Support/paid probe/другой route не запускать.
+
+Owner balance150RUB/обычный тариф уже приняты как OWNER_REPORTED; не спрашивать
+повторно. Partial routing/schema/tools/search-exclusion review сохранён.
+Model openai/gpt-6-luna,selector openai/flex,OpenAI family/no fallback,
+synthetic TEXT; cap512/4POST/10RUB/input32768/wire24576 неизменны.
+Catalog aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a
+и actual checked_at не обновлялись. Перед будущим enable нужны свежие
+scope/transport/window checks и freshness≤24h; review timestamp не заменяет GET.
+
+Новых Polza/Telegram/model calls,VM/configure/enable actions не было.
+Last accepted TEST0016/AI OFF/old writers fence/private receipts/R4/volumes
+сохраняется как snapshot,не новый live check. Completed helpers не повторять.
+UUID/UNKNOWN/ledger unchanged:confirmed0.37505230,holds7.585505548,
+remaining142.039442152;reported0.00743079 UNSETTLED.
+Build/main29dc1608/treeb70eb034 неизменны. Только3docs,без новых PR/CI/runtime tests.
+C6 REVIEW; configure/enable BLOCKED; M4/live остаётся открыт.
+
+
+## История — actual preflight PASS; route review перед моделью / 2026-11-07
+
+[asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal) выполнен владельцем:
+ACCEPTED_CURRENT_SYNTHETIC_TEXT_SCOPE,OFF_ZERO_PROVIDER_SESSIONS,
+FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF,blockers=[],SSH exit0.
+Current owner Resume проверен на сервере. Receiver snapshot RUNNING/
+successful_polls89/durable1/confirmed1/ack_pending=false/age85.2s.
+Original inputs/R4/journal/runtime сохранены. Existing private key принят,
+catalogGET1/keyGET1 завершены,без model/history/Telegram API helpercalls.
+
+Не повторять preflight/metadata GET. Private receipts/provider-preflight-r1
+содержит actual timestamps/raw metadata/selected-catalog-entry и result.
+Catalog SHA256 aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a.
+Использовать actual checked_at,не обновлять его только для прохождения freshness.
+Before enable нужен обычный свежий transport/window/scope check.
+
+### Следующий gate — конкретный RuntimeRoute review
+
+Exact model openai/gpt-6-luna,selector openai/flex,history/response family OpenAI,
+без fallback. Catalog parameter subset содержит max_tokens,а не
+max_completion_tokens. Обязательное output_cap_includes_reasoning=true
+не подтверждается одним наличием max_tokens в catalog; exact total-output
+mapping/evidence передан C0 на review. Validator/cap/budget не обходить.
+Принятый R4 README п.4 runtime inputs требует новый C0-reviewed RuntimeRoute;
+нового owner paid согласия на прежний scope не требуется.
+
+Owner facts ещё нужны:current balance≥10RUB,обычный тариф без индивидуального
+договора. Key auth/limit допускает10RUB,но balance/account tariff/model access
+самим GET key не проверены. RuntimeRoute JSON пока НЕ создан/configure NOT_RUN.
+Полный candidate с primary links — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+
+Current rates:RUB/1M prompt5.93195000,cache read0.59319500,
+cache write7.41493750,completion29.65975000;search1186.39000000/1000.
+Консервативный input sum13.94008250. При review исключения search
+(его нет в closed wire) и total-output512:reserve0.471974416/call,
+×4=1.887897664RUB. Это условная admission-оценка,не proof billing ceiling
+и не фактическое списание. Paid calls этого этапа0.
+
+После C0 review/owner facts: собрать private JSON из exact saved entry,
+проверить≤24h freshness и same current scope; configure непосредственно
+перед accepted10-minute enable,затем disable/drain/return.
+Не считать неподтверждённый mapping доказанным и не заменять reviewed route
+на SyntheticRoute без явного принятого изменения.
+
+### Текущее окружение
+
+TEST0016,prepare/CUTOVER/BIND/POLICY/RECEIVE complete,AI OFF.
+Old writers fenced/stopped;обе группы данных/volumes/R4/private inputs
+и original failed receipts сохранены. Completed helpers не повторять.
+ВМ/PC/Happ/SSH оставить работающими;новые TEXT/edits/photos пока не нужны.
+Общий cold-start IPAM риск/зависимость от PC не закрыты.
+Owner99fb865a/C0 instruction963baf72;один UUID/10мин/4POST/10RUB
+внутри150 с prior/UNKNOWN,2POST/1READ/run,8historyGET/4replies,
+synthetic TEXT-only/один route/no fallback. M4/live остаётся открыт.
+
+
+## История — приёмка R4 до исполнения на ВМ
+
+> **07.11.2026: exact R4 принят C0; C6 IN_PROGRESS.**
+> [R4 ZIP](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal)
+> и [C0 evidence](https://chatgpt.com/library?file_id=libfile_b271fdd4718c81918bff22915f73d7dd&account_id=personal):
+> независимый повтор 17 controls PASS / 76 negative subcases / 0 skips,
+> 17 Python AST / CRC / hashes PASS. Runtime delta — только host_scan;
+> 21 из 23 R3 files byte-identical, operator/cleanup/fences прежние.
+> Accepted manifest422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38.
+> Actual networkd argv/flag/script trust на ВМ ещё NOT_PROVEN; старые
+> unattended-script booleans не подтверждают их. Fixture PASS не является VM proof.
+> C6 выполняет одну полную read-only проверку обеих identities, остальных relevant
+> processes/read errors и checkpoint/window/old containers+receiver до эффектов.
+> При blockers вернуть весь безопасный список причин; службу не отключать,
+> guard не обходить. Продолжение — отдельно pinned R4, сохраняя R2/R3/flags/receipts.
+> После plan/check привязать новый C0 review и прежний owner допуск99fb865a
+> к exact intent/manifest; повторное согласие на тот же scope не требуется.
+> TEST/AI OFF → cutover → synthetic smoke → disable/drain/return прежние.
+> 10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies;
+> source29dc1608/treeb70eb034, no fallback, UNKNOWN/ACK/fences сохраняются.
+> Полный порядок и evidence — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+
+Этот путь остаётся **EVAL_ONLY**, default OFF. Реализация и CI сами по себе
+не разрешают живой запуск; конкретный owner допуск записан выше.
+Исторический C3-M4.3-POLZA-RUNTIME-R1: model POST / catalog GET / history GET /
+Telegram send = **0 / 0 / 0 / 0**, VM/deploy = 0. Фактическое выполнение C6
+учитывается отдельно в новом receipt. Ниже — runtime контракт принятого R2.
 
 Один маршрут: `RU_AGGREGATOR / polza / PROVIDER`, `openai/gpt-6-luna`, request
 selector `openai/flex`, `https://polza.ai/api/v1/chat/completions`. Наблюдаемая
@@ -13,7 +343,7 @@ family — OpenAI; variant flex не объявляется наблюдённы
 
 ## Подготовка и пределы
 
-Будущий smoke: **10 минут, максимум 4 model POST, 10 RUB**, не более2 POST и1
+Разрешённый smoke: **10 минут, максимум 4 model POST, 10 RUB**, не более2 POST и1
 READ за run; до8 ограниченных history GET за сессию, catalog GET из runtime=0.
 До4 ответов Telegram, UNKNOWN не пересылается. Тариф должен давать резерв
 одного вызова ×4 ≤10 RUB. Все резервы сохраняются консервативно, включая
@@ -74,7 +404,7 @@ python scripts/m4_runtime_pilot.py plan --config /private/polza-runtime.json
 Plan валидирует конфигурацию и выводит пределы; не читает API key/DB credentials,
 не подключается к БД и не вызывает HTTP. Он не включает worker или сессию.
 
-## Enable — только после отдельного разрешения владельца
+## Enable — в пределах полученного допуска и после проверок R2
 
 Приватные `polza.key` и `migrator.url` создаются оператором вне Git. Первый —
 только API key, второй — существующий `postgresql+psycopg://asm_migrator:…/asm_test`.
@@ -133,3 +463,205 @@ drain/migrate/start cutover по ADR-132/216/217, без заявления roll
 Неиспользованная0016 откатывается до0015; после создания session downgrade
 закрыт (`AI_PROVIDER_DURABLE_DATA`), история не удаляется ради rollback. Этот
 runbook не выполняет deployment/cutover. Приёмка C0 и owner merge — отдельно.
+
+## История C6 — executable package R1 / REVIEW / 2026-11-06
+
+[M4_TEST_OPERATOR_R1.zip](https://chatgpt.com/library?file_id=libfile_680ff1db569c819199fe65be1d2929d9&account_id=personal) —50981bytes,
+SHA256 bbebbf134935b7f5046cbe64ae07aab0f87d6bfb23d7f6a13724f9b23c0c9e4c.
+16entries/manifest/CRC PASS. Instruction015af6d9; accepted build29dc1608/treeb70eb034.
+Пакет находится на review C0; **пока не выполнять его mutating команды на ВМ**.
+README содержит точные executable commands/private inputs и границы. Полный
+receipt — CURRENT M4_HANDOFF; task status — REVIEW в едином register.
+
+Реализован полный отдельный Compose, без merge lists с LOCAL: persistent
+TEST/asm_test/0016, отдельные SHA tags, loopback18000/18080 и один auth origin.
+Operator имеет readonly полный accepted checkout/frozen deps; runtime не
+получает migrator URL. `plan/check` отделены от `prepare/cutover/bind/policy/
+receive/configure/enable/disable/return`. Приёмник/opaque relay byte-identical;
+новые TEST adapters имеют свои hashes. Старые helpers остаются прежними.
+
+Future sequence: private targeted capture → prepare/AI OFF → PC SSH route →
+old empty queue/ACK fence → binding+MATERIAL+native → TEST receive → synthetic
+TEXT и owner reconciliation/Resume → fresh≤24h reviewed route/key → configure →
+finite enable/user smoke → disable/verified return. Enable foreground watchdog
+закрывает admission к expiry/наблюдённому UNKNOWN. Disable доступен из второго
+SSH окна. Неизвестный ACK/send/partial stage запрещает автоматический возврат;
+старый consumer не запускается поверх второго dedupe ledger. Обе группы
+volumes/история/holds сохранены. При исходно пустом webhook и отсутствии
+poller return восстанавливает это неактивное состояние, не придумывает receiver.
+
+23 bounded controls,Python3.13 import/CLI/source/native profile,actual Compose
+parser для полных OFF/AI models и actual PowerShell parser PASS. Actual Docker
+engine/PG/Windows SSH/Happ/VM/external smoke и account/route review NOT_RUN.
+Новых remote/live/paid действий нет. C0 review предшествует одному owner
+допуску; ниже сохранён исторический source plan, не отдельная команда запуска.
+
+## История C6 — source plan и owner inventory / 2026-11-06
+
+**Owner preflight принят C0. Продолжается реализация private TEST operator
+package по CURRENT HANDOFF; прежний docs-only scope расширен для этой адаптации.
+Ниже source plan с наблюдениями ВМ; executable package и live допуск ещё не приняты.**
+Accepted code/build: `29dc16084f0ee0d01e5f96e7226995480e189a22`,
+tree `b70eb0348577c812f4f587d995c724e3c0e989e4`.
+Instructions: `a170da0975bcd0d73b0f3372fb8ec4a9cecc0956`.
+Docs preparation branch не является build/native fingerprint source.
+
+### Что установлено, что ещё нужно
+
+| Проверено по accepted source/историческим файлам | Следствие для оператора |
+|---|---|
+| `compose.yaml` задаёт LOCAL/asm_local, общие `asm-backend:local`/`asm-frontend:local`, фиксированные localhost ports | Отдельный project, persistent volumes, image tags и private override; не запускать обычный compose поверх M3 |
+| `postgres-test` использует временное хранилище | Для live истории брать отдельный persistent PostgreSQL, не CI test service |
+| Runtime требует TEST/asm_test/0016, storage environment тоже TEST | Environment/DSN/healthcheck/storage проверить согласованно, старую БД не переименовывать |
+| `infra/Dockerfile.backend` runtime не содержит `scripts/`; development не содержит всего Git/Console checkout | Operator команды выполнять через development dependencies с полным accepted checkout, отдельно от runtime |
+| `scripts/provision_telegram_test.py --live` после commit вызывает `setWebhook` | Не запускать эту команду как незаметную подготовку polling. В private wrapper использовать существующие `inspect_connection` с заданным external ID и `commit_binding`, без discovery/getUpdates и setWebhook |
+| Архивные `asm_telegram_pc_dev.py`/`asm_telegram_pc_session.py`/`scripts/telegram_polling_recovery.py` проверяют старые receipts/source/контейнеры | Нужна узкая привязка PC route и единственного receiver к новому project; прежние receipts не редактировать, guards не отключать |
+| Архивный `asm_m3_policy_enable.py` R4 привязан к LOCAL/asm_local/0013 | Новый private TEST intent и current0016/source proof для той же узкой MATERIAL операции; затем существующий native check/commit/current |
+| `native-policy-profile` и `provision_telegram_test.py --native-policy` в accepted code уже поддерживают current0016 | Новая migration/API/GRANT или изменение native policy контракта не требуется |
+
+Точный blocker **TEST_OPERATOR_ADAPTATION_REQUIRED**: перечисленные private
+helpers нельзя переносить сменой строки schema или снятием проверки hashes.
+Минимальная дельта — отдельный private compose override и один ограниченный
+wrapper, переиспользующий existing binding/native/receiver/runtime команды;
+в нём новый TEST intent, accepted source/component/image proof, MATERIAL lock
+and recheck, один bot consumer, остановка/возврат с сохранением обоих DB scopes.
+Product/DDL/dependencies/pins/CI не менять. Это не задание на новую платформу.
+
+Владелец выполнил `asm_m4_live_preflight.py`06.11.2026 в13:25:26UTC:
+SSH0,8containers running, API200; actual READ ONLY SQL показал LOCAL/asm_local/
+schema0013, MATERIAL1/nativeON1, один binding, один разговор с nontext и нулевые
+текущие окна subscription/NORMAL service mode. Это внутренние ASM windows;
+агрегаты не доказывают точные даты истечения или оплату облака/Polza.
+Checkout clean5c074beb/treecb47cccd; image/source pairing всё ещё NOT_PROVEN.
+API/worker token-free Telegram TIMEOUT; причина/состояние Happ не проверены.
+Owner evidence не является прямым SSH исполнением C6; mutations NONE.
+Предложенные18000/18080 были свободны, resume/polling/PC-dev hashes совпали с
+reviewed constants. Policy helper отсутствует в проверенном home path; это не
+отменяет committed MATERIAL/native состояние. Новый TEST scope ещё не создан.
+
+[Полный owner receipt](https://chatgpt.com/library?file_id=libfile_c713f00b60048191991da601d6e841fb&account_id=personal)
+сохраняет supplied output и границы проверки. Общее чтение ВМ повторять не нужно.
+Применён один owner preflight с Windows
+launcher: Docker inspect, bounded READ ONLY SQL/ROLLBACK, local readiness,
+token-free Telegram HTTPS, только наличие/mode credentials и hashes старых
+helpers. Он не запускает/импортирует helpers, не создаёт файлы на ВМ, не вызывает
+bot API/getUpdates/provider, не меняет services/DB. Разрешено обычное чтение
+через owner SSH; нового согласования на эту проверку не требуется.
+Образные IDs и checkout SHA — наблюдения, не доказательство их соответствия.
+Preflight не доказывает отсутствие host receiver или remote webhook; это ещё
+один обязательный fence перед переключением. Не выдавать его за полный0016 audit.
+
+### Конкретный предлагаемый cutover после готового пакета и одного owner допуска
+
+1. Сохранить private snapshot старого project: source/tree, image/container IDs,
+   mounts/volumes, environment-file digests, действующий transport/receiver mode,
+   binding, queue/ack state, конфигурацию ingress и прежние receipts. Текущий
+   snapshot сначала сверить с owner preflight. Не изменять оригиналы.
+2. Подготовить отдельный `asm-m4-live-test` из accepted code, а не docs branch;
+   новые named volumes, новые credentials, новые versioned backend/frontend
+   tags. Предложены только loopback `18000` API / `18080` Console, занятость
+   перепроверить перед созданием. Runtime/Storage TEST, DB `asm_test`, runtime
+   role `asm_runtime`; migrator только в отдельном operator. Новый публичный
+   домен не нужен: Console через owner SSH local forward и exact auth origin.
+   Старые DB/storage/receipts остаются на месте. Не переиспользовать `:local` tags.
+3. После разрешённого create/migrate проверить ровно schema0016/current profile,
+   source/component/image соответствие, private mounts по UID и readiness с
+   AI OFF. Раздельные private копии key/config должны принадлежать читающему
+   процессу: runtime UID10001; operator UID определяется фактически. Не выдавать
+   runtime migrator URL. Отсутствие ключа в old worker не доказывает его отсутствие
+   на ПК. В новом worker обе `ASM_POLZA_RUNTIME_*` пока отсутствуют.
+4. Создать новый synthetic Owner/Workspace существующим
+   `scripts/provision_local_auth.py` и fresh billing/binding через existing
+   capabilities. Существующие тестовые Telegram Owner/Client аккаунты допустимы;
+   старые messages/photo/receipts не копировать и не очищать. Точные новые IDs
+   сохраняются только в private intent. Нужны текущие согласованные окна, не даты M3.
+5. Для того же bot сначала приостановить тестовые сообщения, подтвердить
+   обработку старой очереди/ACK и отсутствие UNKNOWN, остановить старый receiver
+   и старые Telegram writers (API/worker/scheduler); DB/storage оставить.
+   Проверить отсутствие второго host/container poller и webhook consumer.
+   Непустая/непроверенная очередь или неизвестный ACK — STOP. `drop_pending_updates`
+   не использовать. Новому receiver передать только новую API origin и те же
+   ожидаемые bot identity/secret; pending old traffic нельзя считать новым TEXT scope.
+6. Через новую согласованную PC/Happ route проверить callers, затем включить
+   единственный новый polling receiver. При необходимости удаления прежнего
+   webhook это явный шаг cutover с `drop_pending_updates=false`, после fence.
+   Прежний PC helper с автоматическим восстановлением старого consumer не
+   запускать поверх новой схемы. Сначала marker TEXT с AI OFF создаёт новый
+   conversation/client, затем exact private scope фиксируется для сессии.
+7. В том же новом binding: узкая MATERIAL false→true с сохранением M3 lock order,
+   identity/product/binding recheck и UNKNOWN semantics; затем штатный native
+   OFF_UNUSED/P0→ON/P1 с actual current source/drain proof. Ни изменение старого
+   binding, ни декларация `drain_confirmed=true` без проверки не допустимы.
+   Owner подтверждает актуальный native context, сохраняет reconciliation,
+   отдельно выполняет Resume; observation barrier/currentness должны пропустить
+   новую попытку. Не обходить эти условия прямыми UPDATE conversation state.
+
+Все эти изменяющие шаги **NOT_RUN**. Current wrapper/override с private inputs
+ещё не выдан как runnable cutover. Basic preflight получен; остаётся operator delta;
+после этого C0 представляет владельцу одну точную операцию, не серию разрешений.
+
+### Account/route и команды, которые уже существуют
+
+Fresh account/route review **NOT_RUN**: в этом исполнении catalog GET=0,
+key-metadata GET=0; секрет не запрашивался. Разрешённые по необходимости один
+catalog GET и один key/limit GET выполняются существующим путём с private key,
+без повторения исторического paid probe CLI. Новый RuntimeRoute должен пройти
+полный validator: catalog fingerprint, capabilities, rates/fees, token/output
+bounds, OpenAI mapping и проверка свежести≤24h. Старую дату нельзя заменить
+новой без проверки. Flex остаётся NOT_OBSERVED; ledger не является балансом счёта.
+
+Только после готовности scope/review и owner допуска сформировать новый десяти-
+минутный config по примеру выше. Ниже точные existing CLI, выполняемые внутри
+отдельного operator environment с accepted checkout/dependencies; абсолютные
+private paths заполняет wrapper, а не владелец в публичном сообщении:
+
+```sh
+# Current source profile: no policy commit by this command.
+python scripts/prepare_telegram_egress.py native-policy-profile \
+  --state-dir "$ASM_PRIVATE" \
+  --accepted-sha 29dc16084f0ee0d01e5f96e7226995480e189a22 \
+  --accepted-tree b70eb0348577c812f4f587d995c724e3c0e989e4
+# Prepared TEST request/approval/receipt and migration URL are private environment inputs.
+python scripts/provision_telegram_test.py --native-policy check
+python scripts/provision_telegram_test.py --native-policy commit
+python scripts/provision_telegram_test.py --native-policy current
+python scripts/m4_runtime_pilot.py plan --config "$ASM_PRIVATE/polza-runtime.json"
+python scripts/m4_runtime_pilot.py enable --config "$ASM_PRIVATE/polza-runtime.json" \
+  --key-file "$ASM_PRIVATE/polza.key" --database-file "$ASM_PRIVATE/migrator.url"
+# Wrapper starts exactly one TEST worker, not an extra copy beside the existing worker.
+# Its runtime-only environment includes ASM_ENVIRONMENT=TEST and both private Polza paths.
+python -m asm.foundation worker
+# Separate operator terminal; SESSION_UUID is read from the saved private intent.
+python scripts/m4_runtime_pilot.py disable --session "$ASM_SESSION_UUID" \
+  --database-file "$ASM_PRIVATE/migrator.url"
+```
+
+Не передавать весь operator environment worker: последняя worker команда
+выполняется в runtime container, без migrator credentials. Operator команды
+`commit`, `enable`, `disable` здесь только план, в текущей подготовке не вызывались.
+
+### Smoke и возврат
+
+В новом scope владелец сначала подтверждает синтетический факт:
+«Тестовая консультация проходит онлайн». Цена/свободное время не задаются.
+После reconciliation и отдельного Resume два предлагаемых client TEXT:
+
+- «Как проходит тестовая консультация?» — ответ опирается на подтверждённый факт.
+- «Сколько стоит и можно записаться завтра на 15:00?» — уточнение/передача владельцу,
+  без выдуманной цены и подтверждённой записи.
+
+Общие пределы прежние:10мин/4POST/10RUB внутри150;2POST/1READ на run,
+8historyGET/сессию/4автоответа. READ отмечать только по actual evidence; новых
+POST ради READ нет. Проверить оба Telegram участника и Console, durable run/call/
+usage/cost, Outbox/send outcomes, отсутствие дублей. UNKNOWN/error/expiry — STOP,
+disable, сохранение holds; не refresh/re-enable/restart ради повторной генерации.
+
+Возврат начинается с disable новой сессии, остановки нового AI worker и receiver,
+проверки in-flight/queue/ACK. Сохранить новый0016 volume, receipts, cost/UNKNOWN
+history и private intent. При unresolved send/ACK не восстанавливать старого
+Telegram consumer автоматически: новая БД не разделяет dedupe ledger со старой.
+Старую Console можно вернуть на её неизменённые source/images/DB, но Telegram
+writers/receiver возобновлять только после разрешённого однозначного fence;
+одновременно ни два poller, ни poller+webhook. Незавершённый fence означает
+безопасную паузу доставки, не успешный rollback. Никаких `down -v`, удаления
+session/holds, downgrade использованной0016 или восстановления старой БД поверх новой.

@@ -35,8 +35,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def delivery(pg):
-    await migrate("upgrade", "0016")
-    pg.schema_revision = "0016"
+    await migrate("upgrade", "0017")
+    pg.schema_revision = "0017"
     return pg
 
 
@@ -595,7 +595,11 @@ async def test_synthetic_telegram_real_admission_and_rights_race(delivery, right
                         "user_chat_id": int(OWNER),
                         "date": 1789990000,
                         "is_enabled": True,
-                        "rights": {"can_reply": rights},
+                        "rights": {
+                            "can_reply": True
+                            if requests.count("getBusinessConnection") == 1
+                            else rights
+                        },
                     },
                 },
             )
@@ -644,7 +648,9 @@ async def test_synthetic_telegram_real_admission_and_rights_race(delivery, right
             )
         await delivery_facts(h, d, fake, "SEND")
         assert requests == (
-            ["getBusinessConnection", "sendMessage"] if rights else ["getBusinessConnection"]
+            ["getBusinessConnection", "getBusinessConnection", "sendMessage"]
+            if rights
+            else ["getBusinessConnection", "getBusinessConnection"]
         )
         assert len(fake.requests) == 1
         assert await scalar(
@@ -660,7 +666,9 @@ async def test_synthetic_telegram_real_admission_and_rights_race(delivery, right
             assert unused.requests == [] and await enrollment(h, source) == d
             assert len(fake.requests) == 1
             assert requests == (
-                ["getBusinessConnection", "sendMessage"] if rights else ["getBusinessConnection"]
+                ["getBusinessConnection", "getBusinessConnection", "sendMessage"]
+                if rights
+                else ["getBusinessConnection", "getBusinessConnection"]
             )
             assert (
                 await scalar(
@@ -681,11 +689,24 @@ async def test_synthetic_telegram_real_admission_and_rights_race(delivery, right
         await telegram.aclose()
 
 
-async def test_ai_probe_claim_version_tenant_and_foreign_observation_guards(delivery):
+@pytest_asyncio.fixture(loop_scope="module")
+async def positive_reply_rights_client():
+    from test_m4_reply_rights_postgres import connection, telegram
+
+    client = telegram(lambda request: connection())
+    try:
+        yield client
+    finally:
+        await client.aclose()
+
+
+async def test_ai_probe_claim_version_tenant_and_foreign_observation_guards(
+    delivery, positive_reply_rights_client
+):
     h = delivery
     cid, source, _ = await source_turn(h, telegram=True)
     await refresh_synthetic_observation(h, cid)
-    worker, fake = application(h)
+    worker, fake = application(h, telegram=positive_reply_rights_client)
     _, d = await run_turn(h, worker, source)
     assert d["selected_kind"] == "reply" and len(fake.requests) == 1
     send = await claim_job(h, d["send_job_id"])

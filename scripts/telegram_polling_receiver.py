@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import signal
+import ssl
 import sys
 import time
 from pathlib import Path
@@ -106,7 +107,7 @@ class Wire:
                 raise PollingError("PROVIDER_REQUEST_FAILED")
         except (TimeoutError, httpx.TimeoutException):
             raise PollingError("PROVIDER_TIMEOUT") from None
-        except httpx.HTTPError:
+        except (httpx.HTTPError, ssl.SSLError):
             raise PollingError("PROVIDER_UNAVAILABLE") from None
 
     async def identity(self):

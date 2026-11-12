@@ -249,8 +249,8 @@ async def test_billing_and_binding_use_one_short_reviewed_capability_transaction
             if sql == "SELECT current_user":
                 return Result("asm_migrator")
             if sql == "SELECT version_num FROM platform.alembic_version":
-                # Setup is paired with current0015; native policy remains a separate command.
-                return Result("0016")
+                # Setup is paired with current0017; native policy remains a separate command.
+                return Result("0017")
             assert sql.startswith("SELECT platform.initialize_")
             assert params["workspace"] == WS
             if "initialize_local_messaging_billing" in sql:
@@ -571,7 +571,7 @@ def native_request(**updates):
         },
         "source_profile": {
             "source_tree": "b" * 40,
-            "schema_revision": "0016",
+            "schema_revision": "0017",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "drain_confirmed": True,
         },

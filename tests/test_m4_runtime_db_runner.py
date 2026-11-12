@@ -121,7 +121,7 @@ def test_real_wrapper_driver_smoke_inventory_cleanup_and_export(
         monkeypatch.setenv(key, value)
     nodes = [
         m + "::test_synthetic_" + str(i)
-        for m, count in zip(carrier.MODULES, (35, 22, 9, 1), strict=True)
+        for m, count in zip(carrier.MODULES, (35, 22, 9, 1, 1), strict=True)
         for i in range(count)
     ]
     configuration = tmp_path / "synthetic.json"
@@ -149,7 +149,7 @@ elif 'collect-current-native' in args:
 elif 'native-owner' in args:
     runner.write(evidence/'native-owner.json',{'system_identifier':'synthetic-owned-server'})
 elif 'readiness' in args:
-    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0016'})
+    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0017'})
 elif 'pytest' in args:
     nodes=json.loads((evidence/'inventory.json').read_text())['nodeids']
     if nodes==config['native']:
@@ -197,7 +197,7 @@ elif 'pytest' in args:
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
     inventory = json.loads((root / "evidence/inventory.json").read_text())
-    count = (72 if mode == "targeted" else 66) + (0 if fault in {"build", "collection"} else 1)
+    count = (72 if mode == "targeted" else 66) + (0 if fault in {"build", "collection"} else 2)
     assert summary["expected_cases"] == count == sum(summary["planned_cases_by_module"].values())
     assert (
         summary["missing_count"]
@@ -206,17 +206,17 @@ elif 'pytest' in args:
     )
     assert summary["inventory_complete"] is (fault not in {"build", "collection", "m4-duplicate"})
     assert summary["unknown_inventory_cases"] == (
-        66 if fault in {"build", "collection"} else 67 if fault == "m4-duplicate" else 0
+        66 if fault in {"build", "collection"} else 68 if fault == "m4-duplicate" else 0
     )
     assert summary["collected_cases"] == (
-        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 67
+        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 68
     )
     assert summary["collection_complete"] is (fault == "none")
     group = root / (root.name + "-group-0")
     primary = json.loads((group / "evidence/primary.json").read_text())
     if fault == "none":
         assert summary["complete"] and not summary["missing"]
-        assert len(summary["groups"]) == (6 if mode == "targeted" else 5)
+        assert len(summary["groups"]) == (7 if mode == "targeted" else 6)
         assert (
             json.loads((group / "evidence/readiness.json").read_text())["runtime_check"] == "PASS"
         )
@@ -545,7 +545,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         monkeypatch.setenv(key, value)
     nodes = [
         module + "::test_constructed_" + str(i)
-        for module, count in zip(carrier.MODULES, (35, 22, 9, 1), strict=True)
+        for module, count in zip(carrier.MODULES, (35, 22, 9, 1, 1), strict=True)
         for i in range(count)
     ]
     calls, cleaned = [], []
@@ -578,7 +578,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
                 group / "evidence/current-native-inventory.json",
                 {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
             )
-        if label == "catalog-0016" and fault == "catalog":
+        if label == "catalog-0017" and fault == "catalog":
             raise RuntimeError("CATALOG_DECLARED_PROFILE")
         if label == carrier.COMMAND_REPORT:
             expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
@@ -634,7 +634,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         with pytest.raises(RuntimeError, match="PRIMARY_FAILED"):
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
-    expected_count = 73 if mode == "targeted" else 67
+    expected_count = 74 if mode == "targeted" else 68
     assert summary["expected_cases"] == expected_count
     assert summary["sql_test_seconds"] <= 600
     assert summary["result"] == ("PASS" if fault == "none" else "FAIL")
@@ -644,11 +644,11 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         assert summary["groups_visited"] == 1 and len(summary["not_reached"]) == expected_count
         assert not any(label == carrier.COMMAND_REPORT for _, label, _ in calls)
     elif fault == "retained":
-        assert summary["groups_visited"] == 6 and len(summary["missing"]) == 34
+        assert summary["groups_visited"] == 7 and len(summary["missing"]) == 34
         assert summary["groups"][-1]["outcome"] == "PASS"
     else:
         assert summary["complete"] and not summary["missing"]
-        assert summary["groups_visited"] == (6 if mode == "targeted" else 5)
+        assert summary["groups_visited"] == (7 if mode == "targeted" else 6)
 
 
 def test_phase_keeps_private_json_stdout_separate_and_redacts_stderr(tmp_path):
@@ -781,12 +781,12 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason):
-    expected = catalog.source_catalog(catalog.ROOT, "0016")
-    profile = expected["functions"]["platform.ai_provider_schema_profile()"]
+    expected = catalog.source_catalog(catalog.ROOT, "0017")
+    profile = expected["functions"]["platform.ai_reply_rights_schema_profile()"]
     row = "('platform.human_context_schema_profile()','527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac','sql',true,'s',false)"
     assert profile["body"].count(row) == 1
     replacement = {
-        "self": row.replace("human_context_schema_profile", "ai_provider_schema_profile"),
+        "self": row.replace("human_context_schema_profile", "ai_reply_rights_schema_profile"),
         "missing": "",
         "duplicate": row + "," + row,
         "hash": row.replace(
@@ -812,14 +812,14 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
 @pytest.mark.parametrize(
     "predicate",
     [
-        "(SELECT count(*) FROM functions)=190",
-        "(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=189",
+        "(SELECT count(*) FROM functions)=194",
+        "(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=193",
         "(SELECT count(*) FROM tables)=49",
     ],
 )
 def test_current_verifier_rejects_stale_count_predicates(predicate):
-    expected = catalog.source_catalog(catalog.ROOT, "0016")
-    profile = expected["functions"]["platform.ai_provider_schema_profile()"]
+    expected = catalog.source_catalog(catalog.ROOT, "0017")
+    profile = expected["functions"]["platform.ai_reply_rights_schema_profile()"]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
     with pytest.raises(catalog.Refusal, match="^EMBEDDED_COUNT_PREDICATE$"):
@@ -842,11 +842,11 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 ):
     from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
 
-    expected = catalog.source_catalog(catalog.ROOT, "0016")
+    expected = catalog.source_catalog(catalog.ROOT, "0017")
     if not body_matches:
-        expected["functions"]["platform.ai_provider_schema_profile()"]["body_sha256"] = "0" * 64
+        expected["functions"]["platform.ai_reply_rights_schema_profile()"]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
-    declared = {"schema_revision": "0016", "valid": valid, "profile_sha256": digest}
+    declared = {"schema_revision": "0017", "valid": valid, "profile_sha256": digest}
     result = carrier.catalog_comparison(expected, digest, "{}", declared)
     assert result["failed_predicate"] == reason
     assert result["application_pin_matches"] is hash_matches
