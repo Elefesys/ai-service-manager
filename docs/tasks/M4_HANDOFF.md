@@ -30,7 +30,7 @@ private currentness helper/profile, существующий ephemeral job probe
 AI_GENERATE. Новых таблиц/колонок нет. Два current schema dispatcher переведены
 на профиль0017; applied0001–0016 и исторические guards сохранены.
 Current inventory:194functions/49tables/708columns;
-profile a5257875899ac8ad49a96cf82ce2a747fdc2c1918f52ae098e0a9244b7603cf0.
+profile b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538.
 
 Local actual PostgreSQL18.0/pgvector0.8.6, Python3.13/frozen lock:
 red на6851 воспроизводит ранний отказ без Outbox; green matrix25PASS,
@@ -43,6 +43,14 @@ Compatibility delta ограничена current0017/profile pins, fixtures и p
 нового test module. Единственное внешнее finding: унаследованный receiver test
 не проходил Ruff format; применено только форматирование с AST equality proof,
 поведение public receiver repair2a1369c8/diagnostics9d7f50 сохранено.
+
+CI первого candidate4b265b5e/run43145427952 выявил APPLICATION_FULL_CATALOG_PIN:
+все194function bodies/security/roles/nonfunction PASS, declared=independent,
+но локальная БД была C, а pinned CI PG18.6 — en_US.utf8. Порядок functions в
+full catalog отличается. Current full pin исправлен по независимому actual CI
+каталогу b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538;
+SQL, grants, RLS и verifier body не меняются. Сначала local en_US проверка,
+затем финальный fullCI исправленного child. Неизменённого rerun нет.
 
 ### C3 — конкретный результат для продукта
 

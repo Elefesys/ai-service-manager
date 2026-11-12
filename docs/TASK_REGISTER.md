@@ -13,6 +13,14 @@ red/green reproducer подтверждён; runner unit123PASS, Ruff/mypy/OpenA
 в C3 receipt. Только code/test: VM/deploy/paid/Telegram API не выполнялись.
 [Подробности и пределы результата](tasks/M4_HANDOFF.md#результат-реализации-c3--source-candidate).
 
+CI первого candidate4b265b5e/run43145427952 выявил APPLICATION_FULL_CATALOG_PIN:
+все194function bodies/security/roles/nonfunction PASS, declared=independent,
+но локальная БД была C, а pinned CI PG18.6 — en_US.utf8. Порядок functions в
+full catalog отличается. Current full pin исправлен по независимому actual CI
+каталогу b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538;
+SQL, grants, RLS и verifier body не меняются. Сначала local en_US проверка,
+затем финальный fullCI исправленного child. Неизменённого rerun нет.
+
 C0 принимает FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST:
 AI reply дошёл до клиента через текущий PC transport. Evidence owner-reported;
 private report не публикуется. Общий M4 VERIFIED не объявлен.
