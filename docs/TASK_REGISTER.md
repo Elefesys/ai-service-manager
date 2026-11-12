@@ -2,7 +2,25 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4 rights fix INTEGRATED / VERIFIED (LOCAL/TEST); M5 HOLD / 2026-11-12
+## CURRENT — M5 план REVIEW; реализация TODO / 2026-11-12
+
+Владелец поручил подготовить полный пилотный M5 и промпт C0.
+План: [M5_HANDOFF](tasks/M5_HANDOFF.md); предложенное решение:
+[IMPL-005](decisions/IMPL-005-m5-pilot-knowledge.md) (PROPOSED до приёмки C0).
+Это docs-only подготовка. Код, миграции, provider/VM и данные не менялись.
+Первая следующая выдача после принятия/интеграции плана — M5.1A, C1 с C2;
+точный accepted main SHA и write-set назначает C0. Других активных выдач нет.
+
+Application base c9d42878ebfaf6def59d24cf7f95b1f74646eb83; PR44 merged;
+CI43157266312 push/main — 12/12 SUCCESS. Receipt98136c33 сохранён ниже.
+Повторный аудит/CI M4 не требуется. Receiver ACK/fence, полный live HUMAN/Resume,
+UNKNOWN/holds и ограничение PC transport сохранены; они не блокируют M5 coding.
+
+Статус исполнения вести здесь, active assignment — только в M5_HANDOFF.
+Обновлять краткий CURRENT; подробные новые логи и receipts оставлять в PR/CI.
+Merge/paid/live допуск не следует из приёмки планирования.
+
+## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 
 C0 подтверждает слияние PR #44 владельцем.
 Accepted main: `c9d42878ebfaf6def59d24cf7f95b1f74646eb83`;

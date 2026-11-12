@@ -14,41 +14,39 @@
 
 Изоляция клиентов/Workspace, право владельца на управление, защита от повторных отправок и достоверность результатов проверок сохраняются. Упрощение архитектуры не означает скрытое отключение этих гарантий.
 
-## Текущий этап M4 — одна последовательная выдача
+## Текущий этап M5 — одна последовательная выдача
 
-M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем блоке M3_HANDOFF.
-Для M4 сначала читать [M4_HANDOFF](docs/tasks/M4_HANDOFF.md),
-[IMPL-004](docs/decisions/IMPL-004-m4-pilot-ai.md) и CURRENT в
-[TASK_REGISTER](docs/TASK_REGISTER.md), затем относящиеся к задаче исходные ADR.
-План/IMPL-004 приняты C0 и интегрированы в PR #37. Единственная текущая
-выдача, её accepted/repair base, исполнитель и write-set — в верхнем
-M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
-PR39/40 слиты; прежний main586240e8/push41178689536 принят.
-PR42 слит владельцем через merge commit: accepted main3cb3764c, exact tree52f4e7c5,
-parents586240e8+3f68b262. Post-merge CI41971790237 push/main attempt1:12/12 SUCCESS.
-C2 durable DB layer и C3 synthetic runtime INTEGRATED/VERIFIED (LOCAL/TEST):
-unit3529+155subtests,actualPG1031/1031,frontend398/browser54 PASS.
-Все setup/call/teardown и foundation lifecycle/contracts/wheels/cleanup PASS;
-прежние6групп failures закрыты. Нет skips/xfails/NOT_REACHED.
-GitHub также пометил PR41 merged: его head9b05e5dd уже включён в PR42.
-Отдельного merge PR41 в main нет; старые source/execution/C2 refs сохраняются.
-PR43 слит владельцем: accepted main29dc1608/treeb70eb034, exact candidate5372e4dc.
-Post-merge CI42168468085 push/main attempt1:12/12 SUCCESS;1059actualPG partition,
-unit3569+155subtests,frontend398/browser54. C0 принял всю source-реализацию
-Polza bridge и fixture cleanup; LOCAL/TEST INTEGRATED/VERIFIED.
-Полный M4/live pilot ещё открыт. Merge не обновляет ВМ и не включает provider.
+Технические зависимости M4 для начала M5 выполнены. PR #44 слит; accepted main
+c9d42878ebfaf6def59d24cf7f95b1f74646eb83, push/main CI43157266312 — 12/12 SUCCESS.
+Финальный receipt C0 из98136c33 сохранён в [M4_HANDOFF](docs/tasks/M4_HANDOFF.md).
+Общий live VERIFIED не заявляется: receiver ACK/fence и единый HUMAN/Resume
+сценарий остаются отдельно OPEN_OPERATIONAL, без блокировки разработки M5.
+Старые UNKNOWN/holds сохраняются; автономная сеть DEFERRED, development через ПК.
 
-Текущая выдача — C3-M4-PRECOMMIT-RIGHTS-R1: штатное обновление реальных прав
-Telegram до canonical reply COMMIT; exact scope/base/write-set — CURRENT HANDOFF.
-Первый AI reply принят C0 как FUNCTIONAL_E2E_CONFIRMED/ASSISTED_SYNTHETIC_TEST.
-Общий M4 VERIFIED не объявлен; C6 inbound ACK/fence OPEN, live STOP/HOLD.
-Private helper не является новым production/runtime acceptance.
-Автономный Telegram transport DEFERRED по владельцу; development путь через ПК.
-Для этой source-задачи ВМ и новые paid/send не нужны. Остальные роли HOLD.
-C0 резервирует additive0017/down_revision0016; applied0001–0016 не менять.
-Сохранить TTL30,final send-check,tenant/native/currentness,UNKNOWN/no-resend.
-Следующая продуктовая очередь после fix — M5.1; reuse старого receiver отдельно
-зависит от ACK reconciliation. Секреты и private VM receipts не коммитить.
+Перед работой читать [M5_HANDOFF](docs/tasks/M5_HANDOFF.md),
+[IMPL-005](docs/decisions/IMPL-005-m5-pilot-knowledge.md), CURRENT в
+[TASK_REGISTER](docs/TASK_REGISTER.md), затем применимые исходные ADR.
+Пакет планирования — REVIEW, решение IMPL-005 — PROPOSED до принятия C0;
+код M5 не реализован. Первая предполагаемая выдача — M5.1A C1/C2.
+Старые формулировки M4 «следующий шаг M5.1» не являются готовым поручением
+реализовать весь Service/Rule/Workflow/RAG набор одним PR.
+
+M5 делает подтверждённые настройки и знания полезными в разговоре, затем Vision,
+портфолио и предварительный intake. Не строить universal workflow engine,
+OnboardingAgent, массовый импорт чатов, генерацию изображений или pricing/booking
+заранее. Приёмка IMPL-005 явно фиксирует эти изменения порядка/scope.
+Не считать text-only M4 допуском к изображениям или embeddings.
+Нельзя создавать фиктивные conversations/messages ради owner upload/индексации
+либо обходить guards через ручную отправку. Один исходящий portfolio photo —
+отдельная ограниченная задача; текущий sendMessage его не реализует.
+
+C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
+Current migration head0017; следующий номер назначают C0/C2 по факту выдачи,
+applied migrations immutable. Не резервировать всю будущую схему заранее.
+Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
+При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
+не размножать длинные receipts между документами.
+Новых paid/live/VM допусков этот план не создаёт. Merge — отдельное действие.
 
 ## Источники и границы
 
