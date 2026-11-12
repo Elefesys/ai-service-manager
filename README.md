@@ -1,14 +1,16 @@
 # AI Service Manager
 
 Modular monolith; architecture v0.28. Stack decision: `docs/decisions/IMPL-001-stack.md`.
-Current tasks and acceptance: [`docs/TASK_REGISTER.md`](docs/TASK_REGISTER.md). M3 is accepted in its LOCAL/TEST scope; the next plan is [`docs/tasks/M4_HANDOFF.md`](docs/tasks/M4_HANDOFF.md) (REVIEW; implementation not started).
+Current tasks and acceptance: [`docs/TASK_REGISTER.md`](docs/TASK_REGISTER.md). The M4 source prerequisites for M5 are integrated and verified in LOCAL/TEST. The next plan is [`docs/tasks/M5_HANDOFF.md`](docs/tasks/M5_HANDOFF.md) (planning REVIEW; implementation TODO).
 All eleven canonical architecture documents are in `docs/architecture/`, byte-identical to the approved project attachments. Their historical pre-implementation/Freeze-pending wording is preserved; current implementation status belongs in the task register, not in a rewritten historical snapshot.
 
 ## Scope
 
-API/Worker/Scheduler, LOCAL/TEST owner auth and tenant isolation, billing/entitlements and Audit, durable PostgreSQL Inbox/Outbox/Jobs, Telegram text/private images and manual replies, conversation turns, HUMAN takeover/Resume, escalation and owner-confirmed native context. [M3 acceptance](docs/tasks/M3_HANDOFF.md) records main `d2f25673f6d2698d3c3dae2d7b2d709e134358f4` and [11/11 post-merge CI](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046).
+API/Worker/Scheduler, LOCAL/TEST owner auth and tenant isolation, billing/entitlements and Audit, durable PostgreSQL Inbox/Outbox/Jobs, Telegram text/private inbound images and manual replies, conversation control, escalation, owner-confirmed native context, and the guarded M4 text AI runtime.
 
-M4 adds the real AI runtime; its current plan is deliberately limited to one provider/model, current context and read-only tools. [IMPL-004](docs/decisions/IMPL-004-m4-pilot-ai.md) proposes the pilot scope revision; the [provider review](docs/research/M4_AI_PROVIDER_REVIEW_2026-10-28.md) recommends PolzaAI first, pending an actual API probe. Existing guarded consumers are controlled/test consumers; a bounded real AI-to-Telegram integration is still required. No live LLM, production readiness or payment integration is claimed. The PC/Happ/SSH development route and unavailable replacement-photo content remain explicit limitations.
+PR #44 is merged at `c9d42878ebfaf6def59d24cf7f95b1f74646eb83`; [post-merge CI43157266312](https://github.com/Elefesys/ai-service-manager/actions/runs/43157266312) passed 12/12 jobs. [M4 acceptance](docs/tasks/M4_HANDOFF.md) preserves the exact scope: code verification and an owner-confirmed assisted AI reply are not full live pilot verification. Receiver ACK/fence and the complete live HUMAN/Resume journey remain open, without blocking M5 development. The PC/Happ/SSH route and unavailable replacement-photo content remain explicit limitations.
+
+M5 plans published business settings, sourced knowledge, bounded retrieval, Vision, real portfolio matching/display, and preliminary intake. C0 accepted [IMPL-005](docs/decisions/IMPL-005-m5-pilot-knowledge.md), including its explicit pilot deferrals. PR #45 remains in integration review; M5 is not implemented or assigned. After owner-authorized integration, C0 issues only M5.1A from the actual accepted main. The accepted [IMPL-004](docs/decisions/IMPL-004-m4-pilot-ai.md) still governs the existing text runtime; its approval does not automatically authorize images, embeddings, production data or a new paid session.
 
 ## LOCAL start
 
@@ -50,6 +52,6 @@ Reproducibility means locked dependencies/image inputs and matching wheel/static
 
 ## Architecture and work distribution
 
-Read `AGENTS.md`, the current M4 handoff and IMPL-004, then applicable canonical architecture/ADRs and `09_IMPLEMENTATION_PLAN.md` before changing code. Verify all source hashes with the command above. Do not change manifest hashes to hide an accidental source modification; current architecture revisions require an explicit reviewed decision; they do not silently rewrite the imported historical source baseline.
+Read `AGENTS.md`, the current M5 handoff and IMPL-005, the accepted M4 boundaries in IMPL-004, then applicable canonical architecture/ADRs and `09_IMPLEMENTATION_PLAN.md` before changing code. Verify all source hashes with the command above. Do not change manifest hashes to hide an accidental source modification; current architecture revisions require an explicit reviewed decision; they do not silently rewrite the imported historical source baseline.
 
-C0 owns the single task register and integration. [`M4_HANDOFF`](docs/tasks/M4_HANDOFF.md) defines the next sequential scope; M4 implementation has not started. M1–M3 handoffs retain closed acceptance/history. C0 assigns each task an actual accepted full main commit and bounded file/migration scope. A repository merge does not update the existing VM; historical operator commands are not current deployment instructions. Do not prebuild future milestones or assume separate chats share a checkout.
+C0 owns the single task register and integration. [`M5_HANDOFF`](docs/tasks/M5_HANDOFF.md) defines the next sequential scope; M5 implementation has not started. M1–M4 handoffs retain acceptance/history and explicit live limitations. C0 assigns each task an actual accepted full main commit and bounded file/migration scope. A repository merge does not update the existing VM; historical operator commands are not current deployment instructions. Do not prebuild future milestones or assume separate chats share a checkout.

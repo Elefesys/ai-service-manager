@@ -6,7 +6,140 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS; первый AI reply принят / 2026-11-12
+## Итог M4 — rights fix INTEGRATED / VERIFIED (LOCAL/TEST) / 2026-11-12
+
+Следующий план подготовлен по новому поручению владельца:
+[M5_HANDOFF](M5_HANDOFF.md) и [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md).
+Они проходят C0 review; код M5 ещё не начат. Этот файл сохраняет приёмку M4,
+а текущие выдачи читаются в M5_HANDOFF и CURRENT реестра.
+
+C0 подтверждает слияние PR #44 владельцем.
+Accepted main: `c9d42878ebfaf6def59d24cf7f95b1f74646eb83`;
+tree `19c7a2fe16ab40c88b71980b44d16e6582d2aa92` совпадает с reviewed candidate
+`869427002af32c07f35a6fde8cbe6754256ad3cf`.
+Merge parents: main29dc1608 + candidate86942700.
+[Штатный post-merge CI43157266312](https://github.com/Elefesys/ai-service-manager/actions/runs/43157266312),
+push/main, attempt1: **12/12 jobs SUCCESS**, все completed, failed steps отсутствуют.
+Исходный [C0 review](https://github.com/Elefesys/ai-service-manager/pull/44#pullrequestreview-5869272638)
+и проверка source/CI предыдущего candidate сохраняются.
+
+C3-M4-PRECOMMIT-RIGHTS-R1 — **INTEGRATED / VERIFIED в LOCAL/TEST**.
+Проверенные pre-commit rights, additive0017 и public receiver/diagnostics входят
+в main. Merge не является обновлением ВМ или новым live/paid тестом.
+
+**На момент receipt C098136c33 владелец приостановил выдачу M5 до подготовки
+отдельного промпта.** Теперь план подготовлен; приёмка и первая выдача переходят
+в M5_HANDOFF. Реализация M5 этим документационным изменением не объявляется начатой.
+Технические зависимости для начала разработки M5.1 выполнены; обязательной
+дополнительной code-задачи перед ней нет. Это готовность к следующему этапу,
+а не выдача задания или изменение его scope.
+
+Общий M4 VERIFIED не объявлен. C6 receiver ACK/fence остаётся OPEN_OPERATIONAL;
+до reuse исторического receiver нужен отдельный разбор, UNKNOWN/holds сохраняются.
+Полная живая цепочка AI → HUMAN → owner context → Resume → актуальный reply
+остаётся открытым критерием приёмки; доказательства отдельных частей не
+выдаются за единый live-прогон. Это не блокирует разработку M5.1.
+Автономная сеть DEFERRED по владельцу. Новая paid demo сейчас не назначается.
+
+## История — приёмка code review / C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW — C0 PASS / 2026-11-12
+
+**C0 принимает code review; PR #44 готов к слиянию.** Блокирующих замечаний нет.
+[PR #44](https://github.com/Elefesys/ai-service-manager/pull/44):
+head `869427002af32c07f35a6fde8cbe6754256ad3cf`,
+tree `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
+[CI43148600762](https://github.com/Elefesys/ai-service-manager/actions/runs/43148600762)
+attempt1:12/12 SUCCESS; tested merge `dcaf4ca8b983327f8e0e050889f9886994e31e9d`
+имеет тот же tree и parents main29dc1608 + candidate86942700.
+
+C0 проверил source diff, claim/run-bound probe → HTTP вне transaction →
+observation CAS/currentness + canonical COMMIT; TTL30, final-send admission,
+deadline, replay/no-resend и cost/reservation сохранены.
+Additive0017 принята в рамках задания;0001–0016 не менялись.
+Совместимость provisioning/catalog/fixtures и format-only receiver test приняты;
+dependencies/workflow/frontend/каноническая архитектура не менялись.
+
+C0 повторно разобрал исходные CI artifacts:1088actualPG (860generic +105native
++123M4), все setup/call/teardown PASS; ещё7native source cases PASS.
+В123M4 входят25rights и32provider cases.3597unit +161subtests,
+frontend398, Ruff/mypy/OpenAPI PASS по CI.6durable lifecycles/12assertions PASS.
+Проверены SHA256/CRC четырёх artifacts (M4/foundation/native/durable);
+их source archives соответствуют355Git blobs текущего candidate.
+Отдельный локальный source replay подтвердил194functions/49tables/708columns,
+две новые runtime EXECUTE capability и только две замены current dispatcher.
+Нового полного CI, actualPG запуска C0 или live/paid теста не было.
+
+Статус задачи остаётся REVIEW до фактического merge; INTEGRATED/VERIFIED
+будут записаны после проверки merge и штатного push/main CI.
+Следующий шаг: merge PR44 обычным merge commit без изменения tested head;
+затем C0 проверяет main и выдаёт C1 M5.1 (Service/Rule/Workflow/Draft/Validation/Release).
+C3 больше не требуется готовить новый отчёт или повторять CI.
+C6 ACK/fence остаётся OPEN_OPERATIONAL, старые UNKNOWN/holds сохраняются;
+автономная сеть DEFERRED. Новая paid demo не нужна. Общий M4 VERIFIED
+и deployment этим review не объявляются; остальные роли HOLD до выдачи.
+
+## История — возврат C3 / C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW / 2026-11-12
+
+Code source: `869427002af32c07f35a6fde8cbe6754256ad3cf`.
+Tree: `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
+Tested PR merge: `dcaf4ca8b983327f8e0e050889f9886994e31e9d`.
+[Draft PR #44](https://github.com/Elefesys/ai-service-manager/pull/44) → main;
+[финальный CI43148600762, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/43148600762): **12/12 PASS**.
+12original ZIP SHA/size/CRC PASS;11source archives ×355Git blobs/modes exact.
+Main29dc1608; review/интеграция остаются у C0. Runtime source branch сохранена
+на tested code SHA; этот возврат меняет только3coordination docs, не новый app build.
+
+Pre-commit Telegram rights: short claim/run-bound probe → настоящий штатный
+TelegramClient.observe/getBusinessConnection вне DB transaction → observation CAS,
+повторная authority/deadline проверка и canonical COMMIT в одной transaction.
+TTL30s, отдельный final-send probe/admission, no-regeneration/no-resend и
+usage/cost/reservation сохранены. Reply при свежих правах создаёт один Outbox;
+negative/unknown не создаёт reply/Outbox. Replay возвращается до HTTP.
+
+Applied0001–0016 byte-immutable. Additive0017: две узкие runtime capability,
+private helper/profile и прежние ephemeral job probe fields для AI_GENERATE.
+Новых таблиц/колонок нет;194functions/49tables/708columns, закрытые grants/RLS.
+Full profile b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538;
+verifier body6b635b12b8d2e7f0f69500792d7ec3b1c71cd0f85c51e810e3332b910b6189c0.
+
+Проверки: **1088/1088actualPG, strict setup/call/teardown PASS** (860generic +105native +123M4). M4:35runtime/22delivery/9schema/32provider/25rights;
+все123setup/call/teardown PASS,6owned cleanup groups пусты. Native112carrier
+cases PASS, включая105actualPG; normal durable6lifecycles/12assertions PASS,
+четыре образа привязаны к tested tree, primary0/cleanup0. 3597unit +161subtests PASS; frontend398 PASS; Ruff/mypy/OpenAPI PASS.
+Ruff/mypy/OpenAPI и existing workflow gates входят в полный CI.
+Red на6851: один successful fake model, expired rights31s, reply/Outbox отсутствуют;
+green: fresh mocked observation, Outbox1 и отдельный final-send admission.
+Telegram/provider HTTP в новых тестах mocked; owner VM/paid/live не запускались.
+
+Первый candidate4b265b5e/run43145427952 FAIL сохранён: все194bodies/security/
+roles/nonfunction PASS, но application full pin был измерен при local C вместо
+pinned CI en_US.utf8. Pin исправлен по independent actualCI и подтверждён local
+en_US + runtime readiness. SQL/grants/RLS/verifier body не ослаблены.
+Все6migration jobs первого run PASS; native6/readiness отказы отнесены к pin.
+Дополнительные current0017 fixtures прошли103genericPG/7nativePG/229unit.
+Повторного запуска неизменённого source не было.
+
+37changed paths относительно6851 и объяснение каждого compatibility file —
+в description PR44. Workflow/dependencies/frontend/canonical architecture
+не менялись. Public receiver repair2a1369c8 и bounded diagnostics9d7f50 сохранены;
+receiver test имеет только Ruff formatting, AST equality подтверждена.
+
+| Критерий M4 | Статус после возврата C3 |
+|---|---|
+| Первый AI reply клиенту | C0 FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST, owner-reported, принят ранее |
+| Штатный pre-commit rights path | Реализован, synthetic/actualPG evidence; REVIEW у C0 |
+| Final-send/currentness/claim/tenant/cost | Сохранены, covered negative/race/replay/deadline/cancel tests |
+| Receiver ACK/fence и R4 return | OPEN_OPERATIONAL; return не выполнен, receiver не reuse/reset/replay |
+| Старые UNKNOWN/holds | Сохранить; code-fix их не снимает |
+| Автономная сеть | DEFERRED по владельцу; development transport через ПК допустим |
+| Общее M4 VERIFIED | Не объявляется; code-fix не объясняет историческийHTTP400 и не исправляет ACK |
+| Следующая выдача | M5.1 C1 configuration domain после C0 review/интеграции |
+
+C3 — REVIEW. C6 live STOP/HOLD, остальные HOLD до новых выдач C0.
+Новая paid demo, запуск owner VM или автономная сеть не требуются для этого
+code completion. Этот возврат не является fresh VM attestation или deployment.
+
+
+## История — выдача C0 C3-M4-PRECOMMIT-RIGHTS-R1 / 2026-11-12
 
 **Цель владельца «проверить, отвечает ли ИИ клиенту» выполнена:** C0 принимает
 FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST. Это ограниченная приёмка

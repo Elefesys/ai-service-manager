@@ -2,7 +2,129 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS / 2026-11-12
+## CURRENT — M5.0 REVIEW интеграции; решение принято; реализация TODO / 2026-11-12
+
+Единственная текущая работа — C0, подготовка PR #45 к интеграции.
+План: [M5_HANDOFF](tasks/M5_HANDOFF.md); решение
+[IMPL-005](decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
+Уточнены доступ к общим опубликованным знаниям при изоляции личных данных
+клиента и проверка activation version также на MODEL/FOLLOWUP.
+Пакет содержит документы и узкое исправление допуска CI для ветки планирования;
+application code, миграции, provider/VM и данные не менялись. CI43166516634:
+11/12 SUCCESS, runtime остановлен до БД на старом branch allowlist
+(`POLZA_RUNTIME_EVENT_BRANCH`); исправленный кандидат проходит штатный CI.
+Логи и точные результаты кандидата — в PR/CI, неизменённый запуск не повторять.
+После отдельного разрешения владельца и интеграции C0 выдаёт только M5.1A,
+C1 с C2, с фактическим accepted main SHA и точным write-set. Выдач кода пока нет.
+
+Application base c9d42878ebfaf6def59d24cf7f95b1f74646eb83; PR44 merged;
+CI43157266312 push/main — 12/12 SUCCESS. Receipt98136c33 сохранён ниже.
+Повторный аудит/CI M4 не требуется. Receiver ACK/fence, полный live HUMAN/Resume,
+UNKNOWN/holds и ограничение PC transport сохранены; они не блокируют M5 coding.
+
+Статус исполнения вести здесь, active assignment — только в M5_HANDOFF.
+Обновлять краткий CURRENT; подробные новые логи и receipts оставлять в PR/CI.
+Merge/paid/live допуск не следует из приёмки планирования.
+
+## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
+
+C0 подтверждает слияние PR #44 владельцем.
+Accepted main: `c9d42878ebfaf6def59d24cf7f95b1f74646eb83`;
+tree `19c7a2fe16ab40c88b71980b44d16e6582d2aa92` совпадает с reviewed candidate
+`869427002af32c07f35a6fde8cbe6754256ad3cf`.
+Merge parents: main29dc1608 + candidate86942700.
+[Штатный post-merge CI43157266312](https://github.com/Elefesys/ai-service-manager/actions/runs/43157266312),
+push/main, attempt1: **12/12 jobs SUCCESS**, все completed, failed steps отсутствуют.
+Исходный [C0 review](https://github.com/Elefesys/ai-service-manager/pull/44#pullrequestreview-5869272638)
+и проверка source/CI предыдущего candidate сохраняются.
+
+C3-M4-PRECOMMIT-RIGHTS-R1 — **INTEGRATED / VERIFIED в LOCAL/TEST**.
+Проверенные pre-commit rights, additive0017 и public receiver/diagnostics входят
+в main. Merge не является обновлением ВМ или новым live/paid тестом.
+
+**По прямому указанию владельца M5 пока не начинать:** владелец готовит отдельный
+промпт в другом чате. Новых выдач C1/C4/C5 нет; все исполнители HOLD.
+Технические зависимости для начала разработки M5.1 выполнены; обязательной
+дополнительной code-задачи перед ней нет. Это готовность к следующему этапу,
+а не выдача задания или изменение его scope.
+
+Общий M4 VERIFIED не объявлен. C6 receiver ACK/fence остаётся OPEN_OPERATIONAL;
+до reuse исторического receiver нужен отдельный разбор, UNKNOWN/holds сохраняются.
+Полная живая цепочка AI → HUMAN → owner context → Resume → актуальный reply
+остаётся открытым критерием приёмки; доказательства отдельных частей не
+выдаются за единый live-прогон. Это не блокирует разработку M5.1.
+Автономная сеть DEFERRED по владельцу. Новая paid demo сейчас не назначается.
+
+## История — приёмка code review / C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW — C0 PASS / 2026-11-12
+
+**C0 принимает code review; PR #44 готов к слиянию.** Блокирующих замечаний нет.
+[PR #44](https://github.com/Elefesys/ai-service-manager/pull/44):
+head `869427002af32c07f35a6fde8cbe6754256ad3cf`,
+tree `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
+[CI43148600762](https://github.com/Elefesys/ai-service-manager/actions/runs/43148600762)
+attempt1:12/12 SUCCESS; tested merge `dcaf4ca8b983327f8e0e050889f9886994e31e9d`
+имеет тот же tree и parents main29dc1608 + candidate86942700.
+
+C0 проверил source diff, claim/run-bound probe → HTTP вне transaction →
+observation CAS/currentness + canonical COMMIT; TTL30, final-send admission,
+deadline, replay/no-resend и cost/reservation сохранены.
+Additive0017 принята в рамках задания;0001–0016 не менялись.
+Совместимость provisioning/catalog/fixtures и format-only receiver test приняты;
+dependencies/workflow/frontend/каноническая архитектура не менялись.
+
+C0 повторно разобрал исходные CI artifacts:1088actualPG (860generic +105native
++123M4), все setup/call/teardown PASS; ещё7native source cases PASS.
+В123M4 входят25rights и32provider cases.3597unit +161subtests,
+frontend398, Ruff/mypy/OpenAPI PASS по CI.6durable lifecycles/12assertions PASS.
+Проверены SHA256/CRC четырёх artifacts (M4/foundation/native/durable);
+их source archives соответствуют355Git blobs текущего candidate.
+Отдельный локальный source replay подтвердил194functions/49tables/708columns,
+две новые runtime EXECUTE capability и только две замены current dispatcher.
+Нового полного CI, actualPG запуска C0 или live/paid теста не было.
+
+Статус задачи остаётся REVIEW до фактического merge; INTEGRATED/VERIFIED
+будут записаны после проверки merge и штатного push/main CI.
+Следующий шаг: merge PR44 обычным merge commit без изменения tested head;
+затем C0 проверяет main и выдаёт C1 M5.1 (Service/Rule/Workflow/Draft/Validation/Release).
+C3 больше не требуется готовить новый отчёт или повторять CI.
+C6 ACK/fence остаётся OPEN_OPERATIONAL, старые UNKNOWN/holds сохраняются;
+автономная сеть DEFERRED. Новая paid demo не нужна. Общий M4 VERIFIED
+и deployment этим review не объявляются; остальные роли HOLD до выдачи.
+
+## История — возврат C3 / C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW / 2026-11-12
+
+Code source: `869427002af32c07f35a6fde8cbe6754256ad3cf`.
+Tree: `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
+Tested PR merge: `dcaf4ca8b983327f8e0e050889f9886994e31e9d`.
+[Draft PR #44](https://github.com/Elefesys/ai-service-manager/pull/44) → main;
+[финальный CI43148600762, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/43148600762): **12/12 PASS**.
+12original ZIP SHA/size/CRC PASS;11source archives ×355Git blobs/modes exact.
+Main29dc1608; review/интеграция остаются у C0. Runtime source branch сохранена
+на tested code SHA; этот возврат меняет только3coordination docs, не новый app build.
+
+**1088/1088actualPG, strict setup/call/teardown PASS** (860generic +105native +123M4);123M4 +105native +860generic, 3597unit +161subtests PASS; frontend398 PASS; Ruff/mypy/OpenAPI PASS.
+Closed0017/profile194functions/49tables/708columns и6M4cleanup groups PASS.
+ПервыйCI43145427952 FAIL по full pin/local C; исправлен по actualCI en_US,
+SQL/grants/RLS/verifier body сохранены.37paths/compatibility — в PR44.
+[Полный возврат и матрица](tasks/M4_HANDOFF.md).
+
+| Критерий M4 | Статус после возврата C3 |
+|---|---|
+| Первый AI reply клиенту | C0 FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST, owner-reported, принят ранее |
+| Штатный pre-commit rights path | Реализован, synthetic/actualPG evidence; REVIEW у C0 |
+| Final-send/currentness/claim/tenant/cost | Сохранены, covered negative/race/replay/deadline/cancel tests |
+| Receiver ACK/fence и R4 return | OPEN_OPERATIONAL; return не выполнен, receiver не reuse/reset/replay |
+| Старые UNKNOWN/holds | Сохранить; code-fix их не снимает |
+| Автономная сеть | DEFERRED по владельцу; development transport через ПК допустим |
+| Общее M4 VERIFIED | Не объявляется; code-fix не объясняет историческийHTTP400 и не исправляет ACK |
+| Следующая выдача | M5.1 C1 configuration domain после C0 review/интеграции |
+
+C3 — REVIEW. C6 live STOP/HOLD, остальные HOLD до новых выдач C0.
+Новая paid demo, запуск owner VM или автономная сеть не требуются для этого
+code completion. Этот возврат не является fresh VM attestation или deployment.
+
+
+## История — выдача C0 C3-M4-PRECOMMIT-RIGHTS-R1 / 2026-11-12
 
 C3 source candidate реализован: fresh claim-bound Telegram observation перед
 canonical Reply COMMIT, HTTP вне transaction; additive0017/current profile,

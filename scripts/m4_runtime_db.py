@@ -23,6 +23,21 @@ BASE = "6851b8f1c12b50cf0051353f29a41cf89c94a280"
 BASE_TREE = "ffed6f5c7560d080baa672d50850c56eba4060ba"
 BRANCH = "c3/m4-precommit-rights-r1"
 TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r10"
+# C0-approved planning PR45; no M5 application or migration changes are admitted.
+M5_PLAN_BASE = "c9d42878ebfaf6def59d24cf7f95b1f74646eb83"
+M5_PLAN_TREE = "19c7a2fe16ab40c88b71980b44d16e6582d2aa92"
+M5_PLAN_BRANCH = "c0/m5-pilot-plan-20261112"
+M5_PLAN_PATHS = {
+    "AGENTS.md",
+    "README.md",
+    "docs/TASK_REGISTER.md",
+    "docs/tasks/M4_HANDOFF.md",
+    "docs/tasks/M5_HANDOFF.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+    "docs/runbooks/M4_RUNTIME_PILOT.md",
+    "scripts/m4_runtime_db.py",
+    "tests/test_m4_runtime_db_runner.py",
+}
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -167,6 +182,8 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict and set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    planning = value["branch"] == M5_PLAN_BRANCH
+    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
     expected = {
         name: os.environ.get("ASM_M4_" + name)
         for name in ("SOURCE_SHA", "SOURCE_TREE", "RUN_ID", "RUN_ATTEMPT")
@@ -186,16 +203,18 @@ def source_tree_from_evidence(path=None):
             type(value[k]) is str and re.fullmatch(r"[0-9a-f]{40}", value[k])
             for k in ("base", "base_tree", "source", "tree")
         )
-        and value["base"] == BASE
-        and value["base_tree"] == BASE_TREE
+        and value["base"] == base
+        and value["base_tree"] == base_tree
         and value["source"] == expected["SOURCE_SHA"]
-        and value["source"] != BASE
+        and value["source"] != base
         and value["tree"] == expected["SOURCE_TREE"]
         and (
             value["branch"] == BRANCH
             and value["event"] in {"pull_request", "push"}
             or value["branch"] == TARGETED_BRANCH
             and value["event"] == "push"
+            or planning
+            and value["event"] == "pull_request"
         )
         and type(value["attempt"]) is int
         and value["attempt"] == 1
@@ -215,6 +234,8 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
+    if planning:
+        require(set(paths) <= M5_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     return value["tree"]
 
 
@@ -647,13 +668,16 @@ def admit_source(evidence):
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
     require(event["attempt"] == "1", "RUN_ATTEMPT")
+    planning = event.get("head_ref") == M5_PLAN_BRANCH
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
-        or event.get("head_ref") == BRANCH,
+        or event.get("head_ref") == BRANCH
+        or planning,
         "POLZA_RUNTIME_EVENT_BRANCH",
     )
-    require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
-    require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
+    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
+    require(capture(["git", "rev-parse", base + "^{tree}"]) == base_tree, "BASE_TREE")
+    require(capture(["git", "merge-base", base, "HEAD"]) == base, "BASE_ANCESTRY")
     allowed = {
         "AGENTS.md",
         "tests/test_m2_4_browser_fixture.py",
@@ -710,13 +734,18 @@ def admit_source(evidence):
         "tests/test_native_context_db_runner.py",
         "tests/test_m2_3_schema_postgres.py",
     }
-    paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
+    if planning:
+        allowed = M5_PLAN_PATHS
+    elif event["ref"] == "refs/heads/main":
+        # The ordinary post-merge lane retains its original ancestry and checks.
+        allowed = allowed | M5_PLAN_PATHS
+    paths = capture(["git", "diff", "--name-only", base, "HEAD"]).splitlines()
     require(bool(paths) and set(paths) <= allowed, "POLZA_RUNTIME_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
-            "base": BASE,
-            "base_tree": BASE_TREE,
+            "base": base,
+            "base_tree": base_tree,
             "source": event["head"],
             "tree": event["tree"],
             "paths": paths,
@@ -1241,14 +1270,16 @@ def run_admitted(root, event, manifest, mode):
         line.split("=", 1) for line in Path("infra/images.lock.env").read_text().splitlines()
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
-    require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
+    planning = event.get("head_ref") == M5_PLAN_BRANCH
+    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
+    require(capture(["git", "rev-parse", base + "^{tree}"]) == base_tree, "BASE_TREE")
     require(not Path(".env").exists(), "UNEXPECTED_ENV_FILE")
     source = {
-        "base": BASE,
-        "base_tree": BASE_TREE,
+        "base": base,
+        "base_tree": base_tree,
         "source": os.environ["GITHUB_SHA"],
         "tree": capture(["git", "rev-parse", "HEAD^{tree}"]),
-        "paths": capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines(),
+        "paths": capture(["git", "diff", "--name-only", base, "HEAD"]).splitlines(),
         "run_id": os.environ["GITHUB_RUN_ID"],
         "attempt": 1,
         "event": os.environ["GITHUB_EVENT_NAME"],
