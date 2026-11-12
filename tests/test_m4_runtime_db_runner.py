@@ -857,6 +857,12 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 def r11_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
+    for name in ("infra/images.lock.env", "uv.lock"):
+        path = f.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((f.actual / name).read_bytes())
+    f.git("add", ".")
+    f.git("commit", "-qm", "locked source identity inputs")
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
     changed = f.root / "scripts/m4_runtime_db.py"
     changed.write_text("# constructed allowed source delta\n")
@@ -899,6 +905,7 @@ def r11_event(foundation_git, tmp_path, monkeypatch):
         return original_capture(args)
 
     monkeypatch.setattr(carrier, "capture", only_git)
+    real_run_admitted = carrier.run_admitted
     monkeypatch.setattr(carrier, "run_admitted", admitted)
     monkeypatch.setattr(carrier, "inventory", forbidden)
     monkeypatch.setattr(carrier.secrets, "token_hex", forbidden)
@@ -921,14 +928,16 @@ def r11_event(foundation_git, tmp_path, monkeypatch):
         root=root,
         run=run,
         boundary=boundary,
+        real_run_admitted=real_run_admitted,
     )
 
 
 def prepare_m5_planning_event(r, monkeypatch, route, *, extra=None, branch=None):
     """Actual Git merge and event admission, with the resource boundary forbidden."""
     f = r["f"]
-    monkeypatch.setattr(carrier, "M5_PLAN_BASE", r["base"])
-    monkeypatch.setattr(carrier, "M5_PLAN_TREE", f.git("rev-parse", r["base"] + "^{tree}"))
+    # Planning starts after the legacy runtime base, as PR45 does in the real repo.
+    monkeypatch.setattr(carrier, "M5_PLAN_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_PLAN_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
     for relative in sorted(carrier.M5_PLAN_PATHS | ({extra} if extra else set())):
         path = f.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -936,13 +945,13 @@ def prepare_m5_planning_event(r, monkeypatch, route, *, extra=None, branch=None)
     f.git("add", ".")
     f.git("commit", "-qm", "constructed M5 planning")
     source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
-    merged = f.git("commit-tree", tree, "-p", r["base"], "-p", source, "-m", "test merge")
+    merged = f.git("commit-tree", tree, "-p", r["source"], "-p", source, "-m", "test merge")
     f.git("reset", "--hard", merged)
     env, payload = ci_event(Path(r["env"]["GITHUB_EVENT_PATH"]).parent, route)
     env.update(GITHUB_SHA=merged, GITHUB_RUN_ATTEMPT="1")
     if route == "same-repository-pr-merge":
         env["GITHUB_HEAD_REF"] = branch or carrier.M5_PLAN_BRANCH
-        payload["pull_request"]["base"]["sha"] = r["base"]
+        payload["pull_request"]["base"]["sha"] = r["source"]
         payload["pull_request"]["head"].update(sha=source, ref=env["GITHUB_HEAD_REF"])
     else:
         payload.update(after=merged, head_commit={"id": merged})
@@ -953,9 +962,17 @@ def prepare_m5_planning_event(r, monkeypatch, route, *, extra=None, branch=None)
     return merged
 
 
-@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "route,damage",
+    [
+        (route, damage)
+        for route in ("same-repository-pr-merge", "main-push")
+        for damage in (None, "base", "base_tree", "source", "branch", "event")
+    ]
+    + [("same-repository-pr-merge", "paths")],
+)
 def test_m5_planning_and_post_merge_admit_exact_files_to_full_runtime(
-    r11_event, monkeypatch, route
+    r11_event, monkeypatch, route, damage
 ):
     r = r11_event
     merged = prepare_m5_planning_event(r, monkeypatch, route)
@@ -964,9 +981,57 @@ def test_m5_planning_and_post_merge_admit_exact_files_to_full_runtime(
     assert r["boundary"][0]["mode"] == "runtime"
     assert r["boundary"][0]["event"]["head"] == merged
     receipt = json.loads((r["root"] / "evidence/source-admission.json").read_text())
-    assert receipt["base"] == r["base"] and receipt["source"] == merged
+    expected_base = r["source"] if route == "same-repository-pr-merge" else r["base"]
+    assert receipt["base"] == expected_base and receipt["source"] == merged
     assert set(receipt["paths"]) == carrier.M5_PLAN_PATHS
     assert not list((r["root"] / "private").iterdir())
+
+    # Exercise the real producer and the DB-image consumer, not just outer admission.
+    # Stop at archive export, before the first Docker/resource operation.
+    class BeforeResources(Exception):
+        pass
+
+    actual_run = subprocess.run
+
+    def stop_after_source_export(args, *positional, **keywords):
+        assert args[0] == "git"
+        if args[1] == "archive":
+            raise BeforeResources
+        return actual_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(subprocess, "run", stop_after_source_export)
+    b = r["boundary"][0]
+    with pytest.raises(BeforeResources):
+        r["real_run_admitted"](b["root"], b["event"], b["manifest"], b["mode"])
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert (proof["base"], proof["base_tree"], proof["paths"]) == (
+        receipt["base"],
+        receipt["base_tree"],
+        receipt["paths"],
+    )
+    for key, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": receipt["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, value)
+    if damage:
+        proof[damage] = {
+            "base": "f" * 40,
+            "base_tree": "f" * 40,
+            "source": "f" * 40,
+            "branch": "c0/unapproved",
+            "event": "workflow_dispatch",
+            "paths": ["backend/src/asm/configuration/service.py"],
+        }[damage]
+        carrier.write(path, proof)
+    if damage:
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    else:
+        assert carrier.source_tree_from_evidence(path) == receipt["tree"]
 
 
 @pytest.mark.parametrize(

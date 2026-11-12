@@ -182,6 +182,8 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict and set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    planning = value["branch"] == M5_PLAN_BRANCH
+    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
     expected = {
         name: os.environ.get("ASM_M4_" + name)
         for name in ("SOURCE_SHA", "SOURCE_TREE", "RUN_ID", "RUN_ATTEMPT")
@@ -201,16 +203,18 @@ def source_tree_from_evidence(path=None):
             type(value[k]) is str and re.fullmatch(r"[0-9a-f]{40}", value[k])
             for k in ("base", "base_tree", "source", "tree")
         )
-        and value["base"] == BASE
-        and value["base_tree"] == BASE_TREE
+        and value["base"] == base
+        and value["base_tree"] == base_tree
         and value["source"] == expected["SOURCE_SHA"]
-        and value["source"] != BASE
+        and value["source"] != base
         and value["tree"] == expected["SOURCE_TREE"]
         and (
             value["branch"] == BRANCH
             and value["event"] in {"pull_request", "push"}
             or value["branch"] == TARGETED_BRANCH
             and value["event"] == "push"
+            or planning
+            and value["event"] == "pull_request"
         )
         and type(value["attempt"]) is int
         and value["attempt"] == 1
@@ -230,6 +234,8 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
+    if planning:
+        require(set(paths) <= M5_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     return value["tree"]
 
 
@@ -1264,14 +1270,16 @@ def run_admitted(root, event, manifest, mode):
         line.split("=", 1) for line in Path("infra/images.lock.env").read_text().splitlines()
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
-    require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
+    planning = event.get("head_ref") == M5_PLAN_BRANCH
+    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
+    require(capture(["git", "rev-parse", base + "^{tree}"]) == base_tree, "BASE_TREE")
     require(not Path(".env").exists(), "UNEXPECTED_ENV_FILE")
     source = {
-        "base": BASE,
-        "base_tree": BASE_TREE,
+        "base": base,
+        "base_tree": base_tree,
         "source": os.environ["GITHUB_SHA"],
         "tree": capture(["git", "rev-parse", "HEAD^{tree}"]),
-        "paths": capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines(),
+        "paths": capture(["git", "diff", "--name-only", base, "HEAD"]).splitlines(),
         "run_id": os.environ["GITHUB_RUN_ID"],
         "attempt": 1,
         "event": os.environ["GITHUB_EVENT_NAME"],
