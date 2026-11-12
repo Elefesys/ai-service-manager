@@ -6,7 +6,69 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS; первый AI reply принят / 2026-11-12
+## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW / 2026-11-12
+
+Code source: `869427002af32c07f35a6fde8cbe6754256ad3cf`.
+Tree: `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
+Tested PR merge: `dcaf4ca8b983327f8e0e050889f9886994e31e9d`.
+[Draft PR #44](https://github.com/Elefesys/ai-service-manager/pull/44) → main;
+[финальный CI43148600762, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/43148600762): **12/12 PASS**.
+12original ZIP SHA/size/CRC PASS;11source archives ×355Git blobs/modes exact.
+Main29dc1608; review/интеграция остаются у C0. Runtime source branch сохранена
+на tested code SHA; этот возврат меняет только3coordination docs, не новый app build.
+
+Pre-commit Telegram rights: short claim/run-bound probe → настоящий штатный
+TelegramClient.observe/getBusinessConnection вне DB transaction → observation CAS,
+повторная authority/deadline проверка и canonical COMMIT в одной transaction.
+TTL30s, отдельный final-send probe/admission, no-regeneration/no-resend и
+usage/cost/reservation сохранены. Reply при свежих правах создаёт один Outbox;
+negative/unknown не создаёт reply/Outbox. Replay возвращается до HTTP.
+
+Applied0001–0016 byte-immutable. Additive0017: две узкие runtime capability,
+private helper/profile и прежние ephemeral job probe fields для AI_GENERATE.
+Новых таблиц/колонок нет;194functions/49tables/708columns, закрытые grants/RLS.
+Full profile b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538;
+verifier body6b635b12b8d2e7f0f69500792d7ec3b1c71cd0f85c51e810e3332b910b6189c0.
+
+Проверки: **1088/1088actualPG, strict setup/call/teardown PASS** (860generic +105native +123M4). M4:35runtime/22delivery/9schema/32provider/25rights;
+все123setup/call/teardown PASS,6owned cleanup groups пусты. Native112carrier
+cases PASS, включая105actualPG; normal durable6lifecycles/12assertions PASS,
+четыре образа привязаны к tested tree, primary0/cleanup0. 3597unit +161subtests PASS; frontend398 PASS; Ruff/mypy/OpenAPI PASS.
+Ruff/mypy/OpenAPI и existing workflow gates входят в полный CI.
+Red на6851: один successful fake model, expired rights31s, reply/Outbox отсутствуют;
+green: fresh mocked observation, Outbox1 и отдельный final-send admission.
+Telegram/provider HTTP в новых тестах mocked; owner VM/paid/live не запускались.
+
+Первый candidate4b265b5e/run43145427952 FAIL сохранён: все194bodies/security/
+roles/nonfunction PASS, но application full pin был измерен при local C вместо
+pinned CI en_US.utf8. Pin исправлен по independent actualCI и подтверждён local
+en_US + runtime readiness. SQL/grants/RLS/verifier body не ослаблены.
+Все6migration jobs первого run PASS; native6/readiness отказы отнесены к pin.
+Дополнительные current0017 fixtures прошли103genericPG/7nativePG/229unit.
+Повторного запуска неизменённого source не было.
+
+37changed paths относительно6851 и объяснение каждого compatibility file —
+в description PR44. Workflow/dependencies/frontend/canonical architecture
+не менялись. Public receiver repair2a1369c8 и bounded diagnostics9d7f50 сохранены;
+receiver test имеет только Ruff formatting, AST equality подтверждена.
+
+| Критерий M4 | Статус после возврата C3 |
+|---|---|
+| Первый AI reply клиенту | C0 FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST, owner-reported, принят ранее |
+| Штатный pre-commit rights path | Реализован, synthetic/actualPG evidence; REVIEW у C0 |
+| Final-send/currentness/claim/tenant/cost | Сохранены, covered negative/race/replay/deadline/cancel tests |
+| Receiver ACK/fence и R4 return | OPEN_OPERATIONAL; return не выполнен, receiver не reuse/reset/replay |
+| Старые UNKNOWN/holds | Сохранить; code-fix их не снимает |
+| Автономная сеть | DEFERRED по владельцу; development transport через ПК допустим |
+| Общее M4 VERIFIED | Не объявляется; code-fix не объясняет историческийHTTP400 и не исправляет ACK |
+| Следующая выдача | M5.1 C1 configuration domain после C0 review/интеграции |
+
+C3 — REVIEW. C6 live STOP/HOLD, остальные HOLD до новых выдач C0.
+Новая paid demo, запуск owner VM или автономная сеть не требуются для этого
+code completion. Этот возврат не является fresh VM attestation или deployment.
+
+
+## История — выдача C0 C3-M4-PRECOMMIT-RIGHTS-R1 / 2026-11-12
 
 **Цель владельца «проверить, отвечает ли ИИ клиенту» выполнена:** C0 принимает
 FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST. Это ограниченная приёмка

@@ -2,7 +2,40 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS / 2026-11-12
+## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW / 2026-11-12
+
+Code source: `869427002af32c07f35a6fde8cbe6754256ad3cf`.
+Tree: `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
+Tested PR merge: `dcaf4ca8b983327f8e0e050889f9886994e31e9d`.
+[Draft PR #44](https://github.com/Elefesys/ai-service-manager/pull/44) → main;
+[финальный CI43148600762, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/43148600762): **12/12 PASS**.
+12original ZIP SHA/size/CRC PASS;11source archives ×355Git blobs/modes exact.
+Main29dc1608; review/интеграция остаются у C0. Runtime source branch сохранена
+на tested code SHA; этот возврат меняет только3coordination docs, не новый app build.
+
+**1088/1088actualPG, strict setup/call/teardown PASS** (860generic +105native +123M4);123M4 +105native +860generic, 3597unit +161subtests PASS; frontend398 PASS; Ruff/mypy/OpenAPI PASS.
+Closed0017/profile194functions/49tables/708columns и6M4cleanup groups PASS.
+ПервыйCI43145427952 FAIL по full pin/local C; исправлен по actualCI en_US,
+SQL/grants/RLS/verifier body сохранены.37paths/compatibility — в PR44.
+[Полный возврат и матрица](tasks/M4_HANDOFF.md).
+
+| Критерий M4 | Статус после возврата C3 |
+|---|---|
+| Первый AI reply клиенту | C0 FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST, owner-reported, принят ранее |
+| Штатный pre-commit rights path | Реализован, synthetic/actualPG evidence; REVIEW у C0 |
+| Final-send/currentness/claim/tenant/cost | Сохранены, covered negative/race/replay/deadline/cancel tests |
+| Receiver ACK/fence и R4 return | OPEN_OPERATIONAL; return не выполнен, receiver не reuse/reset/replay |
+| Старые UNKNOWN/holds | Сохранить; code-fix их не снимает |
+| Автономная сеть | DEFERRED по владельцу; development transport через ПК допустим |
+| Общее M4 VERIFIED | Не объявляется; code-fix не объясняет историческийHTTP400 и не исправляет ACK |
+| Следующая выдача | M5.1 C1 configuration domain после C0 review/интеграции |
+
+C3 — REVIEW. C6 live STOP/HOLD, остальные HOLD до новых выдач C0.
+Новая paid demo, запуск owner VM или автономная сеть не требуются для этого
+code completion. Этот возврат не является fresh VM attestation или deployment.
+
+
+## История — выдача C0 C3-M4-PRECOMMIT-RIGHTS-R1 / 2026-11-12
 
 C3 source candidate реализован: fresh claim-bound Telegram observation перед
 canonical Reply COMMIT, HTTP вне transaction; additive0017/current profile,
