@@ -2,7 +2,43 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW / 2026-11-12
+## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW — C0 PASS / 2026-11-12
+
+**C0 принимает code review; PR #44 готов к слиянию.** Блокирующих замечаний нет.
+[PR #44](https://github.com/Elefesys/ai-service-manager/pull/44):
+head `869427002af32c07f35a6fde8cbe6754256ad3cf`,
+tree `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
+[CI43148600762](https://github.com/Elefesys/ai-service-manager/actions/runs/43148600762)
+attempt1:12/12 SUCCESS; tested merge `dcaf4ca8b983327f8e0e050889f9886994e31e9d`
+имеет тот же tree и parents main29dc1608 + candidate86942700.
+
+C0 проверил source diff, claim/run-bound probe → HTTP вне transaction →
+observation CAS/currentness + canonical COMMIT; TTL30, final-send admission,
+deadline, replay/no-resend и cost/reservation сохранены.
+Additive0017 принята в рамках задания;0001–0016 не менялись.
+Совместимость provisioning/catalog/fixtures и format-only receiver test приняты;
+dependencies/workflow/frontend/каноническая архитектура не менялись.
+
+C0 повторно разобрал исходные CI artifacts:1088actualPG (860generic +105native
++123M4), все setup/call/teardown PASS; ещё7native source cases PASS.
+В123M4 входят25rights и32provider cases.3597unit +161subtests,
+frontend398, Ruff/mypy/OpenAPI PASS по CI.6durable lifecycles/12assertions PASS.
+Проверены SHA256/CRC четырёх artifacts (M4/foundation/native/durable);
+их source archives соответствуют355Git blobs текущего candidate.
+Отдельный локальный source replay подтвердил194functions/49tables/708columns,
+две новые runtime EXECUTE capability и только две замены current dispatcher.
+Нового полного CI, actualPG запуска C0 или live/paid теста не было.
+
+Статус задачи остаётся REVIEW до фактического merge; INTEGRATED/VERIFIED
+будут записаны после проверки merge и штатного push/main CI.
+Следующий шаг: merge PR44 обычным merge commit без изменения tested head;
+затем C0 проверяет main и выдаёт C1 M5.1 (Service/Rule/Workflow/Draft/Validation/Release).
+C3 больше не требуется готовить новый отчёт или повторять CI.
+C6 ACK/fence остаётся OPEN_OPERATIONAL, старые UNKNOWN/holds сохраняются;
+автономная сеть DEFERRED. Новая paid demo не нужна. Общий M4 VERIFIED
+и deployment этим review не объявляются; остальные роли HOLD до выдачи.
+
+## История — возврат C3 / C3-M4-PRECOMMIT-RIGHTS-R1 / REVIEW / 2026-11-12
 
 Code source: `869427002af32c07f35a6fde8cbe6754256ad3cf`.
 Tree: `19c7a2fe16ab40c88b71980b44d16e6582d2aa92`.
