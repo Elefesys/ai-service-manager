@@ -18,11 +18,10 @@ M5.1B и все последующие срезы не выданы.
   последовательные изменения общих файлов; без параллельного редактирования C1/C2.
 - Зависимости: PR #45 интегрирован; IMPL-005 ACCEPTED / LOCKED;
   [post-merge CI43192222535](https://github.com/Elefesys/ai-service-manager/actions/runs/43192222535)
-  на момент выдачи ещё IN_PROGRESS. Дерево main совпадает с кандидатом, прошедшим
+  завершён: **12/12 SUCCESS**, attempt1, на фактическом main SHA выше.
+  Дерево main совпадает с кандидатом, прошедшим
   [CI43180741615](https://github.com/Elefesys/ai-service-manager/actions/runs/43180741615).
-  C0 принимает этот base по совпадающему проверенному tree; runtime job
-  прошёл также на merge SHA. Это допуск к synthetic разработке, не заявление
-  о завершении всего post-merge CI. Receipt M4
+  Повторный прогон не запускался. Receipt M4
   `98136c33a997f0ce266dee2ad517ea23e312408e` сохранён в ancestry.
 
 ### Результат и короткий контракт
@@ -33,11 +32,10 @@ FAQ, увидеть ошибки/предупреждения и preview, ато
 ограниченная active projection с release/activation version; draft туда не попадает.
 UI и использование знаний в ответе AI принадлежат M5.1B.
 
-До SQL C1 с C2 записывают в этот CURRENT короткий согласованный контракт:
-объекты/Business ownership, поля и пределы размера, API команды/ошибки,
-expected-version/idempotency semantics, owner authority, release/activation и RLS.
-Физическая схема и точные DTO пока OPEN; выбрать минимальное решение для этих
-операций. Не создавать таблицу на каждый термин baseline и отдельный contract tome.
+Ниже C1/C2 зафиксировали контракт перед SQL: объекты/Business ownership,
+поля и пределы размера, API команды/ошибки, expected-version/idempotency,
+owner authority, release/activation и RLS. Это контракт подготовленного source;
+полный C0 code review и штатный CI реализации ещё впереди.
 
 #### Согласованный контракт C1/C2 — M5.1A v1 / 2026-11-12
 
@@ -145,7 +143,7 @@ PG fixtures восстанавливают current18 после историче
 старые и новые права. M4 runner сохраняет старые source routes и добавляет только
 точную M5.1A branch/base/tree/write-set в outer/export/inner admission.
 
-### Возврат C1/C2 — подготовленный source, ожидание точечного согласования
+### Возврат C1/C2 — подготовленный source; scope blocker снят C0
 
 Реализованы шесть owner API и bundle v1, additive0018, private receipt-audit,
 validation/preview/publish/rollback и bounded active projection. Draft и active
@@ -160,11 +158,45 @@ vector0.8.6/btree_gist1.8; accepted0017 profile предварительно с�
 Финальные source identities и подробный return — в
 [C1/C0 coordination](https://github.com/Elefesys/ai-service-manager/pull/45#issuecomment-6821719546).
 
-До PR/штатного CI нужен только точечный C0 write-set допуск для
-`tests/test_auth_contract.py`: явный список шести маршрутов +existing equality,
-+9/-0, frozen auth.v1 и все прежние assertions без изменений. Тест воспроизведён
-RED25→31; source OpenAPI уже byte-equal generated snapshot. Этот путь пока не
-изменён. Scope не расширен самостоятельно; M5.1B/UI/LLM tools не выданы.
+**C0 / 2026-11-12: точечное расширение write-set ПРИНЯТО.**
+Проверенный prepared head: `73ae021d3fbdb9724fd20d44fe2000d8b57dfc2d`,
+tree `7c63fdad005d09d037db6e47e25d82ee80c2f917`; его parent — C0 handoff
+`6c9023dbf29e1e8e100084aee85a12c132ba2ab3`. Implementation base выше не меняется.
+
+Разрешён ровно один дополнительный path: **`tests/test_auth_contract.py`**.
+Принята предложенная правка **+9/-0**: отдельный список `configuration_endpoints`
+из шести маршрутов ниже и его добавление к прежней `sorted` equality.
+C0 сверил declared routes с committed OpenAPI: прежние25 + ровно эти6 =31;
+сам test blob пока совпадает с handoff
+`655ee55f692a7473b0012002ceb009ede2b6af8b`. Это конкретная зависимость уже
+выданного API, без новых продуктовых функций.
+
+```text
+GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/draft
+PUT /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/draft
+GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/preview
+POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/publish
+POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/rollback
+GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/active
+```
+
+Сохранить полную equality, frozen auth.v1 seven/schema0003/down0002, policy
+assertions, OfflineDatabase refusal и full OpenAPI byte equality. Не добавлять
+filter/subset/skip/xfail. В уже разрешённом `scripts/m4_runtime_db.py` добавить
+тот же exact path только в `M5_CONFIGURATION_PATHS`; проверить его прохождение
+через outer/export/inner admission при сохранении отрицательных source cases.
+
+**Продолжение C1:** fast-forward к C0 docs-only commit, содержащему это решение
+поверх prepared head73ae021d; сохранить все существующие изменения и C0 handoff.
+Применить согласованную правку, адресно проверить `tests/test_auth_contract.py`,
+configuration OpenAPI regression и затронутый source admission. После этого
+открыть один implementation PR этой же ветки → main и пройти один штатный полный
+CI готового SHA. Пустой docs PR, повтор main CI и повтор всех локальных PG
+прогонов без новой причины не нужны. Все существующие gates остаются.
+
+Блокировка по path agreement снята; единственная задача остаётся M5.1A / C1.
+Это разрешение на ограниченную правку и подготовку review, не приёмка всей
+реализации. M5.1B/UI/LLM tools, VM/paid/live и merge не выданы.
 
 
 

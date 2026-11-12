@@ -2,34 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.0 INTEGRATED; M5.1A IN_PROGRESS (выдано C1/C2) / 2026-11-12
+## CURRENT — M5.0 INTEGRATED / VERIFIED; M5.1A IN_PROGRESS / 2026-11-12
 
-PR #45 слит C0 после разрешения владельца продолжить с подготовленного merge.
-Фактический принятый base: `49d3e25968507ac41037f369fce5bd7080475a8f`;
+PR #45 интегрирован в `49d3e25968507ac41037f369fce5bd7080475a8f`;
 tree `699bd90777771c5d22d37029336c3e0f8909fb5c` совпадает с кандидатом
-`615ba07fc80b2cf9ce5cd9cb26a0a4564ec502a9`,
-[CI43180741615](https://github.com/Elefesys/ai-service-manager/actions/runs/43180741615)
-12/12 SUCCESS. План и решение IMPL-005 ACCEPTED / LOCKED интегрированы;
-application code и migration head0017 этим merge не менялись.
-Merge сохраняет ancestry receipt98136c33 и финальную приёмку M4.
+`615ba07fc80b2cf9ce5cd9cb26a0a4564ec502a9`.
+[Post-merge CI43192222535](https://github.com/Elefesys/ai-service-manager/actions/runs/43192222535):
+**12/12 SUCCESS**, attempt1. Проверен фактический результат без повторного запуска.
+IMPL-005 остаётся ACCEPTED / LOCKED. M5.0 VERIFIED относится к пакету плана;
+готовность реализации M5.1A этим не заявляется. Receipt98136c33 и M4 сохранены.
 
-Единственная активная выдача — **C1-M5.1A-CONFIGURATION-R1**: C1 ведущий,
-C2 участвует в схеме/миграции/правах и actual-PG проверках. Полное поручение,
-branch/base/write-set и критерии — только в [M5_HANDOFF](tasks/M5_HANDOFF.md).
-Результат: owner API для draft/validation/preview/publish/rollback небольшого
-Business bundle; UI и ответы AI по нему остаются M5.1B. IN_PROGRESS означает
-выданное поручение, не наличие готовой реализации. Остальные срезы не выданы.
+Единственная активная задача — **C1-M5.1A-CONFIGURATION-R1**, C1 с участием C2.
+[C1 вернул подготовленный source](https://github.com/Elefesys/ai-service-manager/pull/45#issuecomment-6821719546)
+`73ae021d3fbdb9724fd20d44fe2000d8b57dfc2d`,
+tree `7c63fdad005d09d037db6e47e25d82ee80c2f917`; полный C0 review/CI впереди.
 
-[Автоматический post-merge CI43192222535](https://github.com/Elefesys/ai-service-manager/actions/runs/43192222535)
-на момент выдачи ещё IN_PROGRESS; runtime, native-context и browser уже SUCCESS.
-C0 допускает synthetic разработку от совпадающего проверенного tree, не заявляя
-post-merge VERIFIED заранее. Не запускать повтор неизменённых исходников.
-Подробные логи и результат CI остаются по ссылке; новые findings разбираются
-по конкретной причине до интеграции следующего кандидата.
+C0 снял scope blocker: разрешён `tests/test_auth_contract.py` для явного
+добавления ровно шести выданных configuration routes в полную equality (+9/-0).
+Фактические API/OpenAPI routes сверены; frozen auth и прежние assertions сохраняются.
+Точные условия и продолжение — только в [M5_HANDOFF](tasks/M5_HANDOFF.md).
+Следующий шаг C1: применить правку и тот же path в уже разрешённый M5 admission,
+выполнить целевые проверки, открыть один implementation PR → main и пройти
+штатный полный CI готового кандидата. Другие срезы не выданы.
 
 Receiver ACK/fence, полный live HUMAN/Resume, UNKNOWN/holds и PC transport
 сохраняют прежний статус и не блокируют M5 coding. VM/paid/live/реальные данные
-не разрешены. CURRENT реестра обновляет C0, активное поручение одно в M5_HANDOFF.
+не разрешены. CURRENT реестра обновляет C0; active assignment один в M5_HANDOFF.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 
