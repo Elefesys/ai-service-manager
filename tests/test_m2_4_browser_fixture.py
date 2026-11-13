@@ -988,3 +988,649 @@ async def test_knowledge_repeat_reads_canonical_receipt_without_claim_model_or_s
         }
         kernel.replay_ai.assert_awaited_once()
     kernel.claim_knowledge.assert_not_awaited()
+
+
+def human_knowledge_seed(harness):
+    """Controlled queue/proofs, not a PostgreSQL or live OWNER substitute."""
+    worker = harness.worker
+    values = tuple(v for v in worker.seed_events() if v.bot_identity == worker.bot("knowledge"))
+    ws, connection = uuid4(), uuid4()
+    inboxes = [
+        SimpleNamespace(code="ACCEPTED", workspace_id=ws, inbox_id=uuid4(), job_id=uuid4())
+        for _ in values
+    ]
+    inbox_claims = [
+        SimpleNamespace(
+            kind="PROCESS_INBOX",
+            workspace_id=ws,
+            connection_id=connection,
+            job_id=r.job_id,
+            inbox_id=r.inbox_id,
+        )
+        for r in inboxes
+    ]
+    groups, consumers, proofs = [], [], []
+    for _ in values:
+        turn = uuid4()
+        groups.append(
+            SimpleNamespace(
+                kind="PROCESS_TURN",
+                step="GROUP",
+                workspace_id=ws,
+                connection_id=connection,
+                job_id=uuid4(),
+                claim_token=uuid4(),
+                turn_id=turn,
+                turn_revision=1,
+            )
+        )
+        consumer = SimpleNamespace(
+            kind="PROCESS_TURN",
+            step="TEST_CONSUME",
+            workspace_id=ws,
+            connection_id=connection,
+            job_id=uuid4(),
+            claim_token=uuid4(),
+            turn_id=turn,
+            turn_revision=2,
+        )
+        consumers.append(consumer)
+        proofs.append(
+            SimpleNamespace(
+                code="OBSERVED",
+                job_id=consumer.job_id,
+                workspace_id=ws,
+                connection_id=connection,
+                turn_id=turn,
+                turn_revision=2,
+                consumer="TURN_TEST_V1",
+                result=SimpleNamespace(member_count=1, ready_file_count=0),
+            )
+        )
+    queue = list(inbox_claims + groups + consumers)
+    executed, observed = [], []
+    events = []
+
+    async def ingest(source, value, correlation):
+        events.append(("ingest", value.bot_identity))
+        return inboxes[values.index(value)]
+
+    async def claim(name):
+        assert name == "knowledge-browser-seed"
+        return queue.pop(0) if queue else None
+
+    async def dispatch(value):
+        events.append(("execute", value.kind))
+        executed.append(value)
+
+    async def replay(job, token):
+        consumer = next(c for c in consumers if c.job_id == job)
+        assert token == consumer.claim_token and consumer in executed
+        observed.append(job)
+        events.append(("observe", job))
+        return proofs[consumers.index(consumer)]
+
+    return SimpleNamespace(
+        values=values,
+        inboxes=inboxes,
+        inbox_claims=inbox_claims,
+        groups=groups,
+        consumers=consumers,
+        proofs=proofs,
+        queue=queue,
+        events=events,
+        executed=executed,
+        observed=observed,
+        kernel=SimpleNamespace(
+            ingest_event=AsyncMock(side_effect=ingest),
+            claim_job=AsyncMock(side_effect=claim),
+            replay_turn=AsyncMock(side_effect=replay),
+        ),
+        ordinary=SimpleNamespace(ai=None, execute=AsyncMock(side_effect=dispatch)),
+        adapter=SimpleNamespace(calls=0, effects=0, source=lambda bot: bot),
+    )
+
+
+async def test_human_knowledge_seed_finishes_two_canonical_histories_before_material(
+    harness, monkeypatch
+):
+    worker, data = harness.worker, human_knowledge_seed(harness)
+    other = worker.event("happy", "main")
+    monkeypatch.setattr(worker, "seed_events", lambda: iter((*data.values, other)))
+
+    async def material(*args):
+        assert len(set(data.observed)) == 2
+        assert {proof.turn_id for proof in data.proofs} == {c.turn_id for c in data.consumers}
+        assert worker.counters("knowledge") == {"calls": 0, "effects": 0}
+        data.events.append(("material", None))
+        return 0
+
+    monkeypatch.setattr(worker, "seed_material", material)
+    original_ingest = data.kernel.ingest_event.side_effect
+    original_claim = data.kernel.claim_job.side_effect
+    happy = SimpleNamespace(code="ACCEPTED", job_id=uuid4(), inbox_id=uuid4())
+    happy_claim = SimpleNamespace(kind="PROCESS_INBOX", job_id=happy.job_id)
+
+    async def ingest(source, value, correlation):
+        if value is other:
+            assert data.events[-1][0] == "material"
+            data.events.append(("happy", None))
+            return happy
+        return await original_ingest(source, value, correlation)
+
+    async def claim(name):
+        return happy_claim if name == "m24-browser-seed" else await original_claim(name)
+
+    data.kernel.ingest_event.side_effect = ingest
+    data.kernel.claim_job.side_effect = claim
+    result = await worker.seed(data.kernel, data.ordinary, data.adapter)
+    assert result == {"processed": 3, "seed_turns": 4}
+    assert data.kernel.ingest_event.await_count == 3
+    assert len(data.observed) == len(set(data.observed)) == 2
+    assert data.events.index(("material", None)) > max(
+        i for i, e in enumerate(data.events) if e[0] == "observe"
+    )
+    assert data.ordinary.execute.await_args_list[-1].args == (happy_claim,)
+    assert data.adapter.calls == data.adapter.effects == 0
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["ai_worker", "foreign_workspace", "foreign_connection", "wrong_inbox", "send", "guarded_turn"],
+)
+async def test_human_knowledge_seed_refuses_unexpected_work_before_dispatch(harness, fault):
+    data, worker = human_knowledge_seed(harness), harness.worker
+    rejected = data.inbox_claims[0]
+    if fault == "ai_worker":
+        data.ordinary.ai = object()
+    elif fault == "foreign_workspace":
+        rejected.workspace_id = uuid4()
+    elif fault == "foreign_connection":
+        rejected = data.inbox_claims[1]
+        rejected.connection_id = uuid4()
+    elif fault == "wrong_inbox":
+        rejected.inbox_id = uuid4()
+    elif fault == "send":
+        rejected.kind = "SEND_AI_TEXT"
+    else:
+        rejected.kind, rejected.step = "PROCESS_TURN", "GUARDED_TEXT"
+    with pytest.raises(worker.ProvisioningError):
+        await worker.seed_knowledge(data.kernel, data.ordinary, data.adapter, data.values)
+    if fault == "ai_worker":
+        data.kernel.ingest_event.assert_not_awaited()
+        data.kernel.claim_job.assert_not_awaited()
+    assert rejected not in data.executed
+    assert data.observed == []
+    assert worker.counters("knowledge") == {"calls": 0, "effects": 0}
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "code",
+        "job_id",
+        "workspace_id",
+        "connection_id",
+        "turn_id",
+        "turn_revision",
+        "consumer",
+        "member_count",
+        "ready_file_count",
+        "duplicate_turn",
+    ],
+)
+async def test_human_knowledge_seed_requires_two_separate_exact_observation_proofs(harness, field):
+    data, worker = human_knowledge_seed(harness), harness.worker
+    target = data.proofs[1]
+    if field == "duplicate_turn":
+        data.consumers[1].turn_id = target.turn_id = data.proofs[0].turn_id
+    elif field in {"member_count", "ready_file_count"}:
+        setattr(target.result, field, 2)
+    elif field == "code":
+        target.code = "STALE"
+    elif field == "turn_revision":
+        target.turn_revision += 1
+    elif field == "consumer":
+        target.consumer = "OTHER_CONSUMER"
+    else:
+        setattr(target, field, uuid4())
+    with pytest.raises(worker.ProvisioningError, match="Canonical HUMAN seed observation required"):
+        await worker.seed_knowledge(data.kernel, data.ordinary, data.adapter, data.values)
+    assert data.kernel.replay_turn.await_count == 2
+    assert worker.counters("knowledge") == {"calls": 0, "effects": 0}
+
+
+@pytest.mark.parametrize(
+    "effect", ["adapter_calls", "adapter_effects", "ledger_call", "ledger_effect"]
+)
+async def test_human_knowledge_seed_rejects_effect_evidence_even_after_valid_proofs(
+    harness, effect
+):
+    data, worker = human_knowledge_seed(harness), harness.worker
+    if effect.startswith("adapter_"):
+        setattr(data.adapter, effect.removeprefix("adapter_"), 1)
+    else:
+        event = "CALL" if effect == "ledger_call" else "EFFECT"
+        worker.ledger_path("knowledge").write_text(json.dumps({"event": event}) + "\n")
+    with pytest.raises(worker.ProvisioningError, match="zero external effects"):
+        await worker.seed_knowledge(data.kernel, data.ordinary, data.adapter, data.values)
+    assert data.kernel.replay_turn.await_count == 2
+
+
+async def test_human_knowledge_seed_never_catches_not_allowed_or_falls_back(harness):
+    from asm.messaging.errors import Code, MessagingError
+
+    data, worker = human_knowledge_seed(harness), harness.worker
+    original = data.ordinary.execute.side_effect
+
+    async def execute(claim):
+        if claim is data.consumers[0]:
+            raise MessagingError(Code.NOT_ALLOWED)
+        await original(claim)
+
+    data.ordinary.execute.side_effect = execute
+    with pytest.raises(MessagingError, match="NOT_ALLOWED"):
+        await worker.seed_knowledge(data.kernel, data.ordinary, data.adapter, data.values)
+    data.kernel.replay_turn.assert_not_awaited()
+    assert data.consumers[1] not in data.executed
+    assert data.ordinary.ai is None
+
+
+async def test_human_knowledge_seed_exhaustion_never_reports_one_proof_as_complete(
+    harness, monkeypatch
+):
+    data, worker = human_knowledge_seed(harness), harness.worker
+    data.queue.pop()  # One HUMAN history never reaches its canonical consumer.
+    sleep = AsyncMock()
+    monkeypatch.setattr(worker.asyncio, "sleep", sleep)
+    with pytest.raises(worker.ProvisioningError, match="did not complete"):
+        await worker.seed_knowledge(data.kernel, data.ordinary, data.adapter, data.values)
+    assert data.kernel.claim_job.await_count == 256
+    assert data.kernel.replay_turn.await_count == 1
+    assert sleep.await_count == 251
+    assert worker.counters("knowledge") == {"calls": 0, "effects": 0}
+
+
+@pytest.mark.parametrize("case", ["v3_owner", "v3_guarded_image"])
+@pytest.mark.parametrize("pin", ["canonical", "foreign", "missing"])
+async def test_knowledge_prepare_requires_canonical_question_membership_before_model(
+    harness, monkeypatch, case, pin
+):
+    from asm.ai.fake import FakeAdapter
+    from asm.ai.runtime_contracts import PreparedKnowledgeRun
+    from asm.messaging.errors import Code, MessagingError
+    from m5_knowledge_fixtures import knowledge_run
+    from test_m4_context import fixture
+
+    worker = harness.worker
+    snapshot, binding = fixture(case)
+    value = knowledge_run().model_dump(mode="json")
+    value.update(snapshot=snapshot, binding=binding.model_dump(mode="json"))
+    value["knowledge_pin"]["business_id"] = str(binding.business_id)
+    value["active_projection"].update(
+        workspace_id=str(binding.workspace_id), business_id=str(binding.business_id)
+    )
+    run = PreparedKnowledgeRun.model_validate_json(json.dumps(value))
+    from uuid import UUID
+
+    question = UUID(snapshot["members"][0]["message_id"])
+    supplied = question if pin == "canonical" else uuid4() if pin == "foreign" else None
+    prepare = AsyncMock(return_value=run)
+    monkeypatch.setattr(worker.AIDatabase, "prepare", prepare)
+
+    class Database(worker.KnowledgeBrowserDatabase):
+        async def replay(self, *args, **kwargs):
+            raise MessagingError(Code.STALE_CLAIM)
+
+    database = Database(
+        SimpleNamespace(question_message_id=supplied), environment="TEST", delivery=True
+    )
+    adapter = FakeAdapter(run.config.route)
+    if pin == "canonical":
+        result = await database.prepare(None, run.config, deadline=run.deadline)
+        assert result is database.prepared is run
+        assert result.snapshot is snapshot or result.snapshot == snapshot
+    else:
+        with pytest.raises(worker.ProvisioningError, match="Canonical browser question"):
+            await database.execute(None, run.config, adapter, deadline=run.deadline)
+        assert database.prepared is None
+    assert adapter.requests == []
+
+
+@pytest.mark.parametrize("shape", ["one_history", "other_chat", "image"])
+async def test_human_knowledge_seed_shape_refuses_before_ingress(harness, shape):
+    from dataclasses import replace
+
+    data, worker = human_knowledge_seed(harness), harness.worker
+    values = data.values
+    if shape == "one_history":
+        values = values[:1]
+    elif shape == "other_chat":
+        values = (replace(values[0], chat_id="another-client"), values[1])
+    else:
+        values = (replace(values[0], image_file_id="private-image", text=None), values[1])
+    with pytest.raises(worker.ProvisioningError):
+        await worker.seed_knowledge(data.kernel, data.ordinary, data.adapter, values)
+    data.kernel.ingest_event.assert_not_awaited()
+    data.kernel.claim_job.assert_not_awaited()
+    data.ordinary.execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "result", ["canonical", "foreign_inbox", "unprocessed", "missing_message", "other_claim"]
+)
+async def test_knowledge_question_pin_comes_only_from_its_canonical_inbox_processing(
+    harness, monkeypatch, result
+):
+    worker = harness.worker
+    kernel = object.__new__(worker.KnowledgeBrowserKernel)
+    inbox, message = uuid4(), uuid4()
+    kernel.question_inbox_id = inbox
+    kernel.question_message_id = None
+    claim = SimpleNamespace(inbox_id=uuid4() if result == "other_claim" else inbox)
+    processed = SimpleNamespace(
+        inbox_id=uuid4() if result == "foreign_inbox" else inbox,
+        code="IGNORED" if result == "unprocessed" else "PROCESSED",
+        message_id=None if result == "missing_message" else message,
+    )
+    base = AsyncMock(return_value=processed)
+    monkeypatch.setattr(worker.MessagingDatabase, "process_inbox", base)
+    if result in {"foreign_inbox", "unprocessed", "missing_message"}:
+        with pytest.raises(worker.ProvisioningError, match="Canonical browser question processing"):
+            await kernel.process_inbox(claim)
+    else:
+        assert await kernel.process_inbox(claim) is processed
+    assert kernel.question_message_id == (message if result == "canonical" else None)
+    base.assert_awaited_once_with(claim)
+
+
+def test_worker_diagnostic_never_stringifies_sql_or_other_private_error_text(harness, monkeypatch):
+    from sqlalchemy.exc import SQLAlchemyError
+
+    class PrivateDatabaseError(SQLAlchemyError):
+        def __str__(self):
+            pytest.fail("Diagnostic tried to stringify private SQL/credentials")
+
+    class PrivateInputError(ValueError):
+        def __str__(self):
+            pytest.fail("Diagnostic tried to stringify private payload")
+
+    worker = harness.worker
+    monkeypatch.setattr(worker, "_diagnostic", worker.BrowserDiagnostic(stage="MODEL"))
+    for error, label in (
+        (PrivateDatabaseError("SELECT PRIVATE_SENTINEL credential=synthetic"), "DATABASE"),
+        (PrivateInputError("PAYLOAD_PRIVATE_SENTINEL"), "INPUT"),
+    ):
+        line = worker.diagnostic_line(error, "knowledge")
+        assert f"stage=MODEL;class={label};code=NONE;" in line
+        assert "SENTINEL" not in line and "SELECT" not in line and "credential" not in line
+        assert "calls=UNKNOWN;effects=UNKNOWN;" in line
+    assert worker.diagnostic_failure(PrivateInputError("PRIVATE"), "PRIVATE_STAGE") == (
+        "ARGS",
+        "INPUT",
+        "NONE",
+    )
+
+
+async def test_worker_diagnostic_keeps_primary_not_allowed_when_cleanup_also_fails(
+    harness, monkeypatch
+):
+    from asm.messaging.errors import Code, MessagingError
+    from sqlalchemy.exc import SQLAlchemyError
+
+    worker = harness.worker
+    monkeypatch.setattr(worker, "_diagnostic", worker.BrowserDiagnostic())
+    monkeypatch.setattr(worker, "target", lambda: ("unused-test-url", object()))
+    cleanup = SQLAlchemyError("PRIVATE_SQL_CLEANUP_SENTINEL")
+    engine = SimpleNamespace(dispose=AsyncMock(side_effect=cleanup))
+    monkeypatch.setattr(worker, "create_async_engine", lambda *args, **kwargs: engine)
+    guard = AsyncMock(side_effect=MessagingError(Code.NOT_ALLOWED))
+    monkeypatch.setattr(worker, "guard", guard)
+    with pytest.raises(SQLAlchemyError):
+        await worker.action("happy", "success")
+    line = worker.diagnostic_line(cleanup, "happy")
+    assert "stage=GUARD;class=MESSAGING;code=NOT_ALLOWED;cleanup=DATABASE;" in line
+    assert "SENTINEL" not in line and "PRIVATE_SQL" not in line
+    engine.dispose.assert_awaited_once()
+    assert not worker._diagnostic.ready
+
+
+def test_worker_diagnostic_cannot_read_or_create_counters_before_validated_guard(
+    harness, monkeypatch
+):
+    worker = harness.worker
+
+    def forbidden(*args):
+        pytest.fail("Unvalidated diagnostics touched counter files")
+
+    monkeypatch.setattr(worker, "counters", forbidden)
+    diagnostic = worker.BrowserDiagnostic(stage="GUARD", ready=False)
+    monkeypatch.setattr(worker, "_diagnostic", diagnostic)
+    assert list(harness.directory.iterdir()) == []
+    line = worker.diagnostic_line(ValueError("PRIVATE_SENTINEL"), "knowledge")
+    assert "calls=UNKNOWN;effects=UNKNOWN;" in line
+    diagnostic.ready = True
+    line = worker.diagnostic_line(ValueError("PRIVATE_SENTINEL"), "../../invalid-preset")
+    assert "calls=UNKNOWN;effects=UNKNOWN;" in line
+    assert list(harness.directory.iterdir()) == []
+
+
+def test_worker_diagnostic_reports_only_bounded_counter_numbers_after_guard(harness, monkeypatch):
+    worker = harness.worker
+    diagnostic = worker.BrowserDiagnostic(stage="DRAIN", ready=True, model_calls=1)
+    monkeypatch.setattr(worker, "_diagnostic", diagnostic)
+    assert "calls=0;effects=0;model_calls=1;" in worker.diagnostic_line(
+        ValueError("PRIVATE"), "happy"
+    )
+    assert (harness.directory / "happy.jsonl").exists()
+    monkeypatch.setattr(
+        worker, "counters", lambda preset: {"calls": True, "effects": "PRIVATE_SENTINEL"}
+    )
+    diagnostic.model_calls = 3
+    line = worker.diagnostic_line(ValueError("PRIVATE"), "happy")
+    assert "calls=UNKNOWN;effects=UNKNOWN;model_calls=UNKNOWN;" in line
+    assert "SENTINEL" not in line
+
+
+async def knowledge_observer_journey(harness, monkeypatch, *, before_guarded):
+    """Real Worker/Gateway/fake/transport dispatch; controlled stores are not PG proof."""
+    from contextlib import asynccontextmanager
+    from datetime import UTC, datetime
+    from uuid import UUID
+
+    from asm.ai.agent import KnowledgeConversationAgent
+    from asm.ai.runtime_contracts import KnowledgeRuntimeReceipt
+    from asm.conversations.turns import parse_snapshot
+    from asm.messaging.errors import Code, MessagingError
+    from asm.messaging.results import (
+        AIJobClaim,
+        AISendPermit,
+        FinalizeResult,
+        JobClaim,
+        TurnJobClaim,
+    )
+    from m5_knowledge_fixtures import ControlledKnowledgeAuthority, knowledge_run
+
+    worker = harness.worker
+    run = knowledge_run().model_copy(update={"config": worker.knowledge_config()})
+    question = uuid4()
+    common = dict(
+        workspace_id=run.binding.workspace_id,
+        connection_id=run.binding.connection_id,
+        claim_token=uuid4(),
+        lease_until=run.deadline,
+        correlation_id=uuid4(),
+        attempt_count=1,
+        inbox_id=None,
+        outbox_id=None,
+    )
+    inbox = JobClaim(
+        **(common | {"job_id": uuid4(), "kind": "PROCESS_INBOX", "inbox_id": question})
+    )
+    turn = common | {
+        "kind": "PROCESS_TURN",
+        "turn_id": run.binding.turn_id,
+        "turn_revision": run.binding.turn_revision,
+    }
+    observer = TurnJobClaim(**(turn | {"job_id": uuid4(), "step": "TEST_CONSUME"}))
+    source = TurnJobClaim(**(turn | {"job_id": uuid4(), "step": "GUARDED_TEXT"}))
+    ai_claim = AIJobClaim(**(turn | {"job_id": run.binding.job_id, "step": "AI_GENERATE"}))
+    send = JobClaim(**(common | {"job_id": uuid4(), "kind": "SEND_AI_TEXT", "outbox_id": uuid4()}))
+    order = [inbox, observer, source, send] if before_guarded else [inbox, source, observer, send]
+    actions, enrollments = [], []
+    runtimes = []
+
+    class Kernel:
+        finalized = None
+        question_message_id = None
+        process_turn = AsyncMock(return_value=parse_snapshot(run.snapshot))
+        finish_turn = AsyncMock()
+        checkpoint = AsyncMock()
+        telegram_probe = AsyncMock(return_value=None)
+
+        @asynccontextmanager
+        async def _transaction(self):
+            yield SimpleNamespace(
+                execute=AsyncMock(
+                    return_value=SimpleNamespace(scalar_one=lambda: datetime.now(UTC))
+                )
+            )
+
+        async def ingest_event(self, *args):
+            return SimpleNamespace(
+                code="ACCEPTED",
+                inbox_id=question,
+                workspace_id=inbox.workspace_id,
+                job_id=inbox.job_id,
+            )
+
+        async def claim_knowledge(self, cutoff, *, ai=False):
+            if ai:
+                return ai_claim if enrollments and not runtimes[0].model_jobs else None
+            return order.pop(0) if order else None
+
+        async def process_inbox(self, claim):
+            assert claim == inbox
+            self.question_message_id = UUID(run.snapshot["members"][0]["message_id"])
+            actions.append("inbox")
+
+        async def enqueue_ai(self, claim):
+            # An observer routed to the AI worker reproduces the old failure:
+            # it must never become a second source for this admitted Turn.
+            if claim != source or enrollments:
+                raise MessagingError(Code.IDEMPOTENCY_KEY_CONFLICT)
+            enrollments.append(claim)
+            actions.append("enroll")
+
+        async def begin_ai_send(self, claim, probe, observation):
+            assert claim == send and probe is observation is None
+            actions.append("send")
+            return AISendPermit(
+                code="PERMITTED",
+                job_id=send.job_id,
+                claim_token=send.claim_token,
+                attempt_id=uuid4(),
+                workspace_id=send.workspace_id,
+                connection_id=send.connection_id,
+                provider="CONTROLLED",
+                bot_identity=worker.bot("knowledge"),
+                external_connection_id=worker.route("knowledge"),
+                chat_id="m24-knowledge-main",
+                text=runtimes[0].database.receipt.result.text,
+                ai_delivery=True,
+            )
+
+        async def finish_send(self, job, token, attempt, outcome):
+            assert job == send.job_id and token == send.claim_token
+            assert outcome.kind == OutcomeKind.SUCCESS
+            self.finalized = FinalizeResult(
+                code="FINALIZED",
+                status="SENT",
+                job_id=job,
+                outbox_id=send.outbox_id,
+                attempt_id=attempt,
+            )
+            return self.finalized
+
+    kernel = Kernel()
+
+    async def observe(claim):
+        assert claim == observer
+        actions.append("observe")
+        return parse_snapshot(run.snapshot)
+
+    kernel.process_turn.side_effect = observe
+
+    class Database:
+        def __init__(self, messaging, **kwargs):
+            self.messaging, self.prepared, self.receipt = messaging, run, None
+
+        async def replay(self, claim, config):
+            assert claim == ai_claim and config == run.config and self.receipt is not None
+            return self.receipt
+
+    class Runtime:
+        def __init__(self, messaging, config, factory, **kwargs):
+            self.database = SimpleNamespace(messaging=messaging)
+            self.config, self.factory = config, factory
+            self.telegram = None
+            self.model_jobs = []
+            runtimes.append(self)
+
+        async def enqueue(self, claim):
+            await self.database.messaging.enqueue_ai(claim)
+
+        async def execute(self, claim):
+            assert claim == ai_claim and len(enrollments) == 1
+            self.model_jobs.append(claim)
+            actions.append("model")
+            authority = ControlledKnowledgeAuthority(run, allowed=True)
+            agent = KnowledgeConversationAgent(
+                run.config,
+                self.factory(),
+                authority,
+                knowledge_pin=run.knowledge_pin,
+                active_projection=run.active_projection,
+            )
+            outcome = await agent.run(
+                run.binding, run.snapshot, run_id=str(run.run_id), deadline=run.deadline
+            )
+            assert outcome.candidate is not None and outcome.candidate.kind == "reply"
+            self.database.receipt = KnowledgeRuntimeReceipt(
+                run_id=run.run_id,
+                job_id=claim.job_id,
+                turn_id=claim.turn_id,
+                turn_revision=claim.turn_revision,
+                selected_at=datetime.now(UTC),
+                result=outcome.candidate,
+                knowledge_pin=run.knowledge_pin,
+            )
+
+    monkeypatch.setattr(worker, "KnowledgeBrowserKernel", lambda *args, **kwargs: kernel)
+    monkeypatch.setattr(worker, "KnowledgeBrowserDatabase", Database)
+    monkeypatch.setattr(worker, "SyntheticRuntime", Runtime)
+    monkeypatch.setattr(worker, "_diagnostic", worker.BrowserDiagnostic())
+    result = await worker.knowledge_answer(None, AsyncMock())
+    assert actions == (
+        ["inbox", "observe", "enroll", "model", "send"]
+        if before_guarded
+        else ["inbox", "enroll", "model", "observe", "send"]
+    )
+    assert enrollments == [source] and runtimes[0].model_jobs == [ai_claim]
+    kernel.process_turn.assert_awaited_once_with(observer)
+    kernel.finish_turn.assert_awaited_once()
+    assert kernel.finish_turn.await_args.args[0] == observer
+    assert len(runtimes[0].factory().requests) == 1
+    assert result["model_calls"] == result["calls"] == result["effects"] == 1
+    assert result["answer"] == run.active_projection.bundle.faqs[0].answer
+    assert worker.knowledge_journal().receipt == runtimes[0].database.receipt
+
+
+async def test_knowledge_current_observer_before_guarded_source_never_enrolls(harness, monkeypatch):
+    await knowledge_observer_journey(harness, monkeypatch, before_guarded=True)
+
+
+async def test_knowledge_current_observer_after_ai_cannot_enroll_or_regenerate(
+    harness, monkeypatch
+):
+    await knowledge_observer_journey(harness, monkeypatch, before_guarded=False)

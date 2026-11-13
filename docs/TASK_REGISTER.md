@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.1A INTEGRATED / VERIFIED; M5.1B IN_PROGRESS / 2026-11-12
+## CURRENT — M5.1A INTEGRATED / VERIFIED; M5.1B IN_PROGRESS / CI repair / 2026-11-13
 
 PR #46 слит владельцем. Accepted main:
 `6c27be8487f3f8792cf01ed2a0fcdde130ea7a52`,
@@ -16,7 +16,7 @@ validation/preview, atomic publish/rollback, immutable release/receipt и active
 projection; additive0018. UI и использование знаний в ответе ещё не реализованы.
 IMPL-005 ACCEPTED / LOCKED; PR45/M5.0 и receipt98136c33/M4 сохранены в ancestry.
 
-Единственная активная задача — **C4-M5.1B-PUBLISHED-KNOWLEDGE-R1 — IN_PROGRESS**.
+Единственная активная задача — **C4-M5.1B-PUBLISHED-KNOWLEDGE-R1 — IN_PROGRESS / CI repair**.
 Ведущий C4; C1/C3, C2 для SQL/миграции, затем C5 участвуют последовательно в одном
 PR. Ветка `c4/m5-1b-published-knowledge-r1` начинается с C0 docs-only handoff
 поверх принятого main выше. Результат: опубликованные услуги/правила/FAQ в
@@ -25,11 +25,18 @@ PR. Ветка `c4/m5-1b-published-knowledge-r1` начинается с C0 docs
 в [M5_HANDOFF](tasks/M5_HANDOFF.md). Current migration0018; C0 резервирует0019
 с подтверждением C2 до SQL. M5.2A и следующие срезы не выданы.
 
+Исходный [CI43363880768](https://github.com/Elefesys/ai-service-manager/actions/runs/43363880768)
+завершён **10/12 SUCCESS**. [C0 разрешил ограниченный repair](https://github.com/Elefesys/ai-service-manager/pull/47#issuecomment-6844936121):
+bounded900 runtime budget только после точного M5.1B admission и адресное
+исправление двух browser worker failures. Приёмка впереди; подробные причины,
+целевые проверки и оставшийся полный CI — в M5_HANDOFF/PR #47.
+
 Receiver ACK/fence, полный live HUMAN/Resume, UNKNOWN/holds и PC transport
 сохраняют прежний статус. Только synthetic LOCAL/TEST; VM/paid/live/реальные
 данные и merge нового PR не разрешены. C0 не повторял неизменённый CI/аудит M4.
 Этот docs-only handoff не является новой реализацией или новым CI evidence.
-CURRENT обновляет C0; активное поручение одно в M5_HANDOFF.
+Это одно обновление CURRENT делегировано C4 только в совместном code/docs repair
+push решением C0 выше. Дальнейшую приёмку и CURRENT ведёт C0; поручение одно.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 

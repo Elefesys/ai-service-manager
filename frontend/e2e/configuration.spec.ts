@@ -13,6 +13,15 @@ try{fixture=JSON.parse(readFileSync(fixtureFile,'utf8'));}catch{throw new Error(
 const password=readFileSync(passwordFile,'utf8'),login=process.env.ASM_BROWSER_LOGIN??'browser.owner';
 const base=`/api/v1/workspaces/${fixture.workspace_id}/businesses/${fixture.business_id}/configuration`;
 const origin=process.env.ASM_BROWSER_BASE_URL??'http://127.0.0.1:8080';
+function finiteChildFailure(error:unknown):string {
+  const value=(typeof error==='object'&&error!==null?error:{}) as Record<string,unknown>;
+  const exit=typeof value.code==='number'&&Number.isInteger(value.code)&&value.code>=-255&&value.code<=255?String(value.code):'UNKNOWN';
+  const signal=value.signal===undefined||value.signal===null?'NONE':typeof value.signal==='string'&&['SIGTERM','SIGKILL','SIGINT'].includes(value.signal)?value.signal:'OTHER';
+  const timeout=value.killed===true&&value.signal==='SIGTERM';
+  const pattern=/^M2_4_BROWSER_DIAGNOSTIC:stage=(ARGS|TARGET|GUARD|SEED|INGEST|CLAIM_AI|CLAIM_WORK|EXECUTE_INBOX|EXECUTE_TURN|EXECUTE_AI|EXECUTE_SEND|MODEL|REPLAY|JOURNAL|DRAIN|CLEANUP);class=(MESSAGING|DATABASE|TIMEOUT|INPUT|IO|OTHER);code=(NONE|NOT_ALLOWED|STALE_CLAIM|AI_STALE|ACCESS_DENIED|INVALID_INPUT|IDEMPOTENCY_KEY_CONFLICT|OTHER);cleanup=(NONE|MESSAGING|DATABASE|TIMEOUT|INPUT|IO|OTHER);calls=(UNKNOWN|[0-9]{1,4});effects=(UNKNOWN|[0-9]{1,4});model_calls=(UNKNOWN|[0-2]);mismatch=[01]$/;
+  const diagnostic=typeof value.stderr==='string'?value.stderr.split(/\r?\n/).find(line=>pattern.test(line)):undefined;
+  return 'exit='+exit+';timeout='+String(timeout)+';signal='+signal+';'+(diagnostic??'diagnostic=UNAVAILABLE');
+}
 async function safe<T>(operation:()=>Promise<T>):Promise<T>{try{return await operation();}catch{throw new Error('E2E_CONFIGURATION_HTTP_FAILED');}}
 async function read(request:APIRequestContext,kind:'draft'|'active',route=base){
   const r=await safe(()=>request.get(`${route}/${kind}`));expect(r.status()).toBe(200);const value=await safe(()=>r.json());return kind==='draft'?parseDraft(value):parseActive(value);
@@ -84,7 +93,7 @@ test('published knowledge reaches one guarded fake runtime reply; draft and repl
   const resumed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===`/api/v1/workspaces/${knowledge.workspace_id}/conversations/${inventory.knowledge.conversation_id}/resume`);await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();expect((await resumed).status()).toBe(200);await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
   async function runKnowledge():Promise<Record<string,unknown>>{
     const args=['compose','--env-file',envPath!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'-v',`${counterDir}:/run/m2-browser-counters:rw`,'browser-runtime','python','scripts/m2_4_browser_worker.py','--preset','knowledge','--action','knowledge-answer'];
-    let stdout:string;try{stdout=(await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:65536})).stdout;}catch{throw new Error('E2E_CONFIGURATION_RUNTIME_FAILED');}
+    let stdout:string;try{stdout=(await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:65536})).stdout;}catch(error){throw new Error('E2E_CONFIGURATION_RUNTIME_FAILED:'+finiteChildFailure(error));}
     try{return JSON.parse(stdout);}catch{throw new Error('E2E_CONFIGURATION_RUNTIME_OUTPUT');}
   }
   const delivered=await runKnowledge();expect([delivered.model_calls,delivered.calls,delivered.effects]).toEqual([1,1,1]);expect(delivered.release_id===publication.release_id&&delivered.activation_version===publication.activation_version&&delivered.answer===answer&&delivered.source===source).toBe(true);

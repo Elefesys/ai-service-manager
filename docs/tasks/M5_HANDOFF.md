@@ -4,13 +4,20 @@
 [TASK_REGISTER](../TASK_REGISTER.md). Решение по объёму:
 [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
 
-## CURRENT — M5.1B → C4 / 2026-11-12
+## CURRENT — M5.1B → C4 / IN_PROGRESS — CI repair / 2026-11-13
 
 Единственная активная задача: **C4-M5.1B-PUBLISHED-KNOWLEDGE-R1**.
 Ведущий C4; C1/C3 согласуют backend/runtime/delivery, C2 — SQL/миграцию и
 сериализацию; затем C5 добавляет UI. Это участие в одном срезе/PR, не несколько
 параллельных выдач. Общие файлы редактировать последовательно; C4 собирает возврат.
 M5.1A завершён; M5.2A и последующие срезы не выданы.
+
+[Решение C0 по repair PR #47](https://github.com/Elefesys/ai-service-manager/pull/47#issuecomment-6844936121)
+принято к исполнению. Repair start
+`a8067f1ad0cd5baffcd28379109009fb9ba7173f`, tree
+`7c8a442465cb00711eebf09714765ce987a7723b`; implementation base и C0 docs
+`3b2a28a192753103017dab5452288cde61226d95` сохраняются. Это продолжение M5.1B,
+не новая выдача и не приёмка.
 
 - Repository: `Elefesys/ai-service-manager`; integration target: `main`.
 - Accepted implementation base: `6c27be8487f3f8792cf01ed2a0fcdde130ea7a52`.
@@ -179,6 +186,7 @@ frontend/src/App.tsx
 frontend/src/App.test.tsx
 frontend/src/style.css
 frontend/e2e/configuration.spec.ts
+frontend/e2e/messaging.spec.ts
 tests/test_m5_knowledge.py
 tests/test_m5_knowledge_migrations.py
 tests/test_m5_knowledge_postgres.py
@@ -263,6 +271,10 @@ PR проверить позитивный маршрут и отказы на �
 paths или реально нужный новый API согласуются с C0 по конкретной причине,
 без нового разрешения владельца на рутинные исправления. C4/C5 не меняют CURRENT
 реестра; согласованный контракт и один краткий возврат — в M5_HANDOFF/PR.
+Разовое исключение C0 для этого совместного code/docs repair push: C4 обновляет
+единственный CURRENT реестра на IN_PROGRESS / CI repair; далее CURRENT ведёт C0.
+Новый exact path `frontend/e2e/messaging.spec.ts` разрешён только для вызова/
+закрытой диагностики finite helper; его функциональные assertions сохраняются.
 
 ### Критерии готовности и возврат
 
@@ -392,10 +404,65 @@ valid=true и full e2bfd685; отличие только в порядке5 па
 unavailable: повтор API/Ruff/mypy repair не завершён, нового PASS им не приписываем.
 Первый native-context lane также RED; подробности в artifact14009171371,
 локальная распаковка заблокирована недоступностью environment. Точная причина
-этого отдельного отказа пока не установлена; исправленный кандидат проверяет
-новый полный CI, без unchanged retry или объявления прежнего RED случайностью.
-Следующий шаг: штатный full CI исправленного кандидата, затем review C0;
-после зелёного CI status-only commit не нужен. Merge и следующий CURRENT — C0.
+этого отдельного отказа не устанавливалась. Последующий
+[CI43363880768](https://github.com/Elefesys/ai-service-manager/actions/runs/43363880768)
+на a8067f1, attempt1: **10/12 SUCCESS**; catalog/readiness, native-context,
+foundation/durable и все connect5 lanes PASS. Pin repair завершён, повторять его
+не требуется. Browser56 PASS/2 FAIL и runtime aggregate600s FAIL разобраны C0.
+
+### Ограниченный CI repair — решение C0 принято / 2026-11-13
+
+Решение и разовое делегирование CURRENT — в комментарии C0, связанном выше.
+Исходные browser/runtime ZIP повторно скачаны, SHA256 и CRC совпали с C0.
+Отдельный чистый worktree a8067f1/tree7c8a442 сохранён для RED reproducer.
+
+**Причины и исправление browser.** Новый helper принимал TEST_CONSUME старого
+HUMAN main Turn после UI Resume. Read-only PG подтвердил другую generation;
+старый Turn не имеет подходящего Resume receipt, поэтому SQL правильно выдал
+NOT_ALLOWED до model call. Оставшийся новый question GROUP затем обработал
+обычный happy drain: knowledge GUARDED_TEXT дошёл до чужого FixtureAdapter и
+его guard остановил helper до foreign CALL/EFFECT. Это подтверждённый каскад,
+не предположение о случайности. После устранения ранней ошибки обнаружен
+отдельный текущий TEST_CONSUME: передача его в AI повторяла уже выполненный
+GUARDED_TEXT enqueue и давала IDEMPOTENCY_KEY_CONFLICT.
+
+Два knowledge seed события теперь первыми проходят обычный Worker без AI до
+двух разных canonical OBSERVED replay receipts при нулевых CALL/EFFECT. Затем
+создаются material и остальные fixtures; два события не дублируются, исходные
+127 events в `seed_events()` и happy PENDING сохранены. В knowledge loop TEST_CONSUME идёт только
+через обычного effect-free observer; GUARDED_TEXT → AI_GENERATE → SEND_AI_TEXT
+сохраняют настоящий runtime/DB/Gateway/Worker. Нет catch-NOT_ALLOWED/fallback,
+timestamp/status DML или новых grants. Cutoff — available_at cursor, не scope
+filter; неожиданные claims по-прежнему отклоняются. Canonical question Inbox
+message_id дополнительно сверяется с PREPARE snapshot до FakeAdapter.
+
+**Carrier.** C0 разрешил один aggregate SQL/test budget900s только в runtime
+после exact M5.1B admission, включая последующий main-push. Остальные routes и
+targeted —600; per-command cap600, build/cleanup bounds и workflow25min прежние.
+Один выбранный budget управляет остатком/timeout/stop/summary/final gate.
+Все **160 cases =35+22+9+41+25+17+11** остаются в прежних семи модулях.
+
+**Целевые результаты.** Carrier209 и browser-fixture135 unit PASS
+(совместно344/61.43s); browser-compose49/0.34s, Ruff/format и frontend
+typecheck/build PASS. Исходные
+fixture92 tests/expectations сохранены побайтово. Проверены полный виртуальный
+проход160 cases/699s, отказ сверх900, прежние600, cleanup failure и missing phase/
+case no-PASS; observer до GUARDED_TEXT и после AI даёт один model request/effect.
+16 Node checks реальных TS formatter functions PASS: raw stdout/stderr,
+exception text/SQL/payload/credentials не печатаются; только closed stage/class/
+code, exit/timeout и bounded counters. Прежний ARGS error marker сохранён.
+
+Actual LOCAL PG18.6 из pinned OCI/en_US.utf8, API и pinned Chromium140:
+оригинальный knowledge UI test и следующий happy text/control/manual subset
+получили RED→GREEN. Knowledge: один actual FakeAdapter request, один canonical
+controlled text effect, draft отсутствует, DB replay не вызывает model/send.
+После исправления knowledge jobs завершены; happy делает только свой эффект.
+Это host helper transport и108 text events, **не Docker/MinIO evidence**:
+MinIO в executor остановлен запретом netlink. Исходные image assertions не
+изменены; полный58-case browser и actual160 PG в пределах900s остаются OPEN
+до штатного CI исправленного кандидата. Его URL и final SHA/tree — в PR #47.
+AI default OFF, live/paid/VM0; merge и review — C0. После зелёного CI отдельный
+status-only push не нужен.
 
 ## 1. Проверяемый результат всего этапа
 

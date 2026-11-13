@@ -911,8 +911,16 @@ def r11_event(foundation_git, tmp_path, monkeypatch):
     )
     boundary = []
 
-    def admitted(root, event, manifest, mode):
-        boundary.append({"root": root, "event": event, "manifest": manifest, "mode": mode})
+    def admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
+        boundary.append(
+            {
+                "root": root,
+                "event": event,
+                "manifest": manifest,
+                "mode": mode,
+                "sql_test_budget_seconds": sql_test_budget_seconds,
+            }
+        )
 
     def forbidden(*args, **kwargs):
         pytest.fail("resource or credential boundary was entered")
@@ -1032,6 +1040,7 @@ def test_m5_configuration_outer_export_and_inner_source_binding(
         carrier.M5_CONFIGURATION_TREE,
     )
     assert set(receipt["paths"]) == carrier.M5_CONFIGURATION_PATHS
+    assert r["boundary"][0]["sql_test_budget_seconds"] == 600
     assert not list((r["root"] / "private").iterdir())
 
     class BeforeResources(Exception):
@@ -1576,6 +1585,7 @@ def test_m5_knowledge_outer_export_and_inner_source_binding(r11_event, monkeypat
         carrier.M5_KNOWLEDGE_TREE,
     )
     assert set(receipt["paths"]) == carrier.M5_KNOWLEDGE_PATHS
+    assert r["boundary"][0]["sql_test_budget_seconds"] == 900
     assert not list((r["root"] / "private").iterdir())
 
     class BeforeResources(Exception):
@@ -1655,3 +1665,231 @@ def test_m5_knowledge_outer_refuses_foreign_source_before_resources(r11_event, m
         }[damage]
     )
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.fixture
+def aggregate_driver(r11_event, monkeypatch):
+    """Real Git admission and aggregate orchestration; finite fake command/PG boundaries.
+
+    A controlled clock advances only inside the simulated phase, so 700 seconds
+    of work need no sleep. This proves execution budgeting, never PostgreSQL/LLM.
+    """
+    r = r11_event
+    module_cases = (35, 22, 9, 41, 25, 17, 11)
+    assert len(carrier.MODULES) == len(module_cases)
+    nodes = [
+        module + "::test_aggregate_" + str(i)
+        for module, count in zip(carrier.MODULES, module_cases, strict=True)
+        for i in range(count)
+    ]
+    assert len(nodes) == 160
+    clock, calls, cleaned = {"now": 0.0}, [], []
+    fault = {"kind": None}
+    capture_git = carrier.capture
+
+    def capture(args):
+        if args[0] == "git":
+            return capture_git(args)
+        if "ps" in args:
+            return "synthetic-owned-container"
+        if "exec" in args:
+            return "Uid:\t999\t999\t999\t999"
+        if "inspect" in args:
+            return "sha256:" + "c" * 64
+        raise AssertionError(args)
+
+    def phase(group, label, args, budget):
+        assert 0 < budget <= 600
+        calls.append((group, label, budget))
+        reports = group / "evidence/phases"
+        reports.mkdir(exist_ok=True)
+        carrier.write(reports / "active.json", {"phase": label})
+        elapsed = 0.0
+        if label == "inventory":
+            carrier.write(
+                group / "evidence/all-m4.json",
+                {"nodeids": nodes, "collection_exit": 0, "deselected": []},
+            )
+        elif label == "current-native-inventory":
+            carrier.write(
+                group / "evidence/current-native-inventory.json",
+                {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
+            )
+        elif label in {
+            "schema-0019",
+            "catalog-0019",
+            "readiness",
+            "schema",
+            "versions",
+            "native-owner",
+        }:
+            elapsed = 2.0
+        elif label == carrier.COMMAND_REPORT:
+            elapsed = 95.0
+            expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
+            if fault["kind"] == "budget" and expected[-1].startswith(carrier.MODULES[-1] + "::"):
+                # Match process timeout/termination overhead: the phase reports
+                # exit124, and elapsed accounting still includes the overrun.
+                elapsed = budget + 0.017
+            if elapsed <= budget:
+                cases = [
+                    {
+                        "nodeid": n,
+                        "overflow": 0,
+                        "invalid_fields": 0,
+                        "phases": [
+                            {"phase": p, "outcome": "passed", "xfail": False}
+                            for p in ("setup", "call", "teardown")
+                        ],
+                    }
+                    for n in expected
+                ]
+                if expected[-1].startswith(carrier.MODULES[-1] + "::"):
+                    if fault["kind"] == "missing":
+                        cases.pop()
+                    elif fault["kind"] == "missing_call":
+                        cases[-1]["phases"] = [
+                            p for p in cases[-1]["phases"] if p["phase"] != "call"
+                        ]
+                carrier.write(group / "evidence/cases.json", cases)
+                carrier.write(
+                    group / "evidence" / carrier.SUMMARY_REPORT,
+                    carrier.summarize(cases, expected, 0),
+                )
+                if expected == carrier.CURRENT_NATIVE_NODES:
+                    carrier.write(
+                        group / "evidence/before-reset-proofs.json", [{} for _ in expected]
+                    )
+                    carrier.write(
+                        group / "evidence/native-identity-proofs.json", [{} for _ in expected]
+                    )
+        clock["now"] += elapsed
+        code = 124 if elapsed > budget else 0
+        carrier.write(
+            reports / (label + ".json"),
+            {"budget_seconds": budget, "seconds": elapsed, "exit_code": code},
+        )
+        if code:
+            raise carrier.Refusal(label.upper().replace("-", "_") + "_FAILED")
+
+    def cleanup(group):
+        cleaned.append(group)
+        if fault["kind"] == "cleanup" and group.name.endswith("-group-7"):
+            raise carrier.Refusal("CLEANUP_COMMAND_1_FAILED")
+        carrier.write(group / "evidence/cleanup.json", {"outcome": "PASS"})
+
+    # The real admission fixture forbids all resources. Only this explicitly
+    # synthetic executor supplies disposable non-secret credential placeholders.
+    monkeypatch.setattr(carrier.secrets, "token_hex", lambda n: "a" * (2 * n))
+    monkeypatch.setattr(carrier, "capture", capture)
+    monkeypatch.setattr(carrier, "phase", phase)
+    monkeypatch.setattr(carrier, "cleanup", cleanup)
+    monkeypatch.setattr(
+        carrier, "inventory", lambda group: {"containers": [], "networks": [], "volumes": []}
+    )
+    monkeypatch.setattr(carrier, "compose", lambda group: ["synthetic-compose"])
+    monkeypatch.setattr(
+        carrier, "checks", lambda group, *args, **kwargs: ["synthetic-checks", *args]
+    )
+    monkeypatch.setattr(
+        carrier, "current_native_checks", lambda group, label, *args: ["synthetic-native", *args]
+    )
+    monkeypatch.setattr(carrier.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(carrier, "run_admitted", r["real_run_admitted"])
+    return dict(r=r, nodes=nodes, calls=calls, cleaned=cleaned, fault=fault, clock=clock)
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("fault", [None, "budget", "cleanup", "missing", "missing_call"])
+def test_m5_admitted_aggregate_budget_keeps_full_inventory_and_fails_closed(
+    aggregate_driver, monkeypatch, route, fault
+):
+    h = aggregate_driver
+    r = h["r"]
+    prepare_m5_knowledge_event(r, monkeypatch, route)
+    h["fault"]["kind"] = fault
+    if fault is None:
+        r["run"]()
+    else:
+        with pytest.raises(carrier.Refusal, match="^PRIMARY_FAILED$"):
+            r["run"]()
+    summary = json.loads((r["root"] / "evidence/summary.json").read_text())
+    assert summary["sql_test_budget_seconds"] == 900
+    assert summary["expected_cases"] == summary["collected_cases"] == 160
+    assert summary["groups_visited"] == len(carrier.MODULES) + 1
+    assert len(h["cleaned"]) == len(set(h["cleaned"])) == summary["groups_visited"]
+    assert summary["result"] == ("PASS" if fault is None else "FAIL")
+    assert summary["inventory_complete"] and summary["collection_complete"]
+    assert set(summary["planned_cases_by_module"]) == set(carrier.MODULES)
+    commands = [(g, budget) for g, label, budget in h["calls"] if label == carrier.COMMAND_REPORT]
+    assert len(commands) == len(carrier.MODULES)
+    assert all(0 < budget <= 600 for _, budget in commands)
+    assert all(budget == 420 for _, label, budget in h["calls"] if label == "build")
+    if fault == "budget":
+        assert 900 < summary["sql_test_seconds"] < 901
+        assert 0 < commands[-1][1] < 600
+        phase = json.loads(
+            (commands[-1][0] / "evidence/phases" / (carrier.COMMAND_REPORT + ".json")).read_text()
+        )
+        assert phase["exit_code"] == 124 and phase["budget_seconds"] == commands[-1][1]
+        assert summary["missing_count"] == 11 and summary["not_reached_modules"] == []
+    else:
+        assert 600 < summary["sql_test_seconds"] < 900
+        assert summary["missing_count"] == int(fault == "missing")
+        assert summary["missing_call_phase_count"] == int(fault in {"missing", "missing_call"})
+        if fault in {"missing", "missing_call"}:
+            assert summary["missing_call_phases"] == [h["nodes"][-1]]
+        if fault == "cleanup":
+            assert summary["groups"][-1]["cleanup"]["code"] == "CLEANUP_COMMAND_1_FAILED"
+        if fault is None:
+            assert summary["complete"] and summary["missing"] == []
+            assert summary["not_reached_modules"] == []
+
+
+@pytest.mark.parametrize("route", ["configuration", "planning", "targeted"])
+def test_historical_routes_retain_600_aggregate_budget(aggregate_driver, monkeypatch, route):
+    h = aggregate_driver
+    r = h["r"]
+    if route == "configuration":
+        prepare_m5_configuration_event(r, monkeypatch, "same-repository-pr-merge")
+    elif route == "planning":
+        prepare_m5_planning_event(r, monkeypatch, "same-repository-pr-merge")
+    with pytest.raises(carrier.Refusal, match="^PRIMARY_FAILED$"):
+        r["run"]()
+    summary = json.loads((r["root"] / "evidence/summary.json").read_text())
+    assert summary["sql_test_budget_seconds"] == 600
+    assert summary["sql_test_seconds"] <= 600
+    assert summary["result"] == "FAIL" and summary["missing_count"] > 0
+    assert len(h["cleaned"]) == summary["groups_visited"]
+    assert summary["not_reached_modules"]
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m5_admission_cannot_extend_targeted_budget(aggregate_driver, monkeypatch, route):
+    h = aggregate_driver
+    r = h["r"]
+    prepare_m5_knowledge_event(r, monkeypatch, route)
+    (r["root"] / "evidence").mkdir(parents=True)
+    (r["root"] / "private").mkdir()
+    Path(r["env"]["GITHUB_EVENT_PATH"]).write_text(json.dumps(r["payload"]))
+    event, manifest = carrier.admit_source(r["root"] / "evidence")
+    with pytest.raises(carrier.Refusal, match="^SQL_TEST_BUDGET_ADMISSION$"):
+        carrier.run_admitted(r["root"], event, manifest, "targeted", sql_test_budget_seconds=900)
+    assert not h["calls"] and not h["cleaned"]
+
+
+@pytest.mark.parametrize("route", ["configuration", "planning", "targeted"])
+def test_historical_admission_cannot_request_900(aggregate_driver, monkeypatch, route):
+    h = aggregate_driver
+    r = h["r"]
+    if route == "configuration":
+        prepare_m5_configuration_event(r, monkeypatch, "same-repository-pr-merge")
+    elif route == "planning":
+        prepare_m5_planning_event(r, monkeypatch, "same-repository-pr-merge")
+    (r["root"] / "evidence").mkdir(parents=True)
+    (r["root"] / "private").mkdir()
+    Path(r["env"]["GITHUB_EVENT_PATH"]).write_text(json.dumps(r["payload"]))
+    event, manifest = carrier.admit_source(r["root"] / "evidence")
+    with pytest.raises(carrier.Refusal, match="^SQL_TEST_BUDGET_ADMISSION$"):
+        carrier.run_admitted(r["root"], event, manifest, "runtime", sql_test_budget_seconds=900)
+    assert not h["calls"] and not h["cleaned"]

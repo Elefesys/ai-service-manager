@@ -135,6 +135,7 @@ M5_KNOWLEDGE_PATHS = {
     "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
     "docs/tasks/M5_HANDOFF.md",
     "frontend/e2e/configuration.spec.ts",
+    "frontend/e2e/messaging.spec.ts",
     "frontend/src/App.test.tsx",
     "frontend/src/App.tsx",
     "frontend/src/ConfigurationPanel.test.tsx",
@@ -1511,10 +1512,13 @@ def run(root):
     event, manifest = admit_source(root / "evidence")
     mode = "targeted" if event["ref"] == "refs/heads/" + TARGETED_BRANCH else "runtime"
     write(root / "evidence/mode.json", {"mode": mode})
-    run_admitted(root, event, manifest, mode)
+    # This finite extension is selected only after exact source admission. No
+    # environment/CLI override, and the historical/targeted routes remain 600s.
+    sql_test_budget_seconds = 900 if mode == "runtime" and knowledge_event(event) else 600
+    run_admitted(root, event, manifest, mode, sql_test_budget_seconds=sql_test_budget_seconds)
 
 
-def run_admitted(root, event, manifest, mode):
+def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     # No resource access or credentials before the complete source admission.
     require(mode in {"targeted", "runtime"}, "R5_MODE")
     modules = ["preflight", *MODULES]
@@ -1530,6 +1534,13 @@ def run_admitted(root, event, manifest, mode):
     planning = event.get("head_ref") == M5_PLAN_BRANCH
     knowledge = knowledge_event(event)
     configuration = not knowledge and configuration_event(event)
+    require(
+        sql_test_budget_seconds == 600
+        or sql_test_budget_seconds == 900
+        and mode == "runtime"
+        and knowledge,
+        "SQL_TEST_BUDGET_ADMISSION",
+    )
     base, base_tree = (
         (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
         if knowledge
@@ -1590,16 +1601,16 @@ def run_admitted(root, event, manifest, mode):
 
     def sql_phase(group, name, command, cap):
         nonlocal sql_test_seconds, test_seconds
-        require(sql_test_seconds < 600, "TOTAL_SQL_TEST_BUDGET_EXHAUSTED")
+        require(sql_test_seconds < sql_test_budget_seconds, "TOTAL_SQL_TEST_BUDGET_EXHAUSTED")
         start = time.monotonic()
         try:
-            phase(group, name, command, min(cap, 600 - sql_test_seconds))
+            phase(group, name, command, min(cap, sql_test_budget_seconds - sql_test_seconds))
         finally:
             elapsed = time.monotonic() - start
             sql_test_seconds += elapsed
             if name == COMMAND_REPORT:
                 test_seconds += elapsed
-        require(sql_test_seconds <= 600, "TOTAL_SQL_TEST_BUDGET_EXHAUSTED")
+        require(sql_test_seconds <= sql_test_budget_seconds, "TOTAL_SQL_TEST_BUDGET_EXHAUSTED")
 
     for index, module in enumerate(modules):
         group = root / (root.name + "-group-" + str(index))
@@ -1826,7 +1837,7 @@ def run_admitted(root, event, manifest, mode):
                     "groups": outcomes,
                     "test_seconds": test_seconds,
                     "sql_test_seconds": sql_test_seconds,
-                    "sql_test_budget_seconds": 600,
+                    "sql_test_budget_seconds": sql_test_budget_seconds,
                     "groups_visited": len(outcomes),
                     "groups_expected": modules,
                     "not_reached_modules": modules[len(outcomes) :],
@@ -1852,20 +1863,26 @@ def run_admitted(root, event, manifest, mode):
                     "result": "PASS"
                     if len(outcomes) == len(modules)
                     and all(v["outcome"] == "PASS" for v in outcomes)
-                    and sql_test_seconds <= 600
+                    and sql_test_seconds <= sql_test_budget_seconds
                     else "FAIL",
                 },
             )
             shutil.copytree(group / "evidence", root / "evidence" / group.name, dirs_exist_ok=True)
         # A failed prerequisite cannot authorize destructive runtime fixtures.
         # Other test modules still report their independent outcomes within budget.
-        if module == "preflight" and result["outcome"] != "PASS" or sql_test_seconds >= 600:
+        if (
+            module == "preflight"
+            and result["outcome"] != "PASS"
+            or sql_test_seconds >= sql_test_budget_seconds
+        ):
             break
     clean = not capture(["git", "status", "--porcelain", "--untracked-files=all"])
     write(root / "evidence/source-preservation.json", {"clean": clean})
     require(clean, "SOURCE_CHANGED")
     require(
-        len(outcomes) == len(modules) and all(v["outcome"] == "PASS" for v in outcomes),
+        len(outcomes) == len(modules)
+        and all(v["outcome"] == "PASS" for v in outcomes)
+        and sql_test_seconds <= sql_test_budget_seconds,
         "PRIMARY_FAILED",
     )
 

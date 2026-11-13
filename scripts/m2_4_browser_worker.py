@@ -9,7 +9,7 @@ import json
 import os
 import stat
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -24,6 +24,8 @@ from asm.ai.knowledge import KnowledgeView, project_knowledge
 from asm.ai.runtime import SyntheticRuntime
 from asm.ai.runtime_contracts import KnowledgeRuntimeReceipt, PreparedKnowledgeRun
 from asm.conversations.escalations import MARKER
+from asm.conversations.guards import parse_guarded_snapshot
+from asm.conversations.turns import parse_snapshot
 from asm.files.config import StorageSettings
 from asm.files.database import FileDatabase
 from asm.files.models import FetchPermit
@@ -33,6 +35,7 @@ from asm.files.transfer import FetchTransfer
 from asm.foundation import DATABASE_SCHEMA_REVISION
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
+from asm.messaging.errors import MessagingError
 from asm.messaging.models import EventKind, NormalizedEventV1, OutcomeKind
 from asm.messaging.results import AIJobClaim, FinalizeResult, ScanStep
 from asm.messaging.worker import Worker
@@ -50,6 +53,7 @@ from provision_local_auth import PrivateArgumentParser, ProvisioningError
 from pydantic import Field
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 MATERIAL_ACTIONS = ("material-edit", "material-delete") + tuple(
@@ -68,6 +72,92 @@ ACTIONS = (
     "knowledge-answer",
 )
 COUNTER_DIRECTORY = Path("/run/m2-browser-counters")
+
+
+@dataclass
+class BrowserDiagnostic:
+    stage: str = "ARGS"
+    ready: bool = False
+    model_calls: int = 0
+    mismatched: bool = False
+    primary: tuple[str, str, str] | None = None
+    cleanup: str = "NONE"
+
+
+_diagnostic = BrowserDiagnostic()
+DIAGNOSTIC_STAGES = frozenset(
+    {
+        "ARGS",
+        "TARGET",
+        "GUARD",
+        "SEED",
+        "INGEST",
+        "CLAIM_AI",
+        "CLAIM_WORK",
+        "EXECUTE_INBOX",
+        "EXECUTE_TURN",
+        "EXECUTE_AI",
+        "EXECUTE_SEND",
+        "MODEL",
+        "REPLAY",
+        "JOURNAL",
+        "DRAIN",
+        "CLEANUP",
+    }
+)
+
+
+def diagnostic_failure(error, stage):
+    kind = (
+        "MESSAGING"
+        if isinstance(error, MessagingError)
+        else "DATABASE"
+        if isinstance(error, SQLAlchemyError)
+        else "TIMEOUT"
+        if isinstance(error, TimeoutError)
+        else "INPUT"
+        if isinstance(error, ValueError)
+        else "IO"
+        if isinstance(error, OSError)
+        else "OTHER"
+    )
+    code = "NONE"
+    if isinstance(error, MessagingError):
+        code = error.code.value
+        if code not in {
+            "NOT_ALLOWED",
+            "STALE_CLAIM",
+            "AI_STALE",
+            "ACCESS_DENIED",
+            "INVALID_INPUT",
+            "IDEMPOTENCY_KEY_CONFLICT",
+        }:
+            code = "OTHER"
+    return stage if stage in DIAGNOSTIC_STAGES else "ARGS", kind, code
+
+
+def diagnostic_line(error, preset):
+    """One closed record; never stringify exceptions, payloads, IDs or child output."""
+    stage, kind, code = _diagnostic.primary or diagnostic_failure(error, _diagnostic.stage)
+    counted = {"calls": "UNKNOWN", "effects": "UNKNOWN"}
+    if _diagnostic.ready and preset in PRESETS:
+        try:
+            values = counters(preset)
+            for name in counted:
+                if type(values[name]) is int and 0 <= values[name] <= 4096:
+                    counted[name] = str(values[name])
+        except Exception:
+            pass  # Diagnostics never grant file/DB/effect authority or replace a failure.
+    model_calls = (
+        str(_diagnostic.model_calls)
+        if type(_diagnostic.model_calls) is int and 0 <= _diagnostic.model_calls <= 2
+        else "UNKNOWN"
+    )
+    return (
+        f"M2_4_BROWSER_DIAGNOSTIC:stage={stage};class={kind};code={code};"
+        f"cleanup={_diagnostic.cleanup};calls={counted['calls']};effects={counted['effects']};"
+        f"model_calls={model_calls};mismatch={int(_diagnostic.mismatched)}"
+    )
 
 
 def validate_operation(preset, operation):
@@ -204,8 +294,10 @@ class FixtureAdapter(ControlledAdapter):
         self.mismatched = False
 
     async def send(self, permit):
+        _diagnostic.stage = "EXECUTE_SEND"
         if permit.bot_identity != bot(self.preset):
             self.mismatched = True
+            _diagnostic.mismatched = True
             raise ProvisioningError("Concurrent browser outbound fixture not allowed")
         return await super().send(permit)
 
@@ -298,9 +390,87 @@ async def drain(worker):
     raise ProvisioningError("Bounded browser TEST jobs exceeded")
 
 
+async def seed_knowledge(kernel, worker, adapter, values):
+    """Finish the two HUMAN histories before any Resume or unrelated queue work.
+
+    A later available_at cursor cannot exclude an old HUMAN job whose next step
+    becomes due after Resume. Its existing generation must never enter the AI
+    runtime. Ordinary effect-free consumption here needs no extra capability.
+    """
+    if (
+        len(values) != 2
+        or {value.chat_id for value in values} != {"m24-knowledge-main", "m24-knowledge-alternate"}
+        or any(value.image_file_id is not None for value in values)
+        or getattr(worker, "ai", None) is not None
+    ):
+        raise ProvisioningError("Two HUMAN knowledge seed histories required")
+    expected = {}
+    workspace = connection_id = None
+    for value in values:
+        receipt = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
+        if receipt.code != "ACCEPTED" or (
+            workspace is not None and workspace != receipt.workspace_id
+        ):
+            raise ProvisioningError("Fresh exclusive knowledge seed required")
+        workspace = receipt.workspace_id
+        expected[receipt.job_id] = receipt.inbox_id
+    observed, turns = set(), 0
+    async with asyncio.timeout(15):
+        for _ in range(256):
+            claim = await kernel.claim_job("knowledge-browser-seed")
+            if claim is None:
+                await asyncio.sleep(0.05)
+                continue
+            if claim.workspace_id != workspace or (
+                connection_id is not None and claim.connection_id != connection_id
+            ):
+                raise ProvisioningError("Exclusive knowledge seed scope required")
+            connection_id = claim.connection_id
+            if claim.kind == "PROCESS_INBOX":
+                if expected.get(claim.job_id) != claim.inbox_id:
+                    raise ProvisioningError("Original knowledge seed Inbox required")
+                await worker.execute(claim)
+                del expected[claim.job_id]
+            elif claim.kind == "PROCESS_TURN" and claim.step in {"GROUP", "TEST_CONSUME"}:
+                await worker.execute(claim)
+                turns += 1
+                if claim.step == "TEST_CONSUME":
+                    receipt = await kernel.replay_turn(claim.job_id, claim.claim_token)
+                    if (
+                        receipt.code != "OBSERVED"
+                        or receipt.job_id != claim.job_id
+                        or receipt.workspace_id != workspace
+                        or receipt.connection_id != connection_id
+                        or receipt.turn_id != claim.turn_id
+                        or receipt.turn_revision != claim.turn_revision
+                        or receipt.consumer != "TURN_TEST_V1"
+                        or receipt.result.member_count != 1
+                        or receipt.result.ready_file_count != 0
+                        or receipt.turn_id in observed
+                    ):
+                        raise ProvisioningError("Canonical HUMAN seed observation required")
+                    observed.add(receipt.turn_id)
+            else:
+                raise ProvisioningError("Effect-free knowledge seed work required")
+            if not expected and len(observed) == 2:
+                if (
+                    adapter.calls != 0
+                    or adapter.effects != 0
+                    or counters("knowledge") != {"calls": 0, "effects": 0}
+                ):
+                    raise ProvisioningError("Knowledge seed must have zero external effects")
+                return turns
+    raise ProvisioningError("Bounded HUMAN knowledge seed did not complete")
+
+
 async def seed(kernel, worker, adapter):
     processed = 0
     seed_turns = 0
+    values = tuple(seed_events())
+    knowledge = tuple(value for value in values if value.bot_identity == bot("knowledge"))
+    if knowledge:
+        seed_turns += await seed_knowledge(kernel, worker, adapter, knowledge)
+        processed += len(knowledge)
 
     async def next_seed_claim(name):
         nonlocal seed_turns
@@ -321,7 +491,9 @@ async def seed(kernel, worker, adapter):
         raise ProvisioningError("Bounded browser seed Turn jobs exceeded")
 
     processed += await seed_material(kernel, worker, next_seed_claim)
-    for value in seed_events():
+    for value in values:
+        if value.bot_identity == bot("knowledge"):
+            continue  # Already observed through the ordinary HUMAN worker above.
         receipt = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
         if receipt.code != "ACCEPTED":
             raise ProvisioningError("Fresh browser TEST Inbox required")
@@ -546,12 +718,34 @@ class KnowledgeBrowserDatabase(AIDatabase):
         run = await super().prepare(*args, **kwargs)
         if not isinstance(run, PreparedKnowledgeRun):
             raise ProvisioningError("Knowledge-aware browser PREPARE required")
+        question = self.messaging.question_message_id
+        snapshot = (
+            parse_guarded_snapshot(run.snapshot)
+            if "consumer" in run.snapshot
+            else parse_snapshot(run.snapshot)
+        )
+        if question is None or question not in {member.message_id for member in snapshot.members}:
+            raise ProvisioningError("Canonical browser question must be in the prepared Turn")
         self.prepared = run
         return run
 
 
 class KnowledgeBrowserKernel(MessagingDatabase):
     finalized = None
+    question_inbox_id = None
+    question_message_id = None
+
+    async def process_inbox(self, claim):
+        result = await super().process_inbox(claim)
+        if claim.inbox_id == self.question_inbox_id:
+            if (
+                result.inbox_id != self.question_inbox_id
+                or result.code != "PROCESSED"
+                or result.message_id is None
+            ):
+                raise ProvisioningError("Canonical browser question processing required")
+            self.question_message_id = result.message_id
+        return result
 
     async def finish_send(self, *args, **kwargs):
         result = await super().finish_send(*args, **kwargs)
@@ -559,9 +753,9 @@ class KnowledgeBrowserKernel(MessagingDatabase):
         return result
 
     async def claim_knowledge(self, cutoff, *, ai=False):
-        # The public bounded paging contract skips jobs older than this fixed
-        # server-side boundary. Deliberately pending unrelated browser fixtures
-        # are neither claimed nor drained. Every returned job is admitted normally.
+        # This is an available_at paging boundary, not a scope/creation filter.
+        # HUMAN seed work is completed before Resume. Unexpected claims still
+        # fail the caller's scope checks; every accepted job is admitted normally.
         name = "m5-knowledge-ai" if ai else "m5-knowledge-work"
         self._claim_scan[name] = ScanStep(
             step="BUSY", scan_until=cutoff + timedelta(seconds=30), at=cutoff, id=UUID(int=0)
@@ -578,6 +772,7 @@ class KnowledgeBrowserModel(FakeAdapter):
         self.view = None
 
     async def complete(self, request):
+        _diagnostic.stage = "MODEL"
         await self.barrier("model")
         run = self.database.prepared
         if run is None or request.config != run.config or self.requests:
@@ -608,6 +803,7 @@ class KnowledgeBrowserModel(FakeAdapter):
                 raise ProvisioningError("Private binding in model input")
         self.view = view
         response = await super().complete(request)
+        _diagnostic.model_calls = len(self.requests)
         return response.model_copy(
             update={
                 "output_json": json.dumps(
@@ -716,13 +912,17 @@ async def knowledge_answer(engine, barrier):
     model = KnowledgeBrowserModel(runtime.database, barrier)
     transport.model = model
     worker = Worker(kernel, transport, ai=runtime)
+    observer = Worker(kernel, transport)
     async with kernel._transaction() as connection:
         cutoff = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
     value = replace(
         event("knowledge", "published-question"),
         text="Как подготовиться к консультации? Synthetic preparation.",
     )
+    _diagnostic.stage = "INGEST"
     incoming = await kernel.ingest_event(transport.source(value.bot_identity), value, uuid4())
+    kernel.question_inbox_id = incoming.inbox_id
+    _diagnostic.stage = "JOURNAL"
     journal = knowledge_journal()
     if journal is not None:
         if (
@@ -731,6 +931,7 @@ async def knowledge_answer(engine, barrier):
             or journal.claim.workspace_id != incoming.workspace_id
         ):
             raise ProvisioningError("Journal requires its original canonical question")
+        _diagnostic.stage = "REPLAY"
         saved = await runtime.database.replay(journal.claim, knowledge_config())
         if saved != journal.receipt:
             raise ProvisioningError("Canonical knowledge receipt changed")
@@ -741,8 +942,10 @@ async def knowledge_answer(engine, barrier):
     connection_id = None
     async with asyncio.timeout(25):
         for _ in range(512):
+            _diagnostic.stage = "CLAIM_AI" if ai_claim is None else "CLAIM_WORK"
             claim = await kernel.claim_knowledge(cutoff, ai=ai_claim is None)
             if claim is None:
+                _diagnostic.stage = "CLAIM_WORK"
                 claim = await kernel.claim_knowledge(cutoff)
             if claim is None:
                 await asyncio.sleep(0.025)
@@ -761,11 +964,29 @@ async def knowledge_answer(engine, barrier):
                 if ai_claim is not None:
                     raise ProvisioningError("One browser model job required")
                 ai_claim = claim
-            await worker.execute(claim)
+            _diagnostic.stage = (
+                "EXECUTE_AI"
+                if isinstance(claim, AIJobClaim)
+                else "EXECUTE_INBOX"
+                if claim.kind == "PROCESS_INBOX"
+                else "EXECUTE_SEND"
+                if claim.kind == "SEND_AI_TEXT"
+                else "EXECUTE_TURN"
+            )
+            # TEST_CONSUME is the ordinary effect-free observer, independent of
+            # the GUARDED_TEXT source enrolled below. Sending it to the AI
+            # worker would try to enroll the same current Turn a second time.
+            selected = (
+                observer
+                if claim.kind == "PROCESS_TURN" and getattr(claim, "step", None) == "TEST_CONSUME"
+                else worker
+            )
+            await selected.execute(claim)
             if kernel.finalized is None:
                 continue
             if ai_claim is None or model.view is None or len(model.requests) != 1:
                 raise ProvisioningError("Completed bounded knowledge browser model required")
+            _diagnostic.stage = "REPLAY"
             receipt = await runtime.database.replay(ai_claim, knowledge_config())
             if (
                 not isinstance(receipt, KnowledgeRuntimeReceipt)
@@ -781,12 +1002,15 @@ async def knowledge_answer(engine, barrier):
                 model_calls=1,
                 source=model.view.faqs[0].fact.source,
             )
+            _diagnostic.stage = "JOURNAL"
             knowledge_journal(journal)
             return knowledge_report(journal, replayed=False)
     raise ProvisioningError("Bounded knowledge browser result not observed")
 
 
 async def action(preset, operation):
+    global _diagnostic
+    _diagnostic = BrowserDiagnostic(stage="TARGET")
     validate_operation(preset, operation)
     url, settings = target()
     engine = create_async_engine(
@@ -796,7 +1020,9 @@ async def action(preset, operation):
     transfer = None
     try:
         async with asyncio.timeout(120):
+            _diagnostic.stage = "GUARD"
             await guard(engine)
+            _diagnostic.ready = True
             if operation == "stats":
                 return counters(preset)
 
@@ -833,6 +1059,7 @@ async def action(preset, operation):
             transfer = FetchTransfer(FileDatabase(kernel), kernel, images, storage)
             worker = Worker(kernel, adapter, files=transfer)
             if operation == "seed":
+                _diagnostic.stage = "SEED"
                 for selected in PRESETS:
                     if counters(selected) != {"calls": 0, "effects": 0}:
                         raise ProvisioningError("Fresh browser TEST counters required")
@@ -842,27 +1069,44 @@ async def action(preset, operation):
             if operation.startswith("escalate-"):
                 return await escalate(kernel, worker, adapter, preset, operation)
             recovered = await kernel.recover_expired() if operation == "recover" else 0
+            _diagnostic.stage = "DRAIN"
             worked = await drain(worker)
             if adapter.mismatched:
                 raise ProvisioningError("Concurrent browser outbound fixture not allowed")
             return {"worked": worked, "recovered": recovered, **counters(preset)}
+    except Exception as error:
+        _diagnostic.primary = diagnostic_failure(error, _diagnostic.stage)
+        raise
     finally:
-        if transfer is not None:
-            await transfer.close()
-        if storage is not None:
-            await storage.close()
-        await engine.dispose()
+        try:
+            if transfer is not None:
+                await transfer.close()
+            if storage is not None:
+                await storage.close()
+            await engine.dispose()
+        except Exception as error:
+            if _diagnostic.primary is None:
+                _diagnostic.primary = diagnostic_failure(error, "CLEANUP")
+            else:
+                _diagnostic.cleanup = diagnostic_failure(error, "CLEANUP")[1]
+            raise
 
 
 def main():
+    global _diagnostic
+    _diagnostic = BrowserDiagnostic()
+    preset = None
     try:
         parser = PrivateArgumentParser()
         parser.add_argument("--preset", choices=PRESETS)
         parser.add_argument("--action", required=True, choices=ACTIONS)
         args = parser.parse_args()
+        preset = args.preset
         print(json.dumps(asyncio.run(action(args.preset, args.action)), sort_keys=True))
         return 0
-    except Exception:
+    except Exception as error:
+        if _diagnostic.stage != "ARGS":
+            print(diagnostic_line(error, preset), file=sys.stderr)
         print("M2_4_BROWSER_WORKER_FAILED", file=sys.stderr)
         return 1
 
