@@ -170,14 +170,23 @@ inline PNG/base64/detail=low; один batch содержит query/related/unre
 expiry. Максимум8HTTP:1catalog GET +3Vision POST +1embedding POST +3history detail
 GET для Vision; embedding history не документирован и не вызывается. Отсутствие
 provider в embedding response сохраняет UNKNOWN/резерв0.08, не подменяется
-request selector. Upstream attempts/steps при отсутствии metadata — NOT_REPORTED,
-а не выдуманный1. Без balance API/повторов. Резерв11.75RUB:3×3.89 +0.08, deadline210s,
+request selector. После review C0-M5.2A-01 проверяется опубликованный `attemptsCount`:
+только strict integer1; действительно отсутствующее поле — NOT_REPORTED.
+Неверное значение останавливает следующий POST, сохраняет UNKNOWN/резерв/no-resend;
+retained receipt фиксирует именно проверенное поле, без alias/подстановки1.
+Steps при отсутствии metadata остаются NOT_REPORTED. Без balance API/повторов.
+Резерв11.75RUB:3×3.89 +0.08, deadline210s,
 key prompt15s, connect5s. Тарифные неизвестности останавливают до POST;
 timeout/неподтверждённый cost сохраняет UNKNOWN/резерв. Create-once local receipt
 запрещает restart/resend; отдельный stop marker отменяет ожидание и новые dispatch.
-Mock PASS не становится semantic/capability PASS. Полные команды для локального
-POSIX TTY, выбранный expiry/plan hash, ограничения и offline/CI evidence — в одном
-Draft PR этой ветки. Сейчас real/provider/paid HTTP0; M5.2B не начат.
+Mock PASS не становится semantic/capability PASS. Подготовка C6 после code repair:
+для известной Windows11 рабочий POSIX TTY/Python3.13/frozen environment не подтверждён;
+operator route — OPEN / OWNER_ENVIRONMENT_UNVERIFIED. Read-only PowerShell preflight
+не запускает wsl.exe/дистрибутивы и не устанавливает окружение. Нужен его закрытый
+вывод владельца; до подтверждения конкретного окружения платная процедура не готова.
+Условные plan/start/stop, постоянный receipt, новый source/expiry/plan hash и
+offline/CI evidence — в том же PR48. Старый plan6e72f5fb не переносится.
+Сейчас real/provider/paid HTTP0; VM/установки не выполнялись, M5.2B не начат.
 
 ## 1. Проверяемый результат всего этапа
 

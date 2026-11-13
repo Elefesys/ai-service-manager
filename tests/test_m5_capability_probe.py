@@ -179,6 +179,7 @@ class Server:
                 "apiType": "embeddings" if is_embedding else "completions",
                 "responseMode": "sync",
                 "isCancelled": False,
+                "attemptsCount": 1,
                 "clientCost": response["usage"]["cost_rub"],
                 "usage": response["usage"],
                 "finishReason": "stop",
@@ -257,7 +258,7 @@ async def test_single_mock_roundtrip_never_claims_real_semantics_and_never_resum
     assert value["status"] == "MOCK_CONTRACT_PASS" and value["real_route"] == "UNVERIFIED"
     assert value["http_requests"] == len(server.requests) == 8
     assert all(
-        c["upstream_attempts"] == "NOT_REPORTED"
+        type(c["upstream_attempts"]) is int and c["upstream_attempts"] == 1
         for c in value["calls"]
         if c["id"] in {"ordinary", "ambiguous", "unsuitable"}
     )
@@ -269,6 +270,69 @@ async def test_single_mock_roundtrip_never_claims_real_semantics_and_never_resum
     monkeypatch.setattr(probe, "local_key", lambda: pytest.fail("restart read key"))
     with pytest.raises(probe.ProbeError, match="SESSION_ALREADY_EXISTS_NO_RESEND"):
         probe.start(plan, plan["plan_sha256"], tmp_path)
+
+
+@pytest.mark.parametrize("metadata", ["reported_one", "absent"])
+async def test_history_attempts_count_reported_or_genuinely_absent_is_saved(
+    plan, tmp_path, metadata
+):
+    def mutate(data, request, n):
+        if n in {3, 5, 7} and metadata == "absent":
+            data.pop("attemptsCount")
+
+    server = Server(mutate=mutate)
+    receipt = probe.Receipt(tmp_path, plan)
+    value = await probe.execute(
+        plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(server)
+    )
+    assert value["status"] == "MOCK_CONTRACT_PASS" and value["real_route"] == "UNVERIFIED"
+    assert value["http_requests"] == len(server.requests) == 8
+    assert sum(r.method == "POST" for r in server.requests) == 4
+    saved = json.loads(receipt.path.read_bytes())
+    assert saved == value and saved["closed"] is True
+    observations = [
+        c["upstream_attempts"]
+        for c in saved["calls"]
+        if c["id"] in {"ordinary", "ambiguous", "unsuitable"}
+    ]
+    assert len(observations) == 3
+    if metadata == "reported_one":
+        assert all(type(v) is int and v == 1 for v in observations)
+    else:
+        assert observations == ["NOT_REPORTED"] * 3
+    assert Decimal(saved["held_rub"]) == 0
+
+
+@pytest.mark.parametrize("attempts", [2, 0, -1, "two", "1", True, False, None, 1.0])
+async def test_history_attempts_count_invalid_stops_next_post_and_keeps_durable_hold(
+    plan, tmp_path, monkeypatch, attempts
+):
+    def mutate(data, request, n):
+        if n == 3:
+            data["attemptsCount"] = attempts
+            # An unrelated historical spelling cannot override the published field.
+            data["providerAttempts"] = 1
+
+    server = Server(mutate=mutate)
+    receipt = probe.Receipt(tmp_path, plan)
+    value = await probe.execute(
+        plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(server)
+    )
+    assert value["status"] == "UNKNOWN" and value["code"] == "HISTORY_ATTEMPTS"
+    assert value["real_route"] == "UNVERIFIED" and value["closed"] is True
+    assert value["http_requests"] == len(server.requests) == 3
+    assert [r.method for r in server.requests] == ["GET", "POST", "GET"]
+    assert Decimal(value["held_rub"]) == probe.VISION_RESERVE
+    assert Decimal(value["cost_rub"]) == 0
+    assert [c["id"] for c in value["calls"]] == ["catalog", "ordinary", "ordinary-history"]
+    assert value["calls"][1]["status"] == value["calls"][2]["status"] == "UNKNOWN"
+    assert "upstream_attempts" not in value["calls"][1]
+    saved = json.loads(receipt.path.read_bytes())
+    assert saved == value and KEY not in receipt.path.read_text()
+    monkeypatch.setattr(probe, "local_key", lambda: pytest.fail("restart read key"))
+    with pytest.raises(probe.ProbeError, match="SESSION_ALREADY_EXISTS_NO_RESEND"):
+        probe.start(plan, plan["plan_sha256"], tmp_path)
+    assert len(server.requests) == 3
 
 
 @pytest.mark.parametrize("fail", [1, 2, 3, 4, 6, 8])
@@ -445,7 +509,7 @@ async def test_response_failures_have_bounded_prefix_safe_receipt_and_truthful_c
                 v["motif"] = "UNKNOWN"
                 data["choices"][0]["message"]["content"] = json.dumps(v)
         if damage == "history" and n == 3:
-            data["providerAttempts"] = 2
+            data["attemptsCount"] = 2
         if damage == "dimension" and n == 8:
             data["data"][0]["embedding"].pop()
 

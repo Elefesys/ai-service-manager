@@ -519,9 +519,9 @@ def verify_history(data: Any, response: Any, usage: dict[str, Any]) -> None:
     require(
         data.get("responseMode") == "sync"
         and (
-            data.get("providerAttempts") is None
-            or type(data["providerAttempts"]) is int
-            and data["providerAttempts"] == 1
+            "attemptsCount" not in data
+            or type(data["attemptsCount"]) is int
+            and data["attemptsCount"] == 1
         )
         and not data.get("serverTools")
         and not data.get("parentGenerationId")
@@ -793,7 +793,9 @@ async def execute(
                 history_row["status"] = "CONFIRMED"
                 observed_provider = history["finalEndpointSlug"]
                 route_evidence = "HISTORY_DETAIL"
-                call["upstream_attempts"] = history.get("providerAttempts") or "NOT_REPORTED"
+                call["upstream_attempts"] = (
+                    history["attemptsCount"] if "attemptsCount" in history else "NOT_REPORTED"
+                )
                 call["upstream_steps"] = history.get("stepsCount") or "NOT_REPORTED"
             call.update(
                 status="CONFIRMED",
