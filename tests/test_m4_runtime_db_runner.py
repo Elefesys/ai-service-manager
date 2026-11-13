@@ -121,7 +121,7 @@ def test_real_wrapper_driver_smoke_inventory_cleanup_and_export(
         monkeypatch.setenv(key, value)
     nodes = [
         m + "::test_synthetic_" + str(i)
-        for m, count in zip(carrier.MODULES, (35, 22, 9, 1, 1), strict=True)
+        for m, count in zip(carrier.MODULES, (35, 22, 9, 1, 1, 1, 1), strict=True)
         for i in range(count)
     ]
     configuration = tmp_path / "synthetic.json"
@@ -149,7 +149,7 @@ elif 'collect-current-native' in args:
 elif 'native-owner' in args:
     runner.write(evidence/'native-owner.json',{'system_identifier':'synthetic-owned-server'})
 elif 'readiness' in args:
-    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0018'})
+    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0019'})
 elif 'pytest' in args:
     nodes=json.loads((evidence/'inventory.json').read_text())['nodeids']
     if nodes==config['native']:
@@ -197,7 +197,7 @@ elif 'pytest' in args:
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
     inventory = json.loads((root / "evidence/inventory.json").read_text())
-    count = (72 if mode == "targeted" else 66) + (0 if fault in {"build", "collection"} else 2)
+    count = (72 if mode == "targeted" else 66) + (0 if fault in {"build", "collection"} else 4)
     assert summary["expected_cases"] == count == sum(summary["planned_cases_by_module"].values())
     assert (
         summary["missing_count"]
@@ -206,17 +206,17 @@ elif 'pytest' in args:
     )
     assert summary["inventory_complete"] is (fault not in {"build", "collection", "m4-duplicate"})
     assert summary["unknown_inventory_cases"] == (
-        66 if fault in {"build", "collection"} else 68 if fault == "m4-duplicate" else 0
+        66 if fault in {"build", "collection"} else 70 if fault == "m4-duplicate" else 0
     )
     assert summary["collected_cases"] == (
-        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 68
+        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 70
     )
     assert summary["collection_complete"] is (fault == "none")
     group = root / (root.name + "-group-0")
     primary = json.loads((group / "evidence/primary.json").read_text())
     if fault == "none":
         assert summary["complete"] and not summary["missing"]
-        assert len(summary["groups"]) == (7 if mode == "targeted" else 6)
+        assert len(summary["groups"]) == (9 if mode == "targeted" else 8)
         assert (
             json.loads((group / "evidence/readiness.json").read_text())["runtime_check"] == "PASS"
         )
@@ -545,7 +545,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         monkeypatch.setenv(key, value)
     nodes = [
         module + "::test_constructed_" + str(i)
-        for module, count in zip(carrier.MODULES, (35, 22, 9, 1, 1), strict=True)
+        for module, count in zip(carrier.MODULES, (35, 22, 9, 1, 1, 1, 1), strict=True)
         for i in range(count)
     ]
     calls, cleaned = [], []
@@ -578,7 +578,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
                 group / "evidence/current-native-inventory.json",
                 {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
             )
-        if label == "catalog-0018" and fault == "catalog":
+        if label == "catalog-0019" and fault == "catalog":
             raise RuntimeError("CATALOG_DECLARED_PROFILE")
         if label == carrier.COMMAND_REPORT:
             expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
@@ -634,7 +634,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         with pytest.raises(RuntimeError, match="PRIMARY_FAILED"):
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
-    expected_count = 74 if mode == "targeted" else 68
+    expected_count = 76 if mode == "targeted" else 70
     assert summary["expected_cases"] == expected_count
     assert summary["sql_test_seconds"] <= 600
     assert summary["result"] == ("PASS" if fault == "none" else "FAIL")
@@ -644,11 +644,11 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         assert summary["groups_visited"] == 1 and len(summary["not_reached"]) == expected_count
         assert not any(label == carrier.COMMAND_REPORT for _, label, _ in calls)
     elif fault == "retained":
-        assert summary["groups_visited"] == 7 and len(summary["missing"]) == 34
+        assert summary["groups_visited"] == 9 and len(summary["missing"]) == 34
         assert summary["groups"][-1]["outcome"] == "PASS"
     else:
         assert summary["complete"] and not summary["missing"]
-        assert summary["groups_visited"] == (7 if mode == "targeted" else 6)
+        assert summary["groups_visited"] == (9 if mode == "targeted" else 8)
 
 
 def test_phase_keeps_private_json_stdout_separate_and_redacts_stderr(tmp_path):
@@ -780,15 +780,20 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("columns", "EMBEDDED_COLUMN_SET"),
     ],
 )
-def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason):
-    expected = catalog.source_catalog(catalog.ROOT, "0018")
-    profile = expected["functions"]["platform.business_configuration_schema_profile()"]
+@pytest.mark.parametrize(
+    "revision,name",
+    [
+        ("0018", "business_configuration_schema_profile"),
+        ("0019", "published_knowledge_schema_profile"),
+    ],
+)
+def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
+    expected = catalog.source_catalog(catalog.ROOT, revision)
+    profile = expected["functions"]["platform." + name + "()"]
     row = "('platform.human_context_schema_profile()','527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac','sql',true,'s',false)"
     assert profile["body"].count(row) == 1
     replacement = {
-        "self": row.replace(
-            "human_context_schema_profile", "business_configuration_schema_profile"
-        ),
+        "self": row.replace("human_context_schema_profile", name),
         "missing": "",
         "duplicate": row + "," + row,
         "hash": row.replace(
@@ -812,16 +817,21 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
 
 
 @pytest.mark.parametrize(
-    "predicate",
+    "revision,name,functions,others",
     [
-        "(SELECT count(*) FROM functions)=202",
-        "(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=201",
-        "(SELECT count(*) FROM tables)=52",
+        ("0018", "business_configuration_schema_profile", 202, 201),
+        ("0019", "published_knowledge_schema_profile", 207, 206),
     ],
 )
-def test_current_verifier_rejects_stale_count_predicates(predicate):
-    expected = catalog.source_catalog(catalog.ROOT, "0018")
-    profile = expected["functions"]["platform.business_configuration_schema_profile()"]
+@pytest.mark.parametrize("field", ["functions", "others", "tables"])
+def test_current_verifier_rejects_stale_count_predicates(revision, name, functions, others, field):
+    expected = catalog.source_catalog(catalog.ROOT, revision)
+    profile = expected["functions"]["platform." + name + "()"]
+    predicate = {
+        "functions": f"(SELECT count(*) FROM functions)={functions}",
+        "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
+        "tables": "(SELECT count(*) FROM tables)=52",
+    }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
     with pytest.raises(catalog.Refusal, match="^EMBEDDED_COUNT_PREDICATE$"):
@@ -844,13 +854,13 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 ):
     from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
 
-    expected = catalog.source_catalog(catalog.ROOT, "0018")
+    expected = catalog.source_catalog(catalog.ROOT, "0019")
     if not body_matches:
-        expected["functions"]["platform.business_configuration_schema_profile()"]["body_sha256"] = (
+        expected["functions"]["platform.published_knowledge_schema_profile()"]["body_sha256"] = (
             "0" * 64
         )
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
-    declared = {"schema_revision": "0018", "valid": valid, "profile_sha256": digest}
+    declared = {"schema_revision": "0019", "valid": valid, "profile_sha256": digest}
     result = carrier.catalog_comparison(expected, digest, "{}", declared)
     assert result["failed_predicate"] == reason
     assert result["application_pin_matches"] is hash_matches
@@ -901,8 +911,16 @@ def r11_event(foundation_git, tmp_path, monkeypatch):
     )
     boundary = []
 
-    def admitted(root, event, manifest, mode):
-        boundary.append({"root": root, "event": event, "manifest": manifest, "mode": mode})
+    def admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
+        boundary.append(
+            {
+                "root": root,
+                "event": event,
+                "manifest": manifest,
+                "mode": mode,
+                "sql_test_budget_seconds": sql_test_budget_seconds,
+            }
+        )
 
     def forbidden(*args, **kwargs):
         pytest.fail("resource or credential boundary was entered")
@@ -1022,6 +1040,7 @@ def test_m5_configuration_outer_export_and_inner_source_binding(
         carrier.M5_CONFIGURATION_TREE,
     )
     assert set(receipt["paths"]) == carrier.M5_CONFIGURATION_PATHS
+    assert r["boundary"][0]["sql_test_budget_seconds"] == 600
     assert not list((r["root"] / "private").iterdir())
 
     class BeforeResources(Exception):
@@ -1511,3 +1530,366 @@ def test_interrupted_phase_is_saved_before_return_and_missing_is_not_complete(tm
         finally:
             process.terminate()
             process.wait(timeout=3)
+
+
+def prepare_m5_knowledge_event(r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False):
+    """Actual Git docs assignment, implementation and merge; no resource substitutes."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_KNOWLEDGE_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_KNOWLEDGE_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
+    handoff = f.root / "docs/tasks/M5_HANDOFF.md"
+    handoff.parent.mkdir(parents=True, exist_ok=True)
+    handoff.write_text("# constructed C0 assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed C0 knowledge assignment")
+    assignment = f.git("rev-parse", "HEAD")
+    monkeypatch.setattr(carrier, "M5_KNOWLEDGE_ASSIGNMENT", assignment)
+    monkeypatch.setattr(carrier, "M5_KNOWLEDGE_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    for relative in sorted(carrier.M5_KNOWLEDGE_PATHS | ({extra} if extra else set())):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            (path.read_text() if path.exists() else "") + "\n# constructed knowledge delta\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed bounded published knowledge")
+    source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
+    base = r["base"] if wrong_base else r["source"]
+    merged = f.git("commit-tree", tree, "-p", base, "-p", source, "-m", "test merge")
+    f.git("reset", "--hard", merged)
+    env, payload = ci_event(Path(r["env"]["GITHUB_EVENT_PATH"]).parent, route)
+    env.update(GITHUB_SHA=merged, GITHUB_RUN_ATTEMPT="1")
+    if route == "same-repository-pr-merge":
+        env["GITHUB_HEAD_REF"] = branch or carrier.M5_KNOWLEDGE_BRANCH
+        payload["pull_request"]["base"]["sha"] = base
+        payload["pull_request"]["head"].update(sha=source, ref=env["GITHUB_HEAD_REF"])
+    else:
+        payload.update(after=merged, head_commit={"id": merged})
+    r["payload"].clear()
+    r["payload"].update(payload)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    return merged
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("damage", [None, "base", "base_tree", "branch", "paths", "tree"])
+def test_m5_knowledge_outer_export_and_inner_source_binding(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    merged = prepare_m5_knowledge_event(r, monkeypatch, route)
+    r["run"]()
+    assert len(r["boundary"]) == 1 and r["boundary"][0]["mode"] == "runtime"
+    receipt = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert (receipt["base"], receipt["base_tree"]) == (
+        carrier.M5_KNOWLEDGE_BASE,
+        carrier.M5_KNOWLEDGE_TREE,
+    )
+    assert set(receipt["paths"]) == carrier.M5_KNOWLEDGE_PATHS
+    assert r["boundary"][0]["sql_test_budget_seconds"] == 900
+    assert not list((r["root"] / "private").iterdir())
+
+    class BeforeResources(Exception):
+        pass
+
+    actual_run = subprocess.run
+
+    def stop_at_archive(args, *positional, **keywords):
+        assert args[0] == "git", "resource before source export"
+        if args[1] == "archive":
+            raise BeforeResources
+        return actual_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(subprocess, "run", stop_at_archive)
+    bound = r["boundary"][0]
+    with pytest.raises(BeforeResources):
+        r["real_run_admitted"](bound["root"], bound["event"], bound["manifest"], bound["mode"])
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert proof["branch"] == carrier.M5_KNOWLEDGE_BRANCH and proof["source"] == merged
+    assert proof["paths"] == receipt["paths"]
+    for key, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": receipt["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, value)
+    if damage:
+        proof[damage] = {
+            "base": "f" * 40,
+            "base_tree": "f" * 40,
+            "branch": "c4/unapproved",
+            "paths": ["migrations/versions/0018_business_configuration.py"],
+            "tree": "f" * 40,
+        }[damage]
+        carrier.write(path, proof)
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    else:
+        assert carrier.source_tree_from_evidence(path) == receipt["tree"]
+
+
+@pytest.mark.parametrize(
+    "damage", ["branch", "base", "base_tree", "path", "assignment_tree", "assignment_ancestry"]
+)
+def test_m5_knowledge_outer_refuses_foreign_source_before_resources(r11_event, monkeypatch, damage):
+    r = r11_event
+    prepare_m5_knowledge_event(
+        r,
+        monkeypatch,
+        "same-repository-pr-merge",
+        extra="migrations/versions/0018_business_configuration.py" if damage == "path" else None,
+        branch="c4/unapproved" if damage == "branch" else None,
+        wrong_base=damage == "base",
+    )
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_KNOWLEDGE_TREE", "f" * 40)
+    elif damage == "assignment_tree":
+        monkeypatch.setattr(carrier, "M5_KNOWLEDGE_ASSIGNMENT_TREE", "f" * 40)
+    elif damage == "assignment_ancestry":
+        tree = r["f"].git("rev-parse", "HEAD^{tree}")
+        unrelated = r["f"].git("commit-tree", tree, "-m", "unrelated assignment")
+        monkeypatch.setattr(carrier, "M5_KNOWLEDGE_ASSIGNMENT", unrelated)
+        monkeypatch.setattr(carrier, "M5_KNOWLEDGE_ASSIGNMENT_TREE", tree)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)) as caught:
+        r["run"]()
+    assert (
+        str(caught.value)
+        == {
+            "branch": "POLZA_RUNTIME_EVENT_BRANCH",
+            "base": "KNOWLEDGE_EVENT_BASE",
+            "base_tree": "BASE_TREE",
+            "path": "POLZA_RUNTIME_WRITE_SET",
+            "assignment_tree": "KNOWLEDGE_ASSIGNMENT_TREE",
+            "assignment_ancestry": "INSPECTION_FAILED",
+        }[damage]
+    )
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.fixture
+def aggregate_driver(r11_event, monkeypatch):
+    """Real Git admission and aggregate orchestration; finite fake command/PG boundaries.
+
+    A controlled clock advances only inside the simulated phase, so 700 seconds
+    of work need no sleep. This proves execution budgeting, never PostgreSQL/LLM.
+    """
+    r = r11_event
+    module_cases = (35, 22, 9, 41, 25, 17, 11)
+    assert len(carrier.MODULES) == len(module_cases)
+    nodes = [
+        module + "::test_aggregate_" + str(i)
+        for module, count in zip(carrier.MODULES, module_cases, strict=True)
+        for i in range(count)
+    ]
+    assert len(nodes) == 160
+    clock, calls, cleaned = {"now": 0.0}, [], []
+    fault = {"kind": None}
+    capture_git = carrier.capture
+
+    def capture(args):
+        if args[0] == "git":
+            return capture_git(args)
+        if "ps" in args:
+            return "synthetic-owned-container"
+        if "exec" in args:
+            return "Uid:\t999\t999\t999\t999"
+        if "inspect" in args:
+            return "sha256:" + "c" * 64
+        raise AssertionError(args)
+
+    def phase(group, label, args, budget):
+        assert 0 < budget <= 600
+        calls.append((group, label, budget))
+        reports = group / "evidence/phases"
+        reports.mkdir(exist_ok=True)
+        carrier.write(reports / "active.json", {"phase": label})
+        elapsed = 0.0
+        if label == "inventory":
+            carrier.write(
+                group / "evidence/all-m4.json",
+                {"nodeids": nodes, "collection_exit": 0, "deselected": []},
+            )
+        elif label == "current-native-inventory":
+            carrier.write(
+                group / "evidence/current-native-inventory.json",
+                {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
+            )
+        elif label in {
+            "schema-0019",
+            "catalog-0019",
+            "readiness",
+            "schema",
+            "versions",
+            "native-owner",
+        }:
+            elapsed = 2.0
+        elif label == carrier.COMMAND_REPORT:
+            elapsed = 95.0
+            expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
+            if fault["kind"] == "budget" and expected[-1].startswith(carrier.MODULES[-1] + "::"):
+                # Match process timeout/termination overhead: the phase reports
+                # exit124, and elapsed accounting still includes the overrun.
+                elapsed = budget + 0.017
+            if elapsed <= budget:
+                cases = [
+                    {
+                        "nodeid": n,
+                        "overflow": 0,
+                        "invalid_fields": 0,
+                        "phases": [
+                            {"phase": p, "outcome": "passed", "xfail": False}
+                            for p in ("setup", "call", "teardown")
+                        ],
+                    }
+                    for n in expected
+                ]
+                if expected[-1].startswith(carrier.MODULES[-1] + "::"):
+                    if fault["kind"] == "missing":
+                        cases.pop()
+                    elif fault["kind"] == "missing_call":
+                        cases[-1]["phases"] = [
+                            p for p in cases[-1]["phases"] if p["phase"] != "call"
+                        ]
+                carrier.write(group / "evidence/cases.json", cases)
+                carrier.write(
+                    group / "evidence" / carrier.SUMMARY_REPORT,
+                    carrier.summarize(cases, expected, 0),
+                )
+                if expected == carrier.CURRENT_NATIVE_NODES:
+                    carrier.write(
+                        group / "evidence/before-reset-proofs.json", [{} for _ in expected]
+                    )
+                    carrier.write(
+                        group / "evidence/native-identity-proofs.json", [{} for _ in expected]
+                    )
+        clock["now"] += elapsed
+        code = 124 if elapsed > budget else 0
+        carrier.write(
+            reports / (label + ".json"),
+            {"budget_seconds": budget, "seconds": elapsed, "exit_code": code},
+        )
+        if code:
+            raise carrier.Refusal(label.upper().replace("-", "_") + "_FAILED")
+
+    def cleanup(group):
+        cleaned.append(group)
+        if fault["kind"] == "cleanup" and group.name.endswith("-group-7"):
+            raise carrier.Refusal("CLEANUP_COMMAND_1_FAILED")
+        carrier.write(group / "evidence/cleanup.json", {"outcome": "PASS"})
+
+    # The real admission fixture forbids all resources. Only this explicitly
+    # synthetic executor supplies disposable non-secret credential placeholders.
+    monkeypatch.setattr(carrier.secrets, "token_hex", lambda n: "a" * (2 * n))
+    monkeypatch.setattr(carrier, "capture", capture)
+    monkeypatch.setattr(carrier, "phase", phase)
+    monkeypatch.setattr(carrier, "cleanup", cleanup)
+    monkeypatch.setattr(
+        carrier, "inventory", lambda group: {"containers": [], "networks": [], "volumes": []}
+    )
+    monkeypatch.setattr(carrier, "compose", lambda group: ["synthetic-compose"])
+    monkeypatch.setattr(
+        carrier, "checks", lambda group, *args, **kwargs: ["synthetic-checks", *args]
+    )
+    monkeypatch.setattr(
+        carrier, "current_native_checks", lambda group, label, *args: ["synthetic-native", *args]
+    )
+    monkeypatch.setattr(carrier.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(carrier, "run_admitted", r["real_run_admitted"])
+    return dict(r=r, nodes=nodes, calls=calls, cleaned=cleaned, fault=fault, clock=clock)
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("fault", [None, "budget", "cleanup", "missing", "missing_call"])
+def test_m5_admitted_aggregate_budget_keeps_full_inventory_and_fails_closed(
+    aggregate_driver, monkeypatch, route, fault
+):
+    h = aggregate_driver
+    r = h["r"]
+    prepare_m5_knowledge_event(r, monkeypatch, route)
+    h["fault"]["kind"] = fault
+    if fault is None:
+        r["run"]()
+    else:
+        with pytest.raises(carrier.Refusal, match="^PRIMARY_FAILED$"):
+            r["run"]()
+    summary = json.loads((r["root"] / "evidence/summary.json").read_text())
+    assert summary["sql_test_budget_seconds"] == 900
+    assert summary["expected_cases"] == summary["collected_cases"] == 160
+    assert summary["groups_visited"] == len(carrier.MODULES) + 1
+    assert len(h["cleaned"]) == len(set(h["cleaned"])) == summary["groups_visited"]
+    assert summary["result"] == ("PASS" if fault is None else "FAIL")
+    assert summary["inventory_complete"] and summary["collection_complete"]
+    assert set(summary["planned_cases_by_module"]) == set(carrier.MODULES)
+    commands = [(g, budget) for g, label, budget in h["calls"] if label == carrier.COMMAND_REPORT]
+    assert len(commands) == len(carrier.MODULES)
+    assert all(0 < budget <= 600 for _, budget in commands)
+    assert all(budget == 420 for _, label, budget in h["calls"] if label == "build")
+    if fault == "budget":
+        assert 900 < summary["sql_test_seconds"] < 901
+        assert 0 < commands[-1][1] < 600
+        phase = json.loads(
+            (commands[-1][0] / "evidence/phases" / (carrier.COMMAND_REPORT + ".json")).read_text()
+        )
+        assert phase["exit_code"] == 124 and phase["budget_seconds"] == commands[-1][1]
+        assert summary["missing_count"] == 11 and summary["not_reached_modules"] == []
+    else:
+        assert 600 < summary["sql_test_seconds"] < 900
+        assert summary["missing_count"] == int(fault == "missing")
+        assert summary["missing_call_phase_count"] == int(fault in {"missing", "missing_call"})
+        if fault in {"missing", "missing_call"}:
+            assert summary["missing_call_phases"] == [h["nodes"][-1]]
+        if fault == "cleanup":
+            assert summary["groups"][-1]["cleanup"]["code"] == "CLEANUP_COMMAND_1_FAILED"
+        if fault is None:
+            assert summary["complete"] and summary["missing"] == []
+            assert summary["not_reached_modules"] == []
+
+
+@pytest.mark.parametrize("route", ["configuration", "planning", "targeted"])
+def test_historical_routes_retain_600_aggregate_budget(aggregate_driver, monkeypatch, route):
+    h = aggregate_driver
+    r = h["r"]
+    if route == "configuration":
+        prepare_m5_configuration_event(r, monkeypatch, "same-repository-pr-merge")
+    elif route == "planning":
+        prepare_m5_planning_event(r, monkeypatch, "same-repository-pr-merge")
+    with pytest.raises(carrier.Refusal, match="^PRIMARY_FAILED$"):
+        r["run"]()
+    summary = json.loads((r["root"] / "evidence/summary.json").read_text())
+    assert summary["sql_test_budget_seconds"] == 600
+    assert summary["sql_test_seconds"] <= 600
+    assert summary["result"] == "FAIL" and summary["missing_count"] > 0
+    assert len(h["cleaned"]) == summary["groups_visited"]
+    assert summary["not_reached_modules"]
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m5_admission_cannot_extend_targeted_budget(aggregate_driver, monkeypatch, route):
+    h = aggregate_driver
+    r = h["r"]
+    prepare_m5_knowledge_event(r, monkeypatch, route)
+    (r["root"] / "evidence").mkdir(parents=True)
+    (r["root"] / "private").mkdir()
+    Path(r["env"]["GITHUB_EVENT_PATH"]).write_text(json.dumps(r["payload"]))
+    event, manifest = carrier.admit_source(r["root"] / "evidence")
+    with pytest.raises(carrier.Refusal, match="^SQL_TEST_BUDGET_ADMISSION$"):
+        carrier.run_admitted(r["root"], event, manifest, "targeted", sql_test_budget_seconds=900)
+    assert not h["calls"] and not h["cleaned"]
+
+
+@pytest.mark.parametrize("route", ["configuration", "planning", "targeted"])
+def test_historical_admission_cannot_request_900(aggregate_driver, monkeypatch, route):
+    h = aggregate_driver
+    r = h["r"]
+    if route == "configuration":
+        prepare_m5_configuration_event(r, monkeypatch, "same-repository-pr-merge")
+    elif route == "planning":
+        prepare_m5_planning_event(r, monkeypatch, "same-repository-pr-merge")
+    (r["root"] / "evidence").mkdir(parents=True)
+    (r["root"] / "private").mkdir()
+    Path(r["env"]["GITHUB_EVENT_PATH"]).write_text(json.dumps(r["payload"]))
+    event, manifest = carrier.admit_source(r["root"] / "evidence")
+    with pytest.raises(carrier.Refusal, match="^SQL_TEST_BUDGET_ADMISSION$"):
+        carrier.run_admitted(r["root"], event, manifest, "runtime", sql_test_budget_seconds=900)
+    assert not h["calls"] and not h["cleaned"]

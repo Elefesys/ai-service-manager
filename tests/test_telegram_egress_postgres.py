@@ -832,7 +832,7 @@ async def canonical_fingerprint(connection, *, revision="0012"):
 
 
 async def current_durable_fingerprint(connection):
-    revision = "0018"
+    revision = "0019"
     tables = (
         await connection.execute(
             text(

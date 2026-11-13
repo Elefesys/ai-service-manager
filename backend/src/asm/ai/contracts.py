@@ -73,12 +73,33 @@ class Limits(DTO):
     call_cost_reservation: Money
 
 
-class GatewayConfig(DTO):
+class _GatewayConfig(DTO):
     revision: Identifier
     route: Route
-    prompt_revision: Literal["conversation_v1", "conversation_v2"]
+    prompt_revision: Literal["conversation_v1", "conversation_v2", "conversation_v3"]
     schema_revision: Literal["conversation_result_v1"]
     limits: Limits
+
+
+class GatewayConfig(_GatewayConfig):
+    """Historical configuration DTO; adding v3 does not reinterpret saved v1/v2 runs."""
+
+    prompt_revision: Literal["conversation_v1", "conversation_v2"]
+
+
+class KnowledgeGatewayConfig(_GatewayConfig):
+    """Explicit knowledge-aware configuration with the same wire field shape."""
+
+    prompt_revision: Literal["conversation_v3"]
+
+
+AnyGatewayConfig = GatewayConfig | KnowledgeGatewayConfig
+
+
+def validate_gateway_config(value: object) -> AnyGatewayConfig:
+    if isinstance(value, KnowledgeGatewayConfig):
+        return KnowledgeGatewayConfig.model_validate(value)
+    return GatewayConfig.model_validate(value)
 
 
 class Message(DTO):
@@ -213,7 +234,7 @@ class Capabilities(DTO):
 
 
 class AdapterRequest(DTO):
-    config: GatewayConfig
+    config: AnyGatewayConfig
     request: GatewayRequest = Field(repr=False)
     prompt: str = Field(min_length=1, max_length=16384, repr=False)
     output_schema_json: JsonText = Field(repr=False)

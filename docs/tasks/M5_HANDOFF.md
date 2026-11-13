@@ -4,248 +4,220 @@
 [TASK_REGISTER](../TASK_REGISTER.md). Решение по объёму:
 [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
 
-## CURRENT — M5.1A → C1 с участием C2 / 2026-11-12
+## CURRENT — M5.1B → C4 / IN_PROGRESS — CI repair / 2026-11-13
 
-Единственная активная выдача: **C1-M5.1A-CONFIGURATION-R1**. Ведущий — C1;
-C2 согласует схему, миграцию, RLS/права и PostgreSQL evidence в том же PR.
-M5.1B и все последующие срезы не выданы.
+Единственная активная задача: **C4-M5.1B-PUBLISHED-KNOWLEDGE-R1**.
+Ведущий C4; C1/C3 согласуют backend/runtime/delivery, C2 — SQL/миграцию и
+сериализацию; затем C5 добавляет UI. Это участие в одном срезе/PR, не несколько
+параллельных выдач. Общие файлы редактировать последовательно; C4 собирает возврат.
+M5.1A завершён; M5.2A и последующие срезы не выданы.
+
+[Решение C0 по repair PR #47](https://github.com/Elefesys/ai-service-manager/pull/47#issuecomment-6844936121)
+принято к исполнению. Repair start
+`a8067f1ad0cd5baffcd28379109009fb9ba7173f`, tree
+`7c8a442465cb00711eebf09714765ce987a7723b`; implementation base и C0 docs
+`3b2a28a192753103017dab5452288cde61226d95` сохраняются. Это продолжение M5.1B,
+не новая выдача и не приёмка.
 
 - Repository: `Elefesys/ai-service-manager`; integration target: `main`.
-- Accepted implementation base: `49d3e25968507ac41037f369fce5bd7080475a8f`.
-- Base tree: `699bd90777771c5d22d37029336c3e0f8909fb5c`.
-- Подготовленная ветка: `c1/m5-1a-configuration-r1`; начать с её C0 docs-only
-  handoff commit поверх указанного base, сохранив его. Один checkout/PR,
-  последовательные изменения общих файлов; без параллельного редактирования C1/C2.
-- Зависимости: PR #45 интегрирован; IMPL-005 ACCEPTED / LOCKED;
-  [post-merge CI43192222535](https://github.com/Elefesys/ai-service-manager/actions/runs/43192222535)
-  завершён: **12/12 SUCCESS**, attempt1, на фактическом main SHA выше.
-  Дерево main совпадает с кандидатом, прошедшим
-  [CI43180741615](https://github.com/Elefesys/ai-service-manager/actions/runs/43180741615).
-  Повторный прогон не запускался. Receipt M4
-  `98136c33a997f0ce266dee2ad517ea23e312408e` сохранён в ancestry.
+- Accepted implementation base: `6c27be8487f3f8792cf01ed2a0fcdde130ea7a52`.
+- Base tree: `1aa2959f1ba28438304ef758947ba241f6d0b729`.
+- Ветка: `c4/m5-1b-published-knowledge-r1`; начать с подготовленного C0 docs-only
+  commit поверх этого base и сохранить его. Не начинать от старого planning SHA.
+- PR #46 интегрирован: parents main49d3e259 + reviewed headd4626334; tree равен
+  проверенному кандидату. [C0 review PASS](https://github.com/Elefesys/ai-service-manager/pull/46#pullrequestreview-5876870257).
+  [Post-merge CI43245856346](https://github.com/Elefesys/ai-service-manager/actions/runs/43245856346),
+  push/main, attempt1: **12/12 SUCCESS**, все jobs completed, failed steps нет.
+  M5.1A — **INTEGRATED / VERIFIED в LOCAL/TEST**. Новый прогон C0 не запускал.
+- Принятый API/bundle/rollback контракт M5.1A:
+  [handoff d4626334](https://github.com/Elefesys/ai-service-manager/blob/d4626334613a91a6ff5e75c57b2edcc05181f69f/docs/tasks/M5_HANDOFF.md).
+  Его длинный исходный write-set и старые ошибки CI не являются текущим заданием.
 
-### Результат и короткий контракт
+### Пользовательский результат
 
-Через owner API можно подготовить небольшой набор услуг, правил и подтверждённых
-FAQ, увидеть ошибки/предупреждения и preview, атомарно опубликовать его либо
-активировать допустимый прежний набор. Для будущего AI чтения доступна только
-ограниченная active projection с release/activation version; draft туда не попадает.
-UI и использование знаний в ответе AI принадлежат M5.1B.
+Владелец через небольшой раздел Console редактирует услуги, правила и FAQ,
+видит различие draft/active, deterministic preview и ошибки, публикует изменения.
+Текстовый AI runtime получает только опубликованные сведения этого Business.
+После новой публикации/rollback следующий ответ использует новую activation;
+устаревший ещё не допущенный к отправке ответ блокируется.
 
-Ниже C1/C2 зафиксировали контракт перед SQL: объекты/Business ownership,
-поля и пределы размера, API команды/ошибки, expected-version/idempotency,
-owner authority, release/activation и RLS. Это контракт подготовленного source;
-полный C0 code review и штатный CI реализации ещё впереди.
+Это первый полезный сценарий знаний из принятого §3 / IMPL-005. Без него M5.1A
+остаётся API подготовки данных, которыми AI ещё не пользуется. Откладывать его
+ради embeddings/Vision не нужно. Цена/время/предоплата здесь только известные
+настройки либо явное неизвестное; индивидуальный расчёт и обязательства — не M5.
 
-#### Согласованный контракт C1/C2 — M5.1A v1 / 2026-11-12
+### Контракт перед реализацией
 
-C2 проверил clean handoff `6c9023dbf29e1e8e100084aee85a12c132ba2ab3`:
-единственный head `0017`, revision `0018` / predecessor `0017` подтверждены до SQL.
+Прочитать AGENTS, этот CURRENT, IMPL-005 и применимые IMPL-004; Spec §10.14–17,
+ADR-030/031/032/072/075/076/262–267. Сначала C4 с участниками кратко фиксирует
+здесь выбранные DTO/версии, точки SQL-проверки, порядок locks и UI состояния.
+Затем реализует этот контракт. Новый конфликт с принятым решением вернуть C0
+с точным пунктом, меньшим рабочим вариантом и последствиями; не отменять молча.
 
-- Три private `platform.business_configuration_{state,releases,receipts}`:
-  одна draft/active state на `(Workspace,Business)`, immutable release и immutable
-  command receipt, одновременно configuration domain audit (actor, correlation,
-  operation, Business/release/activation/time; без текста). Compound FK сохраняют
-  тот же Workspace/Business. Generic AuditEvent/его API не расширяются.
-- Bundle v1: `schema_version=1`, `communication_style=NEUTRAL|WARM|CONCISE`,
-  services (до8), structured rules (до12), owner-confirmed FAQ (до12).
-  Service: slug id, name≤100, description≤500, active, до6 intake fields
-  `(id,label≤100,required)`; независимые price/duration/deposit policy objects.
-  Price: FIXED/CONFIGURED_FORMULA/OWNER_QUOTE, nullable amount_minor/formula_note;
-  duration: FIXED/CONFIGURED_RULE/OWNER_DEFINED, nullable minutes/rule_note;
-  deposit: NONE/FIXED_DEPOSIT/PERCENT_DEPOSIT/FULL_PREPAYMENT, nullable amount/percent.
-  Все nullable fields явные; RUB minor units — настройки, не расчёт/Quote/обязательство.
-- Rule: id, nullable service_id, MIN_AGE с integer1…120 либо OWNER_HANDOFF с bool.
-  FAQ: id, nullable service_id, question≤200, answer≤500, source≤120, confirmed,
-  до6 rule_ids. Id — ASCII slug1…40; notes≤160. Неизвестное значение остаётся NULL.
-  Неверный mode/ref, duplicate id, конфликт правил и неподтверждённый FAQ — ERROR;
-  неизвестные цена/время/депозит, неисполняемые formula/rule notes — WARNING с
-  owner handoff. FAQ explanatory; структурированные rules выше текста.
-- Shape/Unicode/types/limits проверяются в Python и БД; publish повторяет
-  deterministic SQL validation и не доверяет переданному ready flag. Normalized
-  jsonb bundle≤4096 UTF-8 bytes, существующий raw HTTP body cap4096 сохраняется
-  отдельно и включает весь envelope/escaping; не каждый максимальный field
-  помещается одновременно. Free-form prompt/code/Client IDs/private files/PII
-  не являются поддерживаемым содержимым общей бизнес-конфигурации.
-- API prefix `/api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration`:
-  GET/PUT `/draft`, GET `/preview` (validation + bounded owner preview),
-  POST `/publish`, POST `/rollback`, GET `/active`; query и If-Match запрещены.
-  Все owner API используют существующие session/CSRF/AuthService.workspace и
-  отдельную live OWNER policy. В БД OWNER/auth scope проверяется до replay и
-  после waits; membership/account/Business locks сериализуют отзыв прав и publish.
-- Mutation требует один Idempotency-Key (existing ASCII1…128). EDIT body:
-  `{expected_draft_version,bundle}`; PUBLISH:
-  `{expected_draft_version,expected_activation_version}`; ROLLBACK:
-  `{expected_activation_version,release_id}`. Counters — canonical bigint decimal
-  strings. Первый EDIT expected0 создаёт draft1; каждый новый EDIT +1. Publish и
-  rollback +1 activation, draft не меняют. Stale CAS→409 STALE_STATE;
-  тот же key/actor/op/body→exact saved REPLAY без effect; другой payload→409
-  IDEMPOTENCY_KEY_CONFLICT. Live revoked/non-owner не получает даже replay.
-- SQL owner read/command, bounded active read и private validator — narrow
-  capabilities; runtime direct table SELECT/DML запрещён, FORCE RLS/migrator owner,
-  PUBLIC revoke/pinned search_path. Active projection v1 содержит только весь
-  immutable ready bundle, release/activation/source draft version и provenance.
-  До первого publish release/bundle NULL; draft не попадает в active read.
-  Чтение общих бизнесовых знаний не требует чужих Client данных; M5.1B привяжет
-  этот release/activation к существующему trusted context и send admission.
-- Publish ERROR не меняет active. Rollback revalidates ready release и запрещает
-  восстановление удалённых/изменённых FAQ и free text относительно current active;
-  откат policy values/style с сохранёнными текстами допустим. Это консервативный
-  ROLLBACK_NOT_ALLOWED, не попытка распознавать PII или вернуть удалённые данные.
-  Полный release/receipt и active pointer commit атомарно; replay старой команды
-  никогда не переключает pointer обратно.
-- Closed errors: ACCESS_DENIED403, NOT_FOUND404, INVALID_INPUT422,
-  STALE_STATE/IDEMPOTENCY_KEY_CONFLICT/VALIDATION_FAILED/VERSION_EXHAUSTED/
-  ROLLBACK_NOT_ALLOWED409, UNAVAILABLE503; retained auth/CSRF/413/429 unchanged.
-  SQL P2701 преобразуется только в этот allowlist, произвольный SQL текст скрыт.
-- Current-schema transitions ограничены actual catalog/readiness/provisioning,
-  двумя current SQL dispatchers (native policy и AI provider session), current
-  runner/egress/browser fixtures и assertions текущего head. Исторические профили
-  и applied0001–0017 не меняются. Точное использованное подмножество paths и
-  новые измеренные profiles возвращаются с final source/evidence.
+1. Использовать существующий `configuration` bundle v1 и active projection.
+   Доверенный Workspace/Business/Client получается из admitted job/run, не из
+   model arguments. Начать с небольшой service card, structured rules/style и
+   bounded FAQ selection; deterministic structured/keyword selection достаточно.
+   Не создавать KnowledgeBuild/index tables или embedding profile заранее.
+   Неопубликованный draft, чужой Business и частные данные другого Client не
+   попадают в projection; общие опубликованные FAQ доступны клиентам своего Business.
+2. Ввести явную новую версию knowledge-aware context/read DTO и bundled prompt
+   `conversation_v3.txt`. Старые Context/Read DTO, prompts v1/v2 и сохранённые runs
+   сохраняют исходную семантику. Result schema v1 можно сохранить, если её shape
+   не меняется; при изменении shape нужна отдельная v2, без ослабления v1.
+   Привязка source/release/activation и provenance вычисляется сервером, не LLM.
+   Контракт не обязан добавлять новый read tool: компактный bundle можно включить
+   сервером в ContextPack, сохранив максимум2 model calls/1 READ и прежние бюджеты.
+3. Закрепить immutable release + монотонную activation version и версию projection
+   в durable run и выбранном результате/delivery binding. Отсутствие публикации
+   также явное состояние: первый publish инвалидирует ранее подготовленный
+   контекст «знаний нет». Draft edit не инвалидирует неизменившийся active.
+   Rollback к прежнему release не возвращает старую activation (защита от ABA).
+4. Проверять актуальность на MODEL/READ/FOLLOWUP/CANDIDATE/COMMIT/SEND, включая
+   call reservation, текущий rights-refresh COMMIT и окончательный send admission.
+   Publish/rollback и admission используют согласованную точку сериализации в
+   БД. Если публикация выиграла, старый run не делает новый вызов/отправку и не
+   переключается молча на новый набор внутри уже начатого run. Уже допущенный
+   внешний эффект не объявлять отозванным. HTTP не держит DB transaction/locks;
+   нет fan-out update всех conversations, event bus или нового worker engine.
+5. Старые сохранённые runs/receipts не переписывать и не backfill'ить выдуманными
+   publication pins. Явно определить legacy replay/read и безопасный отказ там,
+   где старый run не удовлетворяет новому admission; повтор не регенерирует ответ.
+   HUMAN/Resume, OWNER reconciliation, observation barrier, Telegram rights/TTL,
+   claim/generation/currentness и UNKNOWN/no-resend сохраняются одновременно.
+6. FAQ/owner text остаются данными, не system policy. Structured rules выше FAQ;
+   пустой/противоречивый источник, неизвестная цена/длительность — уточнение или
+   существующий handoff, без выдуманных значений. Источник/revision/authority
+   ограничены по размеру и видны в trace и owner preview/active view; внутренние
+   UUID, storage keys и скрытые поля не печатаются клиенту. Не вводить новый trace UI.
+7. C5 после согласования backend делает формы услуг/правил/FAQ/стиля, читаемые
+   draft/active, ERROR/WARNING, preview, publish и допустимый rollback. Использовать
+   шесть принятых owner API; нельзя заставлять владельца редактировать SQL/JSON.
+   Независимые policy fields и nullable unknown не теряются при сохранении формы.
+   Нужны версия/конфликт, запрет publish при ERROR, объяснение ROLLBACK_NOT_ALLOWED,
+   восстановление неопределённого результата команды тем же key/body и защита от
+   позднего ответа после смены Workspace/Business/logout. UI не заменяет live OWNER.
+   Preview локальный/deterministic, без model call, расхода и отправки клиенту.
+8. AI по умолчанию OFF; FAKE/EVAL_ONLY остаётся ограниченным режимом проверки.
+   Существующий provider bridge сохраняется; для новой версии проверяется только
+   локальная wire/contract совместимость. Старый paid approval не переносится на
+   новый prompt/source. Не включать provider, не менять маршрут/стоимость/лимиты.
 
-Использованное current-schema подмножество (исторические0013–0017 сохранены):
+### Контракт C4/C1/C2/C3/C5 перед реализацией — 2026-11-13
 
-```text
-backend/src/asm/telegram/provisioning.py
-scripts/m2_4_browser_fixture.py
-scripts/m4_runtime_db.py
-scripts/native_context_db_catalog.py
-scripts/prepare_telegram_egress.py
-scripts/test_telegram_egress.sh
-tests/generic_pg_schema.py
-tests/test_foundation.py
-tests/test_m2_3_db_postgres.py
-tests/test_m2_3_schema_postgres.py
-tests/test_m2_3_setup.py
-tests/test_m2_4_browser_fixture.py
-tests/test_m3_1_guards_migrations.py
-tests/test_m3_1_native_context_postgres.py
-tests/test_m3_1_native_context_runtime_postgres.py
-tests/test_m3_2_escalations_migrations.py
-tests/test_m4_delivery.py
-tests/test_m4_delivery_postgres.py
-tests/test_m4_polza_runtime_postgres.py
-tests/test_m4_reply_rights.py
-tests/test_m4_reply_rights_postgres.py
-tests/test_m4_runtime_db_runner.py
-tests/test_m4_runtime_migrations.py
-tests/test_m4_schema_postgres.py
-tests/test_native_context_db_runner.py
-tests/test_telegram_egress.py
-tests/test_telegram_egress_postgres.py
-tests/test_tenancy_postgres.py
-```
+Base выдачи **3b2a28a192753103017dab5452288cde61226d95**, tree
+**0d93ec5242def3e31b6a650b1c0b24d2766cf343**, sole parent accepted
+**6c27be8487f3f8792cf01ed2a0fcdde130ea7a52**. Head миграций подтверждён:0018.
 
-Причины: provisioning/browser и их fixtures требуют current18; egress читает
-все52 таблицы новым fingerprint; catalog/readiness сверяют202 functions/732 columns;
-PG fixtures восстанавливают current18 после исторических фаз, tenancy проверяет
-старые и новые права. M4 runner сохраняет старые source routes и добавляет только
-точную M5.1A branch/base/tree/write-set в outer/export/inner admission.
+- Новый private `KnowledgePin`: business/release (null при отсутствии публикации),
+  монотонная activation version и `business_knowledge_v1`. Run сохраняет pin и
+  immutable active projection из configuration bundle v1; delivery сохраняет тот
+  же pin. Client/scope берутся из admitted job. Draft не участвует в projection.
+- Новый context/read `conversation_context_v2`, отдельный `KnowledgeGatewayConfig`
+  и prompt `conversation_v3`;
+  result schema остаётся v1. Прежние context/read/prompt/run/receipt не меняют
+  семантику. Active service cards и structured rules сохраняются целиком;
+  bounded keyword selection FAQ показывает source/authority/revision и усечение.
+  Owner/FAQ text — data; structured rules приоритетны. Unknown остаётся null.
+- 0019 добавляет nullable bindings без backfill. На current schema новые runs
+  требуют v3; legacy receipt/replay/accounting доступны, новые эффекты старого
+  NULL-pinned run отклоняются. Replay не регенерирует ответ. Explicit unpublished
+  pin инвалидируется первым publish; rollback увеличивает activation.
+- Сериализация: job/run → owner authority → Business FOR SHARE → существующий
+  CONFIGURATION_V1 advisory transaction lock → connection/billing/conversation/
+  turn/client. Publish/rollback используют owner → Business → тот же advisory
+  lock → state. Publisher не ждёт job/run/conversation. Pin проверяется на
+  MODEL/READ/FOLLOWUP/CANDIDATE/RESERVE/COMMIT, rights-refresh COMMIT и SEND.
+  COMPLETE/replay не требуют свежести публикации. HTTP вне транзакции;
+  выигравший SEND admission остаётся допущенным при последующем publish.
+- Console использует шесть owner API: формы service/rules/FAQ/style, draft/active,
+  ERROR/WARNING, deterministic preview, CAS publish и rollback. Unknown сохраняется;
+  неопределённая команда повторяется с тем же key/body, смена scope/logout
+  отменяет владение поздним ответом. Preview не вызывает модель или transport.
+- Default OFF,2 calls/1 READ и прежние limits. Для provider v3 нужен новый явный
+  synthetic knowledge profile/prompt; прежний v2 approval не переносится.
+  Здесь проверяется только локальный wire с MockTransport, без paid/live допуска.
 
-### Возврат C1/C2 — исправление CI в PR46; scope blocker снят C0
+### Миграция и разрешённые paths
 
-Реализованы шесть owner API и согласованный bundle v1, additive0018,
-private receipt-audit, validation/preview/publish/rollback и bounded active
-projection. Контракт C1/C2 выше сохраняется; единственная задача — M5.1A.
-[PR46](https://github.com/Elefesys/ai-service-manager/pull/46) открыт;
-исходный кандидат `7687857fce4b030da4a373657aad996e9472a6fb` и его
-[CI43217876369](https://github.com/Elefesys/ai-service-manager/actions/runs/43217876369)
-завершены: **10/12 SUCCESS**. Подробный разбор и evidence — в
-[C1 return](https://github.com/Elefesys/ai-service-manager/pull/46#issuecomment-6824876431).
+C0 резервирует только `0019_published_knowledge.py`, revision `0019`, predecessor
+`0018`. C2 перед SQL подтверждает единственный актуальный head0018 и согласует
+минимальные durable bindings/constraints/locks. При дрейфе head вернуть вопрос C0;
+applied `0001–0018` побайтово неизменны. Нет будущих бизнесовых таблиц. Использовать
+существующие run/delivery/configuration boundaries; необходимость отдельной таблицы
+должна следовать из конкретной операции и быть объяснена в контракте, не из терминов
+baseline. Не переписывать миграцию0018 ради нового publication/admission lock.
 
-Auth inventory уже исправлен по допуску C0 ef1aa2d2: ровно шесть routes
-в полной equality `tests/test_auth_contract.py` (+9/-0) и его exact admission
-path. Frozen auth.v1 и прежние assertions сохранены. В исходном полном CI:
-3666 unit +161 subtests PASS; все37 новых M5 PG/API и40 legacy tenancy cases
-PASS. Generic completed897:896 PASS/1 FAIL — старый49-table inventory в
-`tests/test_postgres.py` при actual52. Pinned0018 catalog/readiness и M4/native/
-browser/durable gates PASS; последующие foundation phases не достигнуты.
-Отдельный Docker29/image shard остановился на daemon startup до тестов;
-причина отказа daemon по доступному логу не установлена.
-
-**C0 / 2026-11-12: дополнительный scope blocker снят**
-[решением6825320599](https://github.com/Elefesys/ai-service-manager/pull/46#issuecomment-6825320599).
-Разрешён только `tests/test_postgres.py`, согласованные +4/-1: сохранить49
-прежних имён и полную equality, добавить `business_configuration_receipts`,
-`business_configuration_releases`, `business_configuration_state`; label —
-`Only the accepted M0 through M5.1A material tables are allowed`.
-Role/TEMP/uuidv7/vector/RLS/ACL assertions сохраняются. В уже разрешённом
-`scripts/m4_runtime_db.py` добавить только этот exact path в
-`M5_CONFIGURATION_PATHS` (+1), сохранив отрицательные source checks.
-
-Продолжение C1: применить согласованный inventory, адресно выполнить actual-PG
-`tests/test_postgres.py::test_real_postgres_capabilities_and_roles` и затронутые
-source-admission checks; одним commit/push этого исправления и текущих docs
-запустить один штатный полный CI нового SHA в том же PR46. Проверить Docker29/
-image shard в этом CI; при повторении сохранить evidence и разбирать startup
-отдельно, без серии неизменённых reruns. Workflow/dependencies/gates сохраняются.
-Только для этого push C0 делегировал C1 краткое обновление CURRENT
-`docs/TASK_REGISTER.md`; это разовое исключение из общего владения реестром C0.
-
-Implementation base и C0 handoffs сохранены. Ошибки CI ещё не объявлены
-исправленными; приёмка M5.1A впереди. M5.1B/UI/LLM tools, VM/paid/live и merge
-не выданы. Остальные paths требуют конкретного согласования C0.
-
-C0 резервирует только `0018_business_configuration.py`: revision `0018`,
-down_revision `0017`. **C2 до SQL подтверждает**, что актуальный migration head
-по-прежнему `0017`, и согласует схему/профиль. При изменении head вернуть вопрос
-C0; не переименовывать применённые миграции. `0001`–`0017` побайтово сохраняются.
-
-Реализовать согласованный объём M5.1A из §3 ниже:
-
-- service name/description/active, простой intake template, структурированные
-  ограничения; независимые price/duration/deposit policies по ADR-262/263/265;
-  явное неизвестное, без расчёта цены/времени, Quote, записи или платежа;
-- несколько owner-confirmed FAQ с происхождением и выбранный стиль общения;
-  два маленьких synthetic набора, без реальных клиентских данных и prompt editor;
-- draft edit с expected version; deterministic ERROR/WARNING validation и preview;
-  неизвестная цена/длительность допускают консультацию с owner handoff, а
-  невалидный режим, ссылка или конфликт структурированных правил блокируют publish;
-- publish/rollback с устойчивым replay, immutable release, audit и атомарным
-  переключением ready bundle; rollback увеличивает activation version и не
-  восстанавливает удалённые персональные данные;
-- bounded active read по доверенному Workspace/Business. Общий опубликованный
-  FAQ бизнеса доступен его клиентам; приватные записи клиентов в bundle не входят.
-  Зафиксировать контракт версии для M5.1B, не менять agent loop/LLM tools сейчас.
-
-### Точки интеграции и разрешённые paths
-
-Использовать существующие `AuthService.workspace`, session/CSRF и
-`/api/v1/workspaces/...` boundary. `tenancy:write` есть и у ADMIN: для публикации
-и отката нужна отдельная актуальная OWNER-проверка, включая replay. Не расширять
-замороженные auth/tenancy permissions ради этого. Связь ресурса с Business и
-Workspace, runtime role, транзакция и права должны проверяться в БД; никакого
-внешнего HTTP под DB locks. C2 проверяет блокировку конкурентного изменения
-owner authority и публикации, а не только предварительный Python role check.
-
-Новый модуль: только перечисленные файлы (создавать лишь необходимые):
+Основной write-set (создавать/менять только реально нужное):
 
 ```text
-backend/src/asm/configuration/__init__.py
-backend/src/asm/configuration/errors.py
+backend/src/asm/ai/context.py
+backend/src/asm/ai/knowledge.py
+backend/src/asm/ai/agent.py
+backend/src/asm/ai/contracts.py
+backend/src/asm/ai/runtime_contracts.py
+backend/src/asm/ai/database.py
+backend/src/asm/ai/runtime.py
+backend/src/asm/ai/runtime_settings.py
+backend/src/asm/ai/provider_runtime.py
+backend/src/asm/ai/settings.py
+backend/src/asm/ai/gateway.py
+backend/src/asm/ai/fake.py
+backend/src/asm/ai/prompts/conversation_v3.txt
+backend/src/asm/ai/schemas/conversation_result_v2.json
 backend/src/asm/configuration/models.py
-backend/src/asm/configuration/validation.py
-backend/src/asm/configuration/permissions.py
 backend/src/asm/configuration/repository.py
 backend/src/asm/configuration/service.py
-backend/src/asm/configuration/http.py
-migrations/versions/0018_business_configuration.py
+backend/src/asm/configuration/validation.py
+backend/src/asm/tenancy/database.py
+backend/src/asm/messaging/database.py
+backend/src/asm/messaging/results.py
+backend/src/asm/messaging/errors.py
+backend/src/asm/messaging/worker.py
+backend/src/asm/foundation.py
+migrations/versions/0019_published_knowledge.py
+contracts/openapi.json
+frontend/src/ConfigurationPanel.tsx
+frontend/src/ConfigurationPanel.test.tsx
+frontend/src/configuration-api.ts
+frontend/src/configuration-api.test.ts
+frontend/src/configuration-fixtures.test-helper.ts
+frontend/src/App.tsx
+frontend/src/App.test.tsx
+frontend/src/style.css
+frontend/e2e/configuration.spec.ts
+frontend/e2e/messaging.spec.ts
+tests/test_m5_knowledge.py
+tests/test_m5_knowledge_migrations.py
+tests/test_m5_knowledge_postgres.py
+tests/test_m5_knowledge_runtime.py
+tests/test_m5_knowledge_runtime_postgres.py
+tests/m5_knowledge_fixtures.py
+tests/m5_configuration_fixtures.py
 tests/test_m5_configuration.py
 tests/test_m5_configuration_migrations.py
 tests/test_m5_configuration_postgres.py
 tests/test_m5_configuration_api_postgres.py
-tests/m5_configuration_fixtures.py
+tests/test_m4_context.py
+tests/test_m4_agent.py
+tests/test_m4_gateway.py
+tests/test_m4_runtime_database.py
+tests/test_m4_runtime_postgres.py
+tests/test_m4_polza_runtime.py
+tests/test_m4_polza_runtime_migrations.py
+scripts/m2_4_browser_worker.py
+scripts/test_browser.sh
+docs/tasks/M5_HANDOFF.md
 ```
 
-Общие файлы: `backend/src/asm/foundation.py` — wiring и current readiness;
-`backend/src/asm/tenancy/database.py` — ограниченные configuration operations;
-`contracts/openapi.json` — штатно сгенерированный API snapshot;
-`docs/tasks/M5_HANDOFF.md` — короткий контракт C1/C2 и итоговый возврат.
+`contracts/openapi.json` — только штатная генерация при реальном изменении schema;
+новые owner endpoints не требуются. `test_browser.sh`/browser worker — только
+finite synthetic сценарий знания/UI, без произвольного test HTTP endpoint и без
+ослабления runtime-only роли. Исходящий transport остаётся текстовым.
 
-Ниже разрешён **только** необходимый переход current-schema consumers на `0018`
-и его проверки. C1/C2 указывают использованное подмножество и причину в контракте;
-это не поручение менять каждый файл и не разрешение переписать прошлые проверки:
+Ниже отдельное допустимое подмножество только для current-schema/profile перехода
+на0019 и проверок действительно затронутой runtime границы. Это не поручение
+менять всё и не разрешение переписать прежние отрицательные проверки:
 
 ```text
 backend/src/asm/telegram/provisioning.py
@@ -254,8 +226,10 @@ scripts/m4_runtime_db.py
 scripts/m2_4_browser_fixture.py
 scripts/prepare_telegram_egress.py
 scripts/test_telegram_egress.sh
-tests/test_foundation.py
 tests/generic_pg_schema.py
+tests/test_foundation.py
+tests/test_auth_contract.py
+tests/test_postgres.py
 tests/test_tenancy_postgres.py
 tests/test_native_context_db_runner.py
 tests/test_m4_runtime_db_runner.py
@@ -267,72 +241,228 @@ tests/test_m4_polza_runtime_postgres.py
 tests/test_m4_delivery_postgres.py
 tests/test_m4_reply_rights_postgres.py
 tests/test_m2_3_setup.py
-tests/test_m2_4_browser_fixture.py
-tests/test_telegram_egress.py
-tests/test_telegram_egress_postgres.py
 tests/test_m2_3_db_postgres.py
 tests/test_m2_3_schema_postgres.py
+tests/test_m2_4_browser_fixture.py
+tests/test_browser_compose.py
 tests/test_m3_1_guards_migrations.py
-tests/test_m3_2_escalations_migrations.py
 tests/test_m3_1_native_context_postgres.py
 tests/test_m3_1_native_context_runtime_postgres.py
+tests/test_m3_2_escalations_migrations.py
+tests/test_telegram_egress.py
+tests/test_telegram_egress_postgres.py
 ```
 
-Новый exact profile/hashes/counts выводятся из фактической DDL и сверяются с
-установленной PostgreSQL схемой. Исторические профили/тесты прежних ревизий
-сохраняются; массовая замена `0017` на `0018` недопустима. Нужные замены текущих
-SQL dispatchers выполняются additive миграцией, без ослабления ACL/readiness.
+Exact counts/hashes/ACL выводить из реальной DDL и независимого installed catalog.
+Исторические0013–0018 profiles/checkers сохранить; equality inventory не превращать
+в subset. Auth routes не меняются; разрешение test_auth_contract не означает снятие
+его полной проверки. Указать использованное compatibility подмножество с причинами.
 
-В `scripts/m4_runtime_db.py` и его tests разрешён также ограниченный admission
-этой конкретной ветки, полного base/tree и этого write-set, включая пять C0
-стартовых документов (`AGENTS.md`, `README.md`, `docs/TASK_REGISTER.md`,
-`docs/decisions/IMPL-005-m5-pilot-knowledge.md`, `docs/tasks/M5_HANDOFF.md`).
-Обновить согласованно outer admission, source export и inner source verification;
-сохранить same-repository/event/parent/tree/clean-source guards и корректный
-последующий push/main. Старый M5 planning allowance не допускает этот код.
-До открытия implementation PR проверить положительный admission и отказы на
-чужой branch/base/tree/path; fixtures должны работать в штатном checks image.
+В `scripts/m4_runtime_db.py` и его тестах разрешён только новый bounded admission
+этой ветки/base/tree и перечисленного write-set, включая пять C0 документов:
+`AGENTS.md`, `README.md`, `docs/TASK_REGISTER.md`,
+`docs/decisions/IMPL-005-m5-pilot-knowledge.md`, `docs/tasks/M5_HANDOFF.md`.
+Согласовать outer/export/inner и последующий push/main, сохранить прежние source
+routes, same-repository/event/parents/tree/clean-source guards. До implementation
+PR проверить позитивный маршрут и отказы на чужие branch/base/tree/path.
 
-Другие paths требуют конкретного согласования C0, не нового разрешения владельца
-на каждую рутинную правку. C1 не редактирует CURRENT реестра или канонические ADR.
-Не менять `.github/workflows`, зависимости/locks, frozen auth/tenancy contracts,
-frontend, AI/messaging/delivery guards, старые migration files и M4 receipts.
-Не создавать фиктивные Telegram conversations/messages для этой конфигурации.
+Не менять dependencies/locks, workflows, frozen auth/tenancy contracts, исходные
+архитектурные файлы, старые prompt/schema/migration files и receipts M4. Другие
+paths или реально нужный новый API согласуются с C0 по конкретной причине,
+без нового разрешения владельца на рутинные исправления. C4/C5 не меняют CURRENT
+реестра; согласованный контракт и один краткий возврат — в M5_HANDOFF/PR.
+Разовое исключение C0 для этого совместного code/docs repair push: C4 обновляет
+единственный CURRENT реестра на IN_PROGRESS / CI repair; далее CURRENT ведёт C0.
+Новый exact path `frontend/e2e/messaging.spec.ts` разрешён только для вызова/
+закрытой диагностики finite helper; его функциональные assertions сохраняются.
 
 ### Критерии готовности и возврат
 
-Сначала целевые проверки по риску, затем один штатный полный CI готового
-кандидата. Новые actual-PG тесты идут в существующий generic integration lane;
-не добавлять новый workflow или отдельный повтор M4. Обязательное evidence:
+1. Actual owner API/PG + реальный browser: создать/изменить synthetic FAQ и
+   structured rule → preview → publish → active. Draft не влияет на AI; publish
+   меняет видимые runtime факты. Новый вопрос проходит настоящий runtime/DB путь
+   с fake model и controlled text transport; assertions проверяют model input,
+   выбранный источник/release и единственный effect, а не только заранее заданный reply.
+2. Actual PG под runtime role: первая публикация, новая версия и rollback
+   инвалидируют старый run на перечисленных границах. Конкурентные publish и
+   send admission проверяются в обоих порядках с наблюдаемым call/effect counter;
+   stale путь не выполняет запрещённый вызов. Draft-only edit не даёт ложный stale.
+3. Два Workspace/Business и два Client внутри одного Workspace: общий FAQ своего
+   Business разрешён, чужие знания/личная история — нет. Подмена DTO/tool args,
+   HUMAN, revoke, native observation, rights refresh и UNKNOWN/no-resend сохраняют
+   отказ. Replay/restart не делает новый model call/вторую отправку. Старые runs
+   остаются читаемы/безопасно отклоняются согласно явно зафиксированной версии.
+4. Knowledge injection, конфликт structured rule/FAQ, отсутствие/неизвестность,
+   лимит размера и provenance: нет draft/private data leak, исполнения инструкций
+   из FAQ, ложной цены/времени/доступности. Fake/contract evidence не объявляется
+   проверкой смыслового качества реальной LLM.
+5. UI: OWNER/revoked-owner, session/CSRF, version conflict, uncertain mutation
+   с тем же key, переключение Business/logout без поздней утечки; preview делает
+   ноль model/Telegram calls. Минимум достаточных actual browser journeys,
+   остальные гонки проверять адресно на API/PG, не дублировать всё во всех слоях.
+6. Чистый upgrade и populated0018→0019, повторный upgrade, штатный migration cycle;
+   прежние данные/права и pinned historical checkers сохранены. Current app отвергает
+   старую схему; installed catalog соответствует new current profile. Нельзя
+   разрушать новые durable данные ради обратного прохода тестовой миграции.
+7. Сначала адресные проверки по изменениям; затем один штатный полный CI final
+   кандидата. Новые actual-PG cases входят в существующие lanes с полным evidence,
+   не новый workflow и не отдельный повтор старого M4. Зафиксировать достигнутые
+   cases и source SHA; при ошибке отделить реализацию от инфраструктуры, без
+   unchanged reruns и изменения expected ради PASS.
 
-1. Два synthetic набора проходят edit → validate/preview → publish → active read;
-   draft и неготовый набор не видны active projection; частичной публикации нет.
-2. Actual API + PostgreSQL под runtime role: expected-version conflict, атомарный
-   publish при конкуренции, idempotent replay без второго release/audit effect,
-   конфликт повторного ключа с другим payload; прежняя active version сохранена
-   при ERROR. Rollback даёт новую монотонную activation version.
-3. Session/CSRF, ADMIN/non-owner/revoked owner, cross-Workspace и неверный
-   Business/resource scope запрещены, включая replay. Проверены RLS/ACL и
-   неизменяемость release, а не только mock репозитория или HTTP status.
-4. Unknown price/duration не превращаются в нули/обещания; невалидные modes/refs
-   блокируются. FAQ со ссылкой на правила не переопределяет структурированную истину.
-5. Upgrade с чистой БД и с `0017`, повторный upgrade и штатный migration cycle;
-   прежние данные и права сохранены, exact current profile проходит, историческая
-   схема отвергается current app и проверяется своим сохранённым checker.
-6. Ruff/mypy/OpenAPI и штатный полный CI одного final SHA; clean-source evidence
-   и фактическое включение новых PG tests. Падения implementation и test setup
-   разделять; expected не менять только ради PASS и неизменённые прогоны не повторять.
+Вернуть один PR в main: final head/tree, короткий контракт C4/C1/C2/C3/C5,
+миграция и версии DTO/prompt, используемые paths, воспроизводимый пользовательский
+сценарий, целевые проверки и CI URL, оставшиеся ограничения. После зелёного CI
+не делать отдельный status-only push. Приёмку/интеграцию и следующий CURRENT ведёт C0.
+Если реализация перестаёт укладываться в связный небольшой срез, вернуть конкретную
+границу C0 до расширения; новый workflow engine или сетка будущих задач не нужны.
 
-Вернуть один небольшой PR в `main`: final head/tree, краткий согласованный
-контракт C1/C2, migration/изменённые API, проверяемый сценарий и команды/результат,
-CI URL, оставшиеся ограничения/OPEN. Подробные логи — в PR/CI, здесь только итог.
-C0 проводит review и интеграцию; авторы не объявляют задачу INTEGRATED/VERIFIED.
+Только synthetic LOCAL/TEST. Vision/embeddings/sendPhoto/intake/DurationCase,
+VM/paid/live/реальные данные и merge не разрешены этой выдачей. Receiver ACK/fence
+и полный live HUMAN/Resume остаются OPEN_OPERATIONAL, UNKNOWN/holds сохраняются.
+Никаких фиктивных Telegram messages/conversations для бизнесовой конфигурации.
 
-Только synthetic LOCAL/TEST. VM/paid/Vision/embedding/live/реальные данные не
-разрешены этой выдачей. Старые receiver ACK/fence и общий live HUMAN/Resume
-остаются отдельными ограничениями; UNKNOWN/holds, OWNER reconciliation и
-observation barrier сохраняются. Прежний receiver вслепую не запускать.
 
+
+## C4 receipt — C4-M5.1B-PUBLISHED-KNOWLEDGE-R1 / REVIEW / 2026-11-13
+
+Реализован контракт выше на **c4/m5-1b-published-knowledge-r1** поверх сохранённого
+C0 docs commit **3b2a28a192753103017dab5452288cde61226d95**. Accepted base/tree
+**6c27be8487f3f8792cf01ed2a0fcdde130ea7a52 /1aa2959f1ba28438304ef758947ba241f6d0b729**.
+Final head/tree и CI URL возвращаются в PR; текущий реестр C4 не меняет.
+
+В model input попадают active service cards/structured rules и до4 целых FAQ с
+source/authority/revision; keyword ranking детерминирован, общий context≤8192
+UTF-8 bytes. Owner/current/structured facts не режутся; overflow → STOP.
+Draft, publisher/release UUID, storage и private Client context исключены.
+Новые `KnowledgeGatewayConfig`, `PreparedKnowledgeRun`, context/read v2 и prompt v3
+явно отделены от прежних DTO; result schema v1 и старые prompt/schema неизменны.
+Durable pin включает business/release/null-unpublished, activation и projection
+revision. MODEL/READ/FOLLOWUP/CANDIDATE/RESERVE/COMMIT/rights refresh/SEND проверяют
+тот же pin. SQL reader использует настоящий admitted job/claim, не owner GUC.
+Publish/rollback и admission используют общий business lock; HTTP вне транзакции.
+Legacy SQL/Python replay/COMPLETE сохранены, backfill и regeneration отсутствуют.
+
+0019←0018 добавляет bindings/FK/immutability в существующие run/delivery boundaries,
+без новых таблиц. Populated downgrade отказывается до потери новых данных.
+Installed PG18/source: **207 functions /52 tables /736 columns**, точные bodies,
+ACL/RLS/constraints и прежние0013–0018 profiles. Full pin
+`e2bfd685188e1b67430de02c03eb3cef3af8f13de74e13d641032085b3b23c36`, body
+`93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5`, nonfunction
+`1583e77dbe74107fe93cbadd6c43ff20d1521e9f62b4a6b22e89447f5569743c` независимо сверены C3.
+
+Console: формы service/rules/FAQ/style, draft/active/source, ERROR/WARNING,
+read-only preview, CAS publish/rollback, тот же key/body при uncertain result,
+защита смены Business/session/logout. Rollback UI предлагает до8 публикаций,
+наблюдавшихся в памяти страницы; сервер окончательно проверяет допустимость.
+Нового history API/trace UI нет. Provider settings v3 требуют явную новую пару
+prompt/data profile; DB admission остаётся закрытым15-key, prompt внутри config.
+V3 provider composition разрешает только MockTransport; live отклоняется до key load.
+
+Фактическая локальная проверка, frozen uv/Python3.13.5 и npm ci:
+
+- `PYTHONPATH=backend/src pytest -q -m 'not integration' --tb=short`:
+  **3753 PASS +161 subtests /246.37s**. Последняя правка serializer отдельно:
+  **155 targeted PASS /1.87s**; неизменённые negative fixtures сохранены.
+- Actual owned PostgreSQL **18.6** из закреплённого OCI image, vector0.8.6 /
+  btree_gist1.8, asm_test, runtime NOSUPERUSER/NOBYPASSRLS: **106 unique cases
+  достигли PASS** — knowledge SQL17, runtime11, configuration PG25/API12,
+  provider PG41. После исправлений повторялись затронутые группы: races4 +
+  downgrade1 (**5 PASS /22.09s**), legacy Python replay (**1 PASS /12.44s**).
+  Runtime11:44.71s; configuration25:13.59s; API12:9.57s; provider41:129.51s.
+  Реальные PG locks в обоих порядках, first publish/rollback ABA, scopes,
+  HUMAN/revoke/native/input/rights и UNKNOWN/no-resend проверены.
+- Локальный temporary harness проверял настоящий base/tree/write-set и заменял
+  только CI-file reader test fixture на **LOCAL_SOURCE_CHECK_NOT_CI**. Product
+  SQL/roles/readiness/admission не обходились; GitHub CI evidence не имитировался.
+- `ruff check backend/src tests scripts`, `ruff format --check backend/src tests scripts`:
+  **PASS /209 files**; `mypy backend/src`: **87 files PASS**.
+- `npm --prefix frontend run typecheck`, `npm --prefix frontend test`,
+  `npm --prefix frontend run build`: **PASS /427 tests**. Три новых browser
+  journeys добавлены, включая publish→отличающийся draft→реальный runtime/fake
+  model→один controlled effect→DB replay. До PR actual browser ещё NOT_RUN.
+
+Дельта57 paths строго внутри разрешения. Compatibility subset — current0019
+readiness/provisioning/egress/catalog/source admission и соответствующие tests;
+исторические M4 delivery/rights остаются явными0018/v2 carriers с возвратом0019.
+Один новый finite browser preset требует двух text events; удалены два избыточных
+pagination history events: остаются26 messages (>page25), seed127<128, прежние
+сценарии/отрицательные проверки сохранены. OpenAPI/API shape, deps/locks/workflows,
+0001–0018, старые prompts/schemas/receipts и архитектурные источники неизменны.
+
+Real provider HTTP/owner key reads/Telegram/VM/paid/live **0**. Это synthetic
+LOCAL/TEST plumbing/guards, не semantic quality реальной LLM и не M5 целиком.
+AI default OFF,2 calls/1 READ, старые UNKNOWN/holds и operational gates сохранены.
+Первый [CI43361745800](https://github.com/Elefesys/ai-service-manager/actions/runs/43361745800)
+на head59c4b87e/treee8ee6904 выявил неверный application full pin: локальная
+БД имела locale C, штатный Docker — en_US.utf8. Fresh artifact14009055081
+независимо подтвердил all source bodies/security/nonfunction PASS, declared
+valid=true и full e2bfd685; отличие только в порядке5 пар function rows.
+Исправлен один application pin под canonical Docker; body/nonfunction/SQL и
+строгие проверки прежние. Локальный reset с en_US.utf8 воспроизвёл exact e2bfd685
+и valid=true; targeted profile pytest завершился exit0. Затем workspace стал
+unavailable: повтор API/Ruff/mypy repair не завершён, нового PASS им не приписываем.
+Первый native-context lane также RED; подробности в artifact14009171371,
+локальная распаковка заблокирована недоступностью environment. Точная причина
+этого отдельного отказа не устанавливалась. Последующий
+[CI43363880768](https://github.com/Elefesys/ai-service-manager/actions/runs/43363880768)
+на a8067f1, attempt1: **10/12 SUCCESS**; catalog/readiness, native-context,
+foundation/durable и все connect5 lanes PASS. Pin repair завершён, повторять его
+не требуется. Browser56 PASS/2 FAIL и runtime aggregate600s FAIL разобраны C0.
+
+### Ограниченный CI repair — решение C0 принято / 2026-11-13
+
+Решение и разовое делегирование CURRENT — в комментарии C0, связанном выше.
+Исходные browser/runtime ZIP повторно скачаны, SHA256 и CRC совпали с C0.
+Отдельный чистый worktree a8067f1/tree7c8a442 сохранён для RED reproducer.
+
+**Причины и исправление browser.** Новый helper принимал TEST_CONSUME старого
+HUMAN main Turn после UI Resume. Read-only PG подтвердил другую generation;
+старый Turn не имеет подходящего Resume receipt, поэтому SQL правильно выдал
+NOT_ALLOWED до model call. Оставшийся новый question GROUP затем обработал
+обычный happy drain: knowledge GUARDED_TEXT дошёл до чужого FixtureAdapter и
+его guard остановил helper до foreign CALL/EFFECT. Это подтверждённый каскад,
+не предположение о случайности. После устранения ранней ошибки обнаружен
+отдельный текущий TEST_CONSUME: передача его в AI повторяла уже выполненный
+GUARDED_TEXT enqueue и давала IDEMPOTENCY_KEY_CONFLICT.
+
+Два knowledge seed события теперь первыми проходят обычный Worker без AI до
+двух разных canonical OBSERVED replay receipts при нулевых CALL/EFFECT. Затем
+создаются material и остальные fixtures; два события не дублируются, исходные
+127 events в `seed_events()` и happy PENDING сохранены. В knowledge loop TEST_CONSUME идёт только
+через обычного effect-free observer; GUARDED_TEXT → AI_GENERATE → SEND_AI_TEXT
+сохраняют настоящий runtime/DB/Gateway/Worker. Нет catch-NOT_ALLOWED/fallback,
+timestamp/status DML или новых grants. Cutoff — available_at cursor, не scope
+filter; неожиданные claims по-прежнему отклоняются. Canonical question Inbox
+message_id дополнительно сверяется с PREPARE snapshot до FakeAdapter.
+
+**Carrier.** C0 разрешил один aggregate SQL/test budget900s только в runtime
+после exact M5.1B admission, включая последующий main-push. Остальные routes и
+targeted —600; per-command cap600, build/cleanup bounds и workflow25min прежние.
+Один выбранный budget управляет остатком/timeout/stop/summary/final gate.
+Все **160 cases =35+22+9+41+25+17+11** остаются в прежних семи модулях.
+
+**Целевые результаты.** Carrier209 и browser-fixture135 unit PASS
+(совместно344/61.43s); browser-compose49/0.34s, Ruff/format и frontend
+typecheck/build PASS. Исходные
+fixture92 tests/expectations сохранены побайтово. Проверены полный виртуальный
+проход160 cases/699s, отказ сверх900, прежние600, cleanup failure и missing phase/
+case no-PASS; observer до GUARDED_TEXT и после AI даёт один model request/effect.
+16 Node checks реальных TS formatter functions PASS: raw stdout/stderr,
+exception text/SQL/payload/credentials не печатаются; только closed stage/class/
+code, exit/timeout и bounded counters. Прежний ARGS error marker сохранён.
+
+Actual LOCAL PG18.6 из pinned OCI/en_US.utf8, API и pinned Chromium140:
+оригинальный knowledge UI test и следующий happy text/control/manual subset
+получили RED→GREEN. Knowledge: один actual FakeAdapter request, один canonical
+controlled text effect, draft отсутствует, DB replay не вызывает model/send.
+После исправления knowledge jobs завершены; happy делает только свой эффект.
+Это host helper transport и108 text events, **не Docker/MinIO evidence**:
+MinIO в executor остановлен запретом netlink. Исходные image assertions не
+изменены; полный58-case browser и actual160 PG в пределах900s остаются OPEN
+до штатного CI исправленного кандидата. Его URL и final SHA/tree — в PR #47.
+AI default OFF, live/paid/VM0; merge и review — C0. После зелёного CI отдельный
+status-only push не нужен.
 
 ## 1. Проверяемый результат всего этапа
 
@@ -386,7 +516,7 @@ service. Владелец не должен править SQL/JSON вручну
 |---|---|---|---|
 | M5.0 — приёмка плана | C0 | Этот пакет и CI кандидата | IMPL-005 принят; после разрешённой интеграции фиксируются base и единственная выдача M5.1A; application runtime не меняется |
 | M5.1A — конфигурация и публикация | C1; C2 | M5.0 | В БД можно безопасно подготовить, проверить и опубликовать небольшой набор услуг/правил/FAQ |
-| M5.1B — ответ по опубликованным знаниям | C4; C1/C3, затем C5 | M5.1A | Опубликованный FAQ читается M4 runtime; owner видит preview и публикует через простой UI |
+| M5.1B — ответ по опубликованным знаниям | C4; C1/C3, C2 для БД, затем C5 | M5.1A | Опубликованный FAQ читается M4 runtime; owner видит preview и публикует через простой UI |
 | M5.2A — ограниченная проверка modalities | C4; C6 только при необходимости | M5.1B; допуск нужен только для paid probe | Выбран конкретный пригодный Vision/embedding route либо описан точный блокер |
 | M5.2B — знания и семантический поиск | C4; C1/C2 | M5.1B, embedding контракт M5.2A | Источники/ревизии/index build; keyword + exact vector retrieval с источниками |
 | M5.2C — Vision и private portfolio | C4; C1/C2/C5, C6 для storage | M5.2A/B | Фото анализируется, подтверждённые работы загружаются, релевантные примеры видны мастеру |

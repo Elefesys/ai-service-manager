@@ -40,16 +40,16 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def provider_pg(pg):
     await migrate("upgrade", "0015")
-    await migrate("upgrade", "0018")
-    await migrate("upgrade", "0018")
-    pg.schema_revision = "0018"
+    await migrate("upgrade", "0019")
+    await migrate("upgrade", "0019")
+    pg.schema_revision = "0019"
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
         await migrate("downgrade", "0015")
         with pytest.raises(RuntimeError, match="schema"):
             await runtime.check()
-        await migrate("upgrade", "0018")
+        await migrate("upgrade", "0019")
         await runtime.check()
         yield pg
     finally:
@@ -65,6 +65,118 @@ async def command(h, cfg, enable=True):
                 {"p": json.dumps(p), "enabled": enable},
             )
         ).scalar_one()
+
+
+async def admission_settings(h, prompt_revision):
+    """Real trusted Telegram scope, operator DTO only; no model or HTTP client."""
+    cid, _, _ = await source_turn(h, telegram=True)
+    row = (await query(h, "SELECT * FROM app.conversations WHERE id=:id", id=cid))[0]
+    return settings(
+        prompt_revision=prompt_revision,
+        data_profile="SYNTHETIC_PUBLISHED_KNOWLEDGE_V1"
+        if prompt_revision == "conversation_v3"
+        else "SYNTHETIC_TEXT_V1",
+        workspace_id=row["workspace_id"],
+        connection_id=row["connection_id"],
+        client_id=row["client_id"],
+        conversation_id=cid,
+        chat_id=row["provider_chat_id"],
+        bot_identity=BOT,
+    )
+
+
+@pytest.mark.parametrize("prompt_revision", ["conversation_v2", "conversation_v3"])
+async def test_versioned_provider_admission_keeps_closed_operator_shape_without_wire(
+    provider_pg, prompt_revision
+):
+    h = provider_pg
+    cfg = await admission_settings(h, prompt_revision)
+    payload = cfg.admission()
+    assert "prompt_revision" not in payload
+    assert payload["config"]["prompt_revision"] == prompt_revision
+    assert len(payload) == 15
+    before = (h.adapter.calls, h.adapter.effects)
+    assert await command(h, cfg) == {"code": "ENABLED"}
+    try:
+        assert await command(h, cfg) == {"code": "ALREADY_ENABLED"}
+        stored = (
+            await query(
+                h,
+                "SELECT data_profile,config FROM platform.ai_provider_sessions WHERE id=:id",
+                id=cfg.session_id,
+            )
+        )[0]
+        assert stored["data_profile"] == payload["data_profile"]
+        assert stored["config"] == payload["config"]
+        assert (
+            await scalar(
+                h,
+                "SELECT count(*) FROM platform.ai_deliveries WHERE provider_session_id=:id",
+                id=cfg.session_id,
+            )
+            == 0
+        )
+        assert (h.adapter.calls, h.adapter.effects) == before
+    finally:
+        assert await command(h, cfg, enable=False) == {"code": "DISABLED"}
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "missing_nested_prompt",
+        "missing_data_profile",
+        "mismatched_profile",
+        "mismatched_prompt",
+        "v3_extra_top_prompt",
+        "v3_unknown_field",
+        "v2_extra_top_prompt",
+    ],
+)
+async def test_provider_admission_rejects_missing_mismatched_or_extra_version_fields_without_effect(
+    provider_pg, variant
+):
+    h = provider_pg
+    cfg = await admission_settings(
+        h, "conversation_v2" if variant == "v2_extra_top_prompt" else "conversation_v3"
+    )
+    payload = cfg.admission()
+    if variant == "missing_nested_prompt":
+        payload["config"].pop("prompt_revision")
+    elif variant == "missing_data_profile":
+        payload.pop("data_profile")
+    elif variant == "mismatched_profile":
+        payload["data_profile"] = "SYNTHETIC_TEXT_V1"
+    elif variant == "mismatched_prompt":
+        payload["config"]["prompt_revision"] = "conversation_v2"
+    elif variant == "v3_unknown_field":
+        payload["foreign_business_id"] = str(uuid4())
+    else:
+        payload["prompt_revision"] = cfg.prompt_revision
+    before = (h.adapter.calls, h.adapter.effects)
+    with pytest.raises(DBAPIError) as caught:
+        async with h.migrator.begin() as c:
+            await c.execute(
+                text("SELECT platform.ai_provider_session(CAST(:p AS jsonb),true)"),
+                {"p": json.dumps(payload)},
+            )
+    assert caught.value.orig.sqlstate == "P2001"
+    assert caught.value.orig.diag.message_primary == "NOT_ALLOWED"
+    assert (
+        await scalar(
+            h, "SELECT count(*) FROM platform.ai_provider_sessions WHERE id=:id", id=cfg.session_id
+        )
+        == 0
+    )
+    assert (
+        await scalar(
+            h,
+            "SELECT count(*) FROM platform.ai_deliveries WHERE provider_session_id=:id",
+            id=cfg.session_id,
+        )
+        == 0
+    )
+    assert (h.adapter.calls, h.adapter.effects) == before
 
 
 async def setup(
@@ -83,6 +195,8 @@ async def setup(
     await refresh_synthetic_observation(h, cid)
     row = (await query(h, "SELECT * FROM app.conversations WHERE id=:id", id=cid))[0]
     cfg = settings(
+        prompt_revision="conversation_v3",
+        data_profile="SYNTHETIC_PUBLISHED_KNOWLEDGE_V1",
         workspace_id=row["workspace_id"],
         connection_id=row["connection_id"],
         client_id=row["client_id"],
@@ -327,13 +441,13 @@ async def test_telegram_unknown_is_durable_and_never_resent(provider_pg, tmp_pat
 
                 from scripts.native_context_db_catalog import capture_source
 
-                mods, _ = capture_source(Path("."), "0018")
+                mods, _ = capture_source(Path("."), "0019")
                 statements = []
                 mods["0016"]["op"].execute = statements.append
                 mods["0016"]["downgrade"]()
                 for sql in statements:
                     await c.execute(text(sql))
-        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0018"
+        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0019"
     finally:
         await worker.ai.telegram.aclose()
 

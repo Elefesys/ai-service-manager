@@ -118,7 +118,7 @@ def foundation_real_catalog_sink(foundation_git, monkeypatch, request):
     """Real migration expansion in an owned synthetic Git checkout; no database."""
     fixture = foundation_git
     paths = sorted((fixture.actual / "migrations/versions").glob("*.py"))
-    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 19)]
+    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 20)]
     for source in paths:
         target = fixture.root / source.relative_to(fixture.actual)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -172,8 +172,8 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    # The retained0017 inventory has791 DDL records;0018 adds29.
-    assert len(journal.catalog["nonfunction_ddl"]) == 820
+    # The closed0018 inventory has820 DDL records;0019 adds12.
+    assert len(journal.catalog["nonfunction_ddl"]) == 832
     journal.start(node)
     append = store.append
 
@@ -1437,7 +1437,7 @@ def test_foundation_durable_completeness_requires_current_six_lane_receipts(
     source = {
         "source_sha": head,
         "parents": [],
-        "expected_revision": "0018",
+        "expected_revision": "0019",
         "images": {k: {} for k in ("api", "worker", "scheduler", "fixture")},
     }
     if fault == "missing-lifecycle":
@@ -3125,7 +3125,7 @@ def test_ci_partition_uses_exact_modules_dynamic_ids_and_separate_source_tests()
             inventory[key].append(REQUIRED_MODULES[3] + "::test_future_case[new]")
     proof = lane.validate_partition(a, n, g, m)
     assert (proof["all_pg"], proof["generic_pg"], proof["native_pg"], proof["native_total"]) == (
-        11,
+        13,
         2,
         4,
         5,

@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
     from httpx import AsyncBaseTransport
 
-    from asm.ai.contracts import GatewayConfig
+    from asm.ai.contracts import AnyGatewayConfig
     from asm.ai.fake import FakeAdapter
     from asm.ai.runtime import SyntheticRuntime
     from asm.ai.runtime_settings import RuntimeSettings
@@ -46,9 +46,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0018"
-NATIVE_CONTEXT_PROFILE_SHA256 = "01bb105b2012725a3905cf5fcf9826f9f58afd21897caf237645dbd7a88c0999"
-NATIVE_PROFILE_BODY_SHA256 = "0f9dcf5d0a11c56e4d78f76626c70ea7f705962aa6bbd71a1cde183f5c530498"
+DATABASE_SCHEMA_REVISION = "0019"
+NATIVE_CONTEXT_PROFILE_SHA256 = "e2bfd685188e1b67430de02c03eb3cef3af8f13de74e13d641032085b3b23c36"
+NATIVE_PROFILE_BODY_SHA256 = "93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -85,7 +85,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.business_configuration_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.published_knowledge_schema_profile()')
             """)
             )
         )
@@ -129,7 +129,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
     if (
         declared
         != {
-            "schema_revision": "0018",
+            "schema_revision": "0019",
             "valid": True,
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
         }
@@ -366,7 +366,7 @@ def create_worker(
     adapter: "ControlledAdapter",
     *,
     environment: str,
-    ai_config: "GatewayConfig | None" = None,
+    ai_config: "AnyGatewayConfig | None" = None,
     model: "Callable[[], FakeAdapter] | None" = None,
     ai_telegram: "TelegramClient | None" = None,
     provider_settings: "RuntimeSettings | None" = None,

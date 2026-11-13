@@ -34,6 +34,8 @@ class ProviderRuntime(RuntimeExecution):
             or telegram.provider_runtime != settings
             or transport is not None
             and type(transport) is not httpx.MockTransport
+            or settings.prompt_revision == "conversation_v3"
+            and type(transport) is not httpx.MockTransport
         ):
             raise MessagingError(Code.NOT_ALLOWED)
         self.config = settings.gateway()

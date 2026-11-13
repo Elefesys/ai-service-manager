@@ -10,7 +10,14 @@ from uuid import UUID
 
 from pydantic import Field, SecretStr, model_validator
 
-from asm.ai.contracts import DTO, GatewayConfig, Limits, Money
+from asm.ai.contracts import (
+    DTO,
+    AnyGatewayConfig,
+    GatewayConfig,
+    KnowledgeGatewayConfig,
+    Limits,
+    Money,
+)
 from asm.ai.polza import RuntimeRoute, fingerprint
 
 
@@ -22,7 +29,8 @@ class RuntimeSettings(DTO):
     connection_id: UUID
     chat_id: str = Field(pattern=r"^[1-9][0-9]{0,18}$", repr=False)
     bot_identity: str = Field(pattern=r"^[1-9][0-9]{0,18}$")
-    data_profile: Literal["SYNTHETIC_TEXT_V1"]
+    data_profile: Literal["SYNTHETIC_TEXT_V1", "SYNTHETIC_PUBLISHED_KNOWLEDGE_V1"]
+    prompt_revision: Literal["conversation_v2", "conversation_v3"] = "conversation_v2"
     starts_at: datetime
     expires_at: datetime
     max_calls: int = Field(ge=1, le=4)
@@ -39,6 +47,8 @@ class RuntimeSettings(DTO):
             or not Decimal(0) < self.max_rub <= Decimal(10)
             or self.review_sha256 != fingerprint(self.review.model_dump(mode="json"))
             or self.review.reservation() * self.max_calls > self.max_rub
+            or (self.prompt_revision == "conversation_v3")
+            != (self.data_profile == "SYNTHETIC_PUBLISHED_KNOWLEDGE_V1")
         ):
             raise ValueError("RUNTIME_ADMISSION_INVALID")
         self.review.route()
@@ -49,11 +59,11 @@ class RuntimeSettings(DTO):
         if not self.starts_at <= datetime.now(UTC) < self.expires_at:
             raise ValueError("RUNTIME_SESSION_EXPIRED")
 
-    def gateway(self) -> GatewayConfig:
-        return GatewayConfig(
+    def gateway(self) -> AnyGatewayConfig:
+        values = dict(
             revision="polza-" + str(self.session_id) + "-" + self.review_sha256,
             route=self.review.route(),
-            prompt_revision="conversation_v2",
+            prompt_revision=self.prompt_revision,
             schema_revision="conversation_result_v1",
             limits=Limits(
                 model_calls=2,
@@ -69,9 +79,16 @@ class RuntimeSettings(DTO):
                 call_cost_reservation=self.review.reservation(),
             ),
         )
+        model = (
+            KnowledgeGatewayConfig if self.prompt_revision == "conversation_v3" else GatewayConfig
+        )
+        return model.model_validate(values)
 
     def admission(self) -> dict[str, object]:
-        return self.model_dump(mode="json", exclude={"review"}) | {
+        # A legacy v2 operator payload remains byte/shape compatible. A new v3
+        # session names the new prompt in config and the new synthetic data scope;
+        # loading old approval/settings cannot silently opt it into knowledge.
+        return self.model_dump(mode="json", exclude={"review", "prompt_revision"}) | {
             "config": self.gateway().model_dump(mode="json"),
             "review_checked_at": self.review.checked_at.isoformat(),
         }

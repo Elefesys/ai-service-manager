@@ -8,25 +8,39 @@ from typing import Any, Literal, Protocol, Self
 
 from pydantic import Field, model_validator
 
-from asm.ai.context import ContextBinding, ContextBuilder, ContextCode, ContextFailure, ContextView
+from asm.ai.context import (
+    ContextBinding,
+    ContextBuilder,
+    ContextCode,
+    ContextFailure,
+    ContextView,
+    KnowledgeContextBuilder,
+    KnowledgeContextView,
+    PreparedContext,
+    PreparedKnowledgeContext,
+)
 from asm.ai.contracts import (
     DTO,
+    AnyGatewayConfig,
     Budget,
     ConversationResult,
     Cost,
     ErrorCode,
-    GatewayConfig,
     GatewayRequest,
     GatewayResult,
     ReadTool,
     ToolResult,
     Usage,
+    validate_gateway_config,
 )
 from asm.ai.gateway import ModelAdapter, ModelGateway
+from asm.ai.knowledge import KnowledgeCode, KnowledgeFailure, KnowledgePin
+from asm.configuration.models import ActiveProjection
 
 Boundary = Literal["MODEL", "READ", "FOLLOWUP", "CANDIDATE"]
 StopCode = (
     ContextCode
+    | KnowledgeCode
     | ErrorCode
     | Literal[
         "AUTHORITY_DENIED", "AUTHORITY_STALE", "AUTHORITY_UNAVAILABLE", "REFUSAL", "CANCELLED"
@@ -115,17 +129,19 @@ class AuthorityFailure(Exception):
 class ConversationAgent:
     """Single-use in-memory orchestration; no persistence, send, retry or runtime wiring."""
 
+    prompt_revision = "conversation_v2"
+
     def __init__(
         self,
-        config: GatewayConfig,
+        config: AnyGatewayConfig,
         adapter: ModelAdapter,
         authority: ContextAuthority,
         *,
         builder: ContextBuilder | None = None,
     ):
-        self.config = GatewayConfig.model_validate(config)
+        self.config = validate_gateway_config(config)
         if (
-            self.config.prompt_revision != "conversation_v2"
+            self.config.prompt_revision != self.prompt_revision
             or self.config.route.eligibility != "EVAL_ONLY"
             or self.config.limits.model_calls > 2
             or self.config.limits.read_executions > 1
@@ -167,6 +183,14 @@ class ConversationAgent:
         if time.monotonic() >= self._deadline:
             raise AuthorityFailure("DEADLINE")
 
+    def _project(
+        self, snapshot: object, binding: ContextBinding
+    ) -> PreparedContext | PreparedKnowledgeContext:
+        return self.builder.build(snapshot, binding)
+
+    def _tool(self) -> ReadTool:
+        return current_context_tool()
+
     async def _authorize(self, binding: ContextBinding, boundary: Boundary) -> None:
         self._time_left()
         try:
@@ -174,6 +198,8 @@ class ConversationAgent:
                 await self.authority.authorize(binding, boundary)
             )
         except asyncio.CancelledError:
+            raise
+        except KnowledgeFailure:
             raise
         except Exception:
             raise AuthorityFailure("AUTHORITY_UNAVAILABLE") from None
@@ -198,13 +224,13 @@ class ConversationAgent:
             self._deadline = time.monotonic() + (deadline - datetime.now(UTC)).total_seconds()
             self._time_left()
             async with asyncio.timeout_at(self._deadline):
-                context = self.builder.build(snapshot, binding)
+                context = self._project(snapshot, binding)
                 binding = context.binding
                 request = GatewayRequest(
                     run_id=run_id,
                     deadline=deadline,
                     messages=context.view.messages(),
-                    tools=(current_context_tool(),) if self.config.limits.read_executions else (),
+                    tools=(self._tool(),) if self.config.limits.read_executions else (),
                 )
                 await self._authorize(binding, "MODEL")
                 self._gateway = ModelGateway(self.config, request, self.adapter)
@@ -219,12 +245,14 @@ class ConversationAgent:
                         )
                     except asyncio.CancelledError:
                         raise
+                    except KnowledgeFailure:
+                        raise
                     except Exception:
                         raise AuthorityFailure("AUTHORITY_UNAVAILABLE") from None
                     self._time_left()
                     if read.binding != binding:
                         raise AuthorityFailure("AUTHORITY_STALE")
-                    refreshed = self.builder.build(read.snapshot, binding)
+                    refreshed = self._project(read.snapshot, binding)
                     if refreshed.snapshot_fingerprint != context.snapshot_fingerprint:
                         raise AuthorityFailure("AUTHORITY_STALE")
                     call = result.tool_calls[0]
@@ -243,6 +271,8 @@ class ConversationAgent:
                 )
         except ContextFailure as exc:
             return self._outcome(reason=exc.code)
+        except KnowledgeFailure as knowledge_error:
+            return self._outcome(reason=knowledge_error.code)
         except AuthorityFailure as exc:
             return self._outcome(reason=exc.code)
         except TimeoutError:
@@ -263,3 +293,99 @@ class ConversationAgent:
             )
         )
         return result
+
+
+class KnowledgeAuthorityDecision(DTO):
+    status: Literal["ALLOWED", "DENIED", "STALE"]
+    binding: ContextBinding = Field(repr=False)
+    knowledge_pin: KnowledgePin = Field(repr=False)
+
+
+class KnowledgeContextRead(DTO):
+    binding: ContextBinding = Field(repr=False)
+    knowledge_pin: KnowledgePin = Field(repr=False)
+    active_projection: ActiveProjection = Field(repr=False)
+    snapshot: dict[str, Any] = Field(repr=False)
+
+
+class KnowledgeAuthority(Protocol):
+    """V2 port: all original authority checks AND the immutable publication pin.
+
+    The implementation owns the principal/job claim. Authorize/read must serialize
+    freshness with publication; a matching DTO alone never grants permission.
+    No switch to a newer release is permitted within this invocation.
+    """
+
+    async def authorize(
+        self, binding: ContextBinding, knowledge_pin: KnowledgePin, boundary: Boundary
+    ) -> KnowledgeAuthorityDecision: ...
+
+    async def read_current(
+        self, binding: ContextBinding, knowledge_pin: KnowledgePin
+    ) -> KnowledgeContextRead: ...
+
+
+class _PinnedAuthority:
+    """Adapt the new mandatory port to the shared finite orchestration, never default allow."""
+
+    def __init__(
+        self, inner: KnowledgeAuthority, pin: KnowledgePin, active: ActiveProjection
+    ) -> None:
+        self.inner, self.pin, self.active = inner, pin, active
+
+    async def authorize(self, binding: ContextBinding, boundary: Boundary) -> AuthorityDecision:
+        decision = KnowledgeAuthorityDecision.model_validate(
+            await self.inner.authorize(binding, self.pin, boundary)
+        )
+        if decision.knowledge_pin != self.pin:
+            raise KnowledgeFailure("KNOWLEDGE_STALE")
+        return AuthorityDecision(status=decision.status, binding=decision.binding)
+
+    async def read_current(self, binding: ContextBinding) -> ContextRead:
+        read = KnowledgeContextRead.model_validate(await self.inner.read_current(binding, self.pin))
+        if read.knowledge_pin != self.pin or read.active_projection != self.active:
+            raise KnowledgeFailure("KNOWLEDGE_STALE")
+        return ContextRead(binding=read.binding, snapshot=read.snapshot)
+
+
+class KnowledgeConversationAgent(ConversationAgent):
+    """Explicit v3 path sharing the same single-use loop, deadline, limits and Gateway."""
+
+    prompt_revision = "conversation_v3"
+
+    def __init__(
+        self,
+        config: AnyGatewayConfig,
+        adapter: ModelAdapter,
+        authority: KnowledgeAuthority,
+        *,
+        knowledge_pin: KnowledgePin,
+        active_projection: ActiveProjection,
+        builder: KnowledgeContextBuilder | None = None,
+    ):
+        self.knowledge_pin = KnowledgePin.model_validate(knowledge_pin)
+        # Configuration DTOs contain lists. Copy the saved value so caller mutation
+        # cannot silently replace facts during an awaited model call.
+        self.active_projection = ActiveProjection.model_validate_json(
+            active_projection.model_dump_json()
+        )
+        self.knowledge_builder = builder if builder is not None else KnowledgeContextBuilder()
+        super().__init__(
+            config,
+            adapter,
+            _PinnedAuthority(authority, self.knowledge_pin, self.active_projection),
+        )
+
+    def _project(self, snapshot: object, binding: ContextBinding) -> PreparedKnowledgeContext:
+        return self.knowledge_builder.build(
+            snapshot, binding, self.knowledge_pin, self.active_projection
+        )
+
+    def _tool(self) -> ReadTool:
+        return ReadTool(
+            name="read_context",
+            revision="conversation_context_v2",
+            description="Read the pinned current conversation and owner-published business facts. No images or mutations.",
+            arguments=CurrentContextArgs,
+            result=KnowledgeContextView,
+        )

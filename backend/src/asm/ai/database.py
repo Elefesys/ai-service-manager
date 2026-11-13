@@ -10,20 +10,38 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from asm.ai.agent import AuthorityDecision, Boundary, ContextRead, ConversationAgent
+from asm.ai.agent import (
+    AuthorityDecision,
+    Boundary,
+    ContextRead,
+    ConversationAgent,
+    KnowledgeAuthorityDecision,
+    KnowledgeContextRead,
+    KnowledgeConversationAgent,
+)
 from asm.ai.context import ContextBinding
 from asm.ai.contracts import (
     CONVERSATION_RESULT,
     DTO,
     AdapterRequest,
     AdapterResponse,
+    AnyGatewayConfig,
     Budget,
     ConversationResult,
-    GatewayConfig,
     Reply,
+    validate_gateway_config,
 )
 from asm.ai.gateway import ModelAdapter
-from asm.ai.runtime_contracts import CallCompletion, PreparedRun, RuntimeReceipt, RuntimeStop
+from asm.ai.knowledge import KnowledgePin
+from asm.ai.runtime_contracts import (
+    AnyPreparedRun,
+    CallCompletion,
+    KnowledgeRuntimeReceipt,
+    PreparedKnowledgeRun,
+    PreparedRun,
+    RuntimeReceipt,
+    RuntimeStop,
+)
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.results import JobClaim
@@ -39,14 +57,14 @@ def decoded[T: DTO](model: type[T], value: Any) -> T:
     return model.model_validate_json(json.dumps(value, allow_nan=False))
 
 
-def runtime_config(config: GatewayConfig) -> GatewayConfig:
-    config = GatewayConfig.model_validate(config)
+def runtime_config(config: AnyGatewayConfig) -> AnyGatewayConfig:
+    config = validate_gateway_config(config)
     if (
         config.route.execution != "FAKE"
         or config.route.adapter != "fake"
         or config.route.endpoint != "https://fake.invalid/v1"
         or config.route.eligibility != "EVAL_ONLY"
-        or config.prompt_revision != "conversation_v2"
+        or config.prompt_revision not in {"conversation_v2", "conversation_v3"}
         or config.limits.model_calls > 2
         or config.limits.read_executions > 1
     ):
@@ -73,10 +91,10 @@ class AIDatabase:
             raise MessagingError(Code.NOT_ALLOWED)
         self.provider = provider
 
-    def config(self, config: GatewayConfig) -> GatewayConfig:
+    def config(self, config: AnyGatewayConfig) -> AnyGatewayConfig:
         if self.provider is None:
             return runtime_config(config)
-        config = GatewayConfig.model_validate(config)
+        config = validate_gateway_config(config)
         if config != self.provider.gateway():
             raise MessagingError(Code.NOT_ALLOWED)
         return config
@@ -96,32 +114,44 @@ class AIDatabase:
         return UUID(raw["job_id"])
 
     async def prepare(
-        self, claim: JobClaim, config: GatewayConfig, *, deadline: datetime
-    ) -> PreparedRun:
+        self, claim: JobClaim, config: AnyGatewayConfig, *, deadline: datetime
+    ) -> AnyPreparedRun:
         config = self.config(config)
         if deadline.tzinfo is None or deadline.utcoffset() is None:
             raise MessagingError(Code.INVALID_INPUT)
-        return decoded(
-            PreparedRun,
-            await self._command(
-                claim,
-                "PREPARE",
-                config=config.model_dump(mode="json"),
-                deadline=deadline.isoformat(),
-            ),
+        raw = await self._command(
+            claim,
+            "PREPARE",
+            config=config.model_dump(mode="json"),
+            deadline=deadline.isoformat(),
         )
+        if config.prompt_revision == "conversation_v3":
+            return decoded(PreparedKnowledgeRun, raw)
+        return decoded(PreparedRun, raw)
 
-    def authority(self, claim: JobClaim, run: PreparedRun) -> "PostgresAuthority":
+    def authority(
+        self, claim: JobClaim, run: AnyPreparedRun
+    ) -> "PostgresAuthority | PostgresKnowledgeAuthority":
+        if isinstance(run, PreparedKnowledgeRun):
+            return PostgresKnowledgeAuthority(self, claim, run)
         return PostgresAuthority(self, claim, run)
 
-    async def reserve(self, claim: JobClaim, run: PreparedRun, budget: Budget) -> int:
+    def receipt(self, config: AnyGatewayConfig, raw: Any) -> RuntimeReceipt:
+        return decoded(
+            KnowledgeRuntimeReceipt
+            if config.prompt_revision == "conversation_v3"
+            else RuntimeReceipt,
+            raw,
+        )
+
+    async def reserve(self, claim: JobClaim, run: AnyPreparedRun, budget: Budget) -> int:
         raw = await self._command(
             claim, "RESERVE", run_id=str(run.run_id), budget=budget.model_dump(mode="json")
         )
         return int(raw["sequence"])
 
     async def complete(
-        self, claim: JobClaim, run: PreparedRun, sequence: int, completion: CallCompletion
+        self, claim: JobClaim, run: AnyPreparedRun, sequence: int, completion: CallCompletion
     ) -> None:
         await self._command(
             claim,
@@ -132,18 +162,18 @@ class AIDatabase:
         )
 
     async def replay(
-        self, claim: JobClaim, config: GatewayConfig, result: ConversationResult | None = None
+        self, claim: JobClaim, config: AnyGatewayConfig, result: ConversationResult | None = None
     ) -> RuntimeReceipt:
         payload: dict[str, object] = {"config": self.config(config).model_dump(mode="json")}
         if result is not None:
             payload["result"] = CONVERSATION_RESULT.validate_python(result).model_dump(mode="json")
-        return decoded(
-            RuntimeReceipt,
+        return self.receipt(
+            config,
             await self.messaging.replay_ai(claim.job_id, claim.claim_token, payload),
         )
 
     async def commit(
-        self, claim: JobClaim, run: PreparedRun, result: ConversationResult
+        self, claim: JobClaim, run: AnyPreparedRun, result: ConversationResult
     ) -> RuntimeReceipt:
         result = CONVERSATION_RESULT.validate_python(result)
         try:
@@ -152,8 +182,8 @@ class AIDatabase:
             if error.code != Code.STALE_CLAIM:
                 raise
         try:
-            return decoded(
-                RuntimeReceipt,
+            return self.receipt(
+                run.config,
                 await self._command(
                     claim, "COMMIT", run_id=str(run.run_id), result=result.model_dump(mode="json")
                 ),
@@ -168,7 +198,7 @@ class AIDatabase:
     async def execute(
         self,
         claim: JobClaim,
-        config: GatewayConfig,
+        config: AnyGatewayConfig,
         adapter: ModelAdapter,
         *,
         deadline: datetime,
@@ -185,9 +215,18 @@ class AIDatabase:
             # No durable wire exchanges are stored. An interrupted invocation
             # cannot reconstruct its Gateway and never starts another POST.
             return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
-        agent = ConversationAgent(
-            config, DurableAdapter(self, claim, run, adapter), self.authority(claim, run)
-        )
+        wrapped = DurableAdapter(self, claim, run, adapter)
+        agent: ConversationAgent | KnowledgeConversationAgent
+        if isinstance(run, PreparedKnowledgeRun):
+            agent = KnowledgeConversationAgent(
+                config,
+                wrapped,
+                PostgresKnowledgeAuthority(self, claim, run),
+                knowledge_pin=run.knowledge_pin,
+                active_projection=run.active_projection,
+            )
+        else:
+            agent = ConversationAgent(config, wrapped, PostgresAuthority(self, claim, run))
         outcome = await agent.run(
             run.binding, run.snapshot, run_id=str(run.run_id), deadline=run.deadline
         )
@@ -203,7 +242,7 @@ class AIDatabase:
         return await self.commit(claim, run, outcome.candidate)
 
     async def _commit_reply(
-        self, claim: JobClaim, run: PreparedRun, result: Reply, telegram: "TelegramClient | None"
+        self, claim: JobClaim, run: AnyPreparedRun, result: Reply, telegram: "TelegramClient | None"
     ) -> RuntimeReceipt | RuntimeStop:
         # The persisted run deadline also bounds HTTP after the agent returns.
         # Probe commits before I/O; observation CAS and canonical selection share
@@ -223,7 +262,7 @@ class AIDatabase:
                 )
                 if raw == {"code": "RIGHTS_REJECTED"}:
                     return RuntimeStop(run_id=run.run_id, reason="AGENT_STOP")
-                return decoded(RuntimeReceipt, raw)
+                return self.receipt(run.config, raw)
         except MessagingError as error:
             if error.code != Code.STALE_CLAIM:
                 raise
@@ -269,11 +308,66 @@ class PostgresAuthority:
         )
 
 
+class PostgresKnowledgeAuthority:
+    """The admitted claim and persisted publication jointly authorize v3 reads."""
+
+    def __init__(self, database: AIDatabase, claim: JobClaim, run: PreparedKnowledgeRun):
+        self.database, self.claim, self.run = database, claim, run
+
+    async def authorize(
+        self, binding: ContextBinding, pin: KnowledgePin, boundary: Boundary
+    ) -> KnowledgeAuthorityDecision:
+        status: str = "ALLOWED"
+        try:
+            await self.database._command(
+                self.claim,
+                "AUTHORIZE",
+                run_id=str(self.run.run_id),
+                binding=binding.model_dump(mode="json"),
+                knowledge_pin=pin.model_dump(mode="json"),
+                boundary=boundary,
+            )
+        except MessagingError as error:
+            if error.code in {Code.AI_STALE, Code.STALE_CLAIM}:
+                status = "STALE"
+            elif error.code in {
+                Code.NOT_ALLOWED,
+                Code.ACCESS_DENIED,
+                Code.AI_BUDGET,
+                Code.AI_INCOMPLETE,
+            }:
+                status = "DENIED"
+            else:
+                raise
+        return decoded(
+            KnowledgeAuthorityDecision,
+            {
+                "status": status,
+                "binding": binding.model_dump(mode="json"),
+                "knowledge_pin": pin.model_dump(mode="json"),
+            },
+        )
+
+    async def read_current(
+        self, binding: ContextBinding, pin: KnowledgePin
+    ) -> KnowledgeContextRead:
+        return decoded(
+            KnowledgeContextRead,
+            await self.database._command(
+                self.claim,
+                "READ",
+                run_id=str(self.run.run_id),
+                binding=binding.model_dump(mode="json"),
+                knowledge_pin=pin.model_dump(mode="json"),
+            ),
+        )
+
+
 class DurableAdapter:
     """Reservation commits before entering the inner adapter; no connection crosses await."""
 
     def __init__(
-        self, database: AIDatabase, claim: JobClaim, run: PreparedRun, inner: ModelAdapter
+        self, database: AIDatabase, claim: JobClaim, run: AnyPreparedRun, inner: ModelAdapter
     ):
         self.database, self.claim, self.run, self.inner = database, claim, run, inner
         self.capabilities = inner.capabilities
