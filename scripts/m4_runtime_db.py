@@ -216,6 +216,7 @@ M5_CAPABILITY_PATHS = M5_CAPABILITY_C0_DOCS | {
     "tests/test_m4_polza.py",
     "scripts/m4_runtime_db.py",
     "tests/test_m4_runtime_db_runner.py",
+    "tests/test_telegram_egress_migration.py",
     "docs/tasks/M5_HANDOFF.md",
 }
 DB_IMAGE = (

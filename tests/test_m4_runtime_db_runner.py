@@ -1941,7 +1941,7 @@ def prepare_m5_capability_event(
 
 
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
-@pytest.mark.parametrize("damage", [None, "base", "base_tree", "branch", "paths", "tree"])
+@pytest.mark.parametrize("damage", [None, "base", "base_tree", "branch", "paths", "tree", "source"])
 def test_m5_capability_outer_export_and_inner_binding(r11_event, monkeypatch, route, damage):
     r = r11_event
     merged = prepare_m5_capability_event(r, monkeypatch, route)
@@ -1953,6 +1953,7 @@ def test_m5_capability_outer_export_and_inner_binding(r11_event, monkeypatch, ro
     assert admission["base"] == carrier.M5_CAPABILITY_BASE
     assert admission["base_tree"] == carrier.M5_CAPABILITY_TREE
     assert set(admission["paths"]) == carrier.M5_CAPABILITY_PATHS
+    assert "tests/test_telegram_egress_migration.py" in admission["paths"]
 
     class BeforeResources(Exception):
         pass
@@ -1991,12 +1992,32 @@ def test_m5_capability_outer_export_and_inner_binding(r11_event, monkeypatch, ro
             "branch": "c4/other",
             "paths": [".github/workflows/ci.yml"],
             "tree": "f" * 40,
+            "source": "f" * 40,
         }[damage]
         carrier.write(path, proof)
         with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
             carrier.source_tree_from_evidence(path)
     else:
         assert carrier.source_tree_from_evidence(path) == admission["tree"]
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "tests/test_telegram_egress.py",
+        "tests/test_telegram_egress_migration_extra.py",
+        "scripts/test_telegram_egress_migration.sh",
+    ],
+)
+def test_m5_capability_migration_repair_refuses_adjacent_paths(
+    r11_event, monkeypatch, route, extra
+):
+    r = r11_event
+    prepare_m5_capability_event(r, monkeypatch, route, extra=extra)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
 
 @pytest.mark.parametrize(

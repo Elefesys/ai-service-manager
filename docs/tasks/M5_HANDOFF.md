@@ -92,18 +92,28 @@ probes не требуется. При конфликте указать точ�
 
 ### Разрешённые paths и source admission
 
-Изменять только по необходимости, не создавать файлы ради заполнения списка:
+Активен ограниченный **C0-M5.2A-02** от repair head
+`fb853b2288724ec5dff7a0e6f51e5d6b628511e8`, та же задача/ветка/base/assignment.
+[Решение C0](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6852941171)
+закрывает C0-M5.2A-01 и разрешает только следующий repair write-set:
 
-- `backend/src/asm/ai/capability_probe.py` — новый ограниченный probe/CLI и его
-  конкретные typed contracts; не новый клиентский runtime.
-- `backend/src/asm/ai/polza.py` — только минимальный helper/рефакторинг общего
-  bounded transport при доказанной необходимости; старое поведение сохраняется.
-- `tests/test_m5_capability_probe.py`, `tests/fixtures/m5_capability_cases.json`
-  (новые); `tests/test_m4_polza.py` только для затронутого общего transport.
-- `scripts/m4_runtime_db.py`, `tests/test_m4_runtime_db_runner.py` — только
-  admission назначенной M5.2A ветки/base/write-set и относящиеся проверки.
-- `docs/tasks/M5_HANDOFF.md` — короткий выбранный контракт/возврат в текущем блоке.
-  Подробная процедура, evidence и логи в одном PR; не добавлять новый реестр.
+- `tests/test_telegram_egress_migration.py` — оба consistency checks используют
+  strict `supervisor == material_deadline + 480`, сохраняя привязку
+  `material_deadline == started_at + 720`; regression на сохранённом дробном S,
+  malformed/expired deadlines и совместный сдвиг terminal/supervisor.
+- `scripts/m4_runtime_db.py` — добавить только exact path этого test file
+  в M5_CAPABILITY_PATHS; прежние admissions и budgets сохраняются.
+- `tests/test_m4_runtime_db_runner.py` — узкий PR/main admission, отказ для
+  соседних paths и неверного source; прежние160 runtime cases/8cleanup.
+- `docs/tasks/M5_HANDOFF.md` — короткий актуальный контракт/возврат здесь.
+
+Producer, shell consumer, bounds600/720/1200/1440, реальное ожидание, cleanup
+и frozen sources не меняются; round/isclose/epsilon/skip не допускаются.
+Первичный probe delta сохранён в ancestry; новые production paths этим repair
+не разрешены. Подробная процедура, source/CI/evidence — в том же Draft PR48.
+После targeted checks — один окончательный code/docs push и штатный полный CI;
+не rerun красный parent. Новый source требует пересчёта reference plan/hash;
+старый176993aa не является допуском.
 
 `AGENTS.md`, `README.md`, `docs/TASK_REGISTER.md` и IMPL-005 — только C0 docs
 ancestor этой выдачи; C4 их не редактирует и не меняет статус приёмки. Их включить
@@ -187,6 +197,11 @@ operator route — OPEN / OWNER_ENVIRONMENT_UNVERIFIED. Read-only PowerShell pre
 Условные plan/start/stop, постоянный receipt, новый source/expiry/plan hash и
 offline/CI evidence — в том же PR48. Старый plan6e72f5fb не переносится.
 Сейчас real/provider/paid HTTP0; VM/установки не выполнялись, M5.2B не начат.
+
+Возврат C4 по C0-M5.2A-02: оба реальных coordinator paths проходят сохранённый
+S=207.841377092 до контролируемой resource boundary; malformed/expired и совместно
+сдвинутые deadlines отвергаются. Targeted67/67 и admission40/40 PASS, Ruff PASS.
+Точный новый source/tree, штатный full CI и пересчитанный reference plan — в PR48.
 
 ## 1. Проверяемый результат всего этапа
 
