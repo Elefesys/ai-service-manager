@@ -152,6 +152,33 @@ dimension/relevance, завершение/UNKNOWN/остаточные огра�
 Отсутствие допуска не мешает завершить весь offline/code пакет, но не заменяется
 автоматическим PASS. M5.2B заранее не начинать.
 
+### Контракт возврата C4 — offline package / REVIEW; real-route UNVERIFIED
+
+Выбраны EVAL_ONLY `openai/gpt-4o-mini` и
+`openai/text-embedding-3-small`, selector `openai`, без fallback. Проверены
+[публичные Vision](https://polza.ai/models/openai/gpt-4o-mini) и
+[embedding](https://polza.ai/models/openai/text-embedding-3-small) catalog metadata
+2026-11-13; RUB token tariffs, explicit1536/float/cosine profile v1.
+Это отдельный capability profile, не смена клиентского RuntimeRoute. Обычный
+account/key access, отсутствующие embedding provider context/parameter metadata
+и нераскрытая ревизия весов остаются OPEN; RU processing не утверждается.
+
+`python -m asm.ai.capability_probe` по умолчанию строит plan без credentials/HTTP.
+Три локальных authored PNG256×256 проходят verify → RGB/metadata stripping →
+inline PNG/base64/detail=low; один batch содержит query/related/unrelated тексты.
+Перед расходом нужен новый допуск к полному source/plan/input/schema hash и UTC
+expiry. Максимум8HTTP:1catalog GET +3Vision POST +1embedding POST +3history detail
+GET для Vision; embedding history не документирован и не вызывается. Отсутствие
+provider в embedding response сохраняет UNKNOWN/резерв0.08, не подменяется
+request selector. Upstream attempts/steps при отсутствии metadata — NOT_REPORTED,
+а не выдуманный1. Без balance API/повторов. Резерв11.75RUB:3×3.89 +0.08, deadline210s,
+key prompt15s, connect5s. Тарифные неизвестности останавливают до POST;
+timeout/неподтверждённый cost сохраняет UNKNOWN/резерв. Create-once local receipt
+запрещает restart/resend; отдельный stop marker отменяет ожидание и новые dispatch.
+Mock PASS не становится semantic/capability PASS. Полные команды для локального
+POSIX TTY, выбранный expiry/plan hash, ограничения и offline/CI evidence — в одном
+Draft PR этой ветки. Сейчас real/provider/paid HTTP0; M5.2B не начат.
+
 ## 1. Проверяемый результат всего этапа
 
 Владелец может завести услуги и подтверждённые знания, проверить изменения и

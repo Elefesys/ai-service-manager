@@ -196,6 +196,28 @@ M5_KNOWLEDGE_PATHS = {
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
 }
+# C0's M5.2A assignment is immutable; this admits only the standalone probe.
+M5_CAPABILITY_BASE = "6942150e9a4ab96222f49702b2e9977178b04e74"
+M5_CAPABILITY_TREE = "12e4481c8a54d219e5bae7acb94b5484cf0b166c"
+M5_CAPABILITY_ASSIGNMENT = "64e80b214b3404728de73030acab4cd1fdc28a4e"
+M5_CAPABILITY_ASSIGNMENT_TREE = "e1ab83979b090a1faa23ef4fd50d10be61a0e962"
+M5_CAPABILITY_BRANCH = "c4/m5-2a-capability-probe-r1"
+M5_CAPABILITY_C0_DOCS = {
+    "AGENTS.md",
+    "README.md",
+    "docs/TASK_REGISTER.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+}
+M5_CAPABILITY_PATHS = M5_CAPABILITY_C0_DOCS | {
+    "backend/src/asm/ai/capability_probe.py",
+    "backend/src/asm/ai/polza.py",
+    "tests/test_m5_capability_probe.py",
+    "tests/fixtures/m5_capability_cases.json",
+    "tests/test_m4_polza.py",
+    "scripts/m4_runtime_db.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "docs/tasks/M5_HANDOFF.md",
+}
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -345,8 +367,11 @@ def source_tree_from_evidence(path=None):
     planning = value["branch"] == M5_PLAN_BRANCH
     configuration = value["branch"] == M5_CONFIGURATION_BRANCH
     knowledge = value["branch"] == M5_KNOWLEDGE_BRANCH
+    capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
+        (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
+        if capability
+        else (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
         if knowledge
         else (M5_CONFIGURATION_BASE, M5_CONFIGURATION_TREE)
         if configuration
@@ -389,6 +414,8 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or knowledge
             and value["event"] in {"pull_request", "push"}
+            or capability
+            and value["event"] in {"pull_request", "push"}
         )
         and type(value["attempt"]) is int
         and value["attempt"] == 1
@@ -408,7 +435,9 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if planning:
+    if capability:
+        require(set(paths) <= M5_CAPABILITY_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif planning:
         require(set(paths) <= M5_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif configuration:
         require(set(paths) <= M5_CONFIGURATION_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -841,6 +870,20 @@ def root_path():
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
 
 
+def capability_event(event):
+    if event.get("head_ref") == M5_CAPABILITY_BRANCH:
+        return True
+    if event["ref"] != "refs/heads/main":
+        return False
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", M5_CAPABILITY_ASSIGNMENT, "HEAD"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    require(result.returncode in (0, 1, 128), "CAPABILITY_ASSIGNMENT_ANCESTRY")
+    return result.returncode == 0
+
+
 def knowledge_event(event):
     if event.get("head_ref") == M5_KNOWLEDGE_BRANCH:
         return True
@@ -877,18 +920,22 @@ def admit_source(evidence):
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    knowledge = knowledge_event(event)
-    configuration = not knowledge and configuration_event(event)
+    capability = capability_event(event)
+    knowledge = not capability and knowledge_event(event)
+    configuration = not (capability or knowledge) and configuration_event(event)
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH
         or planning
         or configuration
-        or knowledge,
+        or knowledge
+        or capability,
         "POLZA_RUNTIME_EVENT_BRANCH",
     )
     base, base_tree = (
-        (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
+        (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
+        if capability
+        else (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
         if knowledge
         else (M5_CONFIGURATION_BASE, M5_CONFIGURATION_TREE)
         if configuration
@@ -898,6 +945,33 @@ def admit_source(evidence):
     )
     if configuration and event["event"] == "pull_request":
         require(event["base_sha"] == base, "CONFIGURATION_EVENT_BASE")
+    if capability:
+        if event["event"] == "pull_request":
+            require(event["base_sha"] == base, "CAPABILITY_EVENT_BASE")
+        require(
+            capture(["git", "rev-parse", M5_CAPABILITY_ASSIGNMENT + "^{tree}"])
+            == M5_CAPABILITY_ASSIGNMENT_TREE,
+            "CAPABILITY_ASSIGNMENT_TREE",
+        )
+        require(
+            capture(["git", "merge-base", M5_CAPABILITY_ASSIGNMENT, "HEAD"])
+            == M5_CAPABILITY_ASSIGNMENT,
+            "CAPABILITY_ASSIGNMENT_ANCESTRY",
+        )
+        require(
+            not capture(
+                [
+                    "git",
+                    "diff",
+                    "--name-only",
+                    M5_CAPABILITY_ASSIGNMENT,
+                    "HEAD",
+                    "--",
+                    *sorted(M5_CAPABILITY_C0_DOCS),
+                ]
+            ),
+            "CAPABILITY_C0_DOCS_IMMUTABLE",
+        )
     if knowledge:
         if event["event"] == "pull_request":
             require(event["base_sha"] == base, "KNOWLEDGE_EVENT_BASE")
@@ -969,7 +1043,9 @@ def admit_source(evidence):
         "tests/test_native_context_db_runner.py",
         "tests/test_m2_3_schema_postgres.py",
     }
-    if knowledge:
+    if capability:
+        allowed = M5_CAPABILITY_PATHS
+    elif knowledge:
         allowed = M5_KNOWLEDGE_PATHS
     elif configuration:
         allowed = M5_CONFIGURATION_PATHS
@@ -1514,7 +1590,9 @@ def run(root):
     write(root / "evidence/mode.json", {"mode": mode})
     # This finite extension is selected only after exact source admission. No
     # environment/CLI override, and the historical/targeted routes remain 600s.
-    sql_test_budget_seconds = 900 if mode == "runtime" and knowledge_event(event) else 600
+    sql_test_budget_seconds = (
+        900 if mode == "runtime" and (capability_event(event) or knowledge_event(event)) else 600
+    )
     run_admitted(root, event, manifest, mode, sql_test_budget_seconds=sql_test_budget_seconds)
 
 
@@ -1532,17 +1610,20 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    knowledge = knowledge_event(event)
-    configuration = not knowledge and configuration_event(event)
+    capability = capability_event(event)
+    knowledge = not capability and knowledge_event(event)
+    configuration = not (capability or knowledge) and configuration_event(event)
     require(
         sql_test_budget_seconds == 600
         or sql_test_budget_seconds == 900
         and mode == "runtime"
-        and knowledge,
+        and (knowledge or capability),
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
+        (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
+        if capability
+        else (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
         if knowledge
         else (M5_CONFIGURATION_BASE, M5_CONFIGURATION_TREE)
         if configuration
@@ -1565,6 +1646,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M5_CAPABILITY_BRANCH
+            if capability
             else M5_KNOWLEDGE_BRANCH
             if knowledge
             else M5_CONFIGURATION_BRANCH

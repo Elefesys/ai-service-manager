@@ -1893,3 +1893,200 @@ def test_historical_admission_cannot_request_900(aggregate_driver, monkeypatch, 
     with pytest.raises(carrier.Refusal, match="^SQL_TEST_BUDGET_ADMISSION$"):
         carrier.run_admitted(r["root"], event, manifest, "runtime", sql_test_budget_seconds=900)
     assert not h["calls"] and not h["cleaned"]
+
+
+def prepare_m5_capability_event(
+    r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False
+):
+    """Real Git base + immutable C0 docs + bounded implementation + test merge."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
+    for relative in sorted(carrier.M5_CAPABILITY_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# constructed C0 capability assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed immutable C0 capability assignment")
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    for relative in sorted(
+        (carrier.M5_CAPABILITY_PATHS - carrier.M5_CAPABILITY_C0_DOCS)
+        | ({extra} if extra else set())
+    ):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            (path.read_text() if path.exists() else "") + "\n# constructed probe delta\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed bounded capability probe")
+    source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
+    base = r["base"] if wrong_base else r["source"]
+    merged = f.git("commit-tree", tree, "-p", base, "-p", source, "-m", "test merge")
+    f.git("reset", "--hard", merged)
+    env, payload = ci_event(Path(r["env"]["GITHUB_EVENT_PATH"]).parent, route)
+    env.update(GITHUB_SHA=merged, GITHUB_RUN_ATTEMPT="1")
+    if route == "same-repository-pr-merge":
+        env["GITHUB_HEAD_REF"] = branch or carrier.M5_CAPABILITY_BRANCH
+        payload["pull_request"]["base"]["sha"] = base
+        payload["pull_request"]["head"].update(sha=source, ref=env["GITHUB_HEAD_REF"])
+    else:
+        payload.update(after=merged, head_commit={"id": merged})
+    r["payload"].clear()
+    r["payload"].update(payload)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    return merged
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("damage", [None, "base", "base_tree", "branch", "paths", "tree"])
+def test_m5_capability_outer_export_and_inner_binding(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    merged = prepare_m5_capability_event(r, monkeypatch, route)
+    r["run"]()
+    assert len(r["boundary"]) == 1 and not list((r["root"] / "private").iterdir())
+    bound = r["boundary"][0]
+    assert bound["mode"] == "runtime" and bound["sql_test_budget_seconds"] == 900
+    admission = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert admission["base"] == carrier.M5_CAPABILITY_BASE
+    assert admission["base_tree"] == carrier.M5_CAPABILITY_TREE
+    assert set(admission["paths"]) == carrier.M5_CAPABILITY_PATHS
+
+    class BeforeResources(Exception):
+        pass
+
+    actual_run = subprocess.run
+
+    def archive_boundary(args, *a, **kw):
+        assert args[0] == "git", "resource or credential access before source export"
+        if args[1] == "archive":
+            raise BeforeResources
+        return actual_run(args, *a, **kw)
+
+    monkeypatch.setattr(subprocess, "run", archive_boundary)
+    with pytest.raises(BeforeResources):
+        r["real_run_admitted"](
+            bound["root"],
+            bound["event"],
+            bound["manifest"],
+            bound["mode"],
+            sql_test_budget_seconds=900,
+        )
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert proof["branch"] == carrier.M5_CAPABILITY_BRANCH and proof["source"] == merged
+    for name, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": proof["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + name, value)
+    if damage:
+        proof[damage] = {
+            "base": "f" * 40,
+            "base_tree": "f" * 40,
+            "branch": "c4/other",
+            "paths": [".github/workflows/ci.yml"],
+            "tree": "f" * 40,
+        }[damage]
+        carrier.write(path, proof)
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    else:
+        assert carrier.source_tree_from_evidence(path) == admission["tree"]
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "branch",
+        "base",
+        "base_tree",
+        "assignment_tree",
+        "assignment_ancestry",
+        "workflow",
+        "migration",
+        "ui",
+        "c0_docs",
+    ],
+)
+def test_m5_capability_refuses_before_resources_and_preserves_c0_docs(
+    r11_event, monkeypatch, damage
+):
+    r = r11_event
+    prepare_m5_capability_event(
+        r,
+        monkeypatch,
+        "same-repository-pr-merge",
+        extra={
+            "workflow": ".github/workflows/ci.yml",
+            "migration": "migrations/new.py",
+            "ui": "frontend/new.ts",
+            "c0_docs": "docs/TASK_REGISTER.md",
+        }.get(damage),
+        branch="c4/other" if damage == "branch" else None,
+        wrong_base=damage == "base",
+    )
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_TREE", "f" * 40)
+    if damage == "assignment_tree":
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT_TREE", "f" * 40)
+    if damage == "assignment_ancestry":
+        tree = r["f"].git("rev-parse", "HEAD^{tree}")
+        unrelated = r["f"].git("commit-tree", tree, "-m", "lost assignment ancestor")
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT", unrelated)
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT_TREE", tree)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("fault", [None, "budget", "cleanup", "missing_call"])
+def test_m5_capability_inherits_all_160_cases_and_eight_cleanups(
+    aggregate_driver, monkeypatch, route, fault
+):
+    h = aggregate_driver
+    r = h["r"]
+    prepare_m5_capability_event(r, monkeypatch, route)
+    h["fault"]["kind"] = fault
+    if fault is None:
+        r["run"]()
+    else:
+        with pytest.raises(carrier.Refusal, match="^PRIMARY_FAILED$"):
+            r["run"]()
+    summary = json.loads((r["root"] / "evidence/summary.json").read_text())
+    assert summary["sql_test_budget_seconds"] == 900
+    assert summary["expected_cases"] == summary["collected_cases"] == 160
+    assert summary["groups_visited"] == len(h["cleaned"]) == len(set(h["cleaned"])) == 8
+    assert summary["result"] == ("PASS" if fault is None else "FAIL")
+    assert all(
+        0 < seconds <= 600 for _, label, seconds in h["calls"] if label == carrier.COMMAND_REPORT
+    )
+
+
+@pytest.mark.parametrize("damage", ["assignment_ancestry", "c0_docs", "path"])
+def test_m5_capability_main_push_refuses_damaged_assignment_without_resources(
+    r11_event, monkeypatch, damage
+):
+    r = r11_event
+    prepare_m5_capability_event(
+        r,
+        monkeypatch,
+        "main-push",
+        extra={
+            "c0_docs": "docs/TASK_REGISTER.md",
+            "path": "backend/src/asm/foundation.py",
+        }.get(damage),
+    )
+    if damage == "assignment_ancestry":
+        tree = r["f"].git("rev-parse", "HEAD^{tree}")
+        unrelated = r["f"].git("commit-tree", tree, "-m", "lost main assignment")
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT", unrelated)
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT_TREE", tree)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())

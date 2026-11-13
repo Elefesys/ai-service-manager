@@ -38,6 +38,11 @@ HISTORY_LIST = HISTORY + "?requestType=chat&page=1&limit=5&sortBy=createdAt&sort
 GENERATION_ID = r"gen_[0-9]{1,64}"
 HISTORY_BYTES = 65536
 HISTORY_SECONDS = 15.0
+# Used only by the separately admitted M5.2A probe, never by RuntimeRoute.
+CAPABILITY_CATALOG = (
+    "https://polza.ai/api/v1/models?include_providers=true&include_capabilities=true"
+)
+EMBEDDINGS = "https://polza.ai/api/v1/embeddings"
 GPT_HISTORY_PROFILE = "gpt_eval_history_v2"
 MODELS = (
     "openai/gpt-6-luna",
@@ -546,6 +551,54 @@ async def bounded_http(
         and (body is not None or seconds > HISTORY_SECONDS or maximum > HISTORY_BYTES)
     ):
         raise PolzaFailure("ADAPTER_ERROR", "REQUEST_ADMISSION")
+    return await _bounded_http(
+        key, url, body=body, seconds=seconds, maximum=maximum, transport=transport
+    )
+
+
+async def bounded_capability_http(
+    key: SecretStr,
+    operation: Literal["catalog", "embedding"],
+    *,
+    body: bytes | None,
+    seconds: float,
+    maximum: int,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> bytes:
+    """Two exact endpoints; no caller-supplied URL or legacy allowlist change."""
+    valid = (
+        operation == "catalog"
+        and body is None
+        and 0 < seconds <= 15
+        and 0 < maximum <= 2097152
+        or operation == "embedding"
+        and type(body) is bytes
+        and len(body) <= 8192
+        and 0 < seconds <= 40
+        and 0 < maximum <= 262144
+    )
+    if not valid:
+        raise PolzaFailure("ADAPTER_ERROR", "REQUEST_ADMISSION")
+    return await _bounded_http(
+        key,
+        CAPABILITY_CATALOG if operation == "catalog" else EMBEDDINGS,
+        body=body,
+        seconds=seconds,
+        maximum=maximum,
+        transport=transport,
+    )
+
+
+async def _bounded_http(
+    key: SecretStr,
+    url: str,
+    *,
+    body: bytes | None,
+    seconds: float,
+    maximum: int,
+    transport: httpx.AsyncBaseTransport | None,
+) -> bytes:
+    """Shared finite transport; public wrappers own their independent admission."""
     try:
         async with asyncio.timeout(seconds):
             async with httpx.AsyncClient(
