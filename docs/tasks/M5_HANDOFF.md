@@ -335,7 +335,7 @@ Legacy SQL/Python replay/COMPLETE сохранены, backfill и regeneration �
 без новых таблиц. Populated downgrade отказывается до потери новых данных.
 Installed PG18/source: **207 functions /52 tables /736 columns**, точные bodies,
 ACL/RLS/constraints и прежние0013–0018 profiles. Full pin
-`7e756d867f366c28983809100f41e15cebc4809d2878d20947b950f651bcd583`, body
+`e2bfd685188e1b67430de02c03eb3cef3af8f13de74e13d641032085b3b23c36`, body
 `93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5`, nonfunction
 `1583e77dbe74107fe93cbadd6c43ff20d1521e9f62b4a6b22e89447f5569743c` независимо сверены C3.
 
@@ -381,7 +381,20 @@ pagination history events: остаются26 messages (>page25), seed127<128, �
 Real provider HTTP/owner key reads/Telegram/VM/paid/live **0**. Это synthetic
 LOCAL/TEST plumbing/guards, не semantic quality реальной LLM и не M5 целиком.
 AI default OFF,2 calls/1 READ, старые UNKNOWN/holds и operational gates сохранены.
-Следующий шаг: штатный full CI этого PR, затем source/contract review C0;
+Первый [CI43361745800](https://github.com/Elefesys/ai-service-manager/actions/runs/43361745800)
+на head59c4b87e/treee8ee6904 выявил неверный application full pin: локальная
+БД имела locale C, штатный Docker — en_US.utf8. Fresh artifact14009055081
+независимо подтвердил all source bodies/security/nonfunction PASS, declared
+valid=true и full e2bfd685; отличие только в порядке5 пар function rows.
+Исправлен один application pin под canonical Docker; body/nonfunction/SQL и
+строгие проверки прежние. Локальный reset с en_US.utf8 воспроизвёл exact e2bfd685
+и valid=true; targeted profile pytest завершился exit0. Затем workspace стал
+unavailable: повтор API/Ruff/mypy repair не завершён, нового PASS им не приписываем.
+Первый native-context lane также RED; подробности в artifact14009171371,
+локальная распаковка заблокирована недоступностью environment. Точная причина
+этого отдельного отказа пока не установлена; исправленный кандидат проверяет
+новый полный CI, без unchanged retry или объявления прежнего RED случайностью.
+Следующий шаг: штатный full CI исправленного кандидата, затем review C0;
 после зелёного CI status-only commit не нужен. Merge и следующий CURRENT — C0.
 
 ## 1. Проверяемый результат всего этапа
