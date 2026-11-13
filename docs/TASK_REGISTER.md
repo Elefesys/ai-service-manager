@@ -2,41 +2,41 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.1A INTEGRATED / VERIFIED; M5.1B IN_PROGRESS / CI repair / 2026-11-13
+## CURRENT — M5.1B INTEGRATED / VERIFIED; M5.2A IN_PROGRESS / 2026-11-13
 
-PR #46 слит владельцем. Accepted main:
-`6c27be8487f3f8792cf01ed2a0fcdde130ea7a52`,
-tree `1aa2959f1ba28438304ef758947ba241f6d0b729` равен reviewed candidate
-`d4626334613a91a6ff5e75c57b2edcc05181f69f`.
-[C0 review PASS](https://github.com/Elefesys/ai-service-manager/pull/46#pullrequestreview-5876870257);
-[post-merge CI43245856346](https://github.com/Elefesys/ai-service-manager/actions/runs/43245856346),
+PR #47 слит владельцем. Accepted main:
+`6942150e9a4ab96222f49702b2e9977178b04e74`,
+tree `12e4481c8a54d219e5bae7acb94b5484cf0b166c` равен reviewed candidate
+`525092b701068465e73db6a912b837808b2ab284`.
+[C0 review PASS](https://github.com/Elefesys/ai-service-manager/pull/47#pullrequestreview-5887861003);
+[post-merge CI43389871150](https://github.com/Elefesys/ai-service-manager/actions/runs/43389871150),
 push/main, attempt1: **12/12 SUCCESS**, все completed, failed steps нет.
-M5.1A — **INTEGRATED / VERIFIED в LOCAL/TEST**: owner configuration API,
-validation/preview, atomic publish/rollback, immutable release/receipt и active
-projection; additive0018. UI и использование знаний в ответе ещё не реализованы.
-IMPL-005 ACCEPTED / LOCKED; PR45/M5.0 и receipt98136c33/M4 сохранены в ancestry.
+M5.1B — **INTEGRATED / VERIFIED в synthetic LOCAL/TEST**: опубликованные знания
+в защищённом AI context, activation guards и минимальный owner UI; additive0019.
+v3 provider contract подтверждён через MockTransport; новый real-provider PASS
+не заявляется. Детальные результаты и CI repair закрытого PR — в review выше.
 
-Единственная активная задача — **C4-M5.1B-PUBLISHED-KNOWLEDGE-R1 — IN_PROGRESS / CI repair**.
-Ведущий C4; C1/C3, C2 для SQL/миграции, затем C5 участвуют последовательно в одном
-PR. Ветка `c4/m5-1b-published-knowledge-r1` начинается с C0 docs-only handoff
-поверх принятого main выше. Результат: опубликованные услуги/правила/FAQ в
-защищённом AI context и минимальный owner UI; смена activation блокирует
-устаревший вызов/ответ. Точный контракт, paths, зависимости и критерии — только
-в [M5_HANDOFF](tasks/M5_HANDOFF.md). Current migration0018; C0 резервирует0019
-с подтверждением C2 до SQL. M5.2A и следующие срезы не выданы.
+M5.1A/PR #46 остаётся INTEGRATED / VERIFIED на
+`6c27be8487f3f8792cf01ed2a0fcdde130ea7a52`;
+[post-merge CI43245856346](https://github.com/Elefesys/ai-service-manager/actions/runs/43245856346)
+12/12 SUCCESS. IMPL-005 ACCEPTED / LOCKED; PR45/M5.0 и receipt98136c33/M4
+сохранены в ancestry. Принятые application и architecture решения не пересмотрены.
 
-Исходный [CI43363880768](https://github.com/Elefesys/ai-service-manager/actions/runs/43363880768)
-завершён **10/12 SUCCESS**. [C0 разрешил ограниченный repair](https://github.com/Elefesys/ai-service-manager/pull/47#issuecomment-6844936121):
-bounded900 runtime budget только после точного M5.1B admission и адресное
-исправление двух browser worker failures. Приёмка впереди; подробные причины,
-целевые проверки и оставшийся полный CI — в M5_HANDOFF/PR #47.
+Единственная активная задача — **C4-M5.2A-CAPABILITY-PROBE-R1 — IN_PROGRESS**.
+Ведущий C4; C6 только при конкретной необходимости операторского маршрута,
+последовательно в том же срезе. Ветка `c4/m5-2a-capability-probe-r1` начинается
+с C0 docs-only handoff поверх main6942150e выше. Результат: выбранные конкретные
+Vision/text-embedding profiles, локально проверенный synthetic probe и готовая
+процедура с точным числом запросов/пределом расходов для отдельного допуска.
+После допуска требуется actual capability receipt; подготовка/MockTransport не
+закрывают M5.2A. Paths, зависимости и критерии — в [M5_HANDOFF](tasks/M5_HANDOFF.md).
+Current migration0019; следующая не назначена. M5.2B и далее не выданы.
 
 Receiver ACK/fence, полный live HUMAN/Resume, UNKNOWN/holds и PC transport
-сохраняют прежний статус. Только synthetic LOCAL/TEST; VM/paid/live/реальные
-данные и merge нового PR не разрешены. C0 не повторял неизменённый CI/аудит M4.
-Этот docs-only handoff не является новой реализацией или новым CI evidence.
-Это одно обновление CURRENT делегировано C4 только в совместном code/docs repair
-push решением C0 выше. Дальнейшую приёмку и CURRENT ведёт C0; поручение одно.
+сохраняют прежний статус. Сейчас разрешена только synthetic LOCAL/TEST подготовка:
+provider/paid/live/VM/реальные данные и merge нового PR отдельно не разрешены.
+C0 не запускал повторный CI и не повторял аудит M4; это docs-only обновление
+приёмки и одной выдачи. Дальнейшую приёмку и CURRENT ведёт C0.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 
