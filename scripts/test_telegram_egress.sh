@@ -514,7 +514,7 @@ http {
             reports = root / 'reports'
             reports.mkdir(exist_ok=True)
             (reports / 'candidate-egress-source.json').write_text(json.dumps({
-                'source_sha': source, 'expected_revision': '0018', 'images': proofs,
+                'source_sha': source, 'expected_revision': '0019', 'images': proofs,
                 # Raw commit headers preserve parents even in Actions' shallow
                 # checkout; revision walking would incorrectly report no parents.
                 'parents': [line[7:] for line in run(['git', 'cat-file', 'commit', source]).decode().split('\n\n', 1)[0].splitlines() if line.startswith('parent ')],

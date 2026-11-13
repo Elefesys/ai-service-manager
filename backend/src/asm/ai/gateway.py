@@ -11,11 +11,11 @@ from asm.ai.contracts import (
     CONVERSATION_RESULT,
     AdapterRequest,
     AdapterResponse,
+    AnyGatewayConfig,
     Budget,
     Capabilities,
     Cost,
     ErrorCode,
-    GatewayConfig,
     GatewayRequest,
     GatewayResult,
     ToolCall,
@@ -23,6 +23,7 @@ from asm.ai.contracts import (
     ToolResult,
     Usage,
     strict_json,
+    validate_gateway_config,
 )
 
 
@@ -70,9 +71,9 @@ class ModelGateway:
     """
 
     def __init__(
-        self, config: GatewayConfig, request: GatewayRequest, adapter: ModelAdapter
+        self, config: AnyGatewayConfig, request: GatewayRequest, adapter: ModelAdapter
     ) -> None:
-        self._config = GatewayConfig.model_validate(config)
+        self._config = validate_gateway_config(config)
         self._request = GatewayRequest.model_validate(request)
         self._adapter = adapter
         self._deadline = time.monotonic() + min(
@@ -91,11 +92,7 @@ class ModelGateway:
         self._seen: set[str] = set()
         self._closed = False
         self._busy = False
-        prompt_path = (
-            "prompts/conversation_v2.txt"
-            if self._config.prompt_revision == "conversation_v2"
-            else "prompts/conversation_v1.txt"
-        )
+        prompt_path = f"prompts/{self._config.prompt_revision}.txt"
         self._prompt = files("asm.ai").joinpath(prompt_path).read_text("utf-8")
         self._schema = (
             files("asm.ai").joinpath("schemas/conversation_result_v1.json").read_text("utf-8")

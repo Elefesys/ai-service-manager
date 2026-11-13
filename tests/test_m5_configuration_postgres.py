@@ -384,14 +384,39 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
 
     async def rows():
         async with h.migrator.connect() as c:
+            # Compare every historical field while the additive 0019 columns
+            # are present. Legacy rows must never acquire a publication pin.
+            revision = (
+                await c.execute(text("SELECT version_num FROM platform.alembic_version"))
+            ).scalar_one()
+            if revision == "0019":
+                assert not (
+                    await c.execute(
+                        text(
+                            "SELECT EXISTS(SELECT 1 FROM platform.ai_runs WHERE knowledge_pin IS NOT NULL)"
+                        )
+                    )
+                ).scalar_one()
             return {
                 table: sorted(
                     json.dumps(v, sort_keys=True)
-                    for v in (await c.execute(text(f"SELECT to_jsonb(t) FROM {table} t"))).scalars()
+                    for v in (
+                        await c.execute(
+                            text(
+                                f"SELECT jsonb_build_object({','.join(repr(name) + ',t.' + name for name in names)}) FROM {table} t"
+                            )
+                        )
+                    ).scalars()
                 )
-                for table in previous["columns"]
+                for table, names in previous["columns"].items()
                 if table != "platform.alembic_version"
             }
+
+    async def scalar_revision():
+        async with h.migrator.connect() as c:
+            return (
+                await c.execute(text("SELECT version_num FROM platform.alembic_version"))
+            ).scalar_one()
 
     async def profile(revision):
         expected = catalog.source_catalog(Path.cwd(), revision)
@@ -412,20 +437,27 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
                 ).all()
             )
             full, nonfunction = (await c.execute(text(catalog.CATALOG_SQL))).one()
-            name = (
-                "business_configuration_schema_profile"
-                if revision == "0018"
-                else "ai_reply_rights_schema_profile"
-            )
+            name = {
+                "0019": "published_knowledge_schema_profile",
+                "0018": "business_configuration_schema_profile",
+                "0017": "ai_reply_rights_schema_profile",
+            }[revision]
             declared = (await c.execute(text(f"SELECT platform.{name}()"))).scalar_one()
             return catalog.compare_catalog(
                 expected, functions, resolved, full, nonfunction, lambda: declared
             )
 
     before = await rows()
-    current = await profile("0018")
+    current = await profile("0019")
     await h.runtime.engine.dispose()
+    historical18 = None
     try:
+        await _migrate("downgrade", "0018")
+        historical18 = await profile("0018")
+        assert historical18[1]["valid"] is True
+        assert await rows() == before
+        with pytest.raises(RuntimeError, match="schema"):
+            await h.runtime.check()
         await _migrate("downgrade", "0017")
         assert (await profile("0017"))[1]["valid"] is True
         assert await rows() == before
@@ -433,14 +465,19 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
             await h.runtime.check()
     finally:
         await _migrate("upgrade", "0018")
-    await _migrate("upgrade", "0018")
-    assert await rows() == before and await profile("0018") == current
+        if historical18 is not None:
+            assert await profile("0018") == historical18
+        await _migrate("upgrade", "0019")
+    await _migrate("upgrade", "0019")
+    assert await rows() == before and await profile("0019") == current
     await h.runtime.check()
     await edit(h)
     before_used = await counts(h)
     with pytest.raises(AssertionError, match="CONFIGURATION_DURABLE_DATA"):
         await _migrate("downgrade", "0017")
     assert await counts(h) == before_used
+    assert await scalar_revision() == "0019"
+    assert await profile("0019") == current
     await h.runtime.check()
 
 

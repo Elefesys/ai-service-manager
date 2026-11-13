@@ -10,11 +10,19 @@ import os
 import stat
 import sys
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
-from uuid import uuid4
+from typing import Literal
+from uuid import UUID, uuid4
 
+from asm.ai.contracts import DTO, KnowledgeGatewayConfig, Limits, Route, strict_json
+from asm.ai.database import AIDatabase
+from asm.ai.fake import FakeAdapter
+from asm.ai.knowledge import KnowledgeView, project_knowledge
+from asm.ai.runtime import SyntheticRuntime
+from asm.ai.runtime_contracts import KnowledgeRuntimeReceipt, PreparedKnowledgeRun
 from asm.conversations.escalations import MARKER
 from asm.files.config import StorageSettings
 from asm.files.database import FileDatabase
@@ -26,6 +34,7 @@ from asm.foundation import DATABASE_SCHEMA_REVISION
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.models import EventKind, NormalizedEventV1, OutcomeKind
+from asm.messaging.results import AIJobClaim, FinalizeResult, ScanStep
 from asm.messaging.worker import Worker
 from asm.telegram.database import TelegramIngress
 from m2_4_browser_fixture import (
@@ -38,6 +47,7 @@ from m2_4_browser_fixture import (
 )
 from PIL import Image
 from provision_local_auth import PrivateArgumentParser, ProvisioningError
+from pydantic import Field
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -55,6 +65,7 @@ ACTIONS = (
     "stats",
     "escalate-main",
     "escalate-alternate",
+    "knowledge-answer",
 )
 COUNTER_DIRECTORY = Path("/run/m2-browser-counters")
 
@@ -74,6 +85,10 @@ def validate_operation(preset, operation):
         and preset not in ("esc_happy", "esc_narrow")
     ):
         raise ProvisioningError("Invalid finite Escalation runner action")
+    if (operation == "knowledge-answer" and preset != "knowledge") or (
+        preset == "knowledge" and operation not in {"knowledge-answer", "stats"}
+    ):
+        raise ProvisioningError("Finite knowledge browser action required")
 
 
 def target():
@@ -224,9 +239,11 @@ def seed_events():
                 yield event(
                     preset, f"conversation-{index}", conversation=f"page-{index}", connection=index
                 )
-            for index in range(1, 27):
+            # main +24 history +ready image still crosses the real limit25;
+            # leave room for two text-only knowledge fixtures under the old cap.
+            for index in range(1, 25):
                 yield event(preset, f"history-{index}")
-        if preset not in ESCALATION_PRESETS + NATIVE_PRESETS:
+        if preset not in ESCALATION_PRESETS + NATIVE_PRESETS + ("knowledge",):
             yield event(preset, "ready-image", image="ready")
         if preset == "happy":
             yield event(preset, "failed-image", image="failed")
@@ -239,6 +256,8 @@ def controlled_images(provider):
     stream = BytesIO()
     Image.new("RGB", (23, 17), (21, 90, 153)).save(stream, format="PNG")
     for preset in PRESETS:
+        if preset == "knowledge":
+            continue
         for label in ("ready", "pending"):
             provider.register(bot(preset), f"m24-image-{label}", stream.getvalue())
     # No registered bytes for "failed": the actual FetchTransfer finalizes the
@@ -489,6 +508,284 @@ async def escalate(kernel, worker, adapter, preset, operation):
     raise ProvisioningError("Bounded Escalation creation not observed")
 
 
+def knowledge_config():
+    """One finite synthetic v3 composition; no provider/key/enable configuration."""
+    return KnowledgeGatewayConfig(
+        revision="browser_published_knowledge_v1",
+        route=Route(
+            branch="RU_AGGREGATOR",
+            adapter="fake",
+            execution="FAKE",
+            endpoint="https://fake.invalid/v1",
+            model="openai/gpt-6-luna",
+            upstream="synthetic-official",
+            eligibility="EVAL_ONLY",
+        ),
+        prompt_revision="conversation_v3",
+        schema_revision="conversation_result_v1",
+        limits=Limits(
+            model_calls=2,
+            read_executions=1,
+            input_bytes=65536,
+            output_bytes=8192,
+            input_tokens=32768,
+            output_tokens=1024,
+            total_tokens=100000,
+            duration_seconds=30.0,
+            currency="RUB",
+            cost_budget=Decimal("0.30"),
+            call_cost_reservation=Decimal("0.10"),
+        ),
+    )
+
+
+class KnowledgeBrowserDatabase(AIDatabase):
+    prepared = None
+
+    async def prepare(self, *args, **kwargs):
+        run = await super().prepare(*args, **kwargs)
+        if not isinstance(run, PreparedKnowledgeRun):
+            raise ProvisioningError("Knowledge-aware browser PREPARE required")
+        self.prepared = run
+        return run
+
+
+class KnowledgeBrowserKernel(MessagingDatabase):
+    finalized = None
+
+    async def finish_send(self, *args, **kwargs):
+        result = await super().finish_send(*args, **kwargs)
+        self.finalized = result
+        return result
+
+    async def claim_knowledge(self, cutoff, *, ai=False):
+        # The public bounded paging contract skips jobs older than this fixed
+        # server-side boundary. Deliberately pending unrelated browser fixtures
+        # are neither claimed nor drained. Every returned job is admitted normally.
+        name = "m5-knowledge-ai" if ai else "m5-knowledge-work"
+        self._claim_scan[name] = ScanStep(
+            step="BUSY", scan_until=cutoff + timedelta(seconds=30), at=cutoff, id=UUID(int=0)
+        )
+        return await self.claim_job(name, ai=ai)
+
+
+class KnowledgeBrowserModel(FakeAdapter):
+    """Echo a FAQ present in the actual Gateway input; no hardcoded business answer."""
+
+    def __init__(self, database, barrier):
+        super().__init__(knowledge_config().route)
+        self.database, self.barrier = database, barrier
+        self.view = None
+
+    async def complete(self, request):
+        await self.barrier("model")
+        run = self.database.prepared
+        if run is None or request.config != run.config or self.requests:
+            raise ProvisioningError("One pinned browser model request required")
+        values = [strict_json(m.text) for m in request.request.messages if m.role == "context"]
+        candidates = [v for v in values if v.get("revision") == "business_knowledge_v1"]
+        if len(candidates) != 1:
+            raise ProvisioningError("Published model projection required")
+        view = KnowledgeView.model_validate_json(json.dumps(candidates[0], allow_nan=False))
+        current = [
+            item
+            for message in request.request.messages
+            if message.role == "user"
+            for item in strict_json(message.text)["current"]
+        ]
+        query = "\n".join(item["text"] for item in current if item["text"] is not None)
+        if view != project_knowledge(run.active_projection, run.knowledge_pin, query):
+            raise ProvisioningError("Model facts differ from the pinned publication")
+        if view.status != "PUBLISHED" or not view.faqs:
+            raise ProvisioningError("Owner-published browser FAQ required")
+        for private in (
+            run.binding.workspace_id,
+            run.binding.client_id,
+            run.binding.business_id,
+            run.knowledge_pin.release_id,
+        ):
+            if str(private) in request.input_json():
+                raise ProvisioningError("Private binding in model input")
+        self.view = view
+        response = await super().complete(request)
+        return response.model_copy(
+            update={
+                "output_json": json.dumps(
+                    {
+                        "kind": "reply",
+                        "text": view.faqs[0].fact.answer,
+                        "reason": None,
+                    },
+                    ensure_ascii=False,
+                )
+            }
+        )
+
+
+class KnowledgeBrowserTransport(FixtureAdapter):
+    model = None
+
+    async def send(self, permit):
+        if (
+            self.model is None
+            or self.model.view is None
+            or permit.provider != "CONTROLLED"
+            or permit.text != self.model.view.faqs[0].fact.answer
+        ):
+            raise ProvisioningError("Canonical published text required at browser send")
+        return await super().send(permit)
+
+
+class KnowledgeBrowserJournal(DTO):
+    revision: Literal["browser_knowledge_receipt_v1"]
+    question_inbox_id: UUID
+    claim: AIJobClaim = Field(repr=False)
+    receipt: KnowledgeRuntimeReceipt = Field(repr=False)
+    finalized: FinalizeResult = Field(repr=False)
+    model_calls: Literal[1]
+    source: str = Field(min_length=1, max_length=120)
+
+
+def knowledge_journal(value=None):
+    """Private bounded ACK evidence; it never authorizes a model call or resend."""
+    ledger = ledger_path("knowledge")  # Validate the private current-owner directory.
+    path = ledger.with_name("knowledge-receipt.json")
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        if value is None:
+            return None
+        data = value.model_dump_json().encode("utf-8")
+        if len(data) > 8192:
+            raise ProvisioningError("Bounded knowledge browser journal required")
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            if os.write(descriptor, data) != len(data):
+                raise ProvisioningError("Complete browser ACK journal required")
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        return value
+    try:
+        info = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or info.st_nlink != 1
+            or not 0 < info.st_size <= 8192
+        ):
+            raise ProvisioningError("Private bounded knowledge browser journal required")
+        data = os.read(descriptor, 8193)
+    finally:
+        os.close(descriptor)
+    saved = KnowledgeBrowserJournal.model_validate_json(
+        json.dumps(strict_json(data.decode("utf-8")))
+    )
+    if value is not None and saved != value:
+        raise ProvisioningError("Knowledge browser journal already belongs to another result")
+    return saved
+
+
+def knowledge_report(journal, *, replayed):
+    result = journal.receipt.result
+    counted = counters("knowledge")
+    if (
+        result.kind != "reply"
+        or journal.finalized.status != "SENT"
+        or counted != {"calls": 1, "effects": 1}
+    ):
+        raise ProvisioningError("One canonical browser reply/effect required")
+    pin = journal.receipt.knowledge_pin
+    return {
+        "model_calls": journal.model_calls,
+        **counted,
+        "activation_version": pin.activation_version,
+        "release_id": str(pin.release_id),
+        "answer": result.text,
+        "source": journal.source,
+        "replayed": replayed,
+    }
+
+
+async def knowledge_answer(engine, barrier):
+    kernel = KnowledgeBrowserKernel(engine, environment="TEST")
+    transport = KnowledgeBrowserTransport("knowledge", OutcomeKind.SUCCESS, barrier)
+    runtime = SyntheticRuntime(kernel, knowledge_config(), lambda: model, environment="TEST")
+    runtime.database = KnowledgeBrowserDatabase(kernel, environment="TEST", delivery=True)
+    model = KnowledgeBrowserModel(runtime.database, barrier)
+    transport.model = model
+    worker = Worker(kernel, transport, ai=runtime)
+    async with kernel._transaction() as connection:
+        cutoff = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
+    value = replace(
+        event("knowledge", "published-question"),
+        text="Как подготовиться к консультации? Synthetic preparation.",
+    )
+    incoming = await kernel.ingest_event(transport.source(value.bot_identity), value, uuid4())
+    journal = knowledge_journal()
+    if journal is not None:
+        if (
+            incoming.code != "DUPLICATE"
+            or journal.question_inbox_id != incoming.inbox_id
+            or journal.claim.workspace_id != incoming.workspace_id
+        ):
+            raise ProvisioningError("Journal requires its original canonical question")
+        saved = await runtime.database.replay(journal.claim, knowledge_config())
+        if saved != journal.receipt:
+            raise ProvisioningError("Canonical knowledge receipt changed")
+        return knowledge_report(journal, replayed=True)
+    if incoming.code != "ACCEPTED" or counters("knowledge") != {"calls": 0, "effects": 0}:
+        raise ProvisioningError("Fresh knowledge question or saved canonical journal required")
+    ai_claim = None
+    connection_id = None
+    async with asyncio.timeout(25):
+        for _ in range(512):
+            claim = await kernel.claim_knowledge(cutoff, ai=ai_claim is None)
+            if claim is None:
+                claim = await kernel.claim_knowledge(cutoff)
+            if claim is None:
+                await asyncio.sleep(0.025)
+                continue
+            if claim.workspace_id != incoming.workspace_id:
+                raise ProvisioningError("Exclusive knowledge browser job required")
+            if connection_id is None:
+                if claim.kind != "PROCESS_INBOX" or claim.job_id != incoming.job_id:
+                    raise ProvisioningError("Original knowledge question Inbox required")
+                connection_id = claim.connection_id
+            elif claim.connection_id != connection_id:
+                raise ProvisioningError("Original knowledge connection required")
+            if claim.kind not in {"PROCESS_INBOX", "PROCESS_TURN", "SEND_AI_TEXT"}:
+                raise ProvisioningError("Text-only knowledge browser job required")
+            if isinstance(claim, AIJobClaim):
+                if ai_claim is not None:
+                    raise ProvisioningError("One browser model job required")
+                ai_claim = claim
+            await worker.execute(claim)
+            if kernel.finalized is None:
+                continue
+            if ai_claim is None or model.view is None or len(model.requests) != 1:
+                raise ProvisioningError("Completed bounded knowledge browser model required")
+            receipt = await runtime.database.replay(ai_claim, knowledge_config())
+            if (
+                not isinstance(receipt, KnowledgeRuntimeReceipt)
+                or receipt.knowledge_pin != runtime.database.prepared.knowledge_pin
+            ):
+                raise ProvisioningError("Canonical published browser pin required")
+            journal = KnowledgeBrowserJournal(
+                revision="browser_knowledge_receipt_v1",
+                question_inbox_id=incoming.inbox_id,
+                claim=ai_claim,
+                receipt=receipt,
+                finalized=kernel.finalized,
+                model_calls=1,
+                source=model.view.faqs[0].fact.source,
+            )
+            knowledge_journal(journal)
+            return knowledge_report(journal, replayed=False)
+    raise ProvisioningError("Bounded knowledge browser result not observed")
+
+
 async def action(preset, operation):
     validate_operation(preset, operation)
     url, settings = target()
@@ -506,6 +803,9 @@ async def action(preset, operation):
             async def no_transaction(_):
                 if engine.pool.checkedout() != 0:
                     raise ProvisioningError("External browser TEST I/O holds a DB connection")
+
+            if operation == "knowledge-answer":
+                return await knowledge_answer(engine, no_transaction)
 
             kernel = MessagingDatabase(engine)
             outcome = {

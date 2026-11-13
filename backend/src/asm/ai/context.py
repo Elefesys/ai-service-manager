@@ -9,6 +9,8 @@ from uuid import UUID
 from pydantic import Field
 
 from asm.ai.contracts import DTO, Message
+from asm.ai.knowledge import KnowledgePin, KnowledgeView, project_knowledge
+from asm.configuration.models import ActiveProjection
 from asm.conversations.guards import (
     GuardedTurnSnapshot,
     GuardedTurnSnapshotV2,
@@ -327,3 +329,70 @@ class ContextBuilder:
             raise
         except (ValueError, TypeError, KeyError, AttributeError, RecursionError, OverflowError):
             raise ContextFailure("INVALID_CONTEXT") from None
+
+
+class KnowledgeContextView(DTO):
+    """New READ contract; the original conversation_context_v1 remains unchanged."""
+
+    revision: Literal["conversation_context_v2"] = "conversation_context_v2"
+    conversation: ContextView
+    business: KnowledgeView
+
+    def messages(self) -> tuple[Message, ...]:
+        context, current = self.conversation.messages()
+        return (
+            context,
+            Message(role="context", text=self.business.model_dump_json()),
+            current,
+        )
+
+
+class PreparedKnowledgeContext(DTO):
+    binding: ContextBinding = Field(repr=False)
+    knowledge_pin: KnowledgePin = Field(repr=False)
+    snapshot_fingerprint: Digest = Field(repr=False)
+    view: KnowledgeContextView = Field(repr=False)
+
+
+class KnowledgeContextBuilder:
+    """One combined byte budget; keep current/owner and structured business facts whole."""
+
+    def __init__(self, limits: ContextLimits = ContextLimits()):
+        self.limits = ContextLimits.model_validate(limits)
+
+    def build(
+        self,
+        value: object,
+        binding: ContextBinding,
+        pin: KnowledgePin,
+        active: ActiveProjection,
+    ) -> PreparedKnowledgeContext:
+        active = ActiveProjection.model_validate(active)
+        pin = KnowledgePin.model_validate(pin)
+        if (
+            str(binding.workspace_id) != active.workspace_id
+            or binding.business_id != pin.business_id
+        ):
+            raise ContextFailure("CONTEXT_MISMATCH")
+        base = ContextBuilder(self.limits).build(value, binding)
+        query = "\n".join(m.text for m in base.view.current if m.text is not None)
+        business = project_knowledge(active, pin, query)
+        view = KnowledgeContextView(conversation=base.view, business=business)
+        excess = len(view.model_dump_json().encode("utf-8")) - self.limits.max_bytes
+        if excess > 0:
+            remaining = len(base.view.model_dump_json().encode("utf-8")) - excess
+            if remaining < 512:
+                raise ContextFailure("CONTEXT_TOO_LARGE")
+            base = ContextBuilder(
+                ContextLimits(max_bytes=remaining, recent_messages=self.limits.recent_messages)
+            ).build(value, binding)
+            view = KnowledgeContextView(conversation=base.view, business=business)
+        if len(view.model_dump_json().encode("utf-8")) > self.limits.max_bytes:
+            raise ContextFailure("CONTEXT_TOO_LARGE")
+        view.messages()  # Validate protocol Message bounds before any call.
+        return PreparedKnowledgeContext(
+            binding=base.binding,
+            knowledge_pin=pin,
+            snapshot_fingerprint=base.snapshot_fingerprint,
+            view=view,
+        )

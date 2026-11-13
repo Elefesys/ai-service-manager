@@ -10,8 +10,9 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from asm.ai.contracts import KnowledgeGatewayConfig
 from asm.ai.fake import FakeAdapter
-from asm.foundation import create_worker
+from asm.foundation import RuntimeDatabase, Settings, create_worker
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind
@@ -35,12 +36,22 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def delivery(pg):
+    # Pinned historical M4 carrier: its populated downgrade proof keeps the
+    # original v2 contracts. Current M5 admission is proved on0019 separately.
     await migrate("upgrade", "0018")
     pg.schema_revision = "0018"
-    return pg
+    current = RuntimeDatabase(Settings())
+    try:
+        with pytest.raises(RuntimeError, match="schema"):
+            await current.check()
+        yield pg
+    finally:
+        await current.close()
+        await migrate("upgrade", "0019")
+        pg.schema_revision = "0019"
 
 
-async def source_turn(h, *, native=False, workspace=A, telegram=False):
+async def source_turn(h, *, native=False, workspace=A, telegram=False, message_text=None):
     number = next(COUNTER)
     chat = f"ai-{number}"
     scope = dict(chat_id=chat, sender_id=f"user-{number}")
@@ -51,6 +62,8 @@ async def source_turn(h, *, native=False, workspace=A, telegram=False):
         scope.update(bot_identity="bot-b", external_connection_id="conn-b")
     elif not native:
         scope["external_connection_id"] = "conn-a2"
+    if message_text is not None:
+        scope["text"] = message_text
     preparation("INGRESS", workspace_id=workspace)
     _, _, cid = await incoming(h, number, **scope)
     if native:
@@ -122,8 +135,12 @@ async def source_turn(h, *, native=False, workspace=A, telegram=False):
     return cid, source, scope
 
 
-def application(h, script=("reply",), *, adapter=None, telegram=None, fake=None):
-    cfg = config()
+def application(h, script=("reply",), *, adapter=None, telegram=None, fake=None, cfg=None):
+    cfg = cfg or config()
+    if getattr(h, "schema_revision", None) == "0019" and cfg.prompt_revision == "conversation_v2":
+        cfg = KnowledgeGatewayConfig.model_validate(
+            cfg.model_dump() | {"prompt_revision": "conversation_v3"}
+        )
     fake = fake or FakeAdapter(cfg.route, script)
     worker = create_worker(
         h.kernel,

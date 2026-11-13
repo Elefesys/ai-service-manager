@@ -66,3 +66,22 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .human-context .exact-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
 .human-context label { display: block; margin-block: .5rem; }
 .human-context input[type=checkbox] { width: auto; margin-right: .5rem; }
+
+.configuration { min-width: 0; }
+.configuration section { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #d8dee8; }
+.configuration label { display: block; margin-block: .5rem; }
+.configuration input:not([type=checkbox]), .configuration textarea, .configuration select { display: block; width: 100%; padding: .65rem; margin-block: .35rem; border: 1px solid #bac3d1; border-radius: 8px; font: inherit; }
+.configuration textarea { resize: vertical; }
+.configuration input[type=checkbox] { margin-right: .5rem; }
+.configuration fieldset { min-width: 0; border: 1px solid #d8dee8; border-radius: 8px; margin-block: .8rem; padding: 1rem; }
+.configuration-fields { border: 0 !important; padding: 0 !important; }
+.configuration-card { background: #f8faff; }
+.configuration-policy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.configuration .notice { margin-top: 1rem; padding: 1rem; border-left: 4px solid #e1a932; }
+.configuration .notice button { margin: .3rem .5rem .3rem 0; }
+.configuration-facts { overflow-wrap: anywhere; }
+.configuration-facts article { border-bottom: 1px solid #e2e7ee; padding-block: .7rem; }
+.configuration-facts h5 { margin: 0; font-size: 1rem; }
+.configuration-issues { overflow-wrap: anywhere; padding-left: 1.25rem; }
+.configuration :focus-visible { outline: 3px solid #7295ff; outline-offset: 2px; }
+@media (max-width: 720px) { .configuration-policy-grid { grid-template-columns: minmax(0, 1fr); } .configuration .billing-heading { flex-direction: column; } }

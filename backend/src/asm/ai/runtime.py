@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from asm.ai.contracts import GatewayConfig
+from asm.ai.contracts import AnyGatewayConfig
 from asm.ai.database import AIDatabase, runtime_config
 from asm.ai.fake import FakeAdapter
 from asm.ai.gateway import ModelAdapter
@@ -18,7 +18,7 @@ from asm.telegram.client import TelegramClient
 
 
 class RuntimeExecution:
-    config: GatewayConfig
+    config: AnyGatewayConfig
     database: AIDatabase
     telegram: TelegramClient | None
 
@@ -85,7 +85,7 @@ class SyntheticRuntime(RuntimeExecution):
     def __init__(
         self,
         database: MessagingDatabase,
-        config: GatewayConfig,
+        config: AnyGatewayConfig,
         model: Callable[[], FakeAdapter],
         *,
         environment: str,

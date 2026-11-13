@@ -735,7 +735,7 @@ async def test_native_policy_carrier_uses_catalog_binding_and_actual_capability_
         human_context_policy="ON",
         human_context_policy_epoch=1,
     )
-    profile = dict(schema_revision="0018", valid=True, profile_sha256="b" * 64)
+    profile = dict(schema_revision="0019", valid=True, profile_sha256="b" * 64)
     db = SimpleNamespace(
         execute=AsyncMock(
             side_effect=[
@@ -763,7 +763,7 @@ async def test_native_policy_carrier_uses_catalog_binding_and_actual_capability_
     }
     assert json.loads(params["profile"]) == {
         "source_tree": "a" * 40,
-        "schema_revision": "0018",
+        "schema_revision": "0019",
         "profile_sha256": "b" * 64,
         "drain_confirmed": True,
     }
@@ -787,7 +787,7 @@ async def test_native_policy_rejects_bad_catalog_before_capability(harness, patc
                 SimpleNamespace(mappings=lambda: SimpleNamespace(one=lambda: {})),
                 SimpleNamespace(
                     scalar_one=lambda: (
-                        dict(schema_revision="0018", valid=True, profile_sha256="b" * 64) | patch
+                        dict(schema_revision="0019", valid=True, profile_sha256="b" * 64) | patch
                     )
                 ),
             ]
@@ -798,3 +798,193 @@ async def test_native_policy_rejects_bad_catalog_before_capability(harness, patc
             db, {"ws": uuid4()}, "native_happy", "native-enable", "a" * 40
         )
     assert db.execute.await_count == 2
+
+
+def test_knowledge_preset_has_only_two_text_seeds_and_closed_actions(harness):
+    fixture, worker = harness.fixture, harness.worker
+    events = list(worker.seed_events())
+    own = [value for value in events if value.bot_identity == fixture.bot("knowledge")]
+    assert len(events) < 128 and len(own) == 2
+    assert {value.chat_id for value in own} == {"m24-knowledge-main", "m24-knowledge-alternate"}
+    assert all(value.image_file_id is None for value in own)
+    worker.validate_operation("knowledge", "knowledge-answer")
+    worker.validate_operation("knowledge", "stats")
+    for preset, operation in (
+        ("happy", "knowledge-answer"),
+        (None, "knowledge-answer"),
+        ("knowledge", "success"),
+        ("knowledge", "recover"),
+    ):
+        with pytest.raises(worker.ProvisioningError):
+            worker.validate_operation(preset, operation)
+    for operation in ("downgrade", "native-enable", "material-stats"):
+        with pytest.raises(fixture.ProvisioningError):
+            fixture.validate_operation("knowledge", operation)
+    config = worker.knowledge_config()
+    assert config.prompt_revision == "conversation_v3"
+    assert config.route.execution == "FAKE" and config.route.eligibility == "EVAL_ONLY"
+    assert config.limits.model_calls == 2 and config.limits.read_executions == 1
+
+
+def knowledge_browser_journal(worker):
+    from datetime import UTC, datetime
+
+    from asm.ai.contracts import Reply
+    from asm.ai.runtime_contracts import KnowledgeRuntimeReceipt
+    from asm.messaging.results import AIJobClaim, FinalizeResult
+    from m5_knowledge_fixtures import knowledge_run
+
+    run = knowledge_run()
+    claim = AIJobClaim(
+        job_id=run.binding.job_id,
+        kind="PROCESS_TURN",
+        step="AI_GENERATE",
+        workspace_id=run.binding.workspace_id,
+        connection_id=run.binding.connection_id,
+        turn_id=run.binding.turn_id,
+        turn_revision=run.binding.turn_revision,
+        claim_token=uuid4(),
+        lease_until=run.deadline,
+        correlation_id=uuid4(),
+        attempt_count=1,
+        inbox_id=None,
+        outbox_id=None,
+    )
+    receipt = KnowledgeRuntimeReceipt(
+        run_id=run.run_id,
+        job_id=claim.job_id,
+        turn_id=claim.turn_id,
+        turn_revision=claim.turn_revision,
+        selected_at=datetime.now(UTC),
+        result=Reply(kind="reply", text="From the published FAQ", reason=None),
+        knowledge_pin=run.knowledge_pin,
+    )
+    return worker.KnowledgeBrowserJournal(
+        revision="browser_knowledge_receipt_v1",
+        question_inbox_id=uuid4(),
+        claim=claim,
+        receipt=receipt,
+        finalized=FinalizeResult(
+            code="FINALIZED", status="SENT", job_id=uuid4(), outbox_id=uuid4(), attempt_id=uuid4()
+        ),
+        model_calls=1,
+        source="Synthetic owner handbook",
+    )
+
+
+@pytest.mark.parametrize("fault", [None, "mode", "size", "duplicate_key"])
+def test_knowledge_ack_journal_is_private_bounded_and_not_authority(harness, fault):
+    worker = harness.worker
+    assert worker.knowledge_journal() is None
+    journal = knowledge_browser_journal(worker)
+    worker.knowledge_journal(journal)
+    path = harness.directory / "knowledge-receipt.json"
+    assert path.stat().st_mode & 0o777 == 0o600
+    if fault == "mode":
+        path.chmod(0o644)
+    elif fault == "size":
+        path.write_bytes(b"x" * 8193)
+    elif fault == "duplicate_key":
+        path.write_text('{"revision":"browser_knowledge_receipt_v1","revision":"other"}')
+    if fault:
+        with pytest.raises((worker.ProvisioningError, ValueError)):
+            worker.knowledge_journal()
+    else:
+        assert worker.knowledge_journal() == journal
+        with pytest.raises(worker.ProvisioningError):
+            worker.knowledge_report(journal, replayed=True)  # No physical effect evidence.
+
+
+async def test_knowledge_model_echoes_actual_projected_source_and_never_a_canned_answer(harness):
+    from asm.ai.context import KnowledgeContextBuilder
+    from asm.ai.contracts import AdapterRequest, Budget, GatewayRequest
+    from m5_knowledge_fixtures import knowledge_run
+
+    worker = harness.worker
+    run = knowledge_run().model_copy(update={"config": worker.knowledge_config()})
+    view = (
+        KnowledgeContextBuilder()
+        .build(run.snapshot, run.binding, run.knowledge_pin, run.active_projection)
+        .view
+    )
+    model = worker.KnowledgeBrowserModel(SimpleNamespace(prepared=run), AsyncMock())
+    request = AdapterRequest(
+        config=run.config,
+        request=GatewayRequest(
+            run_id=str(run.run_id), deadline=run.deadline, messages=view.messages(), tools=()
+        ),
+        prompt="synthetic",
+        output_schema_json="{}",
+        exchanges=(),
+        budget=Budget(
+            calls_used=1,
+            reads_reserved=0,
+            tokens_reserved=1000,
+            cost_reserved=worker.Decimal("0.10"),
+            currency="RUB",
+        ),
+        remaining_seconds=5.0,
+    )
+    response = await model.complete(request)
+    assert json.loads(response.output_json)["text"] == run.active_projection.bundle.faqs[0].answer
+    assert model.view.faqs[0].fact.source == run.active_projection.bundle.faqs[0].source
+    assert len(model.requests) == 1
+    with pytest.raises(worker.ProvisioningError):
+        await model.complete(request)
+    assert len(model.requests) == 1
+
+
+@pytest.mark.parametrize("fault", [None, "missing_journal", "different_receipt"])
+async def test_knowledge_repeat_reads_canonical_receipt_without_claim_model_or_send(
+    harness, monkeypatch, fault
+):
+    from contextlib import asynccontextmanager
+    from datetime import UTC, datetime
+
+    worker = harness.worker
+    journal = knowledge_browser_journal(worker)
+    if fault != "missing_journal":
+        worker.knowledge_journal(journal)
+        worker.ledger_path("knowledge").write_text('{"event":"CALL"}\n{"event":"EFFECT"}\n')
+    raw = journal.receipt.model_dump(mode="json")
+    if fault == "different_receipt":
+        raw["result"]["text"] = "Different saved result"
+
+    class Kernel:
+        ingest_event = AsyncMock(
+            return_value=SimpleNamespace(
+                code="DUPLICATE",
+                inbox_id=journal.question_inbox_id,
+                workspace_id=journal.claim.workspace_id,
+            )
+        )
+        replay_ai = AsyncMock(return_value=raw)
+        claim_knowledge = AsyncMock(side_effect=AssertionError("Replay claimed a job"))
+
+        @asynccontextmanager
+        async def _transaction(self):
+            yield SimpleNamespace(
+                execute=AsyncMock(
+                    return_value=SimpleNamespace(scalar_one=lambda: datetime.now(UTC))
+                )
+            )
+
+    kernel = Kernel()
+    monkeypatch.setattr(worker, "KnowledgeBrowserKernel", lambda *args, **kwargs: kernel)
+    if fault:
+        with pytest.raises(worker.ProvisioningError):
+            await worker.knowledge_answer(None, AsyncMock())
+    else:
+        result = await worker.knowledge_answer(None, AsyncMock())
+        assert result == {
+            "model_calls": 1,
+            "calls": 1,
+            "effects": 1,
+            "activation_version": journal.receipt.knowledge_pin.activation_version,
+            "release_id": str(journal.receipt.knowledge_pin.release_id),
+            "answer": "From the published FAQ",
+            "source": "Synthetic owner handbook",
+            "replayed": True,
+        }
+        kernel.replay_ai.assert_awaited_once()
+    kernel.claim_knowledge.assert_not_awaited()

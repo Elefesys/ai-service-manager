@@ -96,6 +96,41 @@ ADR-030/031/032/072/075/076/262–267. Сначала C4 с участникам
    локальная wire/contract совместимость. Старый paid approval не переносится на
    новый prompt/source. Не включать provider, не менять маршрут/стоимость/лимиты.
 
+### Контракт C4/C1/C2/C3/C5 перед реализацией — 2026-11-13
+
+Base выдачи **3b2a28a192753103017dab5452288cde61226d95**, tree
+**0d93ec5242def3e31b6a650b1c0b24d2766cf343**, sole parent accepted
+**6c27be8487f3f8792cf01ed2a0fcdde130ea7a52**. Head миграций подтверждён:0018.
+
+- Новый private `KnowledgePin`: business/release (null при отсутствии публикации),
+  монотонная activation version и `business_knowledge_v1`. Run сохраняет pin и
+  immutable active projection из configuration bundle v1; delivery сохраняет тот
+  же pin. Client/scope берутся из admitted job. Draft не участвует в projection.
+- Новый context/read `conversation_context_v2`, отдельный `KnowledgeGatewayConfig`
+  и prompt `conversation_v3`;
+  result schema остаётся v1. Прежние context/read/prompt/run/receipt не меняют
+  семантику. Active service cards и structured rules сохраняются целиком;
+  bounded keyword selection FAQ показывает source/authority/revision и усечение.
+  Owner/FAQ text — data; structured rules приоритетны. Unknown остаётся null.
+- 0019 добавляет nullable bindings без backfill. На current schema новые runs
+  требуют v3; legacy receipt/replay/accounting доступны, новые эффекты старого
+  NULL-pinned run отклоняются. Replay не регенерирует ответ. Explicit unpublished
+  pin инвалидируется первым publish; rollback увеличивает activation.
+- Сериализация: job/run → owner authority → Business FOR SHARE → существующий
+  CONFIGURATION_V1 advisory transaction lock → connection/billing/conversation/
+  turn/client. Publish/rollback используют owner → Business → тот же advisory
+  lock → state. Publisher не ждёт job/run/conversation. Pin проверяется на
+  MODEL/READ/FOLLOWUP/CANDIDATE/RESERVE/COMMIT, rights-refresh COMMIT и SEND.
+  COMPLETE/replay не требуют свежести публикации. HTTP вне транзакции;
+  выигравший SEND admission остаётся допущенным при последующем publish.
+- Console использует шесть owner API: формы service/rules/FAQ/style, draft/active,
+  ERROR/WARNING, deterministic preview, CAS publish и rollback. Unknown сохраняется;
+  неопределённая команда повторяется с тем же key/body, смена scope/logout
+  отменяет владение поздним ответом. Preview не вызывает модель или transport.
+- Default OFF,2 calls/1 READ и прежние limits. Для provider v3 нужен новый явный
+  synthetic knowledge profile/prompt; прежний v2 approval не переносится.
+  Здесь проверяется только локальный wire с MockTransport, без paid/live допуска.
+
 ### Миграция и разрешённые paths
 
 C0 резервирует только `0019_published_knowledge.py`, revision `0019`, predecessor
@@ -276,6 +311,78 @@ VM/paid/live/реальные данные и merge не разрешены эт
 Никаких фиктивных Telegram messages/conversations для бизнесовой конфигурации.
 
 
+
+## C4 receipt — C4-M5.1B-PUBLISHED-KNOWLEDGE-R1 / REVIEW / 2026-11-13
+
+Реализован контракт выше на **c4/m5-1b-published-knowledge-r1** поверх сохранённого
+C0 docs commit **3b2a28a192753103017dab5452288cde61226d95**. Accepted base/tree
+**6c27be8487f3f8792cf01ed2a0fcdde130ea7a52 /1aa2959f1ba28438304ef758947ba241f6d0b729**.
+Final head/tree и CI URL возвращаются в PR; текущий реестр C4 не меняет.
+
+В model input попадают active service cards/structured rules и до4 целых FAQ с
+source/authority/revision; keyword ranking детерминирован, общий context≤8192
+UTF-8 bytes. Owner/current/structured facts не режутся; overflow → STOP.
+Draft, publisher/release UUID, storage и private Client context исключены.
+Новые `KnowledgeGatewayConfig`, `PreparedKnowledgeRun`, context/read v2 и prompt v3
+явно отделены от прежних DTO; result schema v1 и старые prompt/schema неизменны.
+Durable pin включает business/release/null-unpublished, activation и projection
+revision. MODEL/READ/FOLLOWUP/CANDIDATE/RESERVE/COMMIT/rights refresh/SEND проверяют
+тот же pin. SQL reader использует настоящий admitted job/claim, не owner GUC.
+Publish/rollback и admission используют общий business lock; HTTP вне транзакции.
+Legacy SQL/Python replay/COMPLETE сохранены, backfill и regeneration отсутствуют.
+
+0019←0018 добавляет bindings/FK/immutability в существующие run/delivery boundaries,
+без новых таблиц. Populated downgrade отказывается до потери новых данных.
+Installed PG18/source: **207 functions /52 tables /736 columns**, точные bodies,
+ACL/RLS/constraints и прежние0013–0018 profiles. Full pin
+`7e756d867f366c28983809100f41e15cebc4809d2878d20947b950f651bcd583`, body
+`93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5`, nonfunction
+`1583e77dbe74107fe93cbadd6c43ff20d1521e9f62b4a6b22e89447f5569743c` независимо сверены C3.
+
+Console: формы service/rules/FAQ/style, draft/active/source, ERROR/WARNING,
+read-only preview, CAS publish/rollback, тот же key/body при uncertain result,
+защита смены Business/session/logout. Rollback UI предлагает до8 публикаций,
+наблюдавшихся в памяти страницы; сервер окончательно проверяет допустимость.
+Нового history API/trace UI нет. Provider settings v3 требуют явную новую пару
+prompt/data profile; DB admission остаётся закрытым15-key, prompt внутри config.
+V3 provider composition разрешает только MockTransport; live отклоняется до key load.
+
+Фактическая локальная проверка, frozen uv/Python3.13.5 и npm ci:
+
+- `PYTHONPATH=backend/src pytest -q -m 'not integration' --tb=short`:
+  **3753 PASS +161 subtests /246.37s**. Последняя правка serializer отдельно:
+  **155 targeted PASS /1.87s**; неизменённые negative fixtures сохранены.
+- Actual owned PostgreSQL **18.6** из закреплённого OCI image, vector0.8.6 /
+  btree_gist1.8, asm_test, runtime NOSUPERUSER/NOBYPASSRLS: **106 unique cases
+  достигли PASS** — knowledge SQL17, runtime11, configuration PG25/API12,
+  provider PG41. После исправлений повторялись затронутые группы: races4 +
+  downgrade1 (**5 PASS /22.09s**), legacy Python replay (**1 PASS /12.44s**).
+  Runtime11:44.71s; configuration25:13.59s; API12:9.57s; provider41:129.51s.
+  Реальные PG locks в обоих порядках, first publish/rollback ABA, scopes,
+  HUMAN/revoke/native/input/rights и UNKNOWN/no-resend проверены.
+- Локальный temporary harness проверял настоящий base/tree/write-set и заменял
+  только CI-file reader test fixture на **LOCAL_SOURCE_CHECK_NOT_CI**. Product
+  SQL/roles/readiness/admission не обходились; GitHub CI evidence не имитировался.
+- `ruff check backend/src tests scripts`, `ruff format --check backend/src tests scripts`:
+  **PASS /209 files**; `mypy backend/src`: **87 files PASS**.
+- `npm --prefix frontend run typecheck`, `npm --prefix frontend test`,
+  `npm --prefix frontend run build`: **PASS /427 tests**. Три новых browser
+  journeys добавлены, включая publish→отличающийся draft→реальный runtime/fake
+  model→один controlled effect→DB replay. До PR actual browser ещё NOT_RUN.
+
+Дельта57 paths строго внутри разрешения. Compatibility subset — current0019
+readiness/provisioning/egress/catalog/source admission и соответствующие tests;
+исторические M4 delivery/rights остаются явными0018/v2 carriers с возвратом0019.
+Один новый finite browser preset требует двух text events; удалены два избыточных
+pagination history events: остаются26 messages (>page25), seed127<128, прежние
+сценарии/отрицательные проверки сохранены. OpenAPI/API shape, deps/locks/workflows,
+0001–0018, старые prompts/schemas/receipts и архитектурные источники неизменны.
+
+Real provider HTTP/owner key reads/Telegram/VM/paid/live **0**. Это synthetic
+LOCAL/TEST plumbing/guards, не semantic quality реальной LLM и не M5 целиком.
+AI default OFF,2 calls/1 READ, старые UNKNOWN/holds и operational gates сохранены.
+Следующий шаг: штатный full CI этого PR, затем source/contract review C0;
+после зелёного CI status-only commit не нужен. Merge и следующий CURRENT — C0.
 
 ## 1. Проверяемый результат всего этапа
 
