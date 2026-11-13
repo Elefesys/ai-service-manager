@@ -570,7 +570,7 @@ async def bounded_capability_http(
         operation == "catalog"
         and body is None
         and 0 < seconds <= 15
-        and 0 < maximum <= 2097152
+        and 0 < maximum <= 4194304
         or operation == "embedding"
         and type(body) is bytes
         and len(body) <= 8192

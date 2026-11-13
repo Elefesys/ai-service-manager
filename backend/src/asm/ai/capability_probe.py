@@ -271,7 +271,7 @@ def make_plan(source: dict[str, str], until: str) -> dict[str, Any]:
             "endpoint": CAPABILITY_CATALOG,
             "reserve_rub": "0",
             "seconds": 15,
-            "response_bytes": 2097152,
+            "response_bytes": 4194304,
         }
     ]
     for name, body, model, reserve, maximum in [

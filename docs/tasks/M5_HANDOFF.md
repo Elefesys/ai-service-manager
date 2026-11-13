@@ -92,28 +92,35 @@ probes не требуется. При конфликте указать точ�
 
 ### Разрешённые paths и source admission
 
-Активен ограниченный **C0-M5.2A-02** от repair head
-`fb853b2288724ec5dff7a0e6f51e5d6b628511e8`, та же задача/ветка/base/assignment.
-[Решение C0](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6852941171)
-закрывает C0-M5.2A-01 и разрешает только следующий repair write-set:
+Активен ограниченный **C0-M5.2A-03** от repair head
+`7c2400701543e518fa9a7ac99816b50f1b120db4`, tree
+`210c36127e1e86837b350d774bed781eaae2758d`; та же задача/ветка/main/assignment.
+[Решение C0](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6858782426)
+закрывает C0-M5.2A-01/02 и принимает catalog ceiling **4194304 bytes (4MiB)**
+вместо2097152. По принятому owner-reported C6 evidence получены HTTP200/TLS,
+identity, Content-Length3276366; прежний предел остановил диагностический GET
+до чтения body. Сам каталог/модель/account этим не проверены; причина первого
+HTTP_FAILED независимо не восстановлена. Это технический порог, не пересмотр
+IMPL-004/005, маршрута или тарифа.
 
-- `tests/test_telegram_egress_migration.py` — оба consistency checks используют
-  strict `supervisor == material_deadline + 480`, сохраняя привязку
-  `material_deadline == started_at + 720`; regression на сохранённом дробном S,
-  malformed/expired deadlines и совместный сдвиг terminal/supervisor.
-- `scripts/m4_runtime_db.py` — добавить только exact path этого test file
-  в M5_CAPABILITY_PATHS; прежние admissions и budgets сохраняются.
-- `tests/test_m4_runtime_db_runner.py` — узкий PR/main admission, отказ для
-  соседних paths и неверного source; прежние160 runtime cases/8cleanup.
+Разрешён только следующий repair write-set:
+
+- `backend/src/asm/ai/capability_probe.py` — только catalog bound в make_plan.
+- `backend/src/asm/ai/polza.py` — только catalog ceiling отдельного capability
+  helper; legacy bounded_http и общий _bounded_http не расширять.
+- `tests/test_m5_capability_probe.py`, `tests/test_m4_polza.py` — synthetic
+  transport/JSON/catalog/session/receipt boundaries; без реального каталога.
 - `docs/tasks/M5_HANDOFF.md` — короткий актуальный контракт/возврат здесь.
 
-Producer, shell consumer, bounds600/720/1200/1440, реальное ожидание, cleanup
-и frozen sources не меняются; round/isclose/epsilon/skip не допускаются.
-Первичный probe delta сохранён в ancestry; новые production paths этим repair
-не разрешены. Подробная процедура, source/CI/evidence — в том же Draft PR48.
-После targeted checks — один окончательный code/docs push и штатный полный CI;
-не rerun красный parent. Новый source требует пересчёта reference plan/hash;
-старый176993aa не является допуском.
+3276366 и4194304 проходят;4194305 отклоняется по Content-Length до body и по
+реально прочитанным chunks без доверия заголовку. После отказа UNKNOWN/no-resend,
+без model POST/retry. Catalog15s/connect5s/session210s/key15s,8HTTP/4POST/11.75RUB,
+Vision32768/history65536/embedding262144 и его отказ262145 сохраняются.
+Никаких CLI overrides, fallback, dependencies/workflows/migrations или новых
+source-admission paths. После целевых двух test modules/lint/type checks — один
+code/docs push и штатный full CI нового кандидата; зелёный parent не rerun.
+Новый source требует нового reference plan/hash/expiry; старый85d99e4a не допуск.
+C6 приостановлен до C0 review; прежний one-Start допуск использован.
 
 `AGENTS.md`, `README.md`, `docs/TASK_REGISTER.md` и IMPL-005 — только C0 docs
 ancestor этой выдачи; C4 их не редактирует и не меняет статус приёмки. Их включить
@@ -122,17 +129,11 @@ ancestor этой выдачи; C4 их не редактирует и не ме
 application entrypoints, UI, Telegram/files/knowledge runtime и старый M4 probe.
 Нужный выход за paths вернуть C0 с конкретной причиной, не делать скрытым fix.
 
-До полного CI добавить узкий M5.2A source admission по полным base/tree выше и
-immutable C0 assignment SHA/tree. Поддержать pull_request merge ref и будущий
-push/main с тем же ограниченным diff. C0 явно разрешает это техническое
-расширение: существующий M5.1B gate не принимает новую ветку. Это не разрешение
-произвольной ветки/base/write-set и не повод изменять исторические admissions.
-Ресурсы/credentials только после полного admission; доказать негативные ветки,
-неверный base/tree, потерю assignment ancestor и лишний файл без resource access.
-Сохранить текущие 160 runtime cases, 8 module cleanups, SQL budget900 для нового
-точно принятого M5.2A маршрута, унаследовавшего M5.1B suite; исторические budgets
-не менять. Не добавлять CLI/env override, skips, новый test runner или общую
-перестройку gate. Это совместимость с прежним CI, не функциональность probe.
+Принятый узкий M5.2A admission для PR merge/main, закреплённых base/tree и
+immutable assignment сохраняется. В этом repair admission не расширяется;
+160 runtime cases,8 module cleanups, SQL budget900 и исторические budgets прежние.
+Исправления attemptsCount и двух fractional-deadline checks из01/02 сохраняются;
+их code/CI evidence — в C0 review/истории PR48.
 
 ### Готовность и возврат
 
@@ -189,19 +190,19 @@ Steps при отсутствии metadata остаются NOT_REPORTED. Без
 key prompt15s, connect5s. Тарифные неизвестности останавливают до POST;
 timeout/неподтверждённый cost сохраняет UNKNOWN/резерв. Create-once local receipt
 запрещает restart/resend; отдельный stop marker отменяет ожидание и новые dispatch.
-Mock PASS не становится semantic/capability PASS. Подготовка C6 после code repair:
-для известной Windows11 рабочий POSIX TTY/Python3.13/frozen environment не подтверждён;
-operator route — OPEN / OWNER_ENVIRONMENT_UNVERIFIED. Read-only PowerShell preflight
-не запускает wsl.exe/дистрибутивы и не устанавливает окружение. Нужен его закрытый
-вывод владельца; до подтверждения конкретного окружения платная процедура не готова.
-Условные plan/start/stop, постоянный receipt, новый source/expiry/plan hash и
-offline/CI evidence — в том же PR48. Старый plan6e72f5fb не переносится.
-Сейчас real/provider/paid HTTP0; VM/установки не выполнялись, M5.2B не начат.
+Mock PASS не становится semantic/capability PASS. C0 принял owner-reported VM
+подготовку/clean source/plan-offline C6 для прежнего source; установка среды
+повторно не требуется. Старый Start закрыт с catalog UNKNOWN, cost0/hold0,
+model POST0 по сохранённому owner receipt. Receipts/UNKNOWN не удалять.
+После C0 review C6 обновляет pins/source и plan/offline; нового paid Start
+этот repair не разрешает. Сам C4 не подключается к VM/провайдеру и не читает ключ.
+Новый source/CI/reference plan и актуальная процедура — в том же PR48;
+прошлые source-bound approvals не переносятся, M5.2B не выдана.
 
-Возврат C4 по C0-M5.2A-02: оба реальных coordinator paths проходят сохранённый
-S=207.841377092 до контролируемой resource boundary; malformed/expired и совместно
-сдвинутые deadlines отвергаются. Targeted67/67 и admission40/40 PASS, Ruff PASS.
-Точный новый source/tree, штатный full CI и пересчитанный reference plan — в PR48.
+Возврат C4 по C0-M5.2A-03: synthetic3276366/4194304 прошли до всех4 разрешённых
+Mock POST;4194305 по header/chunks сохраняет UNKNOWN,0 cost/hold и no-resend.
+Probe72/72, transport372/372, Ruff/format и strict mypy PASS. Full source/tree,
+штатный full CI и пересчитанный reference plan/hash/expiry — в PR48.
 
 ## 1. Проверяемый результат всего этапа
 

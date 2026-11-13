@@ -80,6 +80,22 @@ def catalog():
     }
 
 
+class CatalogStream(httpx.AsyncByteStream):
+    def __init__(self, raw):
+        self.raw = raw
+        self.bytes_read = 0
+        self.closed = False
+
+    async def __aiter__(self):
+        for offset in range(0, len(self.raw), 65536):
+            chunk = self.raw[offset : offset + 65536]
+            self.bytes_read += len(chunk)
+            yield chunk
+
+    async def aclose(self):
+        self.closed = True
+
+
 def result(case):
     return {
         "status": case.expected_status,
@@ -122,12 +138,14 @@ def embedding():
 
 
 class Server:
-    def __init__(self, *, mutate=None, fail=None):
+    def __init__(self, *, mutate=None, fail=None, catalog_size=None):
         self.requests = []
         self.responses = {}
         self.post_index = 0
         self.mutate = mutate
         self.fail = fail
+        self.catalog_size = catalog_size
+        self.catalog_stream = None
 
     async def __call__(self, request):
         self.requests.append(request)
@@ -188,6 +206,16 @@ class Server:
             self.mutate(data, request, len(self.requests))
         if request.method == "POST" and "id" in data:
             self.responses[data["id"]] = copy.deepcopy(data)
+        if str(request.url) == CAPABILITY_CATALOG and self.catalog_size is not None:
+            # JSON whitespace exercises byte counting without saving a real catalog.
+            raw = encode(data).ljust(self.catalog_size, b" ")
+            assert len(raw) == self.catalog_size
+            self.catalog_stream = CatalogStream(raw)
+            return httpx.Response(
+                200,
+                headers={"content-length": str(len(raw))},
+                stream=self.catalog_stream,
+            )
         return httpx.Response(200, stream=httpx.ByteStream(encode(data)))
 
 
@@ -210,6 +238,12 @@ def test_default_and_offline_never_read_key_http_or_create_session(
 
 
 def test_plan_real_bytes_pinned_payloads_and_conservative_sum(plan):
+    assert plan["requests"][0]["response_bytes"] == 4194304
+    assert plan["requests"][0]["seconds"] == 15
+    assert [r["response_bytes"] for r in plan["requests"][1:7:2]] == [32768] * 3
+    assert [r["response_bytes"] for r in plan["requests"][2:7:2]] == [65536] * 3
+    assert plan["requests"][-1]["response_bytes"] == 262144
+    assert plan["connect_seconds"] == 5 and plan["session_seconds"] == 210
     assert sum(Decimal(r["reserve_rub"]) for r in plan["requests"]) == Decimal("11.75")
     assert Decimal("11.75") == 3 * Decimal("3.89") + Decimal("0.08")
     assert Decimal("3.89") >= (128000 * Decimal(30) + 512 * Decimal(80)) / 1000000
@@ -247,16 +281,20 @@ def test_start_rejects_before_credentials_state_and_http(plan, tmp_path, monkeyp
     assert not (tmp_path / "state").exists()
 
 
+@pytest.mark.parametrize("catalog_size", [3276366, 4194304])
 async def test_single_mock_roundtrip_never_claims_real_semantics_and_never_resumes(
-    plan, tmp_path, monkeypatch
+    plan, tmp_path, monkeypatch, catalog_size
 ):
     receipt = probe.Receipt(tmp_path, plan)
-    server = Server()
+    server = Server(catalog_size=catalog_size)
     value = await probe.execute(
         plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(server)
     )
     assert value["status"] == "MOCK_CONTRACT_PASS" and value["real_route"] == "UNVERIFIED"
     assert value["http_requests"] == len(server.requests) == 8
+    assert server.catalog_stream.bytes_read == catalog_size and server.catalog_stream.closed
+    assert value["catalog_sha256"] == probe.validate_catalog(catalog())
+    assert sum(r.method == "POST" for r in server.requests) == 4
     assert all(
         type(c["upstream_attempts"]) is int and c["upstream_attempts"] == 1
         for c in value["calls"]
@@ -270,6 +308,53 @@ async def test_single_mock_roundtrip_never_claims_real_semantics_and_never_resum
     monkeypatch.setattr(probe, "local_key", lambda: pytest.fail("restart read key"))
     with pytest.raises(probe.ProbeError, match="SESSION_ALREADY_EXISTS_NO_RESEND"):
         probe.start(plan, plan["plan_sha256"], tmp_path)
+
+
+@pytest.mark.parametrize("length_header", ["declared", "missing", "smaller"])
+async def test_oversized_catalog_stream_closes_unknown_without_post_or_resend(
+    plan, tmp_path, monkeypatch, length_header
+):
+    stream = CatalogStream(encode(catalog()).ljust(4194305, b" "))
+    requests, failures = [], []
+
+    def respond(request):
+        requests.append(request)
+        headers = (
+            {}
+            if length_header == "missing"
+            else {"content-length": "4194305" if length_header == "declared" else "4194304"}
+        )
+        return httpx.Response(200, headers=headers, stream=stream)
+
+    bounded = probe.bounded_capability_http
+
+    async def observed_failure(*args, **kwargs):
+        try:
+            return await bounded(*args, **kwargs)
+        except probe.PolzaFailure as error:
+            failures.append((error.code, error.detail))
+            raise
+
+    monkeypatch.setattr(probe, "bounded_capability_http", observed_failure)
+    receipt = probe.Receipt(tmp_path, plan)
+    value = await probe.execute(
+        plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(respond)
+    )
+    assert failures == [("ADAPTER_ERROR", "RESPONSE_SIZE")]
+    assert stream.closed and stream.bytes_read == (0 if length_header == "declared" else 4194305)
+    assert value["status"] == "UNKNOWN" and value["code"] == "HTTP_FAILED"
+    assert value["closed"] is True and value["real_route"] == "UNVERIFIED"
+    assert value["http_requests"] == len(requests) == 1
+    assert [(r.method, str(r.url)) for r in requests] == [("GET", CAPABILITY_CATALOG)]
+    assert [c["id"] for c in value["calls"]] == ["catalog"]
+    assert value["calls"][0]["status"] == "UNKNOWN"
+    assert Decimal(value["cost_rub"]) == Decimal(value["held_rub"]) == 0
+    assert "catalog_sha256" not in value
+    assert json.loads(receipt.path.read_bytes()) == value and KEY not in receipt.path.read_text()
+    monkeypatch.setattr(probe, "local_key", lambda: pytest.fail("restart read key"))
+    with pytest.raises(probe.ProbeError, match="SESSION_ALREADY_EXISTS_NO_RESEND"):
+        probe.start(plan, plan["plan_sha256"], tmp_path)
+    assert len(requests) == 1
 
 
 @pytest.mark.parametrize("metadata", ["reported_one", "absent"])

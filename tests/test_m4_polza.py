@@ -86,7 +86,7 @@ async def test_m5_helper_uses_only_exact_finite_endpoint(operation, body):
         ("embedding", b"{}", 41, 1024),
         ("catalog", None, 16, 1024),
         ("embedding", b"{}", 1, 262145),
-        ("catalog", None, 1, 2097153),
+        ("catalog", None, 1, 4194305),
         ("embedding", b"{}", 0, 1024),
         ("catalog", None, 1, 0),
     ],
@@ -103,6 +103,36 @@ async def test_m5_helper_rejects_unbounded_or_wrong_operations_before_transport(
             maximum=maximum,
             transport=httpx.MockTransport(lambda request: pytest.fail("HTTP before admission")),
         )
+
+
+@pytest.mark.parametrize(
+    "operation,body,size",
+    [
+        ("catalog", None, 2097153),
+        ("catalog", None, 3276366),
+        ("catalog", None, 4194304),
+        ("embedding", b"{}", 262144),
+    ],
+)
+async def test_m5_helper_accepts_exact_catalog_and_embedding_response_boundaries(
+    operation, body, size
+):
+    raw = b"{}".ljust(size, b" ")
+    chunks = [raw[offset : offset + 65536] for offset in range(0, size, 65536)]
+    stream, calls = Stream(chunks), []
+
+    def respond(request):
+        calls.append(request)
+        assert str(request.url) == (CAPABILITY_CATALOG if operation == "catalog" else EMBEDDINGS)
+        assert request.method == ("GET" if operation == "catalog" else "POST")
+        assert request.headers["accept-encoding"] == "identity"
+        return httpx.Response(200, headers={"content-length": str(size)}, stream=stream)
+
+    value = await bounded_capability_http(
+        KEY, operation, body=body, seconds=1, maximum=size, transport=httpx.MockTransport(respond)
+    )
+    assert value == raw and json.loads(value) == {}
+    assert stream.reads == len(chunks) and len(calls) == 1
 
 
 @pytest.mark.parametrize(
