@@ -37,6 +37,7 @@ from asm.ai.polza import (
     bounded_capability_http,
     bounded_http,
     encode,
+    failure_labels,
 )
 
 REVISION = "m5_capability_probe_v1"
@@ -836,6 +837,7 @@ async def execute(
             if any(c["status"] == "UNKNOWN" for c in receipt.value["calls"])
             else "FAILED",
             code=error_code(error),
+            failure=failure_labels(error),
         )
     finally:
         if not task.done():

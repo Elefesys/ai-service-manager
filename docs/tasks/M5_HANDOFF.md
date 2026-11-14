@@ -4,7 +4,7 @@
 [TASK_REGISTER](../TASK_REGISTER.md). Решение по объёму:
 [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
 
-## CURRENT — M5.2A → C4 / IN_PROGRESS / 2026-11-13
+## CURRENT — M5.2A → C4 / IN_PROGRESS / 2026-11-14
 
 Единственная активная задача: **C4-M5.2A-CAPABILITY-PROBE-R1**.
 Ведущий C4. C6 участвует только при конкретной необходимости операторского
@@ -92,35 +92,51 @@ probes не требуется. При конфликте указать точ�
 
 ### Разрешённые paths и source admission
 
-Активен ограниченный **C0-M5.2A-03** от repair head
-`7c2400701543e518fa9a7ac99816b50f1b120db4`, tree
-`210c36127e1e86837b350d774bed781eaae2758d`; та же задача/ветка/main/assignment.
-[Решение C0](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6858782426)
-закрывает C0-M5.2A-01/02 и принимает catalog ceiling **4194304 bytes (4MiB)**
-вместо2097152. По принятому owner-reported C6 evidence получены HTTP200/TLS,
-identity, Content-Length3276366; прежний предел остановил диагностический GET
-до чтения body. Сам каталог/модель/account этим не проверены; причина первого
-HTTP_FAILED независимо не восстановлена. Это технический порог, не пересмотр
-IMPL-004/005, маршрута или тарифа.
+Активен ограниченный **C0-M5.2A-04** от repair head
+`abdcfbf8ca8841fcc46b0837c7cd847e1284676f`, tree
+`cc99d72ff0afda65d315e433983f849a9dd6ec39`; та же задача/ветка/main/assignment.
+[Решение C0](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6869961111):
+сохранить существующий `polza.failure_labels(error)` рядом с terminal `code`.
+Это исправление потери диагностики, не диагноз или исправление исходного
+Vision-сбоя и не восстановление утраченного ответа. C0-M5.2A-01/02/03 CLOSED;
+CI43466445474 для этого base —12/12 SUCCESS, без повторного прогона.
+
+C0 принял owner-reported terminal evidence по plan
+`f91c695224c467b02ca0dd31fd41ce46e8dcf0198fa3546890d7d749e9f518b1`:
+catalog CONFIRMED/1589ms, validated hash
+`485709edd3269e4bb2099c7f9b12903163a3b7460bc4db9d58cb4cbfd73d990a`.
+Ремонт4MiB прошёл реальное чтение/валидацию. Ordinary Vision UNKNOWN/HTTP_FAILED;
+дальнейшие Vision/history/embedding не достигнуты. Counter2 — pre-dispatch
+admissions, не доказательство upstream delivery. Confirmed cost0, held3.89RUB,
+фактическое списание UNKNOWN, closed:true; собственный контейнер удалён,
+receipts сохранены. Это транскрипция вывода владельца, не прямое чтение ВМ C0/C4;
+hash оригинального нового receipt не наблюдался, deadline не timestamp завершения.
 
 Разрешён только следующий repair write-set:
 
-- `backend/src/asm/ai/capability_probe.py` — только catalog bound в make_plan.
-- `backend/src/asm/ai/polza.py` — только catalog ceiling отдельного capability
-  helper; legacy bounded_http и общий _bounded_http не расширять.
-- `tests/test_m5_capability_probe.py`, `tests/test_m4_polza.py` — synthetic
-  transport/JSON/catalog/session/receipt boundaries; без реального каталога.
+- `backend/src/asm/ai/capability_probe.py` — импорт существующего helper и
+  terminal `failure`; прежние status/code/control flow не менять.
+- `tests/test_m5_capability_probe.py` — actual execute/MockTransport regressions.
 - `docs/tasks/M5_HANDOFF.md` — короткий актуальный контракт/возврат здесь.
 
-3276366 и4194304 проходят;4194305 отклоняется по Content-Length до body и по
-реально прочитанным chunks без доверия заголовку. После отказа UNKNOWN/no-resend,
-без model POST/retry. Catalog15s/connect5s/session210s/key15s,8HTTP/4POST/11.75RUB,
-Vision32768/history65536/embedding262144 и его отказ262145 сохраняются.
-Никаких CLI overrides, fallback, dependencies/workflows/migrations или новых
-source-admission paths. После целевых двух test modules/lint/type checks — один
-code/docs push и штатный full CI нового кандидата; зелёный parent не rerun.
-Новый source требует нового reference plan/hash/expiry; старый85d99e4a не допуск.
-C6 приостановлен до C0 review; прежний one-Start допуск использован.
+Только четыре закрытых поля helper: `exception_type`, `cause_type`, `detail`,
+`http_status`. Без exception/cause text, raw body/headers/key/prompt и расширения
+allowlists. `polza.py` и его transport/helper, runtime/fixtures/dependencies/
+workflows/migrations/source admission не менять. Catalog4194304,15s/connect5s/
+session210s/key15s,8HTTP/4POST/11.75RUB, Vision32768/history65536/embedding262144,
+price/provider/schema checks и UNKNOWN/hold/no-resend сохраняются. Сначала
+frozen Python3.13 probe/применимые existing diagnostics/Polza tests/lint/type,
+затем один code/docs push и штатный full CI нового кандидата; M4 аудит не повторять.
+Новый source требует нового reference plan/hash/expiry, не нового paid допуска.
+
+**C6 HOLD:** новых Start/Prepare/Catalog/paid/VM/account/history действий нет.
+После code review C0 отдельно определяет следующую процедуру. В ней C6 должен
+обновить source/module/plan pins и безопасно вывести все четыре поля `failure`,
+offline проверив полный путь receipt → operator output. Сохранить оба исторических
+receipt: plan85d99e4a — hold0, planf91c6952 — hold3.89. Guard первого с требованием0
+нельзя переназначить второму или обнулить3.89 ради PASS. Новый source/expiry не
+снимает резерв и не разрешает one-Start; generation ID отсутствует, history URL
+не угадывать. Никаких обращений в поддержку или начала M5.2B.
 
 `AGENTS.md`, `README.md`, `docs/TASK_REGISTER.md` и IMPL-005 — только C0 docs
 ancestor этой выдачи; C4 их не редактирует и не меняет статус приёмки. Их включить
@@ -191,18 +207,22 @@ key prompt15s, connect5s. Тарифные неизвестности остан
 timeout/неподтверждённый cost сохраняет UNKNOWN/резерв. Create-once local receipt
 запрещает restart/resend; отдельный stop marker отменяет ожидание и новые dispatch.
 Mock PASS не становится semantic/capability PASS. C0 принял owner-reported VM
-подготовку/clean source/plan-offline C6 для прежнего source; установка среды
-повторно не требуется. Старый Start закрыт с catalog UNKNOWN, cost0/hold0,
-model POST0 по сохранённому owner receipt. Receipts/UNKNOWN не удалять.
-После C0 review C6 обновляет pins/source и plan/offline; нового paid Start
-этот repair не разрешает. Сам C4 не подключается к VM/провайдеру и не читает ключ.
+подготовку для прежнего source. Оба использованных Start закрыты: первый с
+catalog UNKNOWN/cost0/hold0, второй с catalog CONFIRMED и ordinary Vision
+UNKNOWN/cost0/hold3.89. Receipts/UNKNOWN/резерв не удалять. C6 HOLD до отдельной
+процедуры C0 после code review; сам C4 не подключается к VM/провайдеру и не читает ключ.
 Новый source/CI/reference plan и актуальная процедура — в том же PR48;
 прошлые source-bound approvals не переносятся, M5.2B не выдана.
 
-Возврат C4 по C0-M5.2A-03: synthetic3276366/4194304 прошли до всех4 разрешённых
-Mock POST;4194305 по header/chunks сохраняет UNKNOWN,0 cost/hold и no-resend.
-Probe72/72, transport372/372, Ruff/format и strict mypy PASS. Full source/tree,
-штатный full CI и пересчитанный reference plan/hash/expiry — в PR48.
+Возврат C4 по C0-M5.2A-04:18 actual execute/bounded transport regressions сначала
+воспроизвели отсутствие `failure`, после двух добавленных source строк проходят.
+HTTP400/401/402/403/413/429/500/503, encoding, size/header+stream, incomplete,
+connect/read/timeout и неизвестные detail/exception/cause сохраняют только
+закрытые labels, UNKNOWN/hold3.89/cost0/closed, saved==returned, no-next-dispatch/
+retry/no-resend до key read. Success без `failure` —8HTTP/4POST, MOCK_CONTRACT_PASS/
+UNVERIFIED; прежние stop/deadline codes сохранены. Probe90/90, existing failure
+diagnostics+Polza393/393, Ruff/format и strict mypy PASS. Full source/tree/tested
+SHA, штатный full CI и новый reference plan/hash/expiry — в том же Draft PR48.
 
 ## 1. Проверяемый результат всего этапа
 

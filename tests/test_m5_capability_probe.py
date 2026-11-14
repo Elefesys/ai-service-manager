@@ -291,6 +291,7 @@ async def test_single_mock_roundtrip_never_claims_real_semantics_and_never_resum
         plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(server)
     )
     assert value["status"] == "MOCK_CONTRACT_PASS" and value["real_route"] == "UNVERIFIED"
+    assert "failure" not in value
     assert value["http_requests"] == len(server.requests) == 8
     assert server.catalog_stream.bytes_read == catalog_size and server.catalog_stream.closed
     assert value["catalog_sha256"] == probe.validate_catalog(catalog())
@@ -308,6 +309,108 @@ async def test_single_mock_roundtrip_never_claims_real_semantics_and_never_resum
     monkeypatch.setattr(probe, "local_key", lambda: pytest.fail("restart read key"))
     with pytest.raises(probe.ProbeError, match="SESSION_ALREADY_EXISTS_NO_RESEND"):
         probe.start(plan, plan["plan_sha256"], tmp_path)
+
+
+@pytest.mark.parametrize(
+    "fault,detail,cause,code",
+    [
+        (status, f"HTTP_{status}", "OTHER", "HTTP_FAILED")
+        for status in (400, 401, 402, 403, 413, 429, 500, 503)
+    ]
+    + [
+        ("encoding", "RESPONSE_ENCODING", "OTHER", "HTTP_FAILED"),
+        ("size_header", "RESPONSE_SIZE", "OTHER", "HTTP_FAILED"),
+        ("size_stream", "RESPONSE_SIZE", "OTHER", "HTTP_FAILED"),
+        ("incomplete", "RESPONSE_INCOMPLETE", "OTHER", "HTTP_FAILED"),
+        ("connect", "TRANSPORT_FAILURE", "HTTP_CONNECT", "HTTP_FAILED"),
+        ("read", "TRANSPORT_FAILURE", "HTTP_TRANSPORT", "HTTP_FAILED"),
+        ("read_timeout", "TRANSPORT_TIMEOUT", "HTTP_TIMEOUT", "HTTP_TIMEOUT"),
+        ("timeout", "TRANSPORT_TIMEOUT", "TIMEOUT", "HTTP_TIMEOUT"),
+        ("unknown_detail", "UNCLASSIFIED", "OTHER", "HTTP_FAILED"),
+        ("unknown_exception", "UNCLASSIFIED", "VALUE", "SCHEMA_OR_LOCAL_FAILURE"),
+    ],
+)
+async def test_terminal_failure_keeps_safe_labels_hold_and_no_resend(
+    plan, tmp_path, monkeypatch, fault, detail, cause, code
+):
+    # Actual execute and bounded_http: the counter records admissions, including
+    # a connect failure, rather than proving upstream acceptance of the POST.
+    requests = []
+    private = f"{KEY} RAW_PROVIDER_BODY RAW_HEADER PRIVATE_PROMPT"
+
+    class UnreviewedError(Exception):
+        pass
+
+    class FailureStream(CatalogStream):
+        async def __aiter__(self):
+            async for chunk in super().__aiter__():
+                yield chunk
+            if fault == "read":
+                raise httpx.ReadError(private)
+            if fault == "read_timeout":
+                raise httpx.ReadTimeout(private)
+            if fault == "timeout":
+                raise TimeoutError(private)
+
+    raw = private.encode()
+    if fault == "size_stream":
+        raw = raw.ljust(32769, b" ")
+    stream = FailureStream(raw)
+
+    def respond(request):
+        requests.append(request)
+        assert request.headers["Authorization"] == f"Bearer {KEY}"
+        if len(requests) == 1:
+            assert request.method == "GET" and str(request.url) == CAPABILITY_CATALOG
+            return httpx.Response(200, stream=httpx.ByteStream(encode(catalog())))
+        assert request.method == "POST" and str(request.url) == ENDPOINT
+        if fault == "connect":
+            raise httpx.ConnectError(private)
+        if fault == "unknown_detail":
+            raise probe.PolzaFailure("ADAPTER_ERROR", private) from UnreviewedError(private)
+        if fault == "unknown_exception":
+            raise UnreviewedError(private) from ValueError(private)
+        headers = {"X-Provider-Error": private}
+        if fault == "encoding":
+            headers["content-encoding"] = "gzip"
+        if fault == "size_header":
+            headers["content-length"] = "32769"
+        if fault == "incomplete":
+            headers["content-length"] = str(len(raw) + 1)
+        return httpx.Response(fault if type(fault) is int else 200, headers=headers, stream=stream)
+
+    receipt = probe.Receipt(tmp_path, plan)
+    value = await probe.execute(
+        plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(respond)
+    )
+    assert value["status"] == "UNKNOWN" and value["code"] == code
+    assert value["closed"] is True and value["real_route"] == "UNVERIFIED"
+    assert value["http_requests"] == len(requests) == 2
+    assert [c["id"] for c in value["calls"]] == ["catalog", "ordinary"]
+    assert [c["status"] for c in value["calls"]] == ["CONFIRMED", "UNKNOWN"]
+    assert value["catalog_sha256"] == probe.validate_catalog(catalog())
+    assert Decimal(value["held_rub"]) == Decimal("3.89")
+    assert Decimal(value["cost_rub"]) == 0
+    assert "upstream_attempts" not in value["calls"][1]
+    saved = receipt.path.read_bytes()
+    assert json.loads(saved) == value
+    assert value["failure"] == {
+        "exception_type": "OTHER" if fault == "unknown_exception" else "POLZA",
+        "cause_type": cause,
+        "detail": detail,
+        "http_status": fault if type(fault) is int else None,
+    }
+    for secret in (KEY, "RAW_PROVIDER_BODY", "RAW_HEADER", "PRIVATE_PROMPT", "UnreviewedError"):
+        assert secret not in saved.decode()
+    if fault not in {"connect", "unknown_detail", "unknown_exception"}:
+        assert stream.closed
+        assert stream.bytes_read == (
+            0 if type(fault) is int or fault in {"encoding", "size_header"} else len(raw)
+        )
+    monkeypatch.setattr(probe, "local_key", lambda: pytest.fail("restart read key"))
+    with pytest.raises(probe.ProbeError, match="SESSION_ALREADY_EXISTS_NO_RESEND"):
+        probe.start(plan, plan["plan_sha256"], tmp_path)
+    assert receipt.path.read_bytes() == saved and len(requests) == 2
 
 
 @pytest.mark.parametrize("length_header", ["declared", "missing", "smaller"])
@@ -454,6 +557,13 @@ async def test_stop_cancels_actual_inflight_transport_without_followup(plan, tmp
     probe.stop(tmp_path, plan["plan_sha256"])
     value = await asyncio.wait_for(task, 2)
     assert value["closed"] and value["status"] == "UNKNOWN"
+    assert value["code"] == "STOP_OR_DEADLINE"
+    assert value["failure"] == {
+        "exception_type": "CANCELLED",
+        "cause_type": "OTHER",
+        "detail": "UNCLASSIFIED",
+        "http_status": None,
+    }
     assert value["http_requests"] == 2 and Decimal(value["held_rub"]) == probe.VISION_RESERVE
 
 
@@ -472,6 +582,13 @@ async def test_session_deadline_cancels_and_preserves_unknown(plan, tmp_path, mo
         transport=httpx.MockTransport(block),
     )
     assert value["status"] == "UNKNOWN" and value["closed"] and value["http_requests"] == 2
+    assert value["code"] == "HTTP_TIMEOUT"
+    assert value["failure"] == {
+        "exception_type": "POLZA",
+        "cause_type": "TIMEOUT",
+        "detail": "TRANSPORT_TIMEOUT",
+        "http_status": None,
+    }
 
 
 @pytest.mark.parametrize(
