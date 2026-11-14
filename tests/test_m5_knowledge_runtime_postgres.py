@@ -93,7 +93,7 @@ async def outbound_text(h, delivery):
     )
 
 
-async def test_current0019_application_readiness_and_published_faq_effect(knowledge_pg, tmp_path):
+async def test_current0020_application_readiness_and_published_faq_effect(knowledge_pg, tmp_path):
     h = knowledge_pg
     current = RuntimeDatabase(Settings())
     try:

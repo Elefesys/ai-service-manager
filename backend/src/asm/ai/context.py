@@ -9,7 +9,16 @@ from uuid import UUID
 from pydantic import Field
 
 from asm.ai.contracts import DTO, Message
-from asm.ai.knowledge import KnowledgePin, KnowledgeView, project_knowledge
+from asm.ai.knowledge import (
+    KnowledgePin,
+    KnowledgeView,
+    SearchKnowledgeView,
+    SearchPin,
+    SearchProjection,
+    project_knowledge,
+    project_search_knowledge,
+    reduce_search_view,
+)
 from asm.configuration.models import ActiveProjection
 from asm.conversations.guards import (
     GuardedTurnSnapshot,
@@ -396,3 +405,76 @@ class KnowledgeContextBuilder:
             snapshot_fingerprint=base.snapshot_fingerprint,
             view=view,
         )
+
+
+class SearchContextView(DTO):
+    revision: Literal["conversation_context_v3"] = "conversation_context_v3"
+    conversation: ContextView
+    business: SearchKnowledgeView
+
+    def messages(self) -> tuple[Message, ...]:
+        context, current = self.conversation.messages()
+        return context, Message(role="context", text=self.business.model_dump_json()), current
+
+
+class PreparedSearchContext(DTO):
+    binding: ContextBinding = Field(repr=False)
+    knowledge_pin: KnowledgePin = Field(repr=False)
+    search_pin: SearchPin = Field(repr=False)
+    snapshot_fingerprint: Digest = Field(repr=False)
+    view: SearchContextView = Field(repr=False)
+
+
+class SearchContextBuilder:
+    """Keep the existing 6144 business/8192 combined defaults and complete policy."""
+
+    def __init__(self, limits: ContextLimits = ContextLimits()):
+        self.limits = ContextLimits.model_validate(limits)
+        if self.limits.max_bytes > 8192:
+            raise ValueError("SEARCH_CONTEXT_LIMIT")
+
+    def build(
+        self,
+        value: object,
+        binding: ContextBinding,
+        pin: KnowledgePin,
+        active: ActiveProjection,
+        search_pin: SearchPin,
+        projection: SearchProjection,
+    ) -> PreparedSearchContext:
+        if (
+            str(binding.workspace_id) != active.workspace_id
+            or binding.business_id != pin.business_id
+        ):
+            raise ContextFailure("CONTEXT_MISMATCH")
+        base = ContextBuilder(self.limits).build(value, binding)
+        query = "\n".join(
+            m.text for m in base.view.current if m.state == "VISIBLE" and m.text is not None
+        )
+        business = project_search_knowledge(active, pin, search_pin, projection, query)
+        conversation = base.view
+        while True:
+            view = SearchContextView(conversation=conversation, business=business)
+            if len(view.model_dump_json().encode("utf-8")) <= self.limits.max_bytes:
+                view.messages()
+                return PreparedSearchContext(
+                    binding=base.binding,
+                    knowledge_pin=pin,
+                    search_pin=search_pin,
+                    snapshot_fingerprint=base.snapshot_fingerprint,
+                    view=view,
+                )
+            if conversation.recent:
+                conversation = ContextView.model_validate(
+                    conversation.model_dump()
+                    | {
+                        "recent": conversation.recent[1:],
+                        "history_omitted": conversation.history_omitted + 1,
+                        "history_truncated": True,
+                    }
+                )
+            else:
+                reduced = reduce_search_view(business)
+                if reduced is None:
+                    raise ContextFailure("CONTEXT_TOO_LARGE")
+                business = reduced

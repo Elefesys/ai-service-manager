@@ -162,6 +162,58 @@ class TenantUnitOfWork:
             },
         )
 
+    async def _knowledge_execute(self, sql: str, params: dict[str, object]) -> Any:
+        from asm.knowledge.errors import database_error
+        from asm.messaging.database import physical_transaction
+
+        self._assert_active()
+        try:
+            await physical_transaction(self._connection)
+            return (await self._connection.execute(text(sql), params)).scalar_one()
+        except DBAPIError as error:
+            self._failed = True
+            raise database_error(error) from None
+        except BaseException:
+            self._failed = True
+            raise
+
+    async def knowledge_owner_read(self, business: UUID) -> Any:
+        return await self._knowledge_execute(
+            "SELECT platform.knowledge_owner_read(:business)", {"business": business}
+        )
+
+    async def knowledge_owner_command(
+        self, business: UUID, operation: str, key: str, body: dict[str, Any]
+    ) -> Any:
+        return await self._knowledge_execute(
+            "SELECT platform.knowledge_owner_command(:business,:operation,:key,CAST(:body AS jsonb))",
+            {
+                "business": business,
+                "operation": operation,
+                "key": key,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
+    async def knowledge_build_reserve(self, business: UUID, build: UUID, batch: int) -> Any:
+        return await self._knowledge_execute(
+            "SELECT platform.knowledge_build_reserve(:business,:build,:batch)",
+            {"business": business, "build": build, "batch": batch},
+        )
+
+    async def knowledge_build_apply(
+        self, business: UUID, call: UUID, ticket: UUID, vectors: list[list[float]]
+    ) -> Any:
+        return await self._knowledge_execute(
+            "SELECT platform.knowledge_build_apply(:business,:call,:ticket,CAST(:vectors AS jsonb))",
+            {
+                "business": business,
+                "call": call,
+                "ticket": ticket,
+                "vectors": json.dumps(vectors, allow_nan=False),
+            },
+        )
+
     async def _messaging_execute(self, sql: str, params: dict[str, object]) -> Any:
         from asm.messaging.database import physical_transaction, worker_active
         from asm.messaging.errors import Code, MessagingError, database_error

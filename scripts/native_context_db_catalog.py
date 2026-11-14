@@ -89,6 +89,10 @@ SECRET_ENV = (
 )
 
 # Filled only from the installed owned PG18 catalog, never source serialization.
+KNOWLEDGE_SEARCH_NONFUNCTION_SHA256 = (
+    "cd831a15e7715f792ca11c84ab0f6c8830af12e011c66db69b05d0d0689ca8c9"
+)
+
 PUBLISHED_KNOWLEDGE_NONFUNCTION_SHA256 = (
     "1583e77dbe74107fe93cbadd6c43ff20d1521e9f62b4a6b22e89447f5569743c"
 )
@@ -265,7 +269,7 @@ def parse_function(sql):
 def capture_source(root, revision="0013"):
     """Expand the actual chain without importing/mutating the real Alembic module."""
     require(
-        revision in {"0013", "0014", "0015", "0016", "0017", "0018", "0019"},
+        revision in {"0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020"},
         "Unsupported catalog revision",
     )
     paths = sorted(p for p in (root / "migrations/versions").glob("*.py") if p.name[:4] <= revision)
@@ -470,6 +474,7 @@ def source_catalog(root, revision="0013"):
             "0017": 194,
             "0018": 202,
             "0019": 207,
+            "0020": 233,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -478,9 +483,16 @@ def source_catalog(root, revision="0013"):
     require(
         all(columns[t] == list(c) for t, c in modules["0013"]["NATIVE_COLUMNS"].items())
         and len(columns)
-        == {"0013": 45, "0014": 47, "0015": 48, "0016": 49, "0017": 49, "0018": 52, "0019": 52}[
-            revision
-        ]
+        == {
+            "0013": 45,
+            "0014": 47,
+            "0015": 48,
+            "0016": 49,
+            "0017": 49,
+            "0018": 52,
+            "0019": 52,
+            "0020": 59,
+        }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
             set()
@@ -495,6 +507,22 @@ def source_catalog(root, revision="0013"):
                     "platform.business_configuration_receipts",
                 }
                 if revision >= "0018"
+                else set()
+            )
+            | (
+                {
+                    "platform.knowledge_" + name
+                    for name in (
+                        "sources",
+                        "revisions",
+                        "chunks",
+                        "builds",
+                        "build_chunks",
+                        "release_builds",
+                        "embedding_calls",
+                    )
+                }
+                if revision >= "0020"
                 else set()
             )
         ),
@@ -587,9 +615,11 @@ def compare_embedded_profile(expected):
     derive the expected source catalog or to forgive installed catalog drift.
     """
     revision = expected["revision"]
-    require(revision in {"0015", "0016", "0017", "0018", "0019"}, "EMBEDDED_REVISION")
+    require(revision in {"0015", "0016", "0017", "0018", "0019", "0020"}, "EMBEDDED_REVISION")
     profile = (
-        "platform.published_knowledge_schema_profile()"
+        "platform.knowledge_search_schema_profile()"
+        if revision == "0020"
+        else "platform.published_knowledge_schema_profile()"
         if revision == "0019"
         else "platform.business_configuration_schema_profile()"
         if revision == "0018"
@@ -618,7 +648,8 @@ def compare_embedded_profile(expected):
     require(profile not in names, "EMBEDDED_SELF_ROW")
     require(len(names) == len(set(names)), "EMBEDDED_DUPLICATE_FUNCTION")
     require(
-        len(names) == {"0015": 182, "0016": 189, "0017": 193, "0018": 201, "0019": 206}[revision]
+        len(names)
+        == {"0015": 182, "0016": 189, "0017": 193, "0018": 201, "0019": 206, "0020": 232}[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
     )
@@ -648,7 +679,8 @@ def compare_embedded_profile(expected):
         require(row[1] not in columns, "EMBEDDED_DUPLICATE_TABLE")
         columns[row[1]] = re.findall(r"'([^']+)'", row[2])
     require(
-        len(columns) == {"0015": 48, "0016": 49, "0017": 49, "0018": 52, "0019": 52}[revision]
+        len(columns)
+        == {"0015": 48, "0016": 49, "0017": 49, "0018": 52, "0019": 52, "0020": 59}[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
     )
@@ -746,7 +778,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
         actual_columns.setdefault(table, []).append(column)
     require(actual_columns == expected_columns, "Missing/extra/reordered table columns")
     require(
-        revision in {"0013", "0015", "0016", "0017", "0018", "0019"}
+        revision in {"0013", "0015", "0016", "0017", "0018", "0019", "0020"}
         and sha256(nonfunction_text.encode("utf-8"))
         == (
             {
@@ -756,6 +788,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0017": RIGHTS_NONFUNCTION_SHA256,
                 "0018": CONFIGURATION_NONFUNCTION_SHA256,
                 "0019": PUBLISHED_KNOWLEDGE_NONFUNCTION_SHA256,
+                "0020": KNOWLEDGE_SEARCH_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -2872,7 +2905,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0019"),
+            source_catalog(ROOT, "0020"),
         )
 
     def persist_partition(self, work):
@@ -3056,7 +3089,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0019"
+            and source["expected_revision"] == "0020"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

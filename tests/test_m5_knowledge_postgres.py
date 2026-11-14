@@ -178,7 +178,8 @@ async def knowledge_pg(pg):
     await migrate("downgrade", "0018")
     await migrate("upgrade", "0019")
     await migrate("upgrade", "0019")
-    h.schema_revision = "0019"
+    await migrate("upgrade", "0020")
+    h.schema_revision = "0020"
     h.legacy = (claim, legacy, receipt, incomplete, incomplete_run, retained)
     return h
 
@@ -196,7 +197,7 @@ async def test_populated_upgrade_preserves_legacy_and_receipts_without_fabricate
     claim, cfg, receipt, incomplete, old, retained = h.legacy
     rows = await query(
         h,
-        "SELECT to_jsonb(r)-ARRAY['knowledge_pin','active_projection','knowledge_release_id'] AS row FROM platform.ai_runs r ORDER BY id",
+        "SELECT to_jsonb(r)-ARRAY['knowledge_pin','active_projection','knowledge_release_id','search_pin','search_refs','search_build_id'] AS row FROM platform.ai_runs r ORDER BY id",
     )
     assert [r["row"] for r in rows] == retained
     assert await h.kernel.replay_ai(claim.job_id, claim.claim_token, {"config": cfg}) == receipt
@@ -606,4 +607,4 @@ async def test_populated_downgrade_refuses_without_discarding_new_durable_knowle
         await scalar(h, "SELECT count(*) FROM platform.ai_runs WHERE knowledge_pin IS NOT NULL")
         == before
     )
-    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0019"
+    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0020"

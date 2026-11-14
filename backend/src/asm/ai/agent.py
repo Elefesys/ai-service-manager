@@ -18,6 +18,9 @@ from asm.ai.context import (
     KnowledgeContextView,
     PreparedContext,
     PreparedKnowledgeContext,
+    PreparedSearchContext,
+    SearchContextBuilder,
+    SearchContextView,
 )
 from asm.ai.contracts import (
     DTO,
@@ -28,13 +31,21 @@ from asm.ai.contracts import (
     ErrorCode,
     GatewayRequest,
     GatewayResult,
+    Handoff,
     ReadTool,
     ToolResult,
     Usage,
     validate_gateway_config,
 )
 from asm.ai.gateway import ModelAdapter, ModelGateway
-from asm.ai.knowledge import KnowledgeCode, KnowledgeFailure, KnowledgePin
+from asm.ai.knowledge import (
+    KnowledgeCode,
+    KnowledgeFailure,
+    KnowledgePin,
+    SearchPin,
+    SearchProjection,
+    SearchRefs,
+)
 from asm.configuration.models import ActiveProjection
 
 Boundary = Literal["MODEL", "READ", "FOLLOWUP", "CANDIDATE"]
@@ -185,7 +196,7 @@ class ConversationAgent:
 
     def _project(
         self, snapshot: object, binding: ContextBinding
-    ) -> PreparedContext | PreparedKnowledgeContext:
+    ) -> PreparedContext | PreparedKnowledgeContext | PreparedSearchContext:
         return self.builder.build(snapshot, binding)
 
     def _tool(self) -> ReadTool:
@@ -389,3 +400,131 @@ class KnowledgeConversationAgent(ConversationAgent):
             arguments=CurrentContextArgs,
             result=KnowledgeContextView,
         )
+
+
+class SearchAuthorityDecision(KnowledgeAuthorityDecision):
+    search_pin: SearchPin = Field(repr=False)
+
+
+class SearchContextRead(KnowledgeContextRead):
+    search_pin: SearchPin = Field(repr=False)
+    search_refs: SearchRefs = Field(repr=False)
+    search_projection: SearchProjection = Field(repr=False)
+
+
+class SearchAuthority(Protocol):
+    async def authorize(
+        self,
+        binding: ContextBinding,
+        knowledge_pin: KnowledgePin,
+        search_pin: SearchPin,
+        boundary: Boundary,
+    ) -> SearchAuthorityDecision: ...
+
+    async def read_current(
+        self, binding: ContextBinding, knowledge_pin: KnowledgePin, search_pin: SearchPin
+    ) -> SearchContextRead: ...
+
+
+class _PinnedSearchAuthority:
+    def __init__(
+        self,
+        inner: SearchAuthority,
+        pin: KnowledgePin,
+        active: ActiveProjection,
+        search_pin: SearchPin,
+        projection: SearchProjection,
+    ) -> None:
+        self.inner, self.pin, self.active = inner, pin, active
+        self.search_pin, self.projection = search_pin, projection
+
+    async def authorize(self, binding: ContextBinding, boundary: Boundary) -> AuthorityDecision:
+        decision = SearchAuthorityDecision.model_validate(
+            await self.inner.authorize(binding, self.pin, self.search_pin, boundary)
+        )
+        if decision.knowledge_pin != self.pin or decision.search_pin != self.search_pin:
+            raise KnowledgeFailure("KNOWLEDGE_STALE")
+        return AuthorityDecision(status=decision.status, binding=decision.binding)
+
+    async def read_current(self, binding: ContextBinding) -> ContextRead:
+        read = SearchContextRead.model_validate(
+            await self.inner.read_current(binding, self.pin, self.search_pin)
+        )
+        if (
+            read.knowledge_pin != self.pin
+            or read.active_projection != self.active
+            or read.search_pin != self.search_pin
+            or read.search_projection != self.projection
+            or read.search_refs != self.projection.refs()
+        ):
+            raise KnowledgeFailure("KNOWLEDGE_STALE")
+        return ContextRead(binding=read.binding, snapshot=read.snapshot)
+
+
+class SearchConversationAgent(ConversationAgent):
+    """Explicit v4, sharing the original two model calls and one bounded read."""
+
+    prompt_revision = "conversation_v4"
+
+    def __init__(
+        self,
+        config: AnyGatewayConfig,
+        adapter: ModelAdapter,
+        authority: SearchAuthority,
+        *,
+        knowledge_pin: KnowledgePin,
+        active_projection: ActiveProjection,
+        search_pin: SearchPin,
+        search_projection: SearchProjection,
+        builder: SearchContextBuilder | None = None,
+    ):
+        self.knowledge_pin = KnowledgePin.model_validate(knowledge_pin)
+        self.active_projection = ActiveProjection.model_validate_json(
+            active_projection.model_dump_json()
+        )
+        self.search_pin = SearchPin.model_validate(search_pin)
+        self.search_projection = SearchProjection.model_validate(search_projection)
+        self.search_builder = builder if builder is not None else SearchContextBuilder()
+        super().__init__(
+            config,
+            adapter,
+            _PinnedSearchAuthority(
+                authority,
+                self.knowledge_pin,
+                self.active_projection,
+                self.search_pin,
+                self.search_projection,
+            ),
+        )
+
+    def _project(self, snapshot: object, binding: ContextBinding) -> PreparedSearchContext:
+        return self.search_builder.build(
+            snapshot,
+            binding,
+            self.knowledge_pin,
+            self.active_projection,
+            self.search_pin,
+            self.search_projection,
+        )
+
+    def _tool(self) -> ReadTool:
+        return ReadTool(
+            name="read_context",
+            revision="conversation_context_v3",
+            description="Read current authorized conversation, policy and pinned source fragments. No images or mutations.",
+            arguments=CurrentContextArgs,
+            result=SearchContextView,
+        )
+
+    def _outcome(
+        self, *, reason: StopCode | None = None, candidate: ConversationResult | None = None
+    ) -> AgentOutcome:
+        # The application selects owner review after the ordinary fresh CANDIDATE gate.
+        # A model cannot resolve conflicting owner-labelled facts by inventing a winner.
+        if candidate is not None and self.search_projection.status == "CONFLICT":
+            candidate = Handoff(
+                kind="handoff",
+                text=None,
+                reason="Published sources conflict on an owner-labelled topic; owner review required.",
+            )
+        return super()._outcome(reason=reason, candidate=candidate)

@@ -25,14 +25,14 @@ _catalog = runpy.run_path(
 
 @cache
 def current_source():
-    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], "0019")
+    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], "0020")
 
 
 async def assert_current_schema(c):
     assert (await c.execute(text("SELECT current_user"))).scalar_one() == "asm_migrator"
     assert (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-    ).scalar_one() == "0019"
+    ).scalar_one() == "0020"
     original_path = (await c.execute(text("SHOW search_path"))).scalar_one()
     await c.execute(text("SET LOCAL search_path=pg_catalog,pg_temp"))
     expected = current_source()
@@ -49,7 +49,7 @@ async def assert_current_schema(c):
     )
     full, nonfunction = (await c.execute(text(_catalog["CATALOG_SQL"]))).one()
     profile = (
-        await c.execute(text("SELECT platform.published_knowledge_schema_profile()"))
+        await c.execute(text("SELECT platform.knowledge_search_schema_profile()"))
     ).scalar_one()
     await c.execute(text("SELECT set_config('search_path',:path,true)"), {"path": original_path})
     _catalog["compare_catalog"](expected, functions, resolved, full, nonfunction, lambda: profile)
@@ -57,14 +57,14 @@ async def assert_current_schema(c):
 
 
 async def current_snapshot(c):
-    """All 52 complete row multisets plus the independently checked full catalog."""
+    """All 59 complete row multisets plus the independently checked full catalog."""
     catalog = await assert_current_schema(c)
     rows = {}
     for table in sorted(current_source()["columns"]):
         values = (await c.execute(text(f"SELECT to_jsonb(t) FROM {table} AS t"))).scalars()
         canonical = sorted(json.dumps(v, sort_keys=True, separators=(",", ":")) for v in values)
         rows[table] = (len(canonical), hashlib.sha256("\n".join(canonical).encode()).hexdigest())
-    assert len(rows) == 52
+    assert len(rows) == 59
     return rows, catalog
 
 
@@ -83,7 +83,7 @@ async def historical_schema(h, revision):
             await h.runtime.check()
         yield
     finally:
-        await _migrate("upgrade", "0019")
+        await _migrate("upgrade", "0020")
         await h.runtime.engine.dispose()
         await h.runtime.check()
         with pytest.raises(RuntimeError, match="schema"):

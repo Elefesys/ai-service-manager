@@ -149,7 +149,7 @@ elif 'collect-current-native' in args:
 elif 'native-owner' in args:
     runner.write(evidence/'native-owner.json',{'system_identifier':'synthetic-owned-server'})
 elif 'readiness' in args:
-    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0019'})
+    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0020'})
 elif 'pytest' in args:
     nodes=json.loads((evidence/'inventory.json').read_text())['nodeids']
     if nodes==config['native']:
@@ -578,7 +578,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
                 group / "evidence/current-native-inventory.json",
                 {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
             )
-        if label == "catalog-0019" and fault == "catalog":
+        if label == "catalog-0020" and fault == "catalog":
             raise RuntimeError("CATALOG_DECLARED_PROFILE")
         if label == carrier.COMMAND_REPORT:
             expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
@@ -785,6 +785,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
     [
         ("0018", "business_configuration_schema_profile"),
         ("0019", "published_knowledge_schema_profile"),
+        ("0020", "knowledge_search_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -821,6 +822,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
     [
         ("0018", "business_configuration_schema_profile", 202, 201),
         ("0019", "published_knowledge_schema_profile", 207, 206),
+        ("0020", "knowledge_search_schema_profile", 233, 232),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -830,7 +832,7 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
     predicate = {
         "functions": f"(SELECT count(*) FROM functions)={functions}",
         "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
-        "tables": "(SELECT count(*) FROM tables)=52",
+        "tables": f"(SELECT count(*) FROM tables)={59 if revision == '0020' else 52}",
     }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
@@ -854,13 +856,13 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 ):
     from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
 
-    expected = catalog.source_catalog(catalog.ROOT, "0019")
+    expected = catalog.source_catalog(catalog.ROOT, "0020")
     if not body_matches:
-        expected["functions"]["platform.published_knowledge_schema_profile()"]["body_sha256"] = (
+        expected["functions"]["platform.knowledge_search_schema_profile()"]["body_sha256"] = (
             "0" * 64
         )
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
-    declared = {"schema_revision": "0019", "valid": valid, "profile_sha256": digest}
+    declared = {"schema_revision": "0020", "valid": valid, "profile_sha256": digest}
     result = carrier.catalog_comparison(expected, digest, "{}", declared)
     assert result["failed_predicate"] == reason
     assert result["application_pin_matches"] is hash_matches
@@ -1716,8 +1718,8 @@ def aggregate_driver(r11_event, monkeypatch):
                 {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
             )
         elif label in {
-            "schema-0019",
-            "catalog-0019",
+            "schema-0020",
+            "catalog-0020",
             "readiness",
             "schema",
             "versions",
@@ -2223,3 +2225,165 @@ def test_m5_capability_main_push_refuses_damaged_assignment_without_resources(
     with pytest.raises((carrier.Refusal, catalog.Refusal)):
         r["run"]()
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+def prepare_m5_search_event(r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False):
+    """Actual Git C0 assignment + bounded implementation, before all resources."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_SEARCH_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_SEARCH_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
+    for relative in sorted(carrier.M5_SEARCH_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# constructed C0 search assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed immutable C0 search assignment")
+    monkeypatch.setattr(carrier, "M5_SEARCH_ASSIGNMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(carrier, "M5_SEARCH_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    for relative in sorted(
+        (carrier.M5_SEARCH_PATHS - carrier.M5_SEARCH_C0_DOCS) | ({extra} if extra else set())
+    ):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            (path.read_text() if path.exists() else "") + "\n# constructed search delta\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed bounded knowledge search")
+    return capability_checkout(
+        r,
+        monkeypatch,
+        route,
+        f.git("rev-parse", "HEAD"),
+        branch=branch or carrier.M5_SEARCH_BRANCH,
+        wrong_base=wrong_base,
+    )
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m5_search_admission_export_and_inner_binding(r11_event, monkeypatch, route):
+    r = r11_event
+    merged = prepare_m5_search_event(r, monkeypatch, route)
+    r["run"]()
+    assert len(r["boundary"]) == 1 and not list((r["root"] / "private").iterdir())
+    bound = r["boundary"][0]
+    assert bound["mode"] == "runtime" and bound["sql_test_budget_seconds"] == 900
+    admission = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert admission["source"] == merged and admission["base"] == carrier.M5_SEARCH_BASE
+    actual_run = subprocess.run
+
+    class BeforeResources(Exception):
+        pass
+
+    def archive_boundary(args, *a, **kw):
+        assert args[0] == "git", "resource or credential access before source export"
+        if args[1] == "archive":
+            raise BeforeResources
+        return actual_run(args, *a, **kw)
+
+    monkeypatch.setattr(subprocess, "run", archive_boundary)
+    with pytest.raises(BeforeResources):
+        r["real_run_admitted"](
+            bound["root"],
+            bound["event"],
+            bound["manifest"],
+            bound["mode"],
+            sql_test_budget_seconds=900,
+        )
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert proof["branch"] == carrier.M5_SEARCH_BRANCH and proof["source"] == merged
+    for name, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": proof["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + name, value)
+    assert carrier.source_tree_from_evidence(path) == admission["tree"]
+    proof["paths"] = [".github/workflows/ci.yml"]
+    carrier.write(path, proof)
+    with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_WRITE_SET"):
+        carrier.source_tree_from_evidence(path)
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("document", sorted(carrier.M5_SEARCH_C0_DOCS))
+@pytest.mark.parametrize("drift", ["content", "mode", "type"])
+def test_m5_search_refuses_each_protected_doc_before_resources(
+    r11_event, monkeypatch, route, document, drift
+):
+    r = r11_event
+    prepare_m5_search_event(r, monkeypatch, route)
+    f = r["f"]
+    path = f.root / document
+    if drift == "content":
+        path.write_text(path.read_text() + "# unapproved\n")
+    elif drift == "mode":
+        path.chmod(0o755)
+    else:
+        path.unlink()
+        path.symlink_to("untrusted-target")
+    f.git("add", document)
+    f.git("commit", "-qm", "unapproved protected C0 document")
+    capability_checkout(
+        r, monkeypatch, route, f.git("rev-parse", "HEAD"), branch=carrier.M5_SEARCH_BRANCH
+    )
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("damage", ["assignment_tree", "assignment_ancestry", "base_tree", "path"])
+def test_m5_search_refuses_unapproved_source_before_resources(
+    r11_event, monkeypatch, route, damage
+):
+    r = r11_event
+    prepare_m5_search_event(r, monkeypatch, route, extra="uv.lock" if damage == "path" else None)
+    if damage == "assignment_tree":
+        monkeypatch.setattr(carrier, "M5_SEARCH_ASSIGNMENT_TREE", "f" * 40)
+    elif damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_SEARCH_TREE", "f" * 40)
+    elif damage == "assignment_ancestry":
+        tree = r["f"].git("rev-parse", "HEAD^{tree}")
+        unrelated = r["f"].git("commit-tree", tree, "-m", "unrelated same-tree assignment")
+        monkeypatch.setattr(carrier, "M5_SEARCH_ASSIGNMENT", unrelated)
+        monkeypatch.setattr(carrier, "M5_SEARCH_ASSIGNMENT_TREE", tree)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("damage", ["base", "branch", "old_migration", "probe", "workflow"])
+def test_m5_search_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damage):
+    r = r11_event
+    prepare_m5_search_event(
+        r,
+        monkeypatch,
+        "same-repository-pr-merge",
+        wrong_base=damage == "base",
+        branch="c4/unrelated" if damage == "branch" else None,
+        extra={
+            "old_migration": "migrations/versions/0019_published_knowledge.py",
+            "probe": "backend/src/asm/ai/capability_probe.py",
+            "workflow": ".github/workflows/ci.yml",
+        }.get(damage),
+    )
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m5_search_inherits_runtime_inventory_cleanup_and_budget(
+    aggregate_driver, monkeypatch, route
+):
+    h = aggregate_driver
+    prepare_m5_search_event(h["r"], monkeypatch, route)
+    h["r"]["run"]()
+    summary = json.loads((h["r"]["root"] / "evidence/summary.json").read_text())
+    assert summary["result"] == "PASS"
+    assert summary["expected_cases"] == summary["collected_cases"] == 160
+    assert summary["groups_visited"] == len(h["cleaned"]) == 8
+    assert summary["sql_test_budget_seconds"] == 900

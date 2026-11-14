@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
-import { type Bundle, parseActive, parseCommand, parseDraft } from '../src/configuration-api';
+import { type Bundle, parseActive, parseCommand, parseDraft, parseKnowledgeState } from '../src/configuration-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
 if(!fixtureFile||!passwordFile)throw new Error('E2E_CONFIGURATION_PRIVATE_FIXTURES_REQUIRED');
@@ -99,4 +99,68 @@ test('published knowledge reaches one guarded fake runtime reply; draft and repl
   const delivered=await runKnowledge();expect([delivered.model_calls,delivered.calls,delivered.effects]).toEqual([1,1,1]);expect(delivered.release_id===publication.release_id&&delivered.activation_version===publication.activation_version&&delivered.answer===answer&&delivered.source===source).toBe(true);
   await inbox.getByRole('button',{name:'Обновить сообщения',exact:true}).click();await expect(inbox.getByText(answer,{exact:true})).toHaveCount(1);await expect(inbox.getByText('Synthetic DRAFT must stay private.',{exact:true})).toHaveCount(0);
   const replayed=await runKnowledge();expect(replayed.replayed).toBe(true);expect([replayed.model_calls,replayed.calls,replayed.effects]).toEqual([1,1,1]);expect(replayed.release_id===delivered.release_id&&replayed.activation_version===delivered.activation_version).toBe(true);
+});
+
+
+test('@narrow owner reviews sources, preserves exact uncertain intent, publishes a ready build and revokes',async({page})=>{
+  test.setTimeout(60000);
+  await prepare(page);
+  const settings=page.getByRole('region',{name:'Настройки бизнеса',exact:true});
+  // Establish a real prior publication through the existing owner button.
+  await settings.getByRole('button',{name:'Опубликовать черновик',exact:true}).click();
+  await expect(settings.getByRole('region',{name:'Опубликованные сведения'}).getByText('Возьмите синтетический эскиз.',{exact:true})).toBeVisible();
+  const previous=await read(page.request,'active');
+  const knowledgeBase=base.replace(/\/configuration$/,'/knowledge');
+  const state=async()=>{const r=await safe(()=>page.request.get(knowledgeBase));expect(r.status()).toBe(200);return parseKnowledgeState(await safe(()=>r.json()));};
+  const before=await state();
+  await settings.getByRole('button',{name:'Посмотреть источники',exact:true}).click();
+  await expect(settings.getByRole('textbox',{name:'Текст источника',exact:true})).toBeEnabled();
+  const title='Synthetic source '+randomUUID(),canonical='Синтетическая памятка: возьмите эскиз. <b>Это текст.</b>';
+  let attempts=0,firstBody:string|null=null,firstKey:string|undefined,identical=false,finished=false;
+  await page.route(`**${knowledgeBase}/sources`,async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    attempts++;const body=route.request().postData(),key=route.request().headers()['idempotency-key'];
+    if(attempts===1){firstBody=body;firstKey=key;const r=await safe(()=>route.fetch());expect(r.status()).toBe(200);await safe(()=>route.abort('failed'));}
+    else{identical=body===firstBody&&key===firstKey;await safe(()=>route.continue());}
+  });
+  try{
+    await settings.getByLabel('Заголовок источника',{exact:true}).fill(title);
+    await settings.getByRole('combobox',{name:'Формат источника',exact:true}).selectOption('MARKDOWN');
+    await settings.getByRole('textbox',{name:'Текст источника',exact:true}).fill('  '+canonical+'  ');
+    await settings.getByRole('button',{name:'Сохранить источник',exact:true}).click();
+    await expect(settings.getByRole('button',{name:'Повторить исходную команду',exact:true})).toBeVisible();
+    await expect(settings.getByRole('textbox',{name:'Текст источника',exact:true})).toBeDisabled();
+    await settings.getByRole('button',{name:'Повторить исходную команду',exact:true}).click();
+    const source=settings.getByRole('article',{name:`Источник: ${title}`,exact:true});
+    await expect(source.getByText(canonical,{exact:true})).toBeVisible();
+    expect(attempts===2&&identical).toBe(true);
+    const saved=await state();expect(saved.sources.length===before.sources.length+1&&saved.sources.filter(s=>s.head.title===title).length===1).toBe(true);
+    expect((await read(page.request,'active')).release_id===previous.release_id).toBe(true);
+    await source.getByRole('button',{name:'Подтвердить источник',exact:true}).click();
+    await expect(source.getByRole('heading',{name:`${title} · Подтверждён`,exact:true})).toBeVisible();
+    const confirmed=await state();const own=confirmed.sources.find(s=>s.head.title===title)!;
+    expect(own.head.confirmed&&own.head.canonical_text===canonical&&own.preview.chunks.length===1).toBe(true);
+    await settings.getByRole('button',{name:'Подготовить поиск',exact:true}).click();
+    if(confirmed.embedding_mode==='CONTROLLED'){
+      await expect(settings.getByText(/Поиск готов к публикации/).first()).toBeVisible();
+      await expect.poll(async()=>{const value=await state();return value.builds.find(b=>b.revision_ids.includes(own.head.revision_id))?.state;}).toBe('READY');
+      await settings.getByRole('button',{name:'Опубликовать источники',exact:true}).click();
+      await expect(settings.getByText('Опубликованный поиск подключён к текущим настройкам.',{exact:true})).toBeVisible();
+      const published=await state();expect(published.active_build_id!==null&&published.release_id!==previous.release_id).toBe(true);
+      expect(published.builds.some(b=>b.build_id===published.active_build_id&&b.revision_ids.includes(own.head.revision_id)&&b.state==='READY')).toBe(true);
+    }else{
+      await expect(settings.getByText(/Ошибка индексации.*Индексация отключена/).first()).toBeVisible();
+      await expect.poll(async()=>{const value=await state();return value.builds.find(b=>b.revision_ids.includes(own.head.revision_id))?.state;}).toBe('ERROR');
+      await expect(settings.getByRole('button',{name:'Опубликовать источники',exact:true})).toBeDisabled();
+      const unchanged=await read(page.request,'active');expect(unchanged.release_id===previous.release_id&&unchanged.activation_version===previous.activation_version).toBe(true);
+    }
+    await source.getByRole('button',{name:'Отозвать источник',exact:true}).click();
+    await expect(source.getByRole('heading',{name:`${title} · Отозван`,exact:true})).toBeVisible();
+    const revoked=await state();expect(revoked.sources.find(s=>s.source_id===own.source_id)?.head.confirmed).toBe(false);
+    await source.getByRole('button',{name:'Удалить источник',exact:true}).click();
+    await source.getByRole('button',{name:'Удалить текст и индекс',exact:true}).click();
+    await expect(source).toHaveCount(0);
+    expect((await state()).sources.some(s=>s.source_id===own.source_id)).toBe(false);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);finished=true;
+  }finally{firstBody=null;firstKey=undefined;try{if(!page.isClosed())await page.unrouteAll({behavior:'wait'});}catch(error){if(finished)throw error;}}
 });

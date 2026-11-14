@@ -167,6 +167,67 @@ docs-only PR с ещё не поддержанной веткой.
 сначала готовые процедура/route/точные запросы/предел расходов, затем отдельный
 допуск владельца; не повторять M5.2A ради нового отчёта.
 
+### Контракт C4/C1/C2 — M5.2B R1 / 2026-11-14
+
+C2 подтвердил свободный slot0020←0019 по checkout и GitHub main; C1 review принят.
+Семь bounded таблиц: sources/revisions/chunks/builds/build_chunks/release_builds/
+embedding_calls; canonical text отдельно от vector projection. Все tenant keys,
+FORCE RLS/private capabilities; один literal profile/preprocessing v1, без registry.
+Новый publish атомарно создаёт v1 configuration release и build manifest; старые
+releases/runs/receipts не переписываются. Legacy publish остаётся configuration-only;
+любой rollback проверяет linked build и необратимый отзыв/delete, без восстановления
+удалённого. SAVE draft не меняет активные revisions. Revoke/delete видимого материала
+повышает activation под прежним CONFIGURATION_V1 lock; до первой публикации остаётся0.
+Private v4 pin: release/activation/build/profile, digest всех eligible published
+revisions и ближайший future effective_from/until; все прежние gates и clock checks.
+В run — только refs/hash/rank, текст читается заново после fresh admission.
+
+Owner prefix /knowledge: GET state; POST sources, sources/{id}/confirm/revoke/delete,
+builds, publish, rollback. Existing cookie/OWNER/CSRF/Origin/idempotency/CAS.
+State/command DTO v1 отдельны от configuration v1; prompt conversation_v4,
+context_v3/knowledge_v2 новые; неизменённый answer wire conversation_result_v1.
+Owner UI вводит/показывает/подтверждает/публикует/отзывает без SQL/ручного JSON.
+Optional owner-labelled claim_key: differing canonical text hashes среди visible
+published sibling revisions с пересекающимся service scope дают CONFLICT при
+попадании темы в retrieval, до top4; это conservative conflict, не NLP detector.
+
+Input source2048 UTF-8 bytes, HTTP envelope4096, до8 nondeleted sources/business;
+chunk512 bytes/до4 source/32 build. UTF-8-safe complete chunk plan проверяется
+до reservation, CHUNK_LIMIT без truncation. Batch≤8 chunks/8192 request bytes и
+консервативный token bound; до4 INDEX POST/build и1 QUERY POST/run, query≤1024 bytes.
+HTTP≤10s/connect5s, operation≤30s, response≤262144 bytes/history≤65536;
+до3 HTTP/call (POST + bounded list/detail),12/build и3/query. Максимум4 fragments
+в прежних6144 business/8192 total context bytes. Failed/UNKNOWN не меняет active.
+Reservation commit → controlled HTTP вне DB transaction → accounting completion
+по private opaque ticket даже после потери currentness → fresh apply только
+при действующих guards. Restart/новый key не повторяет uncertain call. До отдельного
+допуска default DISABLED/0HTTP; transport tests только controlled MockTransport,
+его vectors не доказывают качество/upstream real route. Raw ABSENT completion_tokens
+сохраняется NOT_APPLICABLE; present только integer0; identity/usage/cost различаются.
+Source delete очищает text/chunks/vectors; safe manifests/receipts сохраняются.
+
+### Возврат C4 — M5.2B R1
+
+Реализованы owner API/UI, отдельные confirmed builds и scoped FTS/exact-vector
+retrieval с provenance в защищённом v4 runtime. Миграция0020←0019: семь таблиц,
+восемь private capabilities; applied0001–0019 и четыре C0 docs сохранены.
+Current profile:233 functions/59 tables/832 columns/914 DDL;
+SHA-256 `470350d66139c8fca806421186006b6d3a3fe555d32641d572193e259f13fe1e`.
+
+LOCAL/TEST: backend unit4142 PASS (18 launcher cases повторены с CI PYTHONPATH),
+финальные49 source/pin/sentinel PASS; frontend437 PASS, typecheck/build PASS;
+actual PG owner API6 и runtime28 cases PASS; SQL8 groups и lifecycle4 groups PASS.
+Реальный30s deadline сценарий подтвердил finite ERROR/UNKNOWN, неизменность
+ledger/active и no-resend. Chromium: CONTROLLED и DISABLED × desktop/narrow —4 PASS.
+Ruff/format/mypy/OpenAPI drift check PASS. Команды, head/tree и итог штатного CI —
+в PR этого возврата; K02–K06/K11/K12 проверяются в указанном synthetic scope.
+
+Default embeddings остаются DISABLED/0HTTP; controlled vectors доказывают
+механику, не качество модели. Старые receipts/holds, M5.2A evidence и C6 HOLD
+сохранены. Следующий шаг — C0 review и отдельный owner merge; live activation,
+новые provider вызовы, VM и реальные клиентские данные не включались.
+
+
 ## 1. Проверяемый результат всего этапа
 
 Владелец может завести услуги и подтверждённые знания, проверить изменения и

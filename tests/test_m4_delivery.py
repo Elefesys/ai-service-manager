@@ -471,7 +471,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     old = catalog.source_catalog(catalog.ROOT, "0013")
     middle = catalog.source_catalog(catalog.ROOT, "0014")
     rights = catalog.source_catalog(catalog.ROOT, "0017")
-    current = catalog.source_catalog(catalog.ROOT, "0019")
+    current = catalog.source_catalog(catalog.ROOT, "0020")
     assert (
         len(old["functions"]),
         len(middle["functions"]),
@@ -481,19 +481,19 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         167,
         175,
         194,
-        207,
+        233,
     )
     assert (
         len(old["columns"]),
         len(middle["columns"]),
         len(rights["columns"]),
         len(current["columns"]),
-    ) == (45, 47, 49, 52)
-    body = current["functions"]["platform.published_knowledge_schema_profile()"]["body"]
+    ) == (45, 47, 49, 59)
+    body = current["functions"]["platform.knowledge_search_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 206,
-        "tables": 52,
+        "other_functions": 232,
+        "tables": 59,
         "result": "PASS",
     }
     assert (

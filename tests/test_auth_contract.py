@@ -72,6 +72,16 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/rollback",
         "GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/active",
     ]
+    knowledge_endpoints = [
+        "GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/sources",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/sources/{source_id}/confirm",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/sources/{source_id}/revoke",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/sources/{source_id}/delete",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/builds",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/publish",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/rollback",
+    ]
     assert len(contract["endpoints"]) == 7
     assert actual_endpoints == sorted(
         contract["endpoints"]
@@ -81,6 +91,7 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         + escalation_endpoints
         + native_context_endpoints
         + configuration_endpoints
+        + knowledge_endpoints
     )
     assert contract["schema_revision"] == "0003" and contract["down_revision"] == "0002"
     assert contract["environments"] == ["LOCAL", "TEST"]

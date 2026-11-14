@@ -6,8 +6,8 @@ import { api } from './api';
 vi.mock('./BillingPanel',()=>({BillingPanel:()=>null}));
 vi.mock('./MessagingPanel',()=>({MessagingPanel:()=>null}));
 vi.mock('./EscalationsPanel',()=>({EscalationsPanel:()=>null}));
-import { ActiveProjection, Bundle, ConfigurationError, DraftState, configurationApi } from './configuration-api';
-import { active, bundle, business, businessId, command, deferred, draft, preview, releaseId, session, workspace } from './configuration-fixtures.test-helper';
+import { ActiveProjection, Bundle, ConfigurationError, DraftState, configurationApi, KnowledgeState, KnowledgeCommand, knowledgeApi, normalizeSource } from './configuration-api';
+import { active, bundle, business, businessId, command, deferred, draft, preview, releaseId, session, workspace, knowledgeSource, knowledgeState, knowledgeCommand, readyBuild, sourceId, revisionId, buildId } from './configuration-fixtures.test-helper';
 let state:DraftState,current:ActiveProjection;
 beforeEach(()=>{state=draft();current=active();vi.spyOn(configurationApi,'draft').mockImplementation(async()=>structuredClone(state));vi.spyOn(configurationApi,'active').mockImplementation(async()=>structuredClone(current));vi.spyOn(configurationApi,'preview').mockImplementation(async()=>preview(structuredClone(state)));vi.spyOn(configurationApi,'command').mockImplementation(async(_w,_b,op,body)=>{
   if(op==='EDIT'&&'bundle'in body)state={...state,draft_version:String(BigInt(state.draft_version)+1n),bundle:structuredClone(body.bundle)};
@@ -31,4 +31,107 @@ describe('business configuration owner flow',()=>{
   it.each(['read','command'] as const)('ignores late %s after Business change, logout and unmount',async phase=>{const delayedRead=deferred<DraftState>(),delayedCommand=deferred<ReturnType<typeof command>>();if(phase==='read')vi.mocked(configurationApi.draft).mockImplementationOnce(()=>delayedRead.promise);const v=setup();if(phase==='command'){await ready();vi.mocked(configurationApi.command).mockImplementationOnce(()=>delayedCommand.promise);fireEvent.change(screen.getByLabelText('Ответ FAQ 1'),{target:{value:'Late private answer'}});fireEvent.submit(screen.getByRole('button',{name:'Сохранить черновик'}).closest('form')!);}const other=business('66666666-6666-4666-8666-666666666666');v.rerender(<ConfigurationPanel {...v.props} business={other}/>);v.rerender(<ConfigurationPanel {...v.props} session={null} business={null}/>);await act(async()=>{if(phase==='read')delayedRead.resolve({...draft(),bundle:{...bundle(),communication_style:'LATE_SECRET'}});else delayedCommand.resolve(command());});expect(screen.queryByRole('region',{name:'Настройки бизнеса'})).toBeNull();expect(screen.queryByText('LATE_SECRET')).toBeNull();expect(v.props.expired).not.toHaveBeenCalled();v.unmount();});
   it('hides owner data on live revocation and never requests settings for ADMIN/PROVIDER',async()=>{const v=setup();await ready();vi.mocked(configurationApi.active).mockRejectedValueOnce(new ConfigurationError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить настройки'}));await screen.findByText('Нет доступа к настройкам владельца.');expect(screen.queryByLabelText('Ответ FAQ 1')).toBeNull();expect(v.props.accessDenied).toHaveBeenCalledTimes(1);for(const role of ['ADMIN','PROVIDER'] as const){v.rerender(<ConfigurationPanel {...v.props} session={{...session(),memberships:[{...session().memberships[0],role}]}}/>);expect(screen.queryByRole('region',{name:'Настройки бизнеса'})).toBeNull();}});
   it('selects a previously observed publication and explains server-disallowed rollback',async()=>{current=active(bundle(),'1',releaseId);state=draft(bundle(),'1','1',releaseId);setup();await ready();await editFAQ('Revision2');const second='77777777-7777-4777-8777-777777777777';vi.mocked(configurationApi.command).mockImplementationOnce(async()=>{current=active(structuredClone(state.bundle!),'2',second,'2');state={...state,activation_version:'2',release_id:second};return command('PUBLISH','2','2',second);});fireEvent.click(screen.getByRole('button',{name:'Опубликовать черновик'}));await screen.findByText(/Активация 2 · из черновика 2/);fireEvent.change(screen.getByLabelText('Предыдущая публикация'),{target:{value:releaseId}});vi.mocked(configurationApi.command).mockRejectedValueOnce(new ConfigurationError(409,'ROLLBACK_NOT_ALLOWED'));fireEvent.click(screen.getByRole('button',{name:'Откатить публикацию'}));await screen.findByText(/Этот откат недопустим/);expect(vi.mocked(configurationApi.command).mock.calls.at(-1)?.[3]).toEqual({expected_activation_version:'2',release_id:releaseId});});
+});
+
+
+describe('confirmed source owner flow',()=>{
+  let knowledge:KnowledgeState;
+  beforeEach(()=>{
+    knowledge=knowledgeState();
+    vi.spyOn(knowledgeApi,'state').mockImplementation(async(w,b)=>structuredClone({...knowledge,workspace_id:w,business_id:b,activation_version:current.activation_version,release_id:current.release_id}));
+    vi.spyOn(knowledgeApi,'command').mockImplementation(async(_w,_b,operation,body)=>{
+      let result:Partial<KnowledgeCommand['result']>={};
+      if(operation==='KNOWLEDGE_SAVE'&&'text'in body){
+        const value=normalizeSource(body.text),source=knowledgeSource(value);
+        source.head={...source.head,title:body.title,format:body.format,source_label:body.source_label,author_label:body.author_label,service_id:body.service_id,category:body.category,claim_key:body.claim_key,effective_from:body.effective_from,effective_until:body.effective_until};
+        knowledge.sources=[source];result={source_id:sourceId,source_version:'1',revision_id:revisionId};
+      }else if(operation==='KNOWLEDGE_CONFIRM'){
+        knowledge.sources[0]={...knowledge.sources[0],source_version:'2',state:'CONFIRMED',head:{...knowledge.sources[0].head,confirmed:true}};result={source_id:sourceId,source_version:'2',revision_id:revisionId};
+      }else if(operation==='KNOWLEDGE_BUILD_CREATE'){
+        knowledge.builds=[readyBuild()];result={build_id:buildId,build_version:'1'}; // creation ACK deliberately differs from fresh READY version3
+      }else if(operation==='KNOWLEDGE_PUBLISH'){
+        knowledge.active_build_id=buildId;knowledge.release_id=releaseId;knowledge.activation_version='1';
+        state={...state,activation_version:'1',release_id:releaseId};current=active(structuredClone(state.bundle!),'1',releaseId);
+        result={build_id:buildId,build_version:'3',release_id:releaseId,activation_version:'1'};
+      }else if(operation==='KNOWLEDGE_REVOKE'||operation==='KNOWLEDGE_DELETE'){
+        const activation=String(BigInt(current.activation_version)+1n);
+        if(operation==='KNOWLEDGE_REVOKE')knowledge.sources[0]={...knowledge.sources[0],source_version:'3',state:'REVOKED'};else knowledge.sources=[];
+        state={...state,activation_version:activation};current={...current,activation_version:activation};knowledge.activation_version=activation;
+        result={source_id:sourceId,source_version:operation==='KNOWLEDGE_REVOKE'?'3':'4',release_id:current.release_id,activation_version:activation};
+      }
+      return knowledgeCommand(operation,result);
+    });
+  });
+  async function openSources(){
+    await ready();fireEvent.click(screen.getByRole('button',{name:'Посмотреть источники'}));await screen.findByLabelText('Текст источника');
+  }
+  async function saveSource(value='Подтверждённый текст источника.'){
+    fireEvent.change(screen.getByLabelText('Заголовок источника'),{target:{value:'Памятка'}});
+    fireEvent.change(screen.getByLabelText('Текст источника'),{target:{value}});
+    fireEvent.submit(screen.getByRole('button',{name:'Сохранить источник'}).closest('form')!);
+    await screen.findByRole('button',{name:'Подтвердить источник'});
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Подтвердить источник'})).toBeEnabled());
+  }
+  it('previews, confirms, builds, publishes and revokes without manual JSON or SQL',async()=>{
+    setup();await openSources();await saveSource();
+    expect(screen.getByText('Подтверждённый текст источника.',{exact:true})).toBeVisible();
+    expect(current.bundle).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Подтвердить источник'}));await waitFor(()=>expect(screen.getByText('Памятка · Подтверждён')).toBeVisible());
+    fireEvent.click(screen.getByRole('button',{name:'Подготовить поиск'}));await screen.findByText('Поиск готов к публикации · фрагментов 1');
+    fireEvent.click(screen.getByRole('button',{name:'Опубликовать источники'}));await screen.findByText('Опубликованный поиск подключён к текущим настройкам.');
+    const publish=vi.mocked(knowledgeApi.command).mock.calls.find(c=>c[2]==='KNOWLEDGE_PUBLISH');
+    expect(publish?.[3]).toEqual({schema_version:1,expected_draft_version:'1',expected_activation_version:'0',build_id:buildId,expected_build_version:'3'});
+    expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'Отозвать источник'}));await screen.findByText('Памятка · Отозван');
+    expect(vi.mocked(knowledgeApi.command).mock.calls.at(-1)?.slice(2,4)).toEqual(['KNOWLEDGE_REVOKE',{schema_version:1,expected_source_version:'2',expected_activation_version:'1'}]);
+    expect(screen.getByRole('button',{name:'Опубликовать источники'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'Удалить источник'}));expect(screen.getByText('Текст и его индекс будут удалены без восстановления через старую публикацию.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Удалить текст и индекс'}));await screen.findByText('Сохранённых источников ещё нет.');
+    expect(screen.queryByLabelText(/JSON/)).toBeNull();
+  });
+  it('keeps uncertain source intent exact across session recheck and blocks other writes',async()=>{
+    vi.mocked(knowledgeApi.command).mockRejectedValueOnce(new TypeError('lost ACK'));
+    const v=setup();await openSources();
+    fireEvent.change(screen.getByLabelText('Заголовок источника'),{target:{value:'Памятка'}});
+    fireEvent.change(screen.getByLabelText('Текст источника'),{target:{value:'Private synthetic source'}});
+    const form=screen.getByRole('button',{name:'Сохранить источник'}).closest('form')!;
+    fireEvent.submit(form);fireEvent.submit(form);await screen.findByRole('button',{name:'Повторить исходную команду'});
+    expect(knowledgeApi.command).toHaveBeenCalledTimes(1);expect(screen.getByLabelText('Ответ FAQ 1')).toBeDisabled();
+    const original=vi.mocked(knowledgeApi.command).mock.calls[0];
+    v.rerender(<ConfigurationPanel {...v.props} session={session('fresh-csrf')}/>);
+    await screen.findByRole('button',{name:'Повторить исходную команду'});
+    fireEvent.click(screen.getByRole('button',{name:'Повторить исходную команду'}));await screen.findByText('Команда подтверждена. Текущее состояние получено.');
+    const retry=vi.mocked(knowledgeApi.command).mock.calls[1];expect(retry.slice(0,5)).toEqual(original.slice(0,5));expect(retry[5]).toBe('fresh-csrf');
+  });
+  it('does not resend an acknowledged build when its fresh state read failed',async()=>{
+    knowledge.sources=[{...knowledgeSource(),source_version:'2',state:'CONFIRMED',head:{...knowledgeSource().head,confirmed:true}}];
+    setup();await openSources();
+    vi.mocked(knowledgeApi.state).mockRejectedValueOnce(new ConfigurationError(503,'UNAVAILABLE'));
+    fireEvent.click(screen.getByRole('button',{name:'Подготовить поиск'}));await screen.findByRole('button',{name:'Повторить чтение настроек'});
+    expect(knowledgeApi.command).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button',{name:'Повторить чтение настроек'}));await screen.findByText('Поиск готов к публикации · фрагментов 1');expect(knowledgeApi.command).toHaveBeenCalledTimes(1);
+  });
+  it('renders Markdown as text and disables confirmation for a complete-plan error',async()=>{
+    const payload='<img src=x onerror=alert(1)>';
+    knowledge.sources=[{...knowledgeSource(payload),head:{...knowledgeSource(payload).head,format:'MARKDOWN'},preview:{chunks:[],issues:['CHUNK_LIMIT']}}];
+    setup();await openSources();
+    expect(screen.getByText(payload,{exact:true})).toBeVisible();expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByRole('button',{name:'Подтвердить источник'})).toBeDisabled();
+    expect(screen.getByText(/Текст не помещается в четыре фрагмента/)).toBeVisible();
+  });
+  it('shows failed and unknown build state while keeping publish disabled',async()=>{
+    knowledge.sources=[{...knowledgeSource(),source_version:'2',state:'CONFIRMED',head:{...knowledgeSource().head,confirmed:true}}];
+    knowledge.embedding_mode='DISABLED';knowledge.builds=[{...readyBuild(),state:'ERROR',error_code:'EMBEDDING_ERROR'}];
+    setup();await openSources();expect(screen.getByText(/Ошибка индексации.*Индексация отключена/)).toBeVisible();expect(screen.getByRole('button',{name:'Опубликовать источники'})).toBeDisabled();
+    knowledge.builds=[{...readyBuild(),state:'UNKNOWN',error_code:'EMBEDDING_UNKNOWN'}];
+    fireEvent.click(screen.getByRole('button',{name:'Посмотреть источники'}));await screen.findByText(/Результат индексации неизвестен/);expect(knowledgeApi.command).not.toHaveBeenCalled();
+  });
+  it('hides a late source read after Business change and logout',async()=>{
+    const delayed=deferred<KnowledgeState>();vi.mocked(knowledgeApi.state).mockImplementationOnce(()=>delayed.promise);
+    const v=setup();await ready();fireEvent.click(screen.getByRole('button',{name:'Посмотреть источники'}));
+    v.rerender(<ConfigurationPanel {...v.props} business={business('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')}/>);
+    v.rerender(<ConfigurationPanel {...v.props} session={null} business={null}/>);
+    await act(async()=>delayed.resolve({...knowledgeState(),sources:[knowledgeSource('PRIVATE_SOURCE_OTHER_SCOPE')]}));
+    expect(screen.queryByText('PRIVATE_SOURCE_OTHER_SCOPE')).toBeNull();expect(screen.queryByRole('region',{name:'Настройки бизнеса'})).toBeNull();
+  });
 });

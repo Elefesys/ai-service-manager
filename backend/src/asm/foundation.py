@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from asm.ai.runtime import SyntheticRuntime
     from asm.ai.runtime_settings import RuntimeSettings
     from asm.files.storage import ObjectStorage
+    from asm.knowledge.embeddings import EmbeddingClient
     from asm.messaging.adapter import ControlledAdapter
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.worker import Worker
@@ -46,9 +47,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0019"
-NATIVE_CONTEXT_PROFILE_SHA256 = "e2bfd685188e1b67430de02c03eb3cef3af8f13de74e13d641032085b3b23c36"
-NATIVE_PROFILE_BODY_SHA256 = "93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5"
+DATABASE_SCHEMA_REVISION = "0020"
+NATIVE_CONTEXT_PROFILE_SHA256 = "470350d66139c8fca806421186006b6d3a3fe555d32641d572193e259f13fe1e"
+NATIVE_PROFILE_BODY_SHA256 = "0f1a46a1bc297bd73e431ab4e865d9e2e67add552c3425724dbd24b97d7150cb"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -85,7 +86,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.published_knowledge_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.knowledge_search_schema_profile()')
             """)
             )
         )
@@ -129,7 +130,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
     if (
         declared
         != {
-            "schema_revision": "0019",
+            "schema_revision": "0020",
             "valid": True,
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
         }
@@ -268,6 +269,7 @@ def create_app(
     *,
     telegram: "TelegramClient | None" = None,
     object_storage: "ObjectStorage | None" = None,
+    knowledge_embeddings: "EmbeddingClient | None" = None,
 ) -> FastAPI:
     from asm.configuration.http import install_configuration
     from asm.conversations.escalation_http import install_escalations
@@ -275,6 +277,7 @@ def create_app(
     from asm.conversations.native_context_http import install_native_context
     from asm.files.config import StorageSettings
     from asm.files.storage import S3ObjectStorage
+    from asm.knowledge.http import install_knowledge
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.http import install_messaging
     from asm.telegram.adapter import TelegramRefresher
@@ -340,6 +343,7 @@ def create_app(
     install_auth(app, auth, config)
     install_billing(app, auth, config)
     install_configuration(app, auth, config)
+    install_knowledge(app, auth, config, embeddings=knowledge_embeddings)
     install_messaging(
         app,
         auth,
@@ -369,6 +373,7 @@ def create_worker(
     ai_config: "AnyGatewayConfig | None" = None,
     model: "Callable[[], FakeAdapter] | None" = None,
     ai_telegram: "TelegramClient | None" = None,
+    ai_embeddings: "EmbeddingClient | None" = None,
     provider_settings: "RuntimeSettings | None" = None,
     provider_key_file: Path | None = None,
     provider_transport: "AsyncBaseTransport | None" = None,
@@ -381,7 +386,8 @@ def create_worker(
 
     if provider_settings is not None:
         if (
-            ai_config is not None
+            ai_embeddings is not None
+            or ai_config is not None
             or model is not None
             or provider_key_file is None
             or ai_telegram is None
@@ -402,12 +408,19 @@ def create_worker(
         )
     if provider_key_file is not None or provider_transport is not None:
         raise MessagingError(Code.INVALID_INPUT)
+    if ai_config is None and ai_embeddings is not None:
+        raise MessagingError(Code.INVALID_INPUT)
     if (ai_config is None) != (model is None) or (ai_config is None and ai_telegram is not None):
         raise MessagingError(Code.INVALID_INPUT)
     ai = None
     if ai_config is not None and model is not None:
         ai = SyntheticRuntime(
-            database, ai_config, model, environment=environment, telegram=ai_telegram
+            database,
+            ai_config,
+            model,
+            environment=environment,
+            telegram=ai_telegram,
+            embeddings=ai_embeddings,
         )
     return Worker(database, adapter, ai=ai)
 
