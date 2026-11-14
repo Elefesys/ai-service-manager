@@ -2596,9 +2596,10 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
     assert (
         ledger["material_exit"] == 0
         and ledger["material_cleanup"]["state"] == "PASS"
+        and ledger["material_deadline"] == ledger["started_at"] + 720
         and ledger["material_export_completed_at"]
         < ledger["material_supervisor_deadline"]
-        == ledger["started_at"] + 1200
+        == ledger["material_deadline"] + 480
         and ledger["started_at"] <= ledger["material_export_completed_at"] <= began < deadline
     ), "CONTROL_NEGATIVE_ADMISSION"
     positive = json.loads((checkout / "reports/m3-schema-phase.json").read_text())
@@ -4160,7 +4161,7 @@ def run_frozen_material(directory, ledger, completion):
     candidate, started = ledger["candidate"], ledger["started_at"]
     deadline, terminal = ledger["deadline"], ledger["material_deadline"]
     supervisor = ledger["material_supervisor_deadline"]
-    assert deadline == started + 600 and terminal == started + 720 and supervisor == started + 1200
+    assert deadline == started + 600 and terminal == started + 720 and supervisor == terminal + 480
     reports = e.ROOT / "reports"
     retained = reports / "retained-material"
     retained.mkdir(parents=True, exist_ok=True)
@@ -12009,23 +12010,92 @@ def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtim
 
 
 @pytest.mark.parametrize(
-    "fault", [None, "deadline", "expired", "P_exit", "P_cleanup", "P_late", "P_deadline"]
+    "fault", [None, "retained_deadline", "terminal", "supervisor", "terminal_supervisor", "expired"]
 )
-def test_post_material_negative_admission_keeps_original_S(tmp_path, monkeypatch, fault):
+def test_frozen_material_fractional_deadline_reaches_archive_boundary(tmp_path, monkeypatch, fault):
+    started = 207.841377092  # Retained CI43417309912 ledger, not a rounded clock.
+    terminal = started + 720
     ledger = {
-        "started_at": 100.0,
-        "deadline": 700.0,
-        "material_supervisor_deadline": 1300.0,
-        "state_deadline": 1540.0,
-        "material_export_completed_at": 800.0,
+        "candidate": "a" * 40,
+        "started_at": started,
+        "deadline": started + 600,
+        "material_deadline": terminal,
+        "material_supervisor_deadline": terminal + 480,
+    }
+    now = started + 700
+    if fault == "retained_deadline":
+        ledger["deadline"] += 1
+    elif fault in {"terminal", "terminal_supervisor"}:
+        ledger["material_deadline"] += 1
+    if fault in {"supervisor", "terminal_supervisor"}:
+        ledger["material_supervisor_deadline"] += 1
+    if fault == "expired":
+        now = terminal
+    monkeypatch.setattr(sys.modules[__name__], "time", SimpleNamespace(monotonic=lambda: now))
+    monkeypatch.setattr(e, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        sys.modules[__name__], "frozen_material_binding", lambda candidate: {"candidate": candidate}
+    )
+    budgets, calls = [], []
+    stopped = RuntimeError("stop before first real Git archive")
+
+    @contextmanager
+    def budget(seconds):
+        budgets.append(seconds)
+        yield
+
+    def command(args):
+        calls.append(args)
+        raise stopped
+
+    monkeypatch.setattr(e, "migration_budget", budget)
+    monkeypatch.setattr(e, "command", command)
+    with pytest.raises(AssertionError if fault else RuntimeError) as caught:
+        run_frozen_material(tmp_path, ledger, {})
+    if fault:
+        assert calls == budgets == []
+        if fault == "expired":
+            assert str(caught.value).split("\n", 1)[0] == "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+    else:
+        assert caught.value is stopped
+        assert calls == [["git", "archive", "--format=tar.gz", MATERIAL_P]]
+        assert budgets == [20.0]
+        assert ledger["private_state_retained"] is True
+
+
+@pytest.mark.parametrize("started", [100.0, 207.841377092])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        None,
+        "deadline",
+        "expired",
+        "P_exit",
+        "P_cleanup",
+        "P_late",
+        "P_deadline",
+        "terminal",
+        "supervisor",
+        "terminal_supervisor",
+    ],
+)
+def test_post_material_negative_admission_keeps_original_S(tmp_path, monkeypatch, fault, started):
+    terminal = started + 720
+    ledger = {
+        "started_at": started,
+        "deadline": started + 600,
+        "material_deadline": terminal,
+        "material_supervisor_deadline": terminal + 480,
+        "state_deadline": started + 1440,
+        "material_export_completed_at": started + 700,
         "material_exit": 0,
         "material_cleanup": {"state": "PASS"},
     }
-    now = 900.0
+    now = started + 800
     if fault == "deadline":
         ledger["state_deadline"] += 1
     elif fault == "expired":
-        now = 1540.0
+        now = ledger["state_deadline"]
     elif fault == "P_exit":
         ledger["material_exit"] = 1
     elif fault == "P_cleanup":
@@ -12033,8 +12103,12 @@ def test_post_material_negative_admission_keeps_original_S(tmp_path, monkeypatch
     elif fault == "P_late":
         ledger["material_export_completed_at"] = now + 1
     elif fault == "P_deadline":
-        now = 1400.0
-        ledger["material_export_completed_at"] = 1300.0
+        now = started + 1300
+        ledger["material_export_completed_at"] = ledger["material_supervisor_deadline"]
+    elif fault in {"terminal", "terminal_supervisor"}:
+        ledger["material_deadline"] += 1
+    if fault in {"supervisor", "terminal_supervisor"}:
+        ledger["material_supervisor_deadline"] += 1
     monkeypatch.setattr(sys.modules[__name__], "time", SimpleNamespace(monotonic=lambda: now))
     reports = tmp_path / "reports"
     reports.mkdir()

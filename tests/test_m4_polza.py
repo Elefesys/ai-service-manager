@@ -20,7 +20,9 @@ from asm.ai.contracts import (
 )
 from asm.ai.gateway import ModelGateway, ProviderFailure
 from asm.ai.polza import (
+    CAPABILITY_CATALOG,
     CONVERSATION_WIRE_REVISION,
+    EMBEDDINGS,
     ENDPOINT,
     EXPERIMENT_PROVIDERS,
     GPT_HISTORY_PROFILE,
@@ -35,6 +37,7 @@ from asm.ai.polza import (
     SyntheticRoute,
     ToolCompatAdapter,
     ToolCompatRoute,
+    bounded_capability_http,
     bounded_http,
     conversation_wire_schema,
     encode,
@@ -44,6 +47,125 @@ from asm.ai.probe import FIXTURES, Ledger, ReadArgs, ReadResult, configuration, 
 from pydantic import SecretStr
 
 KEY = SecretStr("offline-fixture-secret-do-not-log")
+
+
+@pytest.mark.parametrize("url", [EMBEDDINGS, CAPABILITY_CATALOG])
+async def test_m5_probe_does_not_expand_legacy_transport_allowlist(url):
+    def forbidden(request):
+        pytest.fail("legacy caller reached a newly admitted endpoint")
+
+    with pytest.raises(ProviderFailure):
+        await bounded_http(
+            KEY, url, body=b"{}", seconds=1, maximum=1024, transport=httpx.MockTransport(forbidden)
+        )
+
+
+@pytest.mark.parametrize("operation,body", [("catalog", None), ("embedding", b"{}")])
+async def test_m5_helper_uses_only_exact_finite_endpoint(operation, body):
+    seen = []
+
+    def respond(request):
+        seen.append(request)
+        assert str(request.url) == (CAPABILITY_CATALOG if operation == "catalog" else EMBEDDINGS)
+        assert request.method == ("GET" if operation == "catalog" else "POST")
+        return httpx.Response(200, stream=httpx.ByteStream(b"{}"))
+
+    raw = await bounded_capability_http(
+        KEY, operation, body=body, seconds=1, maximum=1024, transport=httpx.MockTransport(respond)
+    )
+    assert raw == b"{}" and len(seen) == 1
+
+
+@pytest.mark.parametrize(
+    "operation,body,seconds,maximum",
+    [
+        ("https://invalid.example", b"{}", 1, 1024),
+        ("catalog", b"{}", 1, 1024),
+        ("embedding", None, 1, 1024),
+        ("embedding", b"x" * 8193, 1, 1024),
+        ("embedding", b"{}", 41, 1024),
+        ("catalog", None, 16, 1024),
+        ("embedding", b"{}", 1, 262145),
+        ("catalog", None, 1, 4194305),
+        ("embedding", b"{}", 0, 1024),
+        ("catalog", None, 1, 0),
+    ],
+)
+async def test_m5_helper_rejects_unbounded_or_wrong_operations_before_transport(
+    operation, body, seconds, maximum
+):
+    with pytest.raises(ProviderFailure):
+        await bounded_capability_http(
+            KEY,
+            operation,
+            body=body,
+            seconds=seconds,
+            maximum=maximum,
+            transport=httpx.MockTransport(lambda request: pytest.fail("HTTP before admission")),
+        )
+
+
+@pytest.mark.parametrize(
+    "operation,body,size",
+    [
+        ("catalog", None, 2097153),
+        ("catalog", None, 3276366),
+        ("catalog", None, 4194304),
+        ("embedding", b"{}", 262144),
+    ],
+)
+async def test_m5_helper_accepts_exact_catalog_and_embedding_response_boundaries(
+    operation, body, size
+):
+    raw = b"{}".ljust(size, b" ")
+    chunks = [raw[offset : offset + 65536] for offset in range(0, size, 65536)]
+    stream, calls = Stream(chunks), []
+
+    def respond(request):
+        calls.append(request)
+        assert str(request.url) == (CAPABILITY_CATALOG if operation == "catalog" else EMBEDDINGS)
+        assert request.method == ("GET" if operation == "catalog" else "POST")
+        assert request.headers["accept-encoding"] == "identity"
+        return httpx.Response(200, headers={"content-length": str(size)}, stream=stream)
+
+    value = await bounded_capability_http(
+        KEY, operation, body=body, seconds=1, maximum=size, transport=httpx.MockTransport(respond)
+    )
+    assert value == raw and json.loads(value) == {}
+    assert stream.reads == len(chunks) and len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "failure", ["redirect", "compression", "declared_size", "stream_size", "timeout"]
+)
+async def test_m5_helper_retains_raw_byte_deadline_and_no_redirect_guards(failure):
+    calls = []
+
+    async def respond(request):
+        calls.append(request)
+        if failure == "timeout":
+            await asyncio.Future()
+        headers = {
+            "redirect": {"location": "https://invalid.example"},
+            "compression": {"content-encoding": "gzip"},
+            "declared_size": {"content-length": "33"},
+        }.get(failure, {})
+        return httpx.Response(
+            302 if failure == "redirect" else 200,
+            headers=headers,
+            stream=httpx.ByteStream(b"x" * (33 if failure == "stream_size" else 2)),
+        )
+
+    with pytest.raises(ProviderFailure):
+        await bounded_capability_http(
+            KEY,
+            "embedding",
+            body=b"{}",
+            seconds=0.05,
+            maximum=32,
+            transport=httpx.MockTransport(respond),
+        )
+    assert len(calls) == 1
 
 
 def review(model=MODELS[0], **changes):
