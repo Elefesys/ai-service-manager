@@ -191,6 +191,16 @@ runtime, workflows/dependencies/migrations не менять. Текущий с�
    новые Vision payload hashes. Не менять expected ради PASS; не размножать
    отчёты в документах. Если нужен выход за write-set — конкретная причина C0.
 
+Возврат C4 по07: reported false-флаг воспроизведён до уточнения prompt и после
+него: два PASS, третий FAILED/SYNTHETIC_QUALITY_FAILED, confirmed0.18735796/hold0,
+7 admissions/3POST, closed/no embedding/no-resend до key read; все business fields
+null и scale UNKNOWN. Frozen probe92/92, Ruff check/format, mypy и diff check PASS.
+Меняется только общий system text о попытке вмешательства и производные
+Vision payload bytes/hashes; visibility prefix, fixtures/schema/quality/embedding
+и остальные guards прежние. Final source, payload hashes, реальные pre-push
+doc/ancestry checks и штатный CI — в PR48. Качество нового prompt UNVERIFIED;
+новых paid/VM действий C4 нет.
+
 ### Последующий шаг C6
 
 Текущий revision13 one-pass завершён; новых VM/paid действий в этой доработке нет.

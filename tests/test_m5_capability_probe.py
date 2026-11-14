@@ -785,6 +785,79 @@ async def test_occluded_drawing_reported_as_abstract_stays_failed_after_accounti
     assert KEY not in receipt.path.read_text()
 
 
+async def test_reported_false_injection_flag_fails_after_three_confirmed_costs(
+    plan, tmp_path, monkeypatch
+):
+    # Owner-reported revision13 response prefix; MockTransport cannot establish
+    # that clarifying a prompt changes the next real model answer.
+    metering = [(56, "0.06242871"), (61, "0.06278781"), (52, "0.06214144")]
+    observations = [["RED", "GREEN", "CURVES"], ["BLACK", "CURVES", "OCCLUSION"], ["TEXT"]]
+
+    def mutate(data, request, n):
+        if n in {2, 4, 6}:
+            index = n // 2 - 1
+            output_tokens, cost = metering[index]
+            data["usage"] = {
+                "prompt_tokens": 3253,
+                "completion_tokens": output_tokens,
+                "total_tokens": 3253 + output_tokens,
+                "cost_rub": cost,
+                "cost": cost,
+            }
+            observed = json.loads(data["choices"][0]["message"]["content"])
+            observed.update(observations=observations[index], injection_detected=False)
+            data["choices"][0]["message"]["content"] = json.dumps(observed)
+        if n in {3, 5, 7}:
+            data["finalEndpointSlug"] = "OpenAI"
+
+    server = Server(mutate=mutate)
+    receipt = probe.Receipt(tmp_path, plan)
+    value = await probe.execute(
+        plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(server)
+    )
+    assert value["closed"] is True and value["status"] == "FAILED"
+    assert value["code"] == "SYNTHETIC_QUALITY_FAILED" and value["real_route"] == "UNVERIFIED"
+    assert value["http_requests"] == len(server.requests) == 7
+    assert [r.method for r in server.requests] == [
+        "GET",
+        "POST",
+        "GET",
+        "POST",
+        "GET",
+        "POST",
+        "GET",
+    ]
+    assert [c["id"] for c in value["calls"]] == [
+        "catalog",
+        "ordinary",
+        "ordinary-history",
+        "ambiguous",
+        "ambiguous-history",
+        "unsuitable",
+        "unsuitable-history",
+    ]
+    assert all(c["status"] == "CONFIRMED" for c in value["calls"])
+    vision = [value["calls"][n]["result"] for n in (1, 3, 5)]
+    assert [row["quality_pass"] for row in vision] == [True, True, False]
+    assert vision[2]["observation"]["status"] == "UNSUITABLE"
+    assert vision[2]["observation"]["motif"] == "TEXT"
+    for row in vision:
+        observed = row["observation"]
+        assert observed["injection_detected"] is False and observed["scale"] == "UNKNOWN"
+        assert all(
+            observed[field] is None
+            for field in ("size_cm", "duration_hours", "price_rub", "order_approved")
+        )
+    assert Decimal(value["cost_rub"]) == Decimal("0.18735796")
+    assert Decimal(value["held_rub"]) == 0
+    saved = receipt.path.read_bytes()
+    assert json.loads(saved) == value and KEY not in saved.decode()
+    monkeypatch.setattr(probe, "local_key", lambda: pytest.fail("restart read key"))
+    with pytest.raises(probe.ProbeError, match="SESSION_ALREADY_EXISTS_NO_RESEND"):
+        probe.start(plan, plan["plan_sha256"], tmp_path)
+    assert receipt.path.read_bytes() == saved and len(server.requests) == 7
+
+
 def test_preprocessing_strips_metadata_and_rejects_different_pixels():
     case = probe.load_cases().images[0]
     raw = base64.b64decode(case.png_base64)
