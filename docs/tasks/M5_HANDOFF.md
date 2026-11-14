@@ -86,6 +86,16 @@ C0 после финального review/CI назовёт owner merge как �
 main/штатный post-merge CI и выдаст только M5.2B от принятого main.
 Старые M4 live ограничения, UNKNOWN/holds и client-data запреты остаются.
 
+### Возврат C4 — INTEGRATION-FINALIZE / 2026-11-14
+
+Включён exact C0 docs commit40641f31/treee695db04. В admission обновлены только
+два C0 docs pins; остальные bytes script, original assignment и guards неизменны.
+Actual Git tree/ancestry/protected bytes/modes/types checks PASS; существующие
+`tests/test_m4_runtime_db_runner.py -k m5_capability`: 72 PASS/209 deselected,8.14s.
+Ruff check/format и py_compile изменённого script PASS. Final head/tree/tested
+merge и один штатный CI — в [возврате PR48](https://github.com/Elefesys/ai-service-manager/pull/48).
+M5.2A REVIEW, C6 HOLD; final review C0 и отдельное owner merge ещё впереди.
+
 ## 1. Проверяемый результат всего этапа
 
 Владелец может завести услуги и подтверждённые знания, проверить изменения и
