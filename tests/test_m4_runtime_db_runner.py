@@ -1895,33 +1895,10 @@ def test_historical_admission_cannot_request_900(aggregate_driver, monkeypatch, 
     assert not h["calls"] and not h["cleaned"]
 
 
-def prepare_m5_capability_event(
-    r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False
-):
-    """Real Git base + immutable C0 docs + bounded implementation + test merge."""
+def capability_checkout(r, monkeypatch, route, source, *, branch=None, wrong_base=False):
+    """Bind the actual Git source and two-parent merge to the CI event."""
     f = r["f"]
-    monkeypatch.setattr(carrier, "M5_CAPABILITY_BASE", r["source"])
-    monkeypatch.setattr(carrier, "M5_CAPABILITY_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
-    for relative in sorted(carrier.M5_CAPABILITY_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}):
-        path = f.root / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("# constructed C0 capability assignment\n")
-    f.git("add", ".")
-    f.git("commit", "-qm", "constructed immutable C0 capability assignment")
-    monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT", f.git("rev-parse", "HEAD"))
-    monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
-    for relative in sorted(
-        (carrier.M5_CAPABILITY_PATHS - carrier.M5_CAPABILITY_C0_DOCS)
-        | ({extra} if extra else set())
-    ):
-        path = f.root / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            (path.read_text() if path.exists() else "") + "\n# constructed probe delta\n"
-        )
-    f.git("add", ".")
-    f.git("commit", "-qm", "constructed bounded capability probe")
-    source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
+    tree = f.git("rev-parse", source + "^{tree}")
     base = r["base"] if wrong_base else r["source"]
     merged = f.git("commit-tree", tree, "-p", base, "-p", source, "-m", "test merge")
     f.git("reset", "--hard", merged)
@@ -1938,6 +1915,141 @@ def prepare_m5_capability_event(
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     return merged
+
+
+def prepare_m5_capability_event(
+    r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False
+):
+    """Real Git assignment, changed approved C0 CURRENT, implementation and merge."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
+    for relative in sorted(carrier.M5_CAPABILITY_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# constructed C0 capability assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed immutable C0 capability assignment")
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(carrier, "M5_CAPABILITY_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    (f.root / "docs/TASK_REGISTER.md").write_text("# constructed approved C0 CURRENT revision\n")
+    f.git("add", "docs/TASK_REGISTER.md")
+    f.git("commit", "-qm", "constructed approved C0 docs revision")
+    monkeypatch.setattr(
+        carrier, "M5_CAPABILITY_C0_DOCS_REVISION", f.git("rev-parse", "HEAD"), raising=False
+    )
+    monkeypatch.setattr(
+        carrier,
+        "M5_CAPABILITY_C0_DOCS_TREE",
+        f.git("rev-parse", "HEAD^{tree}"),
+        raising=False,
+    )
+    for relative in sorted(
+        (carrier.M5_CAPABILITY_PATHS - carrier.M5_CAPABILITY_C0_DOCS)
+        | ({extra} if extra else set())
+    ):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            (path.read_text() if path.exists() else "") + "\n# constructed probe delta\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed bounded capability probe")
+    return capability_checkout(
+        r, monkeypatch, route, f.git("rev-parse", "HEAD"), branch=branch, wrong_base=wrong_base
+    )
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m5_capability_accepts_approved_docs_revision(r11_event, monkeypatch, route):
+    r = r11_event
+    merged = prepare_m5_capability_event(r, monkeypatch, route)
+    f = r["f"]
+    assignment, revision = carrier.M5_CAPABILITY_ASSIGNMENT, carrier.M5_CAPABILITY_C0_DOCS_REVISION
+    assert assignment != revision
+    assert f.git("merge-base", assignment, "HEAD") == assignment
+    assert f.git("merge-base", revision, "HEAD") == revision
+    assert f.git("rev-parse", revision + "^{tree}") == carrier.M5_CAPABILITY_C0_DOCS_TREE
+    protected = sorted(carrier.M5_CAPABILITY_C0_DOCS)
+    assert f.git("diff", "--name-only", assignment, revision, "--", *protected) == (
+        "docs/TASK_REGISTER.md"
+    )
+    assert not f.git("diff", "--name-only", revision, "HEAD", "--", *protected)
+    r["run"]()
+    assert len(r["boundary"]) == 1 and not list((r["root"] / "private").iterdir())
+    bound = r["boundary"][0]
+    assert bound["event"]["head"] == merged
+    assert bound["mode"] == "runtime" and bound["sql_test_budget_seconds"] == 900
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("damage", ["tree", "ancestry", "unrelated_same_tree"])
+def test_m5_capability_refuses_unapproved_docs_revision(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    prepare_m5_capability_event(r, monkeypatch, route)
+    f = r["f"]
+    assignment, revision = carrier.M5_CAPABILITY_ASSIGNMENT, carrier.M5_CAPABILITY_C0_DOCS_REVISION
+    if damage == "tree":
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_C0_DOCS_TREE", "f" * 40)
+        reason = "CAPABILITY_C0_DOCS_TREE"
+    elif damage == "ancestry":
+        # Keep the original assignment and exact accepted bytes, but omit the
+        # approved docs commit from history. Content equality is not approval.
+        tree = f.git("rev-parse", "HEAD^{tree}")
+        source = f.git("commit-tree", tree, "-p", assignment, "-m", "omit docs ancestor")
+        capability_checkout(r, monkeypatch, route, source)
+        assert f.git("merge-base", revision, "HEAD") == assignment
+        assert not f.git(
+            "diff", "--name-only", revision, "HEAD", "--", *sorted(carrier.M5_CAPABILITY_C0_DOCS)
+        )
+        reason = "CAPABILITY_C0_DOCS_ANCESTRY"
+    else:
+        tree = f.git("rev-parse", revision + "^{tree}")
+        unrelated = f.git("commit-tree", tree, "-m", "unrelated same-tree docs commit")
+        assert unrelated != revision and f.git("rev-parse", unrelated + "^{tree}") == tree
+        monkeypatch.setattr(carrier, "M5_CAPABILITY_C0_DOCS_REVISION", unrelated)
+        # Actual Git refuses merge-base for unrelated histories, before the
+        # ancestry equality predicate can succeed.
+        reason = "INSPECTION_FAILED"
+    assert f.git("merge-base", assignment, "HEAD") == assignment
+    with pytest.raises(carrier.Refusal, match="^" + reason + "$"):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("document", sorted(carrier.M5_CAPABILITY_C0_DOCS))
+@pytest.mark.parametrize("drift", ["content", "mode", "type"])
+def test_m5_capability_refuses_each_protected_doc_drift_before_resources(
+    r11_event, monkeypatch, route, document, drift
+):
+    r = r11_event
+    prepare_m5_capability_event(r, monkeypatch, route)
+    f = r["f"]
+    revision = carrier.M5_CAPABILITY_C0_DOCS_REVISION
+    path = f.root / document
+    assert f.git("ls-tree", revision, "--", document).split()[0] == "100644"
+    if drift == "content":
+        path.write_text(path.read_text() + "# unapproved later change\n")
+    elif drift == "mode":
+        path.chmod(0o755)
+    else:
+        path.unlink()
+        path.symlink_to("untrusted-doc-target")
+    f.git("add", document)
+    f.git("commit", "-qm", "unapproved protected doc " + drift)
+    capability_checkout(r, monkeypatch, route, f.git("rev-parse", "HEAD"))
+    assert f.git("merge-base", revision, "HEAD") == revision
+    assert f.git("diff", "--name-only", revision, "HEAD", "--", document) == document
+    if drift in {"mode", "type"}:
+        assert f.git("ls-tree", "HEAD", "--", document).split()[0] == (
+            "100755" if drift == "mode" else "120000"
+        )
+    with pytest.raises((carrier.Refusal, catalog.Refusal)) as rejected:
+        r["run"]()
+    if drift != "type":
+        assert str(rejected.value) == "CAPABILITY_C0_DOCS_IMMUTABLE"
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
 
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])

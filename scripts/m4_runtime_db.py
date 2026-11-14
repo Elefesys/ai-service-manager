@@ -201,6 +201,9 @@ M5_CAPABILITY_BASE = "6942150e9a4ab96222f49702b2e9977178b04e74"
 M5_CAPABILITY_TREE = "12e4481c8a54d219e5bae7acb94b5484cf0b166c"
 M5_CAPABILITY_ASSIGNMENT = "64e80b214b3404728de73030acab4cd1fdc28a4e"
 M5_CAPABILITY_ASSIGNMENT_TREE = "e1ab83979b090a1faa23ef4fd50d10be61a0e962"
+# C0 separately approved this docs revision; the original assignment stays pinned.
+M5_CAPABILITY_C0_DOCS_REVISION = "5681ee85d31f4d8e1440dc47277893148fc7968c"
+M5_CAPABILITY_C0_DOCS_TREE = "01a1df345556a8e22cfbe083170152bba443b281"
 M5_CAPABILITY_BRANCH = "c4/m5-2a-capability-probe-r1"
 M5_CAPABILITY_C0_DOCS = {
     "AGENTS.md",
@@ -960,12 +963,22 @@ def admit_source(evidence):
             "CAPABILITY_ASSIGNMENT_ANCESTRY",
         )
         require(
+            capture(["git", "rev-parse", M5_CAPABILITY_C0_DOCS_REVISION + "^{tree}"])
+            == M5_CAPABILITY_C0_DOCS_TREE,
+            "CAPABILITY_C0_DOCS_TREE",
+        )
+        require(
+            capture(["git", "merge-base", M5_CAPABILITY_C0_DOCS_REVISION, "HEAD"])
+            == M5_CAPABILITY_C0_DOCS_REVISION,
+            "CAPABILITY_C0_DOCS_ANCESTRY",
+        )
+        require(
             not capture(
                 [
                     "git",
                     "diff",
                     "--name-only",
-                    M5_CAPABILITY_ASSIGNMENT,
+                    M5_CAPABILITY_C0_DOCS_REVISION,
                     "HEAD",
                     "--",
                     *sorted(M5_CAPABILITY_C0_DOCS),

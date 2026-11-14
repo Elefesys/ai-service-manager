@@ -205,6 +205,15 @@ write-set,160 runtime cases/8 cleanups/SQL900s, attemptsCount/deadline repairs,
 CI URL/status. Detailed evidence — в PR/CI. Новый provider plan пока не нужен.
 C0 закрывает06 после проверки кода/CI;05 semantic live outcome остаётся UNVERIFIED.
 
+Возврат C4 по06: старый guard воспроизведён на actual Git PR/main (2 RED).
+После отдельного docs pin/tree/ancestry и сравнения всех4 protected docs:
+72 capability admission/export/binding cases PASS; полный runner281/281 PASS,
+Ruff check/format и diff check PASS. Content/mode/type drift, неверный tree,
+потеря ancestry и unrelated same-tree commit отвергаются до resources/credentials.
+Assignment64e80b21, protected set,160 cases/8 cleanups/900s и принятые Vision blobs
+сохранены. Final source, реальные pre-push Git pin checks и новый штатный CI —
+в том же Draft PR48; paid/VM действий нет, real-route UNVERIFIED.
+
 ### Следующий последовательный шаг C6
 
 Только после C0 code/CI приёмки C6 обновляет source/module/payload pins и готовит
