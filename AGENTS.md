@@ -26,14 +26,22 @@ c9d42878ebfaf6def59d24cf7f95b1f74646eb83, push/main CI43157266312 — 12/12 SUCC
 Перед работой читать [M5_HANDOFF](docs/tasks/M5_HANDOFF.md),
 [IMPL-005](docs/decisions/IMPL-005-m5-pilot-knowledge.md), CURRENT в
 [TASK_REGISTER](docs/TASK_REGISTER.md), затем применимые исходные ADR.
-Решение IMPL-005 — ACCEPTED / LOCKED C0; PR #45 интегрирован. M5.1A из PR #46
-INTEGRATED / VERIFIED в LOCAL/TEST на main6c27be84; post-merge CI43245856346 —
-12/12 SUCCESS. C0 выдал только M5.1B ведущему C4: C1/C3, C2 для SQL/миграции,
-затем C5 участвуют последовательно в одном PR. Фактический полный base,
-состояние CI и единственное активное поручение закреплены в реестре и
-M5_HANDOFF выше; выдача M5.1B не является приёмкой его реализации.
-Старые формулировки M4 «следующий шаг M5.1» не являются готовым поручением
-реализовать весь Service/Rule/Workflow/RAG набор одним PR.
+Решение IMPL-005 — ACCEPTED / LOCKED C0; PR #45 интегрирован. M5.1A/PR #46 и
+M5.1B/PR #47 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST, accepted
+main6942150e. M5.2A functional capability принят C0 на owner-reported assisted
+synthetic evidence: три Vision samples и embedding relevance/1536/cosine,
+провайдер OpenAI подтверждён history того же запроса. Отсутствующий
+completion_tokens у установленного embedding request — NOT_APPLICABLE;
+исходное ABSENT сохраняется, чатовые проверки не ослаблены. Точное решение —
+в IMPL-005, подробные observations — в PR48.
+
+M5.2A остаётся REVIEW до финальной интеграции PR48. Единственный текущий
+исполнитель C4 готовит принятый результат к слиянию: синхронизация двух C0 docs
+pins и штатный CI финального кандидата. C6 operator work завершён; новые GET,
+model POST, планы, действия на ВМ и запрос ключа не нужны и не назначены.
+M5.2B выдаётся только после интеграции по фактическому main SHA.
+Original UNKNOWN/diagnostic receipts, holds и real-client/data restrictions
+сохраняются; ручная приёмка evidence не переписывает результат старого probe.
 
 M5 делает подтверждённые настройки и знания полезными в разговоре, затем Vision,
 портфолио и предварительный intake. Не строить universal workflow engine,
@@ -45,9 +53,9 @@ OnboardingAgent, массовый импорт чатов, генерацию и
 отдельная ограниченная задача; текущий sendMessage его не реализует.
 
 C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
-Current migration head0018; в M5.1B C0 резервирует только0019←0018,
-C2 подтверждает актуальный head до SQL. Applied0001–0018 immutable.
-Не резервировать всю будущую схему заранее.
+Current migration head0019; applied0001–0019 immutable. В M5.2A новые миграции
+и бизнесовые таблицы не нужны и не назначены. Следующий номер C0/C2 согласуют
+при выдаче соответствующего среза по актуальному main.
 Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
 При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
 не размножать длинные receipts между документами.
