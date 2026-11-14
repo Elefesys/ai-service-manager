@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.1B INTEGRATED / VERIFIED; M5.2A IN_PROGRESS / 2026-11-13
+## CURRENT — M5.1B INTEGRATED / VERIFIED; M5.2A IN_PROGRESS / 2026-11-14
 
 PR #47 слит владельцем. Accepted main:
 `6942150e9a4ab96222f49702b2e9977178b04e74`,
@@ -23,20 +23,32 @@ M5.1A/PR #46 остаётся INTEGRATED / VERIFIED на
 сохранены в ancestry. Принятые application и architecture решения не пересмотрены.
 
 Единственная активная задача — **C4-M5.2A-CAPABILITY-PROBE-R1 — IN_PROGRESS**.
-Ведущий C4; C6 только при конкретной необходимости операторского маршрута,
-последовательно в том же срезе. Ветка `c4/m5-2a-capability-probe-r1` начинается
-с C0 docs-only handoff поверх main6942150e выше. Результат: выбранные конкретные
-Vision/text-embedding profiles, локально проверенный synthetic probe и готовая
-процедура с точным числом запросов/пределом расходов для отдельного допуска.
-После допуска требуется actual capability receipt; подготовка/MockTransport не
-закрывают M5.2A. Paths, зависимости и критерии — в [M5_HANDOFF](tasks/M5_HANDOFF.md).
-Current migration0019; следующая не назначена. M5.2B и далее не выданы.
+Ведущий C4; C6 подключается последовательно для operator route.
+Текущая ограниченная доработка **C0-M5.2A-05**: включить готовый C6 prompt fix
+`cb6c95de5c3fc6194c4f216018e4914cbf457ece` и C0 docs в прежний Draft PR48,
+проверить targeted tests, затем один штатный full CI окончательного кандидата.
+Parent `3472faf1041b7e42c21b89ce01599efebca6a0dd` уже прошёл
+[CI43546043614](https://github.com/Elefesys/ai-service-manager/actions/runs/43546043614),
+12/12 SUCCESS; fixes01–04 CLOSED, этот CI не повторять.
+Write-set, полный base/candidate SHA и одна активная выдача — в
+[M5_HANDOFF](tasks/M5_HANDOFF.md).
 
-Receiver ACK/fence, полный live HUMAN/Resume, UNKNOWN/holds и PC transport
-сохраняют прежний статус. Сейчас разрешена только synthetic LOCAL/TEST подготовка:
-provider/paid/live/VM/реальные данные и merge нового PR отдельно не разрешены.
-C0 не запускал повторный CI и не повторял аудит M4; это docs-only обновление
-приёмки и одной выдачи. Дальнейшую приёмку и CURRENT ведёт C0.
+[Реальный synthetic возврат C6](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6872471841):
+ordinary Vision PASS; ambiguous FAILED/SYNTHETIC_QUALITY_FAILED;
+unsuitable и embeddings NOT RUN. Два вызова OpenAI/gpt-4o-mini подтверждены,
+HTTP403 в этом проходе нет. Confirmed0.12166148RUB, текущий hold0; прежние
+UNKNOWN/holds11.67RUB сохранены отдельно. Это owner-reported terminal evidence,
+не прямое чтение ВМ C0. Качество нового prompt ещё не проверено;
+**M5.2A real-route UNVERIFIED**, не INTEGRATED/VERIFIED.
+
+Владелец отдельно разрешил C6 продолжение synthetic paid tests, что закреплено
+[в PR](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6872201066).
+Текущая работа C4 — code/offline/CI. После code/CI приёмки C6 готовит новый
+source-bound план в фактических границах имеющегося допуска; сам docs/source
+update не расширяет разрешение и не снимает старые holds.
+Receiver ACK/fence, полный live HUMAN/Resume и PC transport сохраняют прежние
+ограничения. Current migration0019; следующая не назначена. M5.2B и далее не выданы.
+Merge PR48 требует отдельного разрешения владельца.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 

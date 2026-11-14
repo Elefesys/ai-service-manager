@@ -9,8 +9,9 @@
 Единственная активная задача: **C4-M5.2A-CAPABILITY-PROBE-R1**.
 Ведущий C4. C6 участвует только при конкретной необходимости операторского
 маршрута, последовательно в том же срезе/PR. M5.1A и M5.1B завершены;
-M5.2B и последующие срезы не выданы. Это подготовка capability probe, не
-разрешение выполнить платные вызовы или включить Vision в разговорах.
+M5.2B и последующие срезы не выданы. Сейчас C4 интегрирует ограниченную правку
+Vision prompt; capability остаётся UNVERIFIED. Само поручение не создаёт нового
+paid/VM допуска и не включает Vision в клиентских разговорах.
 
 - Repository: `Elefesys/ai-service-manager`; integration target: `main`.
 - Accepted implementation base: `6942150e9a4ab96222f49702b2e9977178b04e74`.
@@ -84,145 +85,110 @@ probes не требуется. При конфликте указать точ�
    без DB-таблиц и универсального ledger/runner. Штатное завершение само закрывает
    процесс/сессию; вернуть точную команду остановки для выбранного окружения.
 6. Старые 150 рублей, ключ и M4 text-only допуск не являются текущим балансом
-   или новым разрешением. Сейчас не читать ключ, не обращаться к account API,
-   не делать платный запрос и не менять ВМ. Публичные docs и offline/MockTransport
-   доступны. Ключ при отдельном допуске передаётся только локально, не через PR/чат.
-   Если условия не дают вычислить конечную безопасную сумму, вернуть точный
-   blocker и меньший проверяемый вариант вместо неконтролируемого эксперимента.
+   или разрешением. Владелец отдельно разрешил C6 продолжение synthetic paid
+   tests; основание и границы приведены ниже. Текущая работа C4 — offline/code/CI,
+   без ключа, provider HTTP и действий на ВМ. Ключ передаётся только локально,
+   не через PR/чат. Новый source/plan сам по себе не расширяет имеющийся допуск.
 
-### Разрешённые paths и source admission
+### C0-M5.2A-05 — принять готовую правку распознавания перекрытого рисунка
 
-Активен ограниченный **C0-M5.2A-04** от repair head
-`abdcfbf8ca8841fcc46b0837c7cd847e1284676f`, tree
-`cc99d72ff0afda65d315e433983f849a9dd6ec39`; та же задача/ветка/main/assignment.
-[Решение C0](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6869961111):
-сохранить существующий `polza.failure_labels(error)` рядом с terminal `code`.
-Это исправление потери диагностики, не диагноз или исправление исходного
-Vision-сбоя и не восстановление утраченного ответа. C0-M5.2A-01/02/03 CLOSED;
-CI43466445474 для этого base —12/12 SUCCESS, без повторного прогона.
+C0 принимает техническое уточнение общего prompt из готового кандидата C6.
+Польза: модель должна сначала оценить видимость рисунка и сохранить неизвестное,
+если перекрытие мешает распознать мотив. Нельзя объявлять видимые фрагменты
+завершённой ABSTRACT-композицией. Это соответствует IMPL-005 «Фото, портфолио
+и длительность»; прежние решения/критерии не отменяются.
 
-C0 принял owner-reported terminal evidence по plan
-`f91c695224c467b02ca0dd31fd41ce46e8dcf0198fa3546890d7d749e9f518b1`:
-catalog CONFIRMED/1589ms, validated hash
-`485709edd3269e4bb2099c7f9b12903163a3b7460bc4db9d58cb4cbfd73d990a`.
-Ремонт4MiB прошёл реальное чтение/валидацию. Ordinary Vision UNKNOWN/HTTP_FAILED;
-дальнейшие Vision/history/embedding не достигнуты. Counter2 — pre-dispatch
-admissions, не доказательство upstream delivery. Confirmed cost0, held3.89RUB,
-фактическое списание UNKNOWN, closed:true; собственный контейнер удалён,
-receipts сохранены. Это транскрипция вывода владельца, не прямое чтение ВМ C0/C4;
-hash оригинального нового receipt не наблюдался, deadline не timestamp завершения.
+- Точный reviewed PR parent: `3472faf1041b7e42c21b89ce01599efebca6a0dd`,
+  tree `22e8c07a1f8125295b534a0f1ce45c946a97d67f`.
+- Готовый C6 commit: `cb6c95de5c3fc6194c4f216018e4914cbf457ece`,
+  tree `93fcbe5d64dd5fa9595b44380043997924778ce6`; единственный parent — выше.
+  [Два изменённых файла](https://github.com/Elefesys/ai-service-manager/compare/3472faf1041b7e42c21b89ce01599efebca6a0dd...cb6c95de5c3fc6194c4f216018e4914cbf457ece).
+- C0 подготовил этот docs update поверх C6 candidate; точный полный prepared SHA
+  закрепляется в review PR48. C4 берёт его целиком, сохраняя C6 commit и C0 docs
+  в ancestry, затем после targeted PASS fast-forward обновляет прежнюю PR ветку.
+  Не переносить только prompt и не создавать другой PR.
+- Accepted main и immutable assignment
+  `64e80b214b3404728de73030acab4cd1fdc28a4e` остаются прежними.
+  C0-M5.2A-01/02/03/04 CLOSED; [CI43546043614](https://github.com/Elefesys/ai-service-manager/actions/runs/43546043614)
+  для parent3472faf — 12/12 SUCCESS, не повторять.
 
-Разрешён только следующий repair write-set:
+C0 независимо прочитал diff и визуально проверил исходные три PNG. У ambiguous
+чёрные линии прерываются непрозрачным прямоугольником. Ожидаемое
+AMBIGUOUS/UNKNOWN сохранено; общая инструкция не получает case ID, expected,
+координаты или индивидуальную подсказку ответа. Новый regression воспроизводит
+наблюдённый ORDINARY/ABSTRACT как FAILED после подтверждения стоимости, а не
+объявляет качество исправленным. Девять прямых local checks C6 — ограниченное
+evidence, не frozen pytest/full CI и не live-quality PASS.
 
-- `backend/src/asm/ai/capability_probe.py` — импорт существующего helper и
-  terminal `failure`; прежние status/code/control flow не менять.
-- `tests/test_m5_capability_probe.py` — actual execute/MockTransport regressions.
-- `docs/tasks/M5_HANDOFF.md` — короткий актуальный контракт/возврат здесь.
+### Принятый результат C6 и оставшаяся проверка
 
-Только четыре закрытых поля helper: `exception_type`, `cause_type`, `detail`,
-`http_status`. Без exception/cause text, raw body/headers/key/prompt и расширения
-allowlists. `polza.py` и его transport/helper, runtime/fixtures/dependencies/
-workflows/migrations/source admission не менять. Catalog4194304,15s/connect5s/
-session210s/key15s,8HTTP/4POST/11.75RUB, Vision32768/history65536/embedding262144,
-price/provider/schema checks и UNKNOWN/hold/no-resend сохраняются. Сначала
-frozen Python3.13 probe/применимые existing diagnostics/Polza tests/lint/type,
-затем один code/docs push и штатный full CI нового кандидата; M4 аудит не повторять.
-Новый source требует нового reference plan/hash/expiry, не нового paid допуска.
+[Возврат C6](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6872471841)
+по closed plan `6dfde87e3b2f776fecbce1b5ade566aa1e8595092c32f9f0569f9754dac8459f`:
+5 HTTP / 2 model POST; ordinary PASS (FLOWER), ambiguous FAIL
+(ORDINARY/ABSTRACT), unsuitable и embeddings NOT RUN.
+Оба Vision маршрута подтверждены HISTORY_DETAIL как OpenAI/openai/gpt-4o-mini,
+attemptsCount=1. Confirmed cost 0.12166148 RUB, текущий hold0; overall
+FAILED/SYNTHETIC_QUALITY_FAILED, real_route UNVERIFIED, closed=true.
+В этом проходе HTTP403 отсутствует; доступ заработал после изменения owner key
+allowlist. Это не доказывает единственную причину всех прежних отказов.
 
-**C6 HOLD:** новых Start/Prepare/Catalog/paid/VM/account/history действий нет.
-После code review C0 отдельно определяет следующую процедуру. В ней C6 должен
-обновить source/module/plan pins и безопасно вывести все четыре поля `failure`,
-offline проверив полный путь receipt → operator output. Сохранить оба исторических
-receipt: plan85d99e4a — hold0, planf91c6952 — hold3.89. Guard первого с требованием0
-нельзя переназначить второму или обнулить3.89 ради PASS. Новый source/expiry не
-снимает резерв и не разрешает one-Start; generation ID отсутствует, history URL
-не угадывать. Никаких обращений в поддержку или начала M5.2B.
+Evidence — транскрипция вывода владельца, не прямое чтение ВМ C0/C4; hash
+последнего receipt-файла не наблюдался. Старые UNKNOWN/holds **11.67 RUB**
+сохраняются отдельно. Текущий hold0 не освобождает их; прежние receipts,
+guards, modes и stop state не удалять/переписывать.
 
-`AGENTS.md`, `README.md`, `docs/TASK_REGISTER.md` и IMPL-005 — только C0 docs
-ancestor этой выдачи; C4 их не редактирует и не меняет статус приёмки. Их включить
-в конечный source write-set как уже подготовленный C0 delta. Не изменять
-миграции, schema profile/catalog, зависимости/lockfiles, `.github/workflows`,
-application entrypoints, UI, Telegram/files/knowledge runtime и старый M4 probe.
-Нужный выход за paths вернуть C0 с конкретной причиной, не делать скрытым fix.
+### Write-set, проверки и возврат C4
 
-Принятый узкий M5.2A admission для PR merge/main, закреплённых base/tree и
-immutable assignment сохраняется. В этом repair admission не расширяется;
-160 runtime cases,8 module cleanups, SQL budget900 и исторические budgets прежние.
-Исправления attemptsCount и двух fractional-deadline checks из01/02 сохраняются;
-их code/CI evidence — в C0 review/истории PR48.
+Разрешены готовые изменения:
 
-### Готовность и возврат
+- `backend/src/asm/ai/capability_probe.py` — только общий Vision system prompt;
+- `tests/test_m5_capability_probe.py` — один actual execute/MockTransport
+  regression неверного ORDINARY/ABSTRACT с confirmed accounting и fail-fast;
+- `docs/tasks/M5_HANDOFF.md` и `docs/TASK_REGISTER.md` — подготовленный C0
+  update. C4 дополняет короткий фактический возврат только в этом handoff.
 
-Сначала целевые offline проверки admission/no-HTTP-default, finite transport,
-schema/dimension/NaN rejection, budget reservation/timeout/UNKNOWN/no-resend,
-preprocessing и secret redaction. Негативные transport/schema cases не оплачивать.
-При изменении общего helper проверить прежние callers. Достаточно tests по
-реальным рискам; новых PG сценариев для probe без DB не требуется. Затем один
-штатный full CI окончательного code/docs кандидата. Не менять expected ради PASS;
-инфраструктурную причину отделять от ошибки реализации, не повторять неизменённый
-полный прогон. Existing PG/browser gates продолжают проверять application.
+Fixtures/expected/schema/quality predicate, embedding payload, routing/provider,
+limits, accounting/UNKNOWN/no-resend и source admission неизменны.
+`polza.py`, runtime, migrations, dependencies/lockfiles и workflows не менять.
+Старые fixes01–04 сохраняются. Новых функций и миграций нет.
 
-Первый возврат C4: один небольшой Draft PR, full head/tree и tested SHA; выбранные
-profiles с первичными источниками, фактические offline результаты и CI, точные
-команды plan/start/stop, synthetic input hashes, число/сумма запросов и один
-следующий шаг — допуск владельца к этой конкретной процедуре. До такого допуска
-статус **REVIEW — процедура готова; real-route UNVERIFIED**, не M5.2A VERIFIED.
-Если capability недоступен, сообщить blocker/минимальный вариант C0; не обращаться
-в поддержку и не запускать другой платный маршрут самостоятельно.
+C4: frozen Python3.13/locked dependencies; полный
+`tests/test_m5_capability_probe.py`, ruff check/format изменённых Python files,
+mypy probe и git diff --check. Проверить неизменность fixtures/schema/embedding
+payload и новых трёх Vision payload hashes против C6 report.
+Общий transport/helper не менялся — отдельный повтор всех M4 diagnostics или
+M4 аудита не нужен. Затем один финальный code/docs push в PR48 и один штатный
+полный CI кандидата; unchanged rerun без новой причины не запускать.
+Фактические head/tree/tested SHA, команды/результаты, CI URL и оставшееся
+real-route UNVERIFIED вернуть в PR. Имеющийся regression не заменяет real probe.
 
-После отдельного допуска — один ограниченный реальный synthetic проход и короткий
-receipt в том же PR: source/profile/schema/input hashes, фактические HTTP counts,
-latency, usage, confirmed/unknown cost, наблюдённый Vision результат и embedding
-dimension/relevance, завершение/UNKNOWN/остаточные ограничения. K06/K07 покрыты
-здесь только на уровне capability; PG search/private media остаются M5.2B/C.
-Только C0 принимает capability и решает готовность PR к отдельному merge.
-Отсутствие допуска не мешает завершить весь offline/code пакет, но не заменяется
-автоматическим PASS. M5.2B заранее не начинать.
+### Следующий последовательный шаг C6
 
-### Контракт возврата C4 — offline package / REVIEW; real-route UNVERIFIED
+Только после C0 code/CI приёмки C6 обновляет source/module/payload pins и готовит
+один новый bounded operator plan из фактически принятого SHA. Старые closed plans
+не воспроизводить. Новые payload hashes обязательны; один полный synthetic проход
+с прежним fail-fast — максимум8HTTP/4POST, резерв11.75RUB, session210s/key15s,
+connect5s. Catalog4MiB; Vision32768/history65536/embedding262144 bytes.
+Неподтверждённый embedding provider остаётся UNKNOWN/hold0.08; selector не evidence.
 
-Выбраны EVAL_ONLY `openai/gpt-4o-mini` и
-`openai/text-embedding-3-small`, selector `openai`, без fallback. Проверены
-[публичные Vision](https://polza.ai/models/openai/gpt-4o-mini) и
-[embedding](https://polza.ai/models/openai/text-embedding-3-small) catalog metadata
-2026-11-13; RUB token tariffs, explicit1536/float/cosine profile v1.
-Это отдельный capability profile, не смена клиентского RuntimeRoute. Обычный
-account/key access, отсутствующие embedding provider context/parameter metadata
-и нераскрытая ревизия весов остаются OPEN; RU processing не утверждается.
+[Владелец разрешил C6 продолжение paid tests после изменения allowlist](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6872201066);
+C6 подтверждает наличие допуска в текущем возврате. Не требовать повторного
+разрешения на уже охваченные действия. При подготовке нового конкретного плана
+C6 связывает его с фактическими границами этого допуска; source/expiry сами по себе
+не разрешение, закрытый прежний one-Start не переиспользуется. Расширение модели,
+данных, лимита расходов или VM scope требует отдельного решения владельца.
+C4/C0 не выполняют provider/VM действий в этой доработке.
 
-`python -m asm.ai.capability_probe` по умолчанию строит plan без credentials/HTTP.
-Три локальных authored PNG256×256 проходят verify → RGB/metadata stripping →
-inline PNG/base64/detail=low; один batch содержит query/related/unrelated тексты.
-Перед расходом нужен новый допуск к полному source/plan/input/schema hash и UTC
-expiry. Максимум8HTTP:1catalog GET +3Vision POST +1embedding POST +3history detail
-GET для Vision; embedding history не документирован и не вызывается. Отсутствие
-provider в embedding response сохраняет UNKNOWN/резерв0.08, не подменяется
-request selector. После review C0-M5.2A-01 проверяется опубликованный `attemptsCount`:
-только strict integer1; действительно отсутствующее поле — NOT_REPORTED.
-Неверное значение останавливает следующий POST, сохраняет UNKNOWN/резерв/no-resend;
-retained receipt фиксирует именно проверенное поле, без alias/подстановки1.
-Steps при отсутствии metadata остаются NOT_REPORTED. Без balance API/повторов.
-Резерв11.75RUB:3×3.89 +0.08, deadline210s,
-key prompt15s, connect5s. Тарифные неизвестности останавливают до POST;
-timeout/неподтверждённый cost сохраняет UNKNOWN/резерв. Create-once local receipt
-запрещает restart/resend; отдельный stop marker отменяет ожидание и новые dispatch.
-Mock PASS не становится semantic/capability PASS. C0 принял owner-reported VM
-подготовку для прежнего source. Оба использованных Start закрыты: первый с
-catalog UNKNOWN/cost0/hold0, второй с catalog CONFIRMED и ordinary Vision
-UNKNOWN/cost0/hold3.89. Receipts/UNKNOWN/резерв не удалять. C6 HOLD до отдельной
-процедуры C0 после code review; сам C4 не подключается к VM/провайдеру и не читает ключ.
-Новый source/CI/reference plan и актуальная процедура — в том же PR48;
-прошлые source-bound approvals не переносятся, M5.2B не выдана.
+Vision profile `polza_openai_gpt4omini_png_low_v1`; embedding profile
+`polza_openai_text_embedding3small_1536_cosine_v1`; только synthetic data,
+selector openai, no fallback. Максимум 3 изображения256×256 и batch3 текстов;
+scale UNKNOWN, size/time/price/order approval null. Usage/cost/provider/schema
+checks и безопасный вывод failure сохраняются. Все старые receipts и11.67RUB
+UNKNOWN/holds сохраняются; никаких support contacts и переключения моделей.
 
-Возврат C4 по C0-M5.2A-04:18 actual execute/bounded transport regressions сначала
-воспроизвели отсутствие `failure`, после двух добавленных source строк проходят.
-HTTP400/401/402/403/413/429/500/503, encoding, size/header+stream, incomplete,
-connect/read/timeout и неизвестные detail/exception/cause сохраняют только
-закрытые labels, UNKNOWN/hold3.89/cost0/closed, saved==returned, no-next-dispatch/
-retry/no-resend до key read. Success без `failure` —8HTTP/4POST, MOCK_CONTRACT_PASS/
-UNVERIFIED; прежние stop/deadline codes сохранены. Probe90/90, existing failure
-diagnostics+Polza393/393, Ruff/format и strict mypy PASS. Full source/tree/tested
-SHA, штатный full CI и новый reference plan/hash/expiry — в том же Draft PR48.
+Только C0 принимает итог M5.2A по фактическим результатам; успешные mock/CI
+не подтверждают качество модели. M5.2B не выдан. PR остаётся Draft;
+merge — отдельное разрешение владельца.
 
 ## 1. Проверяемый результат всего этапа
 
