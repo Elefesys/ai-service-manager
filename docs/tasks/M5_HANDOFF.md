@@ -9,8 +9,9 @@
 Единственная активная задача: **C4-M5.2A-CAPABILITY-PROBE-R1**.
 Ведущий C4. C6 участвует только при конкретной необходимости операторского
 маршрута, последовательно в том же срезе/PR. M5.1A и M5.1B завершены;
-M5.2B и последующие срезы не выданы. Сейчас C4 интегрирует ограниченную правку
-Vision prompt; capability остаётся UNVERIFIED. Само поручение не создаёт нового
+M5.2B и последующие срезы не выданы. Правка Vision prompt включена; сейчас C4
+устраняет C0-M5.2A-06 — конфликт принятой C0 docs-ревизии с source guard.
+Capability остаётся UNVERIFIED. Само поручение не создаёт нового
 paid/VM допуска и не включает Vision в клиентских разговорах.
 
 - Repository: `Elefesys/ai-service-manager`; integration target: `main`.
@@ -90,7 +91,7 @@ probes не требуется. При конфликте указать точ�
    без ключа, provider HTTP и действий на ВМ. Ключ передаётся только локально,
    не через PR/чат. Новый source/plan сам по себе не расширяет имеющийся допуск.
 
-### C0-M5.2A-05 — принять готовую правку распознавания перекрытого рисунка
+### Принятая правка C0-M5.2A-05 и текущий blocker C0-M5.2A-06
 
 C0 принимает техническое уточнение общего prompt из готового кандидата C6.
 Польза: модель должна сначала оценить видимость рисунка и сохранить неизвестное,
@@ -103,10 +104,12 @@ C0 принимает техническое уточнение общего pro
 - Готовый C6 commit: `cb6c95de5c3fc6194c4f216018e4914cbf457ece`,
   tree `93fcbe5d64dd5fa9595b44380043997924778ce6`; единственный parent — выше.
   [Два изменённых файла](https://github.com/Elefesys/ai-service-manager/compare/3472faf1041b7e42c21b89ce01599efebca6a0dd...cb6c95de5c3fc6194c4f216018e4914cbf457ece).
-- C0 подготовил этот docs update поверх C6 candidate; точный полный prepared SHA
-  закрепляется в review PR48. C4 берёт его целиком, сохраняя C6 commit и C0 docs
-  в ancestry, затем после targeted PASS fast-forward обновляет прежнюю PR ветку.
-  Не переносить только prompt и не создавать другой PR.
+- Пакет05 `5681ee85d31f4d8e1440dc47277893148fc7968c`, tree
+  `01a1df345556a8e22cfbe083170152bba443b281` опубликован C4 exact fast-forward.
+  Probe91/91, lint/type и сравнение payloads PASS; full CI остановлен guard ниже.
+  Это точный repair parent06. C0 добавляет только это обновление handoff;
+  его полный prepared SHA закрепляется в review PR48. C4 продолжает ту же
+  ветку/задачу, сохраняя ancestry и уже принятую правку prompt.
 - Accepted main и immutable assignment
   `64e80b214b3404728de73030acab4cd1fdc28a4e` остаются прежними.
   C0-M5.2A-01/02/03/04 CLOSED; [CI43546043614](https://github.com/Elefesys/ai-service-manager/actions/runs/43546043614)
@@ -137,30 +140,70 @@ Evidence — транскрипция вывода владельца, не пр
 сохраняются отдельно. Текущий hold0 не освобождает их; прежние receipts,
 guards, modes и stop state не удалять/переписывать.
 
-### Write-set, проверки и возврат C4
+### C0-M5.2A-06 — согласовать source guard с принятой C0 docs-ревизией
 
-Разрешены готовые изменения:
+[CI43563778264](https://github.com/Elefesys/ai-service-manager/actions/runs/43563778264)
+на5681ee85: runtime job132353027249 остановлен до SQL cases с
+`CAPABILITY_C0_DOCS_IMMUTABLE`. C0 подтвердил checkout tested merge
+`1a5decffd6350a5385696ce1a9c64b734d06b246` и отказ по job log.
+Это конфликт интеграционного пакета C0 с test infrastructure, не SQL/LLM failure:
+старый guard сравнивает четыре C0 docs с assignment64e80b21, тогда как C0
+явно изменил CURRENT в5681ee85. Отмена CURRENT либо игнорирование отказа
+не приняты. Полный CI этого кандидата не PASS; неизменённый rerun не нужен.
 
-- `backend/src/asm/ai/capability_probe.py` — только общий Vision system prompt;
-- `tests/test_m5_capability_probe.py` — один actual execute/MockTransport
-  regression неверного ORDINARY/ABSTRACT с confirmed accounting и fail-fast;
-- `docs/tasks/M5_HANDOFF.md` и `docs/TASK_REGISTER.md` — подготовленный C0
-  update. C4 дополняет короткий фактический возврат только в этом handoff.
+**C0 явно принимает меньший вариант:** отдельная точная approved docs revision
+для текущего M5.2A route. Исходный assignment остаётся immutable историческим
+основанием; его tree/ancestry проверки сохраняются. Гарантия отсутствия
+неразрешённого doc drift сохраняется, меняется только принятая точка сравнения.
 
-Fixtures/expected/schema/quality predicate, embedding payload, routing/provider,
-limits, accounting/UNKNOWN/no-resend и source admission неизменны.
-`polza.py`, runtime, migrations, dependencies/lockfiles и workflows не менять.
-Старые fixes01–04 сохраняются. Новых функций и миграций нет.
+- Approved C0 docs revision: `5681ee85d31f4d8e1440dc47277893148fc7968c`.
+- Approved revision tree: `01a1df345556a8e22cfbe083170152bba443b281`.
+- TASK_REGISTER: mode100644, blob `b2b7c06a265d897d2054b7c5c4efa0b721687bb5`,
+  SHA256 `5d4047eb3bb0905ba3e172305c360d3bf0c1e46654b7b47110b6401fec102402`.
+  Остальные три C0 docs равны исходному assignment.
+- В capability admission проверить точный tree approved revision и её ancestry
+  до HEAD, затем отсутствие diff всех четырёх C0 docs между этой revision и HEAD.
+  Не брать revision из HEAD, PR body, переменной окружения или последнего commit.
+  Не исключать TASK_REGISTER из protected paths и не разрешать произвольную
+  docs-ветку. Не подменять исходный assignment64e80b21 новой revision.
+- Для нового guard текущая M5.2A линия обязана иметь approved revision в ancestry.
+  Это явно принятое уточнение admission; других исторических M4/M5 routes,
+  accepted main, event admission и source export/binding оно не меняет.
 
-C4: frozen Python3.13/locked dependencies; полный
-`tests/test_m5_capability_probe.py`, ruff check/format изменённых Python files,
-mypy probe и git diff --check. Проверить неизменность fixtures/schema/embedding
-payload и новых трёх Vision payload hashes против C6 report.
-Общий transport/helper не менялся — отдельный повтор всех M4 diagnostics или
-M4 аудита не нужен. Затем один финальный code/docs push в PR48 и один штатный
-полный CI кандидата; unchanged rerun без новой причины не запускать.
-Фактические head/tree/tested SHA, команды/результаты, CI URL и оставшееся
-real-route UNVERIFIED вернуть в PR. Имеющийся regression не заменяет real probe.
+**C4 write-set только для этой доработки:**
+
+- `scripts/m4_runtime_db.py` — отдельные pins и bounded docs admission выше;
+- `tests/test_m4_runtime_db_runner.py` — реальные Git fixtures/regressions;
+- `docs/tasks/M5_HANDOFF.md` — это C0 поручение и короткий фактический возврат.
+
+`docs/TASK_REGISTER.md`, остальные protected docs и уже принятые probe/test
+blobs не менять: так source pins не создают новый цикл. Protected set, общий
+write-set,160 runtime cases/8 cleanups/SQL900s, attemptsCount/deadline repairs,
+все app/tenant/delivery/UNKNOWN guards прежние. Dependencies/workflows/migrations
+и source-admission соседних этапов не трогать. Никаких provider/VM действий.
+
+Сначала frozen targeted checks:
+
+1. Реальный Git base → immutable assignment → явно изменённый C0 CURRENT →
+   implementation → PR test merge/main push. Одобренная revision с новыми bytes
+   проходит; старый guard воспроизводимо отвергает её. Mock git-output вместо
+   созданных commit не является этой проверкой.
+2. Неверный tree approved revision, её отсутствие в ancestry (включая unrelated
+   commit с таким же tree), последующее изменение каждого из четырёх protected
+   docs и mode/type drift отвергаются до resources/credentials.
+   Прежние assignment/base/branch/path negative tests сохраняются.
+3. Все M5 capability source-admission/export/binding cases, затем полный
+   `tests/test_m4_runtime_db_runner.py`; lint/format и git diff --check.
+   Подтвердить неизменность160 cases/8 cleanups/900s существующими тестами,
+   не повторять локально полный M4 SQL workload.
+4. До push на настоящем candidate checkout проверить pinned revision tree,
+   оба ancestry и пустой protected-doc diff; не ограничиваться synthetic fixture.
+   Затем один штатный full CI финального исправленного code/docs кандидата.
+   Сам acceptance expected не ослаблять; SQL/инфраструктурные причины разделять.
+
+Возврат: final head/tree/tested SHA, изменение admission и точные commands/results,
+CI URL/status. Detailed evidence — в PR/CI. Новый provider plan пока не нужен.
+C0 закрывает06 после проверки кода/CI;05 semantic live outcome остаётся UNVERIFIED.
 
 ### Следующий последовательный шаг C6
 
