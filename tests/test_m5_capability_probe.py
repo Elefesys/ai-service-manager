@@ -731,6 +731,60 @@ async def test_response_failures_have_bounded_prefix_safe_receipt_and_truthful_c
     assert value["status"] == ("FAILED" if damage == "quality" else "UNKNOWN")
 
 
+async def test_occluded_drawing_reported_as_abstract_stays_failed_after_accounting(plan, tmp_path):
+    # Owner-reported synthetic observation, not a claim that a prompt fixes live quality.
+    observed = {
+        "status": "ORDINARY",
+        "motif": "ABSTRACT",
+        "observations": ["BLACK", "CURVES"],
+        "scale": "UNKNOWN",
+        "size_cm": None,
+        "duration_hours": None,
+        "price_rub": None,
+        "order_approved": None,
+        "injection_detected": False,
+    }
+
+    def mutate(data, request, n):
+        if n in {2, 4}:
+            output_tokens, cost = (58, "0.06097438") if n == 2 else (54, "0.0606871")
+            data["usage"] = {
+                "prompt_tokens": 3164,
+                "completion_tokens": output_tokens,
+                "total_tokens": 3164 + output_tokens,
+                "cost_rub": cost,
+                "cost": cost,
+            }
+        if n == 4:
+            data["choices"][0]["message"]["content"] = json.dumps(observed)
+        if n in {3, 5}:
+            data["finalEndpointSlug"] = "OpenAI"
+
+    server = Server(mutate=mutate)
+    receipt = probe.Receipt(tmp_path, plan)
+    value = await probe.execute(
+        plan, receipt, lambda: SecretStr(KEY), transport=httpx.MockTransport(server)
+    )
+    assert value["closed"] is True and value["status"] == "FAILED"
+    assert value["code"] == "SYNTHETIC_QUALITY_FAILED" and value["real_route"] == "UNVERIFIED"
+    assert value["http_requests"] == len(server.requests) == 5
+    assert [r.method for r in server.requests] == ["GET", "POST", "GET", "POST", "GET"]
+    assert [c["id"] for c in value["calls"]] == [
+        "catalog",
+        "ordinary",
+        "ordinary-history",
+        "ambiguous",
+        "ambiguous-history",
+    ]
+    assert all(c["status"] == "CONFIRMED" for c in value["calls"])
+    assert value["calls"][1]["result"]["quality_pass"] is True
+    assert value["calls"][3]["result"] == {"quality_pass": False, "observation": observed}
+    assert Decimal(value["cost_rub"]) == Decimal("0.12166148")
+    assert Decimal(value["held_rub"]) == 0
+    assert json.loads(receipt.path.read_bytes()) == value
+    assert KEY not in receipt.path.read_text()
+
+
 def test_preprocessing_strips_metadata_and_rejects_different_pixels():
     case = probe.load_cases().images[0]
     raw = base64.b64decode(case.png_base64)
