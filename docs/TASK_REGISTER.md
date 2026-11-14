@@ -2,53 +2,44 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.1B INTEGRATED / VERIFIED; M5.2A IN_PROGRESS / 2026-11-14
+## CURRENT — M5.1A/B INTEGRATED / VERIFIED; M5.2A REVIEW / 2026-11-14
 
-PR #47 слит владельцем. Accepted main:
-`6942150e9a4ab96222f49702b2e9977178b04e74`,
-tree `12e4481c8a54d219e5bae7acb94b5484cf0b166c` равен reviewed candidate
-`525092b701068465e73db6a912b837808b2ab284`.
-[C0 review PASS](https://github.com/Elefesys/ai-service-manager/pull/47#pullrequestreview-5887861003);
-[post-merge CI43389871150](https://github.com/Elefesys/ai-service-manager/actions/runs/43389871150),
-push/main, attempt1: **12/12 SUCCESS**, все completed, failed steps нет.
-M5.1B — **INTEGRATED / VERIFIED в synthetic LOCAL/TEST**: опубликованные знания
-в защищённом AI context, activation guards и минимальный owner UI; additive0019.
-v3 provider contract подтверждён через MockTransport; новый real-provider PASS
-не заявляется. Детальные результаты и CI repair закрытого PR — в review выше.
+Accepted application main: `6942150e9a4ab96222f49702b2e9977178b04e74`,
+tree `12e4481c8a54d219e5bae7acb94b5484cf0b166c`; PR47 integrated,
+[post-merge CI43389871150](https://github.com/Elefesys/ai-service-manager/actions/runs/43389871150)
+12/12 SUCCESS. M5.1A/PR46 и M5.1B/PR47 VERIFIED в synthetic LOCAL/TEST;
+IMPL-005 ACCEPTED / LOCKED; M4 receipt98136c33 сохранён в ancestry.
 
-M5.1A/PR #46 остаётся INTEGRATED / VERIFIED на
-`6c27be8487f3f8792cf01ed2a0fcdde130ea7a52`;
-[post-merge CI43245856346](https://github.com/Elefesys/ai-service-manager/actions/runs/43245856346)
-12/12 SUCCESS. IMPL-005 ACCEPTED / LOCKED; PR45/M5.0 и receipt98136c33/M4
-сохранены в ancestry. Принятые application и architecture решения не пересмотрены.
+**M5.2A functional capability принят C0 / ASSISTED_SYNTHETIC.**
+[Revision14](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6876443802) — три Vision samples PASS,
+embedding3×1536/cosine/relevance PASS. [Revision16](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6877156327)
+подтверждает identity/model/OpenAI/status/usage/cost этого же embedding request.
+Единственные два mismatches — ABSENT completion_tokens; C0 явно принял
+embedding-specific NOT_APPLICABLE при сохранении исходного ABSENT.
+Решение и пределы — [IMPL-005](decisions/IMPL-005-m5-pilot-knowledge.md).
+Новых provider/VM вызовов, ключа или operator revision17 не требуется.
 
-Единственная активная задача — **C4-M5.2A-CAPABILITY-PROBE-R1 — IN_PROGRESS**.
-Ведущий C4; C6 подключается последовательно для operator route.
-Текущая ограниченная доработка **C0-M5.2A-05**: включить готовый C6 prompt fix
-`cb6c95de5c3fc6194c4f216018e4914cbf457ece` и C0 docs в прежний Draft PR48,
-проверить targeted tests, затем один штатный full CI окончательного кандидата.
-Parent `3472faf1041b7e42c21b89ce01599efebca6a0dd` уже прошёл
-[CI43546043614](https://github.com/Elefesys/ai-service-manager/actions/runs/43546043614),
-12/12 SUCCESS; fixes01–04 CLOSED, этот CI не повторять.
-Write-set, полный base/candidate SHA и одна активная выдача — в
-[M5_HANDOFF](tasks/M5_HANDOFF.md).
+Принятый source parent: `d0cc2b88ed08475619d76692559f7cdcc039ec32`,
+tree `f9bb2b4758694250577ee6712caa86a0f7da5daa`;
+[CI43580452502](https://github.com/Elefesys/ai-service-manager/actions/runs/43580452502)
+12/12 SUCCESS, не повторять для неизменённого parent. Fixes01–07 и C6 capture
+CLOSED. PR48 ещё не интегрирован; M5.2A остаётся REVIEW.
 
-[Реальный synthetic возврат C6](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6872471841):
-ordinary Vision PASS; ambiguous FAILED/SYNTHETIC_QUALITY_FAILED;
-unsuitable и embeddings NOT RUN. Два вызова OpenAI/gpt-4o-mini подтверждены,
-HTTP403 в этом проходе нет. Confirmed0.12166148RUB, текущий hold0; прежние
-UNKNOWN/holds11.67RUB сохранены отдельно. Это owner-reported terminal evidence,
-не прямое чтение ВМ C0. Качество нового prompt ещё не проверено;
-**M5.2A real-route UNVERIFIED**, не INTEGRATED/VERIFIED.
+Единственная активная задача — прежняя C4-M5.2A-CAPABILITY-PROBE-R1,
+ограниченный финальный шаг **C4-M5.2A-INTEGRATION-FINALIZE**.
+Ведущий C4: взять C0 docs acceptance commit, обновить только два C0 docs pins
+в существующем admission и получить один штатный CI окончательного кандидата.
+Полный prepared base/write-set/проверки — [M5_HANDOFF](tasks/M5_HANDOFF.md).
+C6 HOLD; operator циклы завершены. M5.2B и далее не выданы.
 
-Владелец отдельно разрешил C6 продолжение synthetic paid tests, что закреплено
-[в PR](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6872201066).
-Текущая работа C4 — code/offline/CI. После code/CI приёмки C6 готовит новый
-source-bound план в фактических границах имеющегося допуска; сам docs/source
-update не расширяет разрешение и не снимает старые holds.
-Receiver ACK/fence, полный live HUMAN/Resume и PC transport сохраняют прежние
-ограничения. Current migration0019; следующая не назначена. M5.2B и далее не выданы.
-Merge PR48 требует отдельного разрешения владельца.
+Original receipts не переписываются: standalone probe сохранил UNKNOWN,
+diagnostics — NOT_PROVEN по прежнему predicate. Принятие C0 является отдельной
+оценкой evidence. Bookkeeping остаётся confirmed0.50229415 RUB / holds11.75 RUB;
+совпавшие reported/history0.00027011 RUB не освобождают резерв автоматически.
+Отдельная сверка не блокирует эту synthetic capability приёмку (ADR-148).
+Real-client/data admission, M4 receiver ACK/fence и полный live HUMAN/Resume
+не закрыты; PC transport и migration0019 прежние. Merge — только с отдельного
+разрешения владельца после C0 review финального CI.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 

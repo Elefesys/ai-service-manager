@@ -27,16 +27,21 @@ c9d42878ebfaf6def59d24cf7f95b1f74646eb83, push/main CI43157266312 — 12/12 SUCC
 [IMPL-005](docs/decisions/IMPL-005-m5-pilot-knowledge.md), CURRENT в
 [TASK_REGISTER](docs/TASK_REGISTER.md), затем применимые исходные ADR.
 Решение IMPL-005 — ACCEPTED / LOCKED C0; PR #45 интегрирован. M5.1A/PR #46 и
-M5.1B/PR #47 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST. Текущий принятый
-main6942150e; post-merge CI43389871150 — 12/12 SUCCESS. В разговоре используются
-опубликованные знания, доступен минимальный owner UI; новый v3 provider contract
-проверен через MockTransport, не новым live вызовом. C0 выдал только M5.2A ведущему
-C4: ограниченная подготовка и проверка Vision/embedding routes. C6 участвует
-только при конкретной необходимости операторского маршрута, последовательно.
-Фактический полный base, CI и одно поручение закреплены в реестре и M5_HANDOFF;
-подготовка probe не является подтверждением real-route capability.
-Старые формулировки M4 «следующий шаг M5.1» не являются готовым поручением
-реализовать весь Service/Rule/Workflow/RAG набор одним PR.
+M5.1B/PR #47 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST, accepted
+main6942150e. M5.2A functional capability принят C0 на owner-reported assisted
+synthetic evidence: три Vision samples и embedding relevance/1536/cosine,
+провайдер OpenAI подтверждён history того же запроса. Отсутствующий
+completion_tokens у установленного embedding request — NOT_APPLICABLE;
+исходное ABSENT сохраняется, чатовые проверки не ослаблены. Точное решение —
+в IMPL-005, подробные observations — в PR48.
+
+M5.2A остаётся REVIEW до финальной интеграции PR48. Единственный текущий
+исполнитель C4 готовит принятый результат к слиянию: синхронизация двух C0 docs
+pins и штатный CI финального кандидата. C6 operator work завершён; новые GET,
+model POST, планы, действия на ВМ и запрос ключа не нужны и не назначены.
+M5.2B выдаётся только после интеграции по фактическому main SHA.
+Original UNKNOWN/diagnostic receipts, holds и real-client/data restrictions
+сохраняются; ручная приёмка evidence не переписывает результат старого probe.
 
 M5 делает подтверждённые настройки и знания полезными в разговоре, затем Vision,
 портфолио и предварительный intake. Не строить universal workflow engine,

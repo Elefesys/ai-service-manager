@@ -6,9 +6,10 @@
 ниже изменения порядка реализации исходных ADR. Остальные архитектурные
 инварианты сохраняются. M5.1A/PR #46 и M5.1B/PR #47 интегрированы и проверены
 в synthetic LOCAL/TEST; текущий main6942150e, post-merge CI43389871150 — 12/12 SUCCESS.
-Активен только M5.2A под руководством C4. Подготовка Vision/embedding probe не
-подтверждает real-route capability и не разрешает paid/live/VM действия.
-Решение остаётся ACCEPTED / LOCKED, его scope не расширен.
+M5.2A functional capability принят C0 в ASSISTED_SYNTHETIC scope;
+PR48 REVIEW до финальной интеграции. Operator циклы C6 закончены.
+Текущее уточнение embedding usage ниже — ACCEPTED C0; client-data/paid/VM
+допуск не расширен. Решение IMPL-005 остаётся ACCEPTED / LOCKED.
 План и активная выдача: [M5_HANDOFF](../tasks/M5_HANDOFF.md); фактический base,
 CI и статус исполнения — в [TASK_REGISTER](../TASK_REGISTER.md).
 
@@ -130,12 +131,62 @@ Owner ingestion нельзя строить на фиктивных Telegram с�
 наборов допустимы bounded операции concierge с durable outcome/receipt;
 универсальная background AI platform и bulk pipeline не обязательны.
 
+
+## Уточнение C0 — embedding usage и приёмка M5.2A / 2026-11-14
+
+**ACCEPTED C0; REVISED только обязательность completion_tokens в
+диагностических требованиях review5904066438/review5904212299.**
+
+Проблема: history validator требовал обязательный integer completion_tokens=0
+у embedding request. [Polza embedding response](https://polza.ai/docs/api-reference/embeddings/create)
+и [OpenAI embedding response](https://developers.openai.com/api/reference/resources/embeddings/methods/create)
+описывают prompt_tokens/total_tokens без этого поля.
+[Actual revision16](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6877156327) для exact ранее выполненного
+запроса показывает ту же форму в list и detail. Принятый source meter уже
+разрешает ABSENT для embedding. Это ошибка modality-specific диагностического
+условия, а не доказанный сбой модели или неправильный биллинг.
+
+Меньший принятый вариант: только у установленного text-embedding request/model
+при корректных integer prompt_tokens=total_tokens допускается ABSENT
+completion_tokens как NOT_APPLICABLE. Исходное отсутствие сохраняется;
+нельзя утверждать, что provider прислал integer0. Если поле присутствует,
+допустим только integer0; null, string, bool и nonzero не принимаются.
+Chat usage и все identity/model/provider/status/cost/limit проверки неизменны.
+Это согласование с форматом modality, не ослабление tenant/client/privacy/route
+или финансовых инвариантов исходных ADR.
+
+C0 принимает functional capability на совокупности owner-reported assisted
+synthetic evidence: [revision14](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6876443802) подтверждает
+три Vision samples и embedding3×1536, float/cosine/relevance;
+revision16 подтверждает exact request identity, model
+openai/text-embedding-3-small, observed OpenAI, completed/sync/attempts1,
+prompt_tokens=total_tokens=111 и совпадающую response/list/detail
+стоимость0.00027011 RUB. Отсутствующий completion_tokens — единственное прежнее
+несоответствие. Для Vision выбран openai/gpt-4o-mini, PNG256×256/detail low;
+provider подтверждён history. Это PASS этих synthetic samples/маршрутов,
+не общий benchmark татуировок, client-runtime E2E или утверждение data residency.
+
+Новые HTTP/model/VM вызовы для этой приёмки не нужны. Original closed probe
+UNKNOWN и diagnostic NOT_PROVEN не переписываются; отдельный C0 acceptance
+не является новым CLI result. Ledger/holds также не изменяются:
+confirmed0.50229415 RUB и aggregate holds11.75 RUB остаются консервативным
+операторским учётом; сверка конкретного embedding0.00027011/hold0.08 остаётся
+отдельным действием без блокировки принятой capability (ADR-148).
+Старые UNKNOWN/holds не снимаются автоматически.
+
+Последствие: M5.2A capability достаточен для подготовки интеграции PR48,
+статус задачи REVIEW до merge/final CI. M5.2B выдаётся только после интеграции
+от фактического принятого main. Реальные данные/производственный route,
+версия upstream weights/alias и последующая operational reconciliation
+не объявляются закрытыми; IMPL-004/005 data и guarded runtime границы сохранены.
+
 ## Что остаётся OPEN до соответствующей задачи
 
-- Точный разрешённый Vision и embedding route, modality, размер вектора,
-  preprocessing, реальные usage/cost и лимиты. Text-only M4 approval это не закрывает.
-  Проверить небольшой synthetic probe до основной реализации адаптера; без
-  нового допуска на расход сначала fake/contract/local работа.
+- Реальные клиентские данные, processing eligibility и production activation
+  выбранных Vision/embedding routes остаются OPEN. Synthetic profiles и
+  наблюдённые usage/cost приняты выше; text-only M4 и этот synthetic PASS
+  не разрешают новый live расход или client data. До отдельного допуска —
+  fake/contract/local работа.
 - Физическая схема и миграции, endpoints и read DTO для первого среза — C1/C2,
   далее ограниченные дополнения. Не фиксировать заранее число таблиц/маршрутов.
 - Разрешённые данные настоящего мастера и включение реального бизнеса — перед
