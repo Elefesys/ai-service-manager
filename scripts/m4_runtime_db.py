@@ -290,6 +290,8 @@ M5_SEARCH_PATHS = M5_SEARCH_C0_DOCS | {
     "tests/m5_knowledge_search_fixtures.py",
     "tests/test_auth_contract.py",
     "tests/test_foundation.py",
+    # Owner-approved 2026-11-15: current-schema TRUNCATE compatibility only.
+    "tests/test_m1_3_c0_acceptance.py",
     "tests/test_m2_3_db_postgres.py",
     "tests/test_m2_3_schema_postgres.py",
     "tests/test_m2_3_setup.py",

@@ -2355,7 +2355,9 @@ def test_m5_search_refuses_unapproved_source_before_resources(
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
 
-@pytest.mark.parametrize("damage", ["base", "branch", "old_migration", "probe", "workflow"])
+@pytest.mark.parametrize(
+    "damage", ["base", "branch", "old_migration", "probe", "workflow", "m1_api"]
+)
 def test_m5_search_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damage):
     r = r11_event
     prepare_m5_search_event(
@@ -2368,6 +2370,7 @@ def test_m5_search_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damage):
             "old_migration": "migrations/versions/0019_published_knowledge.py",
             "probe": "backend/src/asm/ai/capability_probe.py",
             "workflow": ".github/workflows/ci.yml",
+            "m1_api": "tests/test_m1_3_api_postgres.py",
         }.get(damage),
     )
     with pytest.raises((carrier.Refusal, catalog.Refusal)):
