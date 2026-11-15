@@ -1,5 +1,5 @@
 import { Business, Session } from './api';
-import { ActiveProjection, Bundle, CommandResponse, DraftState, Operation, Preview } from './configuration-api';
+import { ActiveProjection, Bundle, CommandResponse, DraftState, Operation, Preview, KnowledgeSource, KnowledgeState, KnowledgeBuild, KnowledgeCommand, KnowledgeOperation, embeddingProfile } from './configuration-api';
 export const workspace='22222222-2222-4222-8222-222222222222',actor='11111111-1111-4111-8111-111111111111',businessId='33333333-3333-4333-8333-333333333333',releaseId='44444444-4444-4444-8444-444444444444',stamp='2026-11-13T00:00:00.000000Z';
 export const session=(csrf='csrf'):Session=>({user_account_id:actor,csrf_token:csrf,expires_at:'2030-01-01T00:00:00Z',memberships:[{workspace_id:workspace,role:'OWNER',permissions:[]}]});
 export const business=(id=businessId):Business=>({workspace_id:workspace,id,name:'Тестовая мастерская',status:'ACTIVE',version:1,created_at:stamp});
@@ -10,3 +10,12 @@ export const preview=(state=draft(),valid=true):Preview=>({state,validation:{val
 export const command=(operation:Operation='EDIT',version='2',activation='0',release:string|null=null):CommandResponse=>({outcome:'ACCEPTED',result:{workspace_id:workspace,business_id:businessId,receipt_id:'55555555-5555-4555-8555-555555555555',operation,draft_version:version,activation_version:activation,release_id:release,recorded_at:stamp}});
 export const deferred=<T,>()=>{let resolve!:(v:T)=>void,reject!:(e:unknown)=>void;const promise=new Promise<T>((yes,no)=>{resolve=yes;reject=no;});return{promise,resolve,reject};};
 export const ok=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status});
+
+export const sourceId='66666666-6666-4666-8666-666666666666',revisionId='77777777-7777-4777-8777-777777777777',buildId='88888888-8888-4888-8888-888888888888';
+export const knowledgeSource=(text='Подтверждённый текст источника.'):KnowledgeSource=>({source_id:sourceId,source_version:'1',state:'DRAFT',head:{revision_id:revisionId,revision_no:'1',title:'Памятка',format:'TEXT',canonical_text:text,canonical_sha256:'a'.repeat(64),source_label:'Владелец',author_label:null,service_id:null,category:null,claim_key:null,effective_from:null,effective_until:null,confirmed:false},preview:{chunks:[{ordinal:0,text,sha256:'a'.repeat(64)}],issues:[]}});
+export const knowledgeState=():KnowledgeState=>({schema_version:1,workspace_id:workspace,business_id:businessId,sources_hash:'b'.repeat(64),activation_version:'0',release_id:null,active_build_id:null,profile_id:embeddingProfile,embedding_mode:'CONTROLLED',sources:[],builds:[],rollback_targets:[]});
+export const readyBuild=():KnowledgeBuild=>({build_id:buildId,build_version:'3',state:'READY',profile_id:embeddingProfile,manifest_hash:'c'.repeat(64),revision_ids:[revisionId],chunk_count:1,calls_reserved:1,calls_completed:1,error_code:null});
+export const knowledgeCommand=(operation:KnowledgeOperation='KNOWLEDGE_SAVE',result:Partial<KnowledgeCommand['result']>={}):KnowledgeCommand=>({schema_version:1,outcome:'ACCEPTED',result:{workspace_id:workspace,business_id:businessId,receipt_id:'99999999-9999-4999-8999-999999999999',operation,source_id:null,source_version:null,revision_id:null,build_id:null,build_version:null,release_id:null,activation_version:'0',recorded_at:stamp,request_hash:'d'.repeat(64),...result}});
+
+export const emptyBuildId='12121212-1212-4212-8212-121212121212';
+export const emptyReadyBuild=():KnowledgeBuild=>({...readyBuild(),build_id:emptyBuildId,build_version:'1',manifest_hash:'e'.repeat(64),revision_ids:[],chunk_count:0,calls_reserved:0,calls_completed:0});

@@ -11,6 +11,7 @@ from asm.ai.database import AIDatabase, runtime_config
 from asm.ai.fake import FakeAdapter
 from asm.ai.gateway import ModelAdapter
 from asm.ai.runtime_contracts import RuntimeStop
+from asm.knowledge.embeddings import EmbeddingClient
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.results import AIJobClaim, JobClaim
@@ -90,9 +91,12 @@ class SyntheticRuntime(RuntimeExecution):
         *,
         environment: str,
         telegram: TelegramClient | None = None,
+        embeddings: EmbeddingClient | None = None,
     ) -> None:
         self.config = runtime_config(config)
-        self.database = AIDatabase(database, environment=environment, delivery=True)
+        self.database = AIDatabase(
+            database, environment=environment, delivery=True, embeddings=embeddings
+        )
         if telegram is not None and (
             type(telegram) is not TelegramClient or not telegram.synthetic_ai
         ):

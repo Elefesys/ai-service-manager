@@ -141,7 +141,7 @@ def install_configuration(app: FastAPI, auth: AuthService, settings: AuthSetting
         "/publish",
         response_model=CommandResponse,
         openapi_extra=command_schema(Publish),
-        description="Live OWNER including replay. SQL validation, draft/activation CAS and atomic immutable release. Replaying an old result never changes current activation.",
+        description="Live OWNER including replay. SQL validation, draft/activation CAS and atomic immutable release. A linked knowledge build requires joint publication (409 KNOWLEDGE_BUILD_REQUIRED). Replaying an old result never changes current activation.",
     )
     async def publish(
         request: Request, workspace_id: CanonicalUUID, business_id: CanonicalUUID

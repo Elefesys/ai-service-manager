@@ -12,7 +12,7 @@ Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[a-zA
 Text = Annotated[str, Field(min_length=1, max_length=4000, pattern=r"\S")]
 Reason = Annotated[str, Field(min_length=1, max_length=500, pattern=r"\S")]
 JsonText = Annotated[str, Field(min_length=1, max_length=65536)]
-Money = Annotated[Decimal, Field(ge=0, le=Decimal("1000000"), max_digits=18, decimal_places=9)]
+Money = Annotated[Decimal, Field(ge=0, le=Decimal(1000000), max_digits=18, decimal_places=9)]
 Currency = Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
 
 
@@ -76,7 +76,9 @@ class Limits(DTO):
 class _GatewayConfig(DTO):
     revision: Identifier
     route: Route
-    prompt_revision: Literal["conversation_v1", "conversation_v2", "conversation_v3"]
+    prompt_revision: Literal[
+        "conversation_v1", "conversation_v2", "conversation_v3", "conversation_v4"
+    ]
     schema_revision: Literal["conversation_result_v1"]
     limits: Limits
 
@@ -93,10 +95,18 @@ class KnowledgeGatewayConfig(_GatewayConfig):
     prompt_revision: Literal["conversation_v3"]
 
 
-AnyGatewayConfig = GatewayConfig | KnowledgeGatewayConfig
+class SearchGatewayConfig(_GatewayConfig):
+    """Explicit fixed-profile search path; historical configs remain strict."""
+
+    prompt_revision: Literal["conversation_v4"]
+
+
+AnyGatewayConfig = GatewayConfig | KnowledgeGatewayConfig | SearchGatewayConfig
 
 
 def validate_gateway_config(value: object) -> AnyGatewayConfig:
+    if isinstance(value, SearchGatewayConfig):
+        return SearchGatewayConfig.model_validate(value)
     if isinstance(value, KnowledgeGatewayConfig):
         return KnowledgeGatewayConfig.model_validate(value)
     return GatewayConfig.model_validate(value)

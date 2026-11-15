@@ -5,9 +5,11 @@
 По поручению владельца C0 принял ограниченный scope M5 и явно перечисленные
 ниже изменения порядка реализации исходных ADR. Остальные архитектурные
 инварианты сохраняются. M5.1A/PR #46 и M5.1B/PR #47 интегрированы и проверены
-в synthetic LOCAL/TEST; текущий main6942150e, post-merge CI43389871150 — 12/12 SUCCESS.
-M5.2A functional capability принят C0 в ASSISTED_SYNTHETIC scope;
-PR48 REVIEW до финальной интеграции. Operator циклы C6 закончены.
+в synthetic LOCAL/TEST. M5.2A/PR48 также INTEGRATED / VERIFIED:
+accepted main8eeeede1, post-merge CI43600856660 — итог12/12 SUCCESS после
+обоснованного повтора одной Docker setup job. Functional capability принят
+в ASSISTED_SYNTHETIC scope. Активна только M5.2B по CURRENT HANDOFF.
+Operator циклы C6 закончены.
 Текущее уточнение embedding usage ниже — ACCEPTED C0; client-data/paid/VM
 допуск не расширен. Решение IMPL-005 остаётся ACCEPTED / LOCKED.
 План и активная выдача: [M5_HANDOFF](../tasks/M5_HANDOFF.md); фактический base,
@@ -174,9 +176,9 @@ confirmed0.50229415 RUB и aggregate holds11.75 RUB остаются консе�
 отдельным действием без блокировки принятой capability (ADR-148).
 Старые UNKNOWN/holds не снимаются автоматически.
 
-Последствие: M5.2A capability достаточен для подготовки интеграции PR48,
-статус задачи REVIEW до merge/final CI. M5.2B выдаётся только после интеграции
-от фактического принятого main. Реальные данные/производственный route,
+Последствие: M5.2A capability принят; PR48 интегрирован и post-merge CI проверен.
+M5.2B выдан от фактического accepted main8eeeede1; его code/LOCAL/TEST проверка
+не требует повторного M5.2A probe. Реальные данные/производственный route,
 версия upstream weights/alias и последующая operational reconciliation
 не объявляются закрытыми; IMPL-004/005 data и guarded runtime границы сохранены.
 

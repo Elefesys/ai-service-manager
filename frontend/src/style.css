@@ -85,3 +85,8 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .configuration-issues { overflow-wrap: anywhere; padding-left: 1.25rem; }
 .configuration :focus-visible { outline: 3px solid #7295ff; outline-offset: 2px; }
 @media (max-width: 720px) { .configuration-policy-grid { grid-template-columns: minmax(0, 1fr); } .configuration .billing-heading { flex-direction: column; } }
+
+.knowledge-sources { margin-top: 1.5rem; border-top: 1px solid var(--line, #d7dce3); padding-top: 1rem; }
+.knowledge-source-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: .8rem; border-radius: .5rem; background: #f4f6f9; max-height: 20rem; overflow-y: auto; }
+
+.knowledge-sources h4, .knowledge-sources p { overflow-wrap: anywhere; }

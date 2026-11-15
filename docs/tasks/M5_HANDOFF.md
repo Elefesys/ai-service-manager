@@ -4,97 +4,257 @@
 [TASK_REGISTER](../TASK_REGISTER.md). Решение по объёму:
 [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
 
-## CURRENT — M5.2A → C4 / REVIEW / 2026-11-14
+## CURRENT — M5.2B → C4 / IN_PROGRESS / 2026-11-14
 
-Единственная активная задача C4-M5.2A-CAPABILITY-PROBE-R1.
-Текущий ограниченный шаг **C4-M5.2A-INTEGRATION-FINALIZE**; ведущий C4.
-C6 operator/capture работа завершена. Ни нового plan/revision17, ни GET,
-model POST, действий на ВМ или запроса ключа не назначено. M5.2B не выдан.
+Единственная активная задача **C4-M5.2B-KNOWLEDGE-SEARCH-R1**;
+продолжение **C4-M5.2B-PUBLICATION-R2** принято C0 в
+[review PR49](https://github.com/Elefesys/ai-service-manager/pull/49#pullrequestreview-5909000553).
+Ведущий C4; C1 помогает с configuration/API, C2 — со схемой, RLS и миграцией,
+последовательно в рамках этой задачи. Остальные срезы M5 не выданы; C6 HOLD.
 
-### Принятый результат
+### Результат для пользователя
 
-C0 принимает **ASSISTED_SYNTHETIC capability** по
-[revision14](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6876443802) и
-[revision16](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6877156327): три Vision samples,
-embedding3×1536/cosine/relevance и history identity/model/OpenAI/usage/cost
-того же запроса. Это owner-reported evidence, не прямое чтение ВМ C0
-и не разрешение реальных клиентских данных/клиентского runtime.
-Raw vectors отдельно не пересчитывались.
+Владелец подготавливает небольшой подтверждённый текст, проверяет и публикует
+его. При вопросе клиента приложение находит подходящие фрагменты опубликованных
+знаний, включая переформулированный вопрос, и передаёт AI фрагменты с источниками.
+Черновик/отозванный материал не попадает в ответ; неудачная индексация сохраняет
+старую публикацию. Это следующий шаг после малого FAQ из M5.1B, необходимый
+для принятого семантического поиска M5; сейчас можно разрабатывать без VM/paid.
 
-Единственное прежнее несоответствие — отсутствующий completion_tokens.
-C0 принял embedding-specific NOT_APPLICABLE: исходное поле остаётся ABSENT,
-present поле должно быть integer0; null/string/bool/nonzero не принимаются.
-Chat, provider, model, identity, status, input/total tokens и cost checks прежние.
-[Принятое уточнение IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md)
-явно заменяет требование обязательного completion_tokens из прежних C0 reviews.
-Original UNKNOWN/NOT_PROVEN receipts и holds не редактируются. Приёмка —
-отдельный вывод C0 по совокупности существующих evidence, не подмена CLI outcome.
+### Repository, base, зависимости
 
-### Base и результат финального шага
+- Repository: `Elefesys/ai-service-manager`; branch
+  `c4/m5-2b-knowledge-search-r1`; integration target `main`.
+- **Accepted application base: `8eeeede1b4a05537b0afb8c29992e8b681eaeb65`.**
+  Tree: `df31d522ff862a0af58f1876fd8f16ddcda7bdc1`.
+  PR48 merged владельцем; tree совпадает с принятым кандидатом b455e6eb.
+- [Post-merge CI43600856660](https://github.com/Elefesys/ai-service-manager/actions/runs/43600856660):
+  итог **12/12 SUCCESS**. Первый docker29/intent остановился на старте
+  docker.service до тестов; повтор именно этой job прошёл на том же SHA.
+  Остальные успешные checks сохранены с attempt1; неизменённый CI не повторять.
+- Подготовленная ветка содержит один C0 docs-only assignment commit поверх
+  accepted base. Его exact SHA/tree брать из закреплённой ссылки C0 и Git,
+  сохранить в ancestry. Это старт выдачи, не application implementation.
+- Зависимости M5.1A/B и M5.2A приняты. M5.2A code/CI — LOCAL/TEST;
+  route/quality — ASSISTED_SYNTHETIC по существующим receipts PR48.
+  Это не client-data/runtime activation и не новый paid допуск.
+- Читать этот CURRENT, IMPL-005, Spec §6, §7.12 и ADR-030–036/051/052/075/076/148.
+  Исторические M4/M5.2A handoff не перечитывать целиком.
 
-- Repository `Elefesys/ai-service-manager`, PR48, ветка
-  `c4/m5-2a-capability-probe-r1`, target main.
-- Accepted application main `6942150e9a4ab96222f49702b2e9977178b04e74`,
-  tree `12e4481c8a54d219e5bae7acb94b5484cf0b166c`.
-- Accepted code/CI parent `d0cc2b88ed08475619d76692559f7cdcc039ec32`,
-  tree `f9bb2b4758694250577ee6712caa86a0f7da5daa`;
-  [CI43580452502](https://github.com/Elefesys/ai-service-manager/actions/runs/43580452502)
-  12/12 SUCCESS. Не перезапускать этот unchanged CI.
-- C0 подготовил текущий согласованный docs-only commit поверх этого parent.
-  Его полный SHA/tree закреплены в C0 review PR48; это exact prepared base,
-  сохранить его ancestry. Immutable assignment
-  `64e80b214b3404728de73030acab4cd1fdc28a4e`/tree
-  `e1ab83979b090a1faa23ef4fd50d10be61a0e962` не меняется.
-- Результат для пользователя: готовый к отдельному owner merge PR48 с актуальной
-  приёмкой M5.2A; без дальнейших операторских проверок.
+### Ограниченный контракт и реализация
 
-### Write-set и проверки C4
+1. Начать с короткого совместного C4/C1/C2 контракта в PR/возврате: source/revision,
+   подтверждение, chunks, build/profile, owner операции, runtime read, ошибки и
+   численные лимиты. Зафиксировать пределы text/Markdown input, числа chunks,
+   batch/query bytes/tokens, timeout и результата; текущий context budget не
+   расширять. Не делать отдельный planning PR или универсальный registry.
+2. Bounded text/Markdown/structured concierge input через owner domain/API.
+   Source хранит автора/происхождение, ревизию, service/category, authority и
+   effective dates; raw text сам не становится правилом. Без crawler/PDF/OCR,
+   архивов и истории клиентов. Подтверждение владельца обязательно.
+3. Canonical source/chunks отделить от embedding projection. Один профиль
+   `polza_openai_text_embedding3small_1536_cosine_v1`:
+   Polza / OpenAI / `openai/text-embedding-3-small`, 1536, cosine,
+   EVAL_ONLY / synthetic. Не переключать branch/provider автоматически.
+   Query и index должны совпадать по profile/version/dimensions/preprocessing.
+4. Новый build готовить отдельно от active; активировать только полный валидный
+   совместимый build вместе с release. Error/timeout/UNKNOWN не заменяет active.
+   Publish/rollback/revoke используют owner authority, expected version,
+   idempotency и монотонную activation. Сохранить старые v1 releases/runs и
+   их receipts; не переписывать их под новый контракт.
+5. В PostgreSQL выполнить scoped full-text/metadata + exact pgvector retrieval,
+   deterministic bounded merge/ranking, provenance и честный empty/conflict.
+   Источник Business брать из trusted conversation binding. Общие подтверждённые
+   знания доступны его клиентам; чужие Business/Workspace и личные данные другого
+   Client недоступны. Никакого search_everything, отдельной vector DB или ANN.
+6. Включить результат в защищённый ConversationAgent/ContextBuilder/read path.
+   Версионировать изменённые DTO/prompt/schema; не увеличивать agent loop/tool
+   budget автоматически. Rules/service policy остаются authoritative.
+   Сохранить проверки актуальности на MODEL/READ/FOLLOWUP/CANDIDATE/COMMIT/SEND,
+   HUMAN/Resume, OWNER reconciliation, observation barrier, Telegram rights и
+   UNKNOWN/no-resend. Revocation/delete/expiry исключают материал из новых reads
+   и блокируют stale ещё не отправленный ответ; cache не обходит проверку.
+7. Embedding adapter/build/query path проверять controlled transport в LOCAL/TEST.
+   HTTP не держит DB transaction; finite reservations, durable outcome/receipt,
+   restart и uncertain-call no-resend обязательны. Для owner build не создавать
+   фиктивные Telegram conversations/messages и не включать общий job engine.
+   Использовать маленькую отдельную операцию с durable outcome при необходимости.
+   Отсутствующий embedding completion_tokens — NOT_APPLICABLE, raw ABSENT
+   сохраняется; present допустим только integer0. Не требовать provider в body,
+   если exact request history подтверждает маршрут; не выдумывать это подтверждение.
+   Identity/usage/cost evidence различать; асинхронная финансовая сверка не заменяет
+   functional проверки (ADR-148). Старые UNKNOWN/holds/closed plans не менять.
+8. В существующем owner экране — минимальный способ посмотреть источник,
+   подтвердить/опубликовать/отозвать и увидеть ошибку build. Допустим bounded
+   concierge import через тот же service; ежедневный review/publish/revoke
+   не требует SQL/ручного JSON. Не строить новый кабинет или dashboard.
 
-C0 docs commit включает согласованные CURRENT, IMPL-005, AGENTS, README.
-Protected docs после него не редактировать. Разрешены только:
-1. `scripts/m4_runtime_db.py`: значения
-   `M5_CAPABILITY_C0_DOCS_REVISION` и `M5_CAPABILITY_C0_DOCS_TREE` заменить
-   на exact SHA/tree C0 docs acceptance commit. Весь остальной script,
-   original assignment, approved-doc ancestry/tree/diff guards, SQL scopes,
-   runtime budgets и resource ordering byte-identical.
-2. `docs/tasks/M5_HANDOFF.md`: короткий фактический возврат/ссылка на CI.
-   Не переносить сюда полный журнал.
+### Миграция и write-set
 
-Не менять application/probe/polza/tests/fixtures/expected/schema/профили/лимиты/
-accounting/migrations/workflows/dependencies. Переписывать CLI под искусственный
-CAPABILITY_PASS не нужно. Реальная future embedding history integration относится
-к следующему отдельно выданному срезу; один принятый probe не строит её заранее.
+Фактический head **0019**; applied0001–0019 immutable. C0 выделяет для этого
+среза единственный следующий слот **0020**, predecessor **0019**.
+C2 до SQL подтверждает отсутствие конкурирующей миграции и минимальный контракт;
+имя файла `migrations/versions/0020_knowledge_search.py`. Не резервировать цепочку
+номеров. При конфликте сначала согласовать C0/C2, не переименовывать применённое.
 
-Проверить actual Git tree/ancestry C0 docs revision и assignment; protected diff
-всех четырёх docs должен быть пуст, включая modes/types. Выполнить существующие
-целевые admission tests `tests/test_m4_runtime_db_runner.py -k m5_capability`,
-lint/format изменённого script и принятые static checks по применимости.
-Существующие отрицательные tests должны по-прежнему отклонять wrong tree,
-unrelated ancestry и изменения каждого protected doc до создания ресурсов.
-Новые зеркальные tests для двух pins не нужны.
+Разрешены только нужные для указанного сценария paths:
+- Новый bounded domain `backend/src/asm/knowledge/`: `__init__.py`,
+  `models.py`, `errors.py`, `validation.py`, `permissions.py`,
+  `repository.py`, `service.py`, `http.py`, `embeddings.py`.
+  Не создавать пустые файлы/слои ради списка.
+- `backend/src/asm/configuration/{models,validation,repository,service,http}.py`;
+  `errors.py` дополнительно разрешён C0 для закрытого publication R2 отказа;
+  `backend/src/asm/ai/{knowledge,contracts,context,agent,database,fake,gateway,runtime,runtime_contracts,runtime_settings,provider_runtime,settings,polza}.py`;
+  новая версия conversation prompt/result schema, сохраняя старые версии.
+- `backend/src/asm/foundation.py`, `backend/src/asm/tenancy/database.py`,
+  `backend/src/asm/messaging/{database,worker,results,errors}.py` —
+  только подключение нового контракта/сохранение currentness; `contracts/openapi.json`.
+- `migrations/versions/0020_knowledge_search.py`.
+- Минимальный owner UI: `frontend/src/ConfigurationPanel.tsx`,
+  `frontend/src/configuration-api.ts`, `frontend/src/style.css`, их существующие
+  tests/fixtures и `frontend/e2e/configuration.spec.ts`; App wiring только при
+  необходимости в `frontend/src/App.tsx`/`App.test.tsx`.
+- Новые `tests/test_m5_knowledge_search*.py`, `tests/m5_knowledge_search_fixtures.py`,
+  `tests/fixtures/m5_knowledge_search/`; относящиеся существующие M5 configuration/
+  knowledge tests и M4 context/agent/gateway/runtime/delivery/rights regression tests.
+- Current-schema compatibility, только по фактическому impact list:
+  `scripts/m4_runtime_db.py`, `scripts/native_context_db_catalog.py`,
+  `tests/generic_pg_schema.py`, `tests/test_postgres.py`,
+  `tests/test_tenancy_postgres.py`, `tests/test_foundation.py`,
+  `tests/test_auth_contract.py`, `tests/test_m4_runtime_db_runner.py`,
+  `tests/test_native_context_db_runner.py`, schema/profile guards в существующих
+  M2/M3/M4 test fixtures, `backend/src/asm/telegram/provisioning.py`,
+  `scripts/m2_4_browser_fixture.py`, `scripts/m2_4_browser_worker.py`,
+  `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`.
+  Это не разрешение менять Telegram/native поведение или исторические expected.
+- `docs/tasks/M5_HANDOFF.md`: короткий контракт/возврат. AGENTS, README,
+  TASK_REGISTER и IMPL-005 из C0 assignment — сохранить; статус меняет C0.
 
-После этих проверок — один final fast-forward push в прежний PR48 и один
-штатный full CI изменённого финального кандидата. Не push C0 docs отдельно
-с ещё старыми pins; не создавать промежуточный заведомо красный CI.
-Локальный SQL/probe/M4/VM audit не повторять без новой причины.
-Вернуть final head/tree/tested merge, exact diff двух constants, фактические
-targeted результаты и final CI URL. Если выявлен инфраструктурный сбой —
-отделить его от исправления, не менять expected и не делать слепой rerun.
+Не изменять старые миграции, исходную архитектуру, dependencies/lockfiles,
+`.github/workflows`, deployment, capability probe/fixtures PR48, ценовые
+планы, provider routing M4 или будущие Portfolio/DurationCase/Quote таблицы.
+Любой дополнительный path/новый существенный контракт — конкретный запрос C0
+с причиной; сначала выполнить независимую разрешённую часть.
 
-C0 после финального review/CI назовёт owner merge как отдельное действие.
-До merge M5.2A REVIEW, не INTEGRATED. После интеграции C0 проверит фактический
-main/штатный post-merge CI и выдаст только M5.2B от принятого main.
-Старые M4 live ограничения, UNKNOWN/holds и client-data запреты остаются.
+### Source admission и критерии готовности
 
-### Возврат C4 — INTEGRATION-FINALIZE / 2026-11-14
+Текущий runner узнаёт только прежние M5 branches. В рамках этой выдачи разрешено
+добавить **узкий M5.2B admission** для указанной ветки/base/assignment и её будущего
+main merge: exact base tree, assignment ancestry, закрытый write-set и неизменность
+C0 docs. Старые admission branches/отказы сохраняются. Не расширять глобальный
+allowlist, не удалять проверку attempt/source и не менять runtime budget ради PASS.
+До открытия Draft PR/первого CI проверить actual Git pins/ancestry/protected diff
+и положительные/отрицательные admission cases. Не открывать заведомо красный
+docs-only PR с ещё не поддержанной веткой.
 
-Включён exact C0 docs commit40641f31/treee695db04. В admission обновлены только
-два C0 docs pins; остальные bytes script, original assignment и guards неизменны.
-Actual Git tree/ancestry/protected bytes/modes/types checks PASS; существующие
-`tests/test_m4_runtime_db_runner.py -k m5_capability`: 72 PASS/209 deselected,8.14s.
-Ruff check/format и py_compile изменённого script PASS. Final head/tree/tested
-merge и один штатный CI — в [возврате PR48](https://github.com/Elefesys/ai-service-manager/pull/48).
-M5.2A REVIEW, C6 HOLD; final review C0 и отдельное owner merge ещё впереди.
+Готовность — работающий сценарий и относящиеся K02–K06/K11/K12:
+- actual PG/pgvector под runtime role: релевантный exact-vector + keyword result,
+  provenance, empty/conflict, mismatch profile/dimensions/invalid vector отказ;
+  draft/unconfirmed/revoked/expired не читаются; cross-tenant/business/client tests;
+- source edit/build/publish/revoke/rollback races; failed build сохраняет active;
+  удалить источник и производные данные без восстановления удалённого через rollback;
+- owner API + browser: ввод/preview/confirm/publish/revoke без SQL; ошибка build видна;
+- controlled runtime: опубликованный fragment доходит до AI reply; prompt injection
+  остаётся данными; смена публикации/прав/HUMAN на границах блокирует stale эффект;
+- bounded embedding wire, accounting/restart/UNKNOWN и отсутствие HTTP по умолчанию.
+  Fake vectors доказывают механику, не качество модели. M5.2A real sample остаётся
+  отдельным capability evidence, не выдаётся за новый end-to-end semantic benchmark.
+- upgrade с чистой БД и с0019, current schema/catalog совместимость и исторические
+  invariants. Сначала целевые unit/actualPG/browser по риску, затем один штатный
+  полный CI итогового небольшого PR. Не повторять unchanged успешные проверки.
+
+Вернуть PR/head, контракт/миграцию C2, фактические сценарии/команды/результаты,
+ограничения и следующий шаг. C0 review → отдельное owner merge; auto-merge нет.
+Новые model POST/GET, ключи, действия на ВМ и реальные клиентские данные не
+разрешены этим заданием. Если для дополнительной проверки понадобится paid smoke,
+сначала готовые процедура/route/точные запросы/предел расходов, затем отдельный
+допуск владельца; не повторять M5.2A ради нового отчёта.
+
+### Контракт C4/C1/C2 — M5.2B R1 / 2026-11-14
+
+C2 подтвердил свободный slot0020←0019 по checkout и GitHub main; C1 review принят.
+Семь bounded таблиц: sources/revisions/chunks/builds/build_chunks/release_builds/
+embedding_calls; canonical text отдельно от vector projection. Все tenant keys,
+FORCE RLS/private capabilities; один literal profile/preprocessing v1, без registry.
+Новый publish атомарно создаёт v1 configuration release и build manifest; старые
+releases/runs/receipts не переписываются. Legacy publish без linked build остаётся
+configuration-only; при linked build требуется совместная публикация (R2 ниже);
+любой rollback проверяет linked build и необратимый отзыв/delete, без восстановления
+удалённого. SAVE draft не меняет активные revisions. Revoke/delete видимого материала
+повышает activation под прежним CONFIGURATION_V1 lock; до первой публикации остаётся0.
+Private v4 pin: release/activation/build/profile, digest всех eligible published
+revisions и ближайший future effective_from/until; все прежние gates и clock checks.
+В run — только refs/hash/rank, текст читается заново после fresh admission.
+
+Owner prefix /knowledge: GET state; POST sources, sources/{id}/confirm/revoke/delete,
+builds, publish, rollback. Existing cookie/OWNER/CSRF/Origin/idempotency/CAS.
+State/command DTO v1 отдельны от configuration v1; prompt conversation_v4,
+context_v3/knowledge_v2 новые; неизменённый answer wire conversation_result_v1.
+Owner UI вводит/показывает/подтверждает/публикует/отзывает без SQL/ручного JSON.
+Optional owner-labelled claim_key: differing canonical text hashes среди visible
+published sibling revisions с пересекающимся service scope дают CONFLICT при
+попадании темы в retrieval, до top4; это conservative conflict, не NLP detector.
+
+Input source2048 UTF-8 bytes, HTTP envelope4096, до8 nondeleted sources/business;
+chunk512 bytes/до4 source/32 build. UTF-8-safe complete chunk plan проверяется
+до reservation, CHUNK_LIMIT без truncation. Batch≤8 chunks/8192 request bytes и
+консервативный token bound; до4 INDEX POST/build и1 QUERY POST/run, query≤1024 bytes.
+HTTP≤10s/connect5s, operation≤30s, response≤262144 bytes/history≤65536;
+до3 HTTP/call (POST + bounded list/detail),12/build и3/query. Максимум4 fragments
+в прежних6144 business/8192 total context bytes. Failed/UNKNOWN не меняет active.
+Reservation commit → controlled HTTP вне DB transaction → accounting completion
+по private opaque ticket даже после потери currentness → fresh apply только
+при действующих guards. Restart/новый key не повторяет uncertain call. До отдельного
+допуска default DISABLED/0HTTP; transport tests только controlled MockTransport,
+его vectors не доказывают качество/upstream real route. Raw ABSENT completion_tokens
+сохраняется NOT_APPLICABLE; present только integer0; identity/usage/cost различаются.
+Source delete очищает text/chunks/vectors; safe manifests/receipts сохраняются.
+
+### Уточнение публикации R2 — принято C0 / 2026-11-15
+
+Continuation base `f46f0ee99f0a604fc4803257bdf010e15d77fb5c`, tree
+`3ecb1806c3d4675c80b4e530b3a8eff27f792125`; application base8eeeede1 и assignment4ce066b1
+сохранены. Это уточнение atomic publish из review C0, без новой архитектуры.
+Под прежним CONFIGURATION_V1 lock/CAS новый legacy PUBLISH при любом linked build,
+включая пустой, возвращает `KNOWLEDGE_BUILD_REQUIRED`/409 до изменения release.
+Проверка находится после replay старого successful receipt; OWNER/key/CAS сохранены.
+Knowledge state читается при открытии экрана независимо от раскрытия источников.
+Для изменения настроек владелец выбирает готовый опубликованный набор и публикует
+его совместно. После REVOKE/DELETE последнего источника доступен явный пустой READY
+набор и публикация «без источников»: manifest/plan/chunks пусты, новых embedding
+POST/reservations нет. Старые SOURCE_REVOKED/UNKNOWN и receipts не обходятся.
+
+### Возврат C4 — M5.2B / publication R2
+
+Реализованы owner API/UI, отдельные confirmed builds и scoped FTS/exact-vector
+retrieval с provenance в защищённом v4 runtime. Миграция0020←0019: семь таблиц,
+восемь private capabilities; applied0001–0019 и четыре C0 docs сохранены.
+Current profile:233 functions/59 tables/832 columns/914 DDL;
+SHA-256 `c146dd44b8a13247c0c4ac3cd0c91433f0b07a8199242617ced6bf28cfb32097`.
+
+LOCAL/TEST R2: actual PG publication3 cases и owner HTTP API12 PASS;
+51 source/readiness и 43 source admission cases PASS; frontend444 PASS,
+typecheck/build PASS. SQL сохранил replay и полный snapshot59 таблиц/каталога
+при отказе; оба withdrawal → empty publish дали0 новых embedding HTTP/reservations.
+Chromium:8 PASS — CONTROLLED/DISABLED × desktop/narrow, remount с закрытыми
+источниками, сохранение выбранного build и оба withdrawal → empty publish.
+Локальный harness использует существующий TEST rate profile compose.browser.yaml.
+Ruff/format/mypy/OpenAPI drift PASS; весь actual PG runtime-набор31 PASS.
+CI43680006728 на892fe7e:11/12 SUCCESS, unit4145 PASS, generic PG937 PASS/1 FAIL.
+Единственный сбой воспроизведён в MockTransport-фикстуре: мгновенный lock probe
+конфликтовал с короткой транзакцией параллельного replay и давал AssertionError/500.
+Probe теперь ждёт SQL lock не более1s; actual PG подтверждает ожидание временного
+конкурента и отказ55P03 при удержанном lock. Исходные200/200, один POST и no-resend
+не изменены; API12 и20 независимых конкурентных прогонов PASS. Production code,
+0020/profile и guards не менялись; после этой коррекции выполняется новый полный CI.
+Команды, финальный head/tree, Chromium и итог штатного CI — в PR49; прежний зелёный
+кандидат не повторяется без изменения. K02–K06/K11/K12 остаются в synthetic scope.
+
+Default embeddings остаются DISABLED/0HTTP; controlled vectors доказывают
+механику, не качество модели. Старые receipts/holds, M5.2A evidence и C6 HOLD
+сохранены. Следующий шаг — C0 review и отдельный owner merge; live activation,
+новые provider вызовы, VM и реальные клиентские данные не включались.
+
 
 ## 1. Проверяемый результат всего этапа
 
@@ -378,7 +538,7 @@ D mixed/full payment. В M5 проверяются настройки и чес�
 одного ведущего, exact write-set, dependency, критерии и что оставлено за границей.
 Не выдавать весь этот документ C1/C4 как одно задание «реализовать M5».
 
-M5.1A и M5.1B интегрированы; текущие paths и source admission задаёт только
+M5.1A, M5.1B и M5.2A интегрированы; текущие paths и source admission задаёт только
 CURRENT выше. Допуски PR #45/#46/#47 не разрешают автоматически будущие изменения
 приложения. Current migration0019; новые номера не резервировать цепочкой,
 назначать с C2 по фактическому head при выдаче соответствующей задачи.
@@ -404,22 +564,19 @@ harness/locale отделяется от production SQL. Не подгонять
 
 ## 6. Действия владельца
 
-Сейчас достаточно передать C4 закреплённую ссылку на CURRENT этой выдачи.
-PR #45/#46/#47 уже интегрированы. Для offline подготовки M5.2A нового допуска
-владельца не требуется; C4 сначала завершает проверяемый code/procedure пакет.
-Запрос на платные вызовы — только с готовыми маршрутом, точными запросами,
-верхней суммой и процедурой остановки. Реальные материалы мастера не нужны.
+Сейчас достаточно передать C4 закреплённую ссылку на CURRENT M5.2B.
+PR #45–#48 уже интегрированы. Разработка LOCAL/TEST идёт без нового paid/VM
+допуска и без реальных материалов мастера. Новый PR открывает C4 после
+подготовки работающего сценария и source admission.
 
-Позже, по конкретной готовой процедуре:
-
-1. Отдельно разрешить ограниченный synthetic Vision/embedding probe и сумму;
-   при необходимости внести ключ локально, не в чат/Git. Не покупать новый сервис
-   до результата capability preflight.
-2. При необходимости выполнить owner VM/Telegram smoke после текущей диагностики
-   receiver; старые инструкции не переиспользуются вслепую. Это не блокирует coding.
-3. До реального бизнеса подтвердить правила, права на материалы и допустимый
-   маршрут обработки данных. Synthetic fixtures не становятся его настройками.
-4. Слияние PR — после C0 review/CI и конкретного допуска, как в предыдущих этапах.
+Позже — только конкретное действие по готовому результату:
+1. Если понадобится дополнительный real synthetic smoke — отдельные route,
+   точные запросы, предел расходов и процедура остановки перед допуском владельца.
+   Принятый M5.2A probe заново не запускать.
+2. VM/Telegram smoke — отдельный допуск и проверка относящихся к нему receiver
+   ограничений; прежние команды не переиспользовать вслепую.
+3. Перед реальным бизнесом — подтверждение правил, прав на материалы и data route.
+4. Merge нового PR — отдельное действие владельца после C0 review/CI.
 
 ## 7. Передача M6
 

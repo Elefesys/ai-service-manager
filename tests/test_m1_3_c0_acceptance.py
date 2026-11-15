@@ -160,6 +160,7 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                             "platform.ai_deliveries",
                             "platform.ai_provider_calls",
                             "platform.ai_provider_sessions",
+                            "platform.knowledge_embedding_calls",
                             "platform.ai_runs",
                             "platform.telegram_provenance",
                             "platform.message_material_targets",

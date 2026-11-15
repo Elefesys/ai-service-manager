@@ -37,7 +37,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def delivery(pg):
     # Pinned historical M4 carrier: its populated downgrade proof keeps the
-    # original v2 contracts. Current M5 admission is proved on0019 separately.
+    # original v2 contracts. Current M5 admission is proved on0020 separately.
     await migrate("upgrade", "0018")
     pg.schema_revision = "0018"
     current = RuntimeDatabase(Settings())
@@ -47,8 +47,8 @@ async def delivery(pg):
         yield pg
     finally:
         await current.close()
-        await migrate("upgrade", "0019")
-        pg.schema_revision = "0019"
+        await migrate("upgrade", "0020")
+        pg.schema_revision = "0020"
 
 
 async def source_turn(h, *, native=False, workspace=A, telegram=False, message_text=None):
@@ -137,7 +137,10 @@ async def source_turn(h, *, native=False, workspace=A, telegram=False, message_t
 
 def application(h, script=("reply",), *, adapter=None, telegram=None, fake=None, cfg=None):
     cfg = cfg or config()
-    if getattr(h, "schema_revision", None) == "0019" and cfg.prompt_revision == "conversation_v2":
+    if (
+        getattr(h, "schema_revision", None) in {"0019", "0020"}
+        and cfg.prompt_revision == "conversation_v2"
+    ):
         cfg = KnowledgeGatewayConfig.model_validate(
             cfg.model_dump() | {"prompt_revision": "conversation_v3"}
         )

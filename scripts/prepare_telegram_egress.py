@@ -1966,17 +1966,29 @@ SCHEMA_TABLES["0018"] = SCHEMA_TABLES["0017"] | {
 }
 
 SCHEMA_TABLES["0019"] = SCHEMA_TABLES["0018"]
+SCHEMA_TABLES["0020"] = SCHEMA_TABLES["0019"] | {
+    "platform.knowledge_" + name
+    for name in (
+        "sources",
+        "revisions",
+        "chunks",
+        "builds",
+        "build_chunks",
+        "release_builds",
+        "embedding_calls",
+    )
+}
 
 
 def native_source_profile():
-    """Current0019 inventory; the historical0012/0013 inventories stay closed."""
+    """Current0020 inventory; the historical0012/0013 inventories stay closed."""
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT, "0019")
-    schema_inventory("0019", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0020")
+    schema_inventory("0020", profile["columns"])
     require(
-        len(profile["functions"]) == 207 and sum(map(len, profile["columns"].values())) == 736,
+        len(profile["functions"]) == 233 and sum(map(len, profile["columns"].values())) == 832,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -2004,7 +2016,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0019",
+            "schema_revision": "0020",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

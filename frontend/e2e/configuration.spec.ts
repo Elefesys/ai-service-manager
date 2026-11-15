@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
-import { type Bundle, parseActive, parseCommand, parseDraft } from '../src/configuration-api';
+import { type Bundle, parseActive, parseCommand, parseDraft, parseKnowledgeState } from '../src/configuration-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
 if(!fixtureFile||!passwordFile)throw new Error('E2E_CONFIGURATION_PRIVATE_FIXTURES_REQUIRED');
@@ -34,6 +34,16 @@ async function prepare(page:Page){
   const token=await csrf(page.request);
   const r=await safe(()=>page.request.put(`${base}/draft`,{headers:{Origin:origin,'X-CSRF-Token':token,'Idempotency-Key':randomUUID()},data:{expected_draft_version:state.draft_version,bundle:synthetic()}}));expect(r.status()).toBe(200);parseCommand(await safe(()=>r.json()));
   await page.getByRole('button',{name:/Synthetic browser business/}).click();await expect(page.getByLabel('Название услуги 1')).toBeEnabled();
+}
+
+// Restore only the legacy publication captured by this synthetic journey.
+// The real OWNER rollback capability enforces eligibility and a fresh CAS.
+async function restoreLegacyPublication(page:Page,release:string|null){
+  if(!release||page.isClosed())return;
+  const active=await read(page.request,'active');if(active.release_id===release)return;
+  const token=await csrf(page.request);
+  const response=await safe(()=>page.request.post(`${base}/rollback`,{headers:{Origin:origin,'X-CSRF-Token':token,'Idempotency-Key':randomUUID()},data:{expected_activation_version:active.activation_version,release_id:release}}));
+  expect(response.status()).toBe(200);parseCommand(await safe(()=>response.json()));
 }
 
 test('@narrow owner edits FAQ/rule, previews and publishes current active knowledge',async({page})=>{
@@ -99,4 +109,161 @@ test('published knowledge reaches one guarded fake runtime reply; draft and repl
   const delivered=await runKnowledge();expect([delivered.model_calls,delivered.calls,delivered.effects]).toEqual([1,1,1]);expect(delivered.release_id===publication.release_id&&delivered.activation_version===publication.activation_version&&delivered.answer===answer&&delivered.source===source).toBe(true);
   await inbox.getByRole('button',{name:'Обновить сообщения',exact:true}).click();await expect(inbox.getByText(answer,{exact:true})).toHaveCount(1);await expect(inbox.getByText('Synthetic DRAFT must stay private.',{exact:true})).toHaveCount(0);
   const replayed=await runKnowledge();expect(replayed.replayed).toBe(true);expect([replayed.model_calls,replayed.calls,replayed.effects]).toEqual([1,1,1]);expect(replayed.release_id===delivered.release_id&&replayed.activation_version===delivered.activation_version).toBe(true);
+});
+
+
+test('@narrow owner reviews sources, preserves exact uncertain intent, publishes a ready build and revokes',async({page})=>{
+  test.setTimeout(60000);
+  await prepare(page);
+  const settings=page.getByRole('region',{name:'Настройки бизнеса',exact:true});
+  // Establish a real prior publication through the existing owner button.
+  await settings.getByRole('button',{name:'Опубликовать черновик',exact:true}).click();
+  await expect(settings.getByRole('region',{name:'Опубликованные сведения'}).getByText('Возьмите синтетический эскиз.',{exact:true})).toBeVisible();
+  const previous=await read(page.request,'active');
+  const knowledgeBase=base.replace(/\/configuration$/,'/knowledge');
+  const state=async()=>{const r=await safe(()=>page.request.get(knowledgeBase));expect(r.status()).toBe(200);return parseKnowledgeState(await safe(()=>r.json()));};
+  const before=await state();
+  await settings.getByRole('button',{name:'Посмотреть источники',exact:true}).click();
+  await expect(settings.getByRole('textbox',{name:'Текст источника',exact:true})).toBeEnabled();
+  const title='Synthetic source '+randomUUID(),canonical='Синтетическая памятка: возьмите эскиз. <b>Это текст.</b>';
+  let attempts=0,firstBody:string|null=null,firstKey:string|undefined,identical=false,finished=false;
+  await page.route(`**${knowledgeBase}/sources`,async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    attempts++;const body=route.request().postData(),key=route.request().headers()['idempotency-key'];
+    if(attempts===1){firstBody=body;firstKey=key;const r=await safe(()=>route.fetch());expect(r.status()).toBe(200);await safe(()=>route.abort('failed'));}
+    else{identical=body===firstBody&&key===firstKey;await safe(()=>route.continue());}
+  });
+  try{
+    await settings.getByLabel('Заголовок источника',{exact:true}).fill(title);
+    await settings.getByRole('combobox',{name:'Формат источника',exact:true}).selectOption('MARKDOWN');
+    await settings.getByRole('textbox',{name:'Текст источника',exact:true}).fill('  '+canonical+'  ');
+    await settings.getByRole('button',{name:'Сохранить источник',exact:true}).click();
+    await expect(settings.getByRole('button',{name:'Повторить исходную команду',exact:true})).toBeVisible();
+    await expect(settings.getByRole('textbox',{name:'Текст источника',exact:true})).toBeDisabled();
+    await settings.getByRole('button',{name:'Повторить исходную команду',exact:true}).click();
+    const source=settings.getByRole('article',{name:`Источник: ${title}`,exact:true});
+    await expect(source.getByText(canonical,{exact:true})).toBeVisible();
+    expect(attempts===2&&identical).toBe(true);
+    const saved=await state();expect(saved.sources.length===before.sources.length+1&&saved.sources.filter(s=>s.head.title===title).length===1).toBe(true);
+    expect((await read(page.request,'active')).release_id===previous.release_id).toBe(true);
+    await source.getByRole('button',{name:'Подтвердить источник',exact:true}).click();
+    await expect(source.getByRole('heading',{name:`${title} · Подтверждён`,exact:true})).toBeVisible();
+    const confirmed=await state();const own=confirmed.sources.find(s=>s.head.title===title)!;
+    expect(own.head.confirmed&&own.head.canonical_text===canonical&&own.preview.chunks.length===1).toBe(true);
+    await settings.getByRole('button',{name:'Подготовить поиск',exact:true}).click();
+    if(confirmed.embedding_mode==='CONTROLLED'){
+      await expect(settings.getByText(/Поиск готов к публикации/).first()).toBeVisible();
+      await expect.poll(async()=>{const value=await state();return value.builds.find(b=>b.revision_ids.includes(own.head.revision_id))?.state;}).toBe('READY');
+      await settings.getByRole('button',{name:'Опубликовать источники',exact:true}).click();
+      await expect(settings.getByText('Опубликованный поиск подключён к текущим настройкам.',{exact:true})).toBeVisible();
+      const published=await state();expect(published.active_build_id!==null&&published.release_id!==previous.release_id).toBe(true);
+      expect(published.builds.some(b=>b.build_id===published.active_build_id&&b.revision_ids.includes(own.head.revision_id)&&b.state==='READY')).toBe(true);
+    }else{
+      await expect(settings.getByText(/Ошибка индексации.*Индексация отключена/).first()).toBeVisible();
+      await expect.poll(async()=>{const value=await state();return value.builds.find(b=>b.revision_ids.includes(own.head.revision_id))?.state;}).toBe('ERROR');
+      await expect(settings.getByRole('button',{name:'Опубликовать источники',exact:true})).toBeDisabled();
+      const unchanged=await read(page.request,'active');expect(unchanged.release_id===previous.release_id&&unchanged.activation_version===previous.activation_version).toBe(true);
+    }
+    await source.getByRole('button',{name:'Отозвать источник',exact:true}).click();
+    await expect(source.getByRole('heading',{name:`${title} · Отозван`,exact:true})).toBeVisible();
+    const revoked=await state();expect(revoked.sources.find(s=>s.source_id===own.source_id)?.head.confirmed).toBe(false);
+    await source.getByRole('button',{name:'Удалить источник',exact:true}).click();
+    await source.getByRole('button',{name:'Удалить текст и индекс',exact:true}).click();
+    await expect(source).toHaveCount(0);
+    expect((await state()).sources.some(s=>s.source_id===own.source_id)).toBe(false);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);finished=true;
+  }finally{firstBody=null;firstKey=undefined;try{if(!page.isClosed()){await page.unrouteAll({behavior:'wait'});await restoreLegacyPublication(page,previous.release_id);}}catch(error){if(finished)throw error;}}
+});
+
+
+test('@narrow owner retains a linked build after reload and explicitly publishes without the last source',async({page})=>{
+  test.setTimeout(60000);
+  await prepare(page);
+  const settings=page.getByRole('region',{name:'Настройки бизнеса',exact:true});
+  await expect(settings.getByRole('button',{name:'Опубликовать черновик',exact:true})).toBeEnabled();
+  await settings.getByRole('button',{name:'Опубликовать черновик',exact:true}).click();
+  await expect(settings.getByRole('region',{name:'Опубликованные сведения'}).getByText('Возьмите синтетический эскиз.',{exact:true})).toBeVisible();
+  const baseline=await read(page.request,'active');
+  const knowledgeBase=base.replace(/\/configuration$/,'/knowledge');
+  const state=async()=>{const r=await safe(()=>page.request.get(knowledgeBase));expect(r.status()).toBe(200);return parseKnowledgeState(await safe(()=>r.json()));};
+  const initial=await state();expect(initial.active_build_id).toBeNull();expect(initial.sources.filter(s=>s.state==='CONFIRMED')).toHaveLength(0);
+  let finished=false;const createdSourceIds:string[]=[];
+  async function open(){await settings.getByRole('button',{name:'Посмотреть источники',exact:true}).click();await expect(settings.getByRole('textbox',{name:'Текст источника',exact:true})).toBeEnabled();}
+  async function makeEmpty(){
+    await settings.getByRole('button',{name:'Подготовить пустой набор',exact:true}).click();
+    await expect(settings.getByRole('button',{name:'Опубликовать настройки без источников',exact:true})).toBeEnabled();
+    const value=await state(),id=await settings.getByRole('combobox',{name:'Готовый набор источников',exact:true}).inputValue();
+    const empty=value.builds.find(b=>b.build_id===id)!;
+    expect(empty).toMatchObject({state:'READY',revision_ids:[],chunk_count:0,calls_reserved:0,calls_completed:0});
+    return empty;
+  }
+  try{
+    await open();
+    // Default CI remains DISABLED. A real empty build also exercises linked
+    // publication there; the LOCAL CONTROLLED journey publishes nonempty text.
+    if(initial.embedding_mode==='DISABLED'){
+      await makeEmpty();await settings.getByRole('button',{name:'Опубликовать настройки без источников',exact:true}).click();
+      await expect(settings.getByText('Настройки опубликованы без источников для поиска.',{exact:true})).toBeVisible();
+    }
+    for(const withdrawal of ['revoke','delete'] as const){
+      const title=`Synthetic publication ${withdrawal} ${randomUUID()}`;
+      await settings.getByRole('textbox',{name:'Заголовок источника',exact:true}).fill(title);
+      await settings.getByRole('textbox',{name:'Текст источника',exact:true}).fill(`Synthetic ${withdrawal} source. Only owner-confirmed explanation.`);
+      await settings.getByRole('button',{name:'Сохранить источник',exact:true}).click();
+      const card=settings.getByRole('article',{name:`Источник: ${title}`,exact:true});
+      await card.getByRole('button',{name:'Подтвердить источник',exact:true}).click();
+      await expect(card.getByRole('heading',{name:`${title} · Подтверждён`,exact:true})).toBeVisible();
+      const confirmed=await state(),own=confirmed.sources.find(s=>s.head.title===title)!;createdSourceIds.push(own.source_id);
+      if(initial.embedding_mode==='CONTROLLED'){
+        await settings.getByRole('button',{name:'Подготовить поиск',exact:true}).click();
+        await expect(settings.getByRole('button',{name:'Опубликовать источники',exact:true})).toBeEnabled();
+        await settings.getByRole('button',{name:'Опубликовать источники',exact:true}).click();
+        await expect.poll(async()=>{const v=await state();return v.builds.find(b=>b.build_id===v.active_build_id)?.revision_ids.includes(own.head.revision_id);}).toBe(true);
+      }
+      if(withdrawal==='revoke'){
+        const linked=await state();expect(linked.active_build_id).not.toBeNull();
+        await page.reload();await expect(page.getByText('ACTIVE SESSION')).toBeVisible();
+        if(await page.getByLabel('Workspace',{exact:true}).inputValue()!==fixture.workspace_id)await page.getByLabel('Workspace',{exact:true}).selectOption(fixture.workspace_id);
+        await page.getByRole('button',{name:/Synthetic browser business/}).click();await expect(settings.getByLabel('Название услуги 1')).toBeEnabled();
+        await expect(settings.getByRole('textbox',{name:'Текст источника',exact:true})).toHaveCount(0);
+        await expect(settings.getByRole('button',{name:'Опубликовать черновик',exact:true})).toBeDisabled();
+        await settings.getByRole('combobox',{name:'Стиль общения',exact:true}).selectOption('WARM');
+        await settings.getByRole('button',{name:'Сохранить черновик',exact:true}).click();await expect(settings.getByRole('button',{name:'Сохранить черновик',exact:true})).toBeDisabled();
+        await expect(settings.getByRole('textbox',{name:'Текст источника',exact:true})).toHaveCount(0);
+        await expect(settings.getByRole('button',{name:'Опубликовать черновик',exact:true})).toBeDisabled();
+        await settings.getByRole('button',{name:'Выбрать набор для публикации',exact:true}).click();
+        await expect(settings.getByRole('combobox',{name:'Готовый набор источников',exact:true})).toHaveValue(linked.active_build_id!);
+        await settings.getByRole('button',{name:initial.embedding_mode==='CONTROLLED'?'Опубликовать источники':'Опубликовать настройки без источников',exact:true}).click();
+        await expect.poll(async()=>{const v=await state();return v.release_id!==linked.release_id&&v.active_build_id===linked.active_build_id;}).toBe(true);
+        const config=await read(page.request,'active');expect(config.bundle?.communication_style).toBe('WARM');
+      }
+      await card.getByRole('button',{name:withdrawal==='revoke'?'Отозвать источник':'Удалить источник',exact:true}).click();
+      if(withdrawal==='delete')await card.getByRole('button',{name:'Удалить текст и индекс',exact:true}).click();
+      await expect(settings.getByRole('button',{name:'Подготовить пустой набор',exact:true})).toBeEnabled();
+      const withdrawn=await state();expect(withdrawn.sources.some(s=>s.source_id===own.source_id&&s.head.confirmed)).toBe(false);
+      await settings.getByRole('combobox',{name:'Стиль общения',exact:true}).selectOption(withdrawal==='revoke'?'CONCISE':'NEUTRAL');
+      await settings.getByRole('button',{name:'Сохранить черновик',exact:true}).click();await expect(settings.getByRole('button',{name:'Сохранить черновик',exact:true})).toBeDisabled();
+      const empty=await makeEmpty();
+      await settings.getByRole('button',{name:'Опубликовать настройки без источников',exact:true}).click();
+      await expect(settings.getByText('Настройки опубликованы без источников для поиска.',{exact:true})).toBeVisible();
+      const published=await state(),config=await read(page.request,'active');
+      expect(published.active_build_id).toBe(empty.build_id);expect(published.release_id).not.toBe(withdrawn.release_id);
+      expect(config.bundle?.communication_style).toBe(withdrawal==='revoke'?'CONCISE':'NEUTRAL');
+      expect(published.builds.find(b=>b.build_id===published.active_build_id)).toMatchObject({revision_ids:[],chunk_count:0,calls_reserved:0,calls_completed:0});
+      await expect(settings.getByRole('button',{name:'Опубликовать черновик',exact:true})).toBeDisabled();
+      if(withdrawal==='revoke'){
+        await card.getByRole('button',{name:'Удалить источник',exact:true}).click();await card.getByRole('button',{name:'Удалить текст и индекс',exact:true}).click();await expect(card).toHaveCount(0);
+      }
+    }
+    expect((await state()).sources).toHaveLength(initial.sources.length);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);finished=true;
+  }finally{try{
+    for(const id of createdSourceIds){
+      const value=await state(),own=value.sources.find(s=>s.source_id===id);if(!own)continue;
+      const token=await csrf(page.request);
+      const response=await safe(()=>page.request.post(`${knowledgeBase}/sources/${id}/delete`,{headers:{Origin:origin,'X-CSRF-Token':token,'Idempotency-Key':randomUUID()},data:{schema_version:1,expected_source_version:own.source_version,expected_activation_version:value.activation_version}}));
+      expect(response.status()).toBe(200);
+    }
+    await restoreLegacyPublication(page,baseline.release_id);
+  }catch(error){if(finished)throw error;}}
 });

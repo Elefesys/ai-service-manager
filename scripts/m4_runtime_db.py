@@ -222,6 +222,123 @@ M5_CAPABILITY_PATHS = M5_CAPABILITY_C0_DOCS | {
     "tests/test_telegram_egress_migration.py",
     "docs/tasks/M5_HANDOFF.md",
 }
+# C0's bounded M5.2B assignment; retain the older admission routes verbatim.
+M5_SEARCH_BASE = "8eeeede1b4a05537b0afb8c29992e8b681eaeb65"
+M5_SEARCH_TREE = "df31d522ff862a0af58f1876fd8f16ddcda7bdc1"
+M5_SEARCH_ASSIGNMENT = "4ce066b171090a8f0716623cc2cd8a6a79fa6139"
+M5_SEARCH_ASSIGNMENT_TREE = "b8bd004fece6faf3f758a932f8855fcc99e51e47"
+M5_SEARCH_BRANCH = "c4/m5-2b-knowledge-search-r1"
+M5_SEARCH_C0_DOCS = M5_CAPABILITY_C0_DOCS
+M5_SEARCH_PATHS = M5_SEARCH_C0_DOCS | {
+    "backend/src/asm/ai/agent.py",
+    "backend/src/asm/ai/context.py",
+    "backend/src/asm/ai/contracts.py",
+    "backend/src/asm/ai/database.py",
+    "backend/src/asm/ai/fake.py",
+    "backend/src/asm/ai/gateway.py",
+    "backend/src/asm/ai/knowledge.py",
+    "backend/src/asm/ai/polza.py",
+    "backend/src/asm/ai/prompts/conversation_v4.txt",
+    "backend/src/asm/ai/provider_runtime.py",
+    "backend/src/asm/ai/runtime.py",
+    "backend/src/asm/ai/runtime_contracts.py",
+    "backend/src/asm/ai/runtime_settings.py",
+    "backend/src/asm/ai/schemas/conversation_result_v2.json",
+    "backend/src/asm/ai/settings.py",
+    # C0 publication R2: closed linked-build refusal only.
+    "backend/src/asm/configuration/errors.py",
+    "backend/src/asm/configuration/http.py",
+    "backend/src/asm/configuration/models.py",
+    "backend/src/asm/configuration/repository.py",
+    "backend/src/asm/configuration/service.py",
+    "backend/src/asm/configuration/validation.py",
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/knowledge/__init__.py",
+    "backend/src/asm/knowledge/embeddings.py",
+    "backend/src/asm/knowledge/errors.py",
+    "backend/src/asm/knowledge/http.py",
+    "backend/src/asm/knowledge/models.py",
+    "backend/src/asm/knowledge/permissions.py",
+    "backend/src/asm/knowledge/repository.py",
+    "backend/src/asm/knowledge/service.py",
+    "backend/src/asm/knowledge/validation.py",
+    "backend/src/asm/messaging/database.py",
+    "backend/src/asm/messaging/errors.py",
+    "backend/src/asm/messaging/results.py",
+    "backend/src/asm/messaging/worker.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "docs/tasks/M5_HANDOFF.md",
+    "frontend/e2e/configuration.spec.ts",
+    "frontend/src/App.test.tsx",
+    "frontend/src/App.tsx",
+    "frontend/src/ConfigurationPanel.test.tsx",
+    "frontend/src/ConfigurationPanel.tsx",
+    "frontend/src/configuration-api.test.ts",
+    "frontend/src/configuration-api.ts",
+    "frontend/src/configuration-fixtures.test-helper.ts",
+    "frontend/src/style.css",
+    "migrations/versions/0020_knowledge_search.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m2_4_browser_worker.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_configuration_fixtures.py",
+    "tests/m5_knowledge_fixtures.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_foundation.py",
+    # Owner-approved 2026-11-15: current-schema TRUNCATE compatibility only.
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_agent.py",
+    "tests/test_m4_context.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_gateway.py",
+    "tests/test_m4_polza_runtime.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_reply_rights_postgres.py",
+    "tests/test_m4_runtime_database.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_runtime_postgres.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration.py",
+    "tests/test_m5_configuration_api_postgres.py",
+    "tests/test_m5_configuration_migrations.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_knowledge.py",
+    "tests/test_m5_knowledge_migrations.py",
+    "tests/test_m5_knowledge_postgres.py",
+    "tests/test_m5_knowledge_runtime.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_knowledge_search.py",
+    "tests/test_m5_knowledge_search_api_postgres.py",
+    "tests/test_m5_knowledge_search_embeddings.py",
+    "tests/test_m5_knowledge_search_migrations.py",
+    "tests/test_m5_knowledge_search_postgres.py",
+    "tests/test_m5_knowledge_search_runtime.py",
+    "tests/test_m5_knowledge_search_runtime_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
+
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -371,9 +488,12 @@ def source_tree_from_evidence(path=None):
     planning = value["branch"] == M5_PLAN_BRANCH
     configuration = value["branch"] == M5_CONFIGURATION_BRANCH
     knowledge = value["branch"] == M5_KNOWLEDGE_BRANCH
+    search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
+        (M5_SEARCH_BASE, M5_SEARCH_TREE)
+        if search
+        else (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
         if capability
         else (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
         if knowledge
@@ -420,6 +540,8 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or capability
             and value["event"] in {"pull_request", "push"}
+            or search
+            and value["event"] in {"pull_request", "push"}
         )
         and type(value["attempt"]) is int
         and value["attempt"] == 1
@@ -439,7 +561,9 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if capability:
+    if search:
+        require(set(paths) <= M5_SEARCH_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif capability:
         require(set(paths) <= M5_CAPABILITY_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif planning:
         require(set(paths) <= M5_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -874,6 +998,20 @@ def root_path():
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
 
 
+def search_event(event):
+    if event.get("head_ref") == M5_SEARCH_BRANCH:
+        return True
+    if event["ref"] != "refs/heads/main":
+        return False
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", M5_SEARCH_ASSIGNMENT, "HEAD"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    require(result.returncode in (0, 1, 128), "SEARCH_ASSIGNMENT_ANCESTRY")
+    return result.returncode == 0
+
+
 def capability_event(event):
     if event.get("head_ref") == M5_CAPABILITY_BRANCH:
         return True
@@ -924,20 +1062,24 @@ def admit_source(evidence):
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    capability = capability_event(event)
-    knowledge = not capability and knowledge_event(event)
-    configuration = not (capability or knowledge) and configuration_event(event)
+    search = search_event(event)
+    capability = not search and capability_event(event)
+    knowledge = not (search or capability) and knowledge_event(event)
+    configuration = not (search or capability or knowledge) and configuration_event(event)
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH
         or planning
         or configuration
         or knowledge
-        or capability,
+        or capability
+        or search,
         "POLZA_RUNTIME_EVENT_BRANCH",
     )
     base, base_tree = (
-        (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
+        (M5_SEARCH_BASE, M5_SEARCH_TREE)
+        if search
+        else (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
         if capability
         else (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
         if knowledge
@@ -949,6 +1091,32 @@ def admit_source(evidence):
     )
     if configuration and event["event"] == "pull_request":
         require(event["base_sha"] == base, "CONFIGURATION_EVENT_BASE")
+    if search:
+        if event["event"] == "pull_request":
+            require(event["base_sha"] == base, "SEARCH_EVENT_BASE")
+        require(
+            capture(["git", "rev-parse", M5_SEARCH_ASSIGNMENT + "^{tree}"])
+            == M5_SEARCH_ASSIGNMENT_TREE,
+            "SEARCH_ASSIGNMENT_TREE",
+        )
+        require(
+            capture(["git", "merge-base", M5_SEARCH_ASSIGNMENT, "HEAD"]) == M5_SEARCH_ASSIGNMENT,
+            "SEARCH_ASSIGNMENT_ANCESTRY",
+        )
+        require(
+            not capture(
+                [
+                    "git",
+                    "diff",
+                    "--name-only",
+                    M5_SEARCH_ASSIGNMENT,
+                    "HEAD",
+                    "--",
+                    *sorted(M5_SEARCH_C0_DOCS),
+                ]
+            ),
+            "SEARCH_C0_DOCS_IMMUTABLE",
+        )
     if capability:
         if event["event"] == "pull_request":
             require(event["base_sha"] == base, "CAPABILITY_EVENT_BASE")
@@ -1057,7 +1225,9 @@ def admit_source(evidence):
         "tests/test_native_context_db_runner.py",
         "tests/test_m2_3_schema_postgres.py",
     }
-    if capability:
+    if search:
+        allowed = M5_SEARCH_PATHS
+    elif capability:
         allowed = M5_CAPABILITY_PATHS
     elif knowledge:
         allowed = M5_KNOWLEDGE_PATHS
@@ -1089,7 +1259,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.published_knowledge_schema_profile()"
+        "platform.knowledge_search_schema_profile()"
+        if revision == "0020"
+        else "platform.published_knowledge_schema_profile()"
         if revision == "0019"
         else "platform.business_configuration_schema_profile()"
         if revision == "0018"
@@ -1103,6 +1275,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0019":
+        profile_pin = "e2bfd685188e1b67430de02c03eb3cef3af8f13de74e13d641032085b3b23c36"
+        body_pin = "93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5"
     if revision == "0018":
         profile_pin = "01bb105b2012725a3905cf5fcf9826f9f58afd21897caf237645dbd7a88c0999"
         body_pin = "0f9dcf5d0a11c56e4d78f76626c70ea7f705962aa6bbd71a1cde183f5c530498"
@@ -1158,12 +1333,12 @@ def stock_catalog():
         ):
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
-        require(revision in {"0013", "0017", "0018", "0019"}, "CATALOG_REVISION")
+        require(revision in {"0013", "0017", "0018", "0019", "0020"}, "CATALOG_REVISION")
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision in {"0017", "0018", "0019"}:
+        if revision in {"0017", "0018", "0019", "0020"}:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -1210,7 +1385,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.published_knowledge_schema_profile()"
+            "platform.knowledge_search_schema_profile()"
+            if revision == "0020"
+            else "platform.published_knowledge_schema_profile()"
             if revision == "0019"
             else "platform.business_configuration_schema_profile()"
             if revision == "0018"
@@ -1231,7 +1408,7 @@ async def readiness():
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
-        write(evidence_path() / "readiness.json", {"revision": "0019", "runtime_check": "PASS"})
+        write(evidence_path() / "readiness.json", {"revision": "0020", "runtime_check": "PASS"})
     finally:
         await runtime.close()
 
@@ -1605,7 +1782,10 @@ def run(root):
     # This finite extension is selected only after exact source admission. No
     # environment/CLI override, and the historical/targeted routes remain 600s.
     sql_test_budget_seconds = (
-        900 if mode == "runtime" and (capability_event(event) or knowledge_event(event)) else 600
+        900
+        if mode == "runtime"
+        and (search_event(event) or capability_event(event) or knowledge_event(event))
+        else 600
     )
     run_admitted(root, event, manifest, mode, sql_test_budget_seconds=sql_test_budget_seconds)
 
@@ -1624,18 +1804,21 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    capability = capability_event(event)
-    knowledge = not capability and knowledge_event(event)
-    configuration = not (capability or knowledge) and configuration_event(event)
+    search = search_event(event)
+    capability = not search and capability_event(event)
+    knowledge = not (search or capability) and knowledge_event(event)
+    configuration = not (search or capability or knowledge) and configuration_event(event)
     require(
         sql_test_budget_seconds == 600
         or sql_test_budget_seconds == 900
         and mode == "runtime"
-        and (knowledge or capability),
+        and (search or knowledge or capability),
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
+        (M5_SEARCH_BASE, M5_SEARCH_TREE)
+        if search
+        else (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
         if capability
         else (M5_KNOWLEDGE_BASE, M5_KNOWLEDGE_TREE)
         if knowledge
@@ -1660,6 +1843,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M5_SEARCH_BRANCH
+            if search
             else M5_CAPABILITY_BRANCH
             if capability
             else M5_KNOWLEDGE_BRANCH
@@ -1828,10 +2013,10 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
             if module == "preflight":
-                sql_phase(group, "schema-0019", checks(group, "alembic", "upgrade", "0019"), 120)
+                sql_phase(group, "schema-0020", checks(group, "alembic", "upgrade", "0020"), 120)
                 sql_phase(
                     group,
-                    "catalog-0019",
+                    "catalog-0020",
                     checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
                     60,
                 )

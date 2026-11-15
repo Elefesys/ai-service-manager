@@ -35,11 +35,14 @@ completion_tokens у установленного embedding request — NOT_APPL
 исходное ABSENT сохраняется, чатовые проверки не ослаблены. Точное решение —
 в IMPL-005, подробные observations — в PR48.
 
-M5.2A остаётся REVIEW до финальной интеграции PR48. Единственный текущий
-исполнитель C4 готовит принятый результат к слиянию: синхронизация двух C0 docs
-pins и штатный CI финального кандидата. C6 operator work завершён; новые GET,
-model POST, планы, действия на ВМ и запрос ключа не нужны и не назначены.
-M5.2B выдаётся только после интеграции по фактическому main SHA.
+M5.2A/PR48 — INTEGRATED / VERIFIED: code/CI LOCAL/TEST, capability
+ASSISTED_SYNTHETIC. Accepted main8eeeede1, post-merge CI43600856660 —
+итог12/12 SUCCESS; первый Docker service setup failure устранён повтором одной
+job на том же SHA, остальные результаты attempt1 сохранены.
+Единственная текущая выдача — C4-M5.2B-KNOWLEDGE-SEARCH-R1, ведущий C4 с C1/C2:
+подтверждённые источники/build и keyword/exact-vector поиск в защищённом ответе.
+Полный base/write-set и порядок source admission — в CURRENT M5_HANDOFF.
+C6 HOLD; operator работа закончена. Новые paid/VM вызовы и ключ не требуются.
 Original UNKNOWN/diagnostic receipts, holds и real-client/data restrictions
 сохраняются; ручная приёмка evidence не переписывает результат старого probe.
 
@@ -53,9 +56,9 @@ OnboardingAgent, массовый импорт чатов, генерацию и
 отдельная ограниченная задача; текущий sendMessage его не реализует.
 
 C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
-Current migration head0019; applied0001–0019 immutable. В M5.2A новые миграции
-и бизнесовые таблицы не нужны и не назначены. Следующий номер C0/C2 согласуют
-при выдаче соответствующего среза по актуальному main.
+Current migration head0019; applied0001–0019 immutable. Для M5.2B C0 выделяет
+только0020/down_revision0019; C2 до SQL подтверждает актуальность слота и контракт.
+Новые номера не резервировать цепочкой; фактическая схема остаётся0019 до реализации.
 Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
 При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
 не размножать длинные receipts между документами.

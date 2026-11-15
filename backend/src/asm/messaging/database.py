@@ -202,6 +202,35 @@ class WorkerUnitOfWork:
             {"operation": operation, "payload": json.dumps(payload, allow_nan=False)},
         )
 
+    async def knowledge_query_reserve(self, run: UUID, pin: dict[str, Any]) -> Any:
+        require_uuid(run)
+        return await self._execute(
+            "SELECT platform.knowledge_query_reserve(:job,:token,:run,CAST(:pin AS jsonb))",
+            {"run": run, "pin": json.dumps(pin, allow_nan=False)},
+        )
+
+    async def knowledge_query_apply(
+        self, run: UUID, call_id: UUID, ticket: UUID, vectors: list[list[float]]
+    ) -> Any:
+        for value in (run, call_id, ticket):
+            require_uuid(value)
+        return await self._execute(
+            "SELECT platform.knowledge_query_apply(:job,:token,:run,:call,:ticket,CAST(:vectors AS jsonb))",
+            {
+                "run": run,
+                "call": call_id,
+                "ticket": ticket,
+                "vectors": json.dumps(vectors, allow_nan=False),
+            },
+        )
+
+    async def knowledge_runtime_read(self, run: UUID, pin: dict[str, Any]) -> Any:
+        require_uuid(run)
+        return await self._execute(
+            "SELECT platform.knowledge_runtime_read(:job,:token,:run,CAST(:pin AS jsonb))",
+            {"run": run, "pin": json.dumps(pin, allow_nan=False)},
+        )
+
     async def process_inbox(self) -> InboxProcessingResult | MutationInboxProcessingResult:
         return parse_inbox_result(
             await self._execute("SELECT platform.messaging_process_inbox(:job, :token)")
@@ -260,6 +289,21 @@ class MessagingDatabase:
             await connection.execute(text("SET LOCAL lock_timeout = '2s'"))
             yield connection
             await physical_transaction(connection)
+
+    async def complete_embedding(
+        self, call_id: UUID, ticket: UUID, outcome: dict[str, Any]
+    ) -> dict[str, Any]:
+        # Accounting after HTTP has only a hashed private ticket. Applying vectors
+        # remains a separate admitted job capability with all fresh guards.
+        from asm.knowledge.repository import complete_embedding as record_embedding
+
+        if not self._guards_enabled:
+            raise MessagingError(Code.NOT_ALLOWED)
+        require_uuid(call_id)
+        require_uuid(ticket)
+        async with self._transaction() as connection:
+            result = await record_embedding(connection, call_id, ticket, outcome)
+        return result
 
     async def ingest_event(
         self,

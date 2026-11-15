@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from asm.ai.agent import (
     AuthorityDecision,
     Boundary,
@@ -18,6 +20,9 @@ from asm.ai.agent import (
     KnowledgeAuthorityDecision,
     KnowledgeContextRead,
     KnowledgeConversationAgent,
+    SearchAuthorityDecision,
+    SearchContextRead,
+    SearchConversationAgent,
 )
 from asm.ai.context import ContextBinding
 from asm.ai.contracts import (
@@ -32,16 +37,21 @@ from asm.ai.contracts import (
     validate_gateway_config,
 )
 from asm.ai.gateway import ModelAdapter
-from asm.ai.knowledge import KnowledgePin
+from asm.ai.knowledge import KnowledgePin, SearchPin, SearchProjection
 from asm.ai.runtime_contracts import (
     AnyPreparedRun,
     CallCompletion,
     KnowledgeRuntimeReceipt,
     PreparedKnowledgeRun,
     PreparedRun,
+    PreparedSearchRun,
+    QueryReservation,
     RuntimeReceipt,
     RuntimeStop,
+    SearchRuntimeReceipt,
 )
+from asm.knowledge.embeddings import EmbeddingClient, EmbeddingFailure, unavailable
+from asm.knowledge.errors import KnowledgeError
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.results import JobClaim
@@ -64,7 +74,7 @@ def runtime_config(config: AnyGatewayConfig) -> AnyGatewayConfig:
         or config.route.adapter != "fake"
         or config.route.endpoint != "https://fake.invalid/v1"
         or config.route.eligibility != "EVAL_ONLY"
-        or config.prompt_revision not in {"conversation_v2", "conversation_v3"}
+        or config.prompt_revision not in {"conversation_v2", "conversation_v3", "conversation_v4"}
         or config.limits.model_calls > 2
         or config.limits.read_executions > 1
     ):
@@ -80,6 +90,7 @@ class AIDatabase:
         environment: str,
         delivery: bool = False,
         provider: "RuntimeSettings | None" = None,
+        embeddings: EmbeddingClient | None = None,
     ):
         if environment not in {"LOCAL", "TEST"}:
             raise MessagingError(Code.NOT_ALLOWED)
@@ -90,6 +101,9 @@ class AIDatabase:
         if provider is not None and not delivery:
             raise MessagingError(Code.NOT_ALLOWED)
         self.provider = provider
+        if embeddings is not None and type(embeddings) is not EmbeddingClient:
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.embeddings = embeddings if embeddings is not None else EmbeddingClient()
 
     def config(self, config: AnyGatewayConfig) -> AnyGatewayConfig:
         if self.provider is None:
@@ -125,20 +139,26 @@ class AIDatabase:
             config=config.model_dump(mode="json"),
             deadline=deadline.isoformat(),
         )
+        if config.prompt_revision == "conversation_v4":
+            return decoded(PreparedSearchRun, raw)
         if config.prompt_revision == "conversation_v3":
             return decoded(PreparedKnowledgeRun, raw)
         return decoded(PreparedRun, raw)
 
     def authority(
         self, claim: JobClaim, run: AnyPreparedRun
-    ) -> "PostgresAuthority | PostgresKnowledgeAuthority":
+    ) -> "PostgresAuthority | PostgresKnowledgeAuthority | PostgresSearchAuthority":
+        if isinstance(run, PreparedSearchRun):
+            return PostgresSearchAuthority(self, claim, run)
         if isinstance(run, PreparedKnowledgeRun):
             return PostgresKnowledgeAuthority(self, claim, run)
         return PostgresAuthority(self, claim, run)
 
     def receipt(self, config: AnyGatewayConfig, raw: Any) -> RuntimeReceipt:
         return decoded(
-            KnowledgeRuntimeReceipt
+            SearchRuntimeReceipt
+            if config.prompt_revision == "conversation_v4"
+            else KnowledgeRuntimeReceipt
             if config.prompt_revision == "conversation_v3"
             else RuntimeReceipt,
             raw,
@@ -215,9 +235,28 @@ class AIDatabase:
             # No durable wire exchanges are stored. An interrupted invocation
             # cannot reconstruct its Gateway and never starts another POST.
             return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
+        projection: SearchProjection | None = None
+        if isinstance(run, PreparedSearchRun):
+            projection = await self.query(claim, run)
+            if projection is None:
+                return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
+            run = PreparedSearchRun.model_validate(
+                run.model_dump() | {"search_refs": projection.refs()}
+            )
         wrapped = DurableAdapter(self, claim, run, adapter)
-        agent: ConversationAgent | KnowledgeConversationAgent
-        if isinstance(run, PreparedKnowledgeRun):
+        agent: ConversationAgent
+        if isinstance(run, PreparedSearchRun):
+            assert projection is not None
+            agent = SearchConversationAgent(
+                config,
+                wrapped,
+                PostgresSearchAuthority(self, claim, run),
+                knowledge_pin=run.knowledge_pin,
+                active_projection=run.active_projection,
+                search_pin=run.search_pin,
+                search_projection=projection,
+            )
+        elif isinstance(run, PreparedKnowledgeRun):
             agent = KnowledgeConversationAgent(
                 config,
                 wrapped,
@@ -268,6 +307,71 @@ class AIDatabase:
                 raise
             # Concurrent/lost-ACK recognition never repeats the observation/model.
             return await self.replay(claim, run.config, result)
+
+    async def _search_read(self, claim: JobClaim, run: PreparedSearchRun) -> SearchProjection:
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit.knowledge_runtime_read(
+                run.run_id, run.search_pin.model_dump(mode="json")
+            )
+        return decoded(SearchProjection, raw)
+
+    async def query(self, claim: JobClaim, run: PreparedSearchRun) -> SearchProjection | None:
+        """One committed query reservation; no ticket/wire is recoverable on replay."""
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit.knowledge_query_reserve(
+                run.run_id, run.search_pin.model_dump(mode="json")
+            )
+        reservation = decoded(QueryReservation, raw)
+        if reservation.status == "REPLAY":
+            try:
+                return await self._search_read(claim, run)
+            except MessagingError as error:
+                if error.code == Code.AI_INCOMPLETE:
+                    return None
+                raise
+        assert reservation.call_id is not None and reservation.ticket is not None
+        assert (
+            reservation.wire is not None
+            and reservation.wire_sha256 is not None
+            and reservation.deadline is not None
+        )
+        call, ticket = reservation.call_id, reservation.ticket
+        try:
+            try:
+                outcome = await self.embeddings.complete(
+                    reservation.wire,
+                    deadline=datetime.strptime(
+                        reservation.deadline, "%Y-%m-%dT%H:%M:%S.%fZ"
+                    ).replace(tzinfo=UTC),
+                    wire_sha256=reservation.wire_sha256,
+                )
+            except EmbeddingFailure as error:
+                outcome = unavailable(error.code)
+            # Completion has only the opaque accounting capability, not the
+            # current job or owner privilege that may have changed during HTTP.
+            completed = await self.messaging.complete_embedding(call, ticket, outcome)
+        except asyncio.CancelledError:
+            try:
+                async with asyncio.timeout(1):
+                    await self.messaging.complete_embedding(
+                        call, ticket, unavailable("CANCELLED", unknown=True)
+                    )
+            except (
+                KnowledgeError,
+                MessagingError,
+                SQLAlchemyError,
+                TimeoutError,
+                asyncio.CancelledError,
+            ):
+                pass
+            raise
+        if outcome["kind"] != "SUCCESS" or completed["state"] != "SUCCESS":
+            return None
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+            projection = await unit.knowledge_query_apply(
+                run.run_id, call, ticket, outcome["vectors"]
+            )
+        return decoded(SearchProjection, projection)
 
 
 class PostgresAuthority:
@@ -359,6 +463,64 @@ class PostgresKnowledgeAuthority:
                 run_id=str(self.run.run_id),
                 binding=binding.model_dump(mode="json"),
                 knowledge_pin=pin.model_dump(mode="json"),
+            ),
+        )
+
+
+class PostgresSearchAuthority:
+    """A fresh admitted job checks the original publication and availability pin."""
+
+    def __init__(self, database: AIDatabase, claim: JobClaim, run: PreparedSearchRun):
+        self.database, self.claim, self.run = database, claim, run
+
+    async def authorize(
+        self, binding: ContextBinding, pin: KnowledgePin, search_pin: SearchPin, boundary: Boundary
+    ) -> SearchAuthorityDecision:
+        status = "ALLOWED"
+        try:
+            await self.database._command(
+                self.claim,
+                "AUTHORIZE",
+                run_id=str(self.run.run_id),
+                binding=binding.model_dump(mode="json"),
+                knowledge_pin=pin.model_dump(mode="json"),
+                search_pin=search_pin.model_dump(mode="json"),
+                boundary=boundary,
+            )
+        except MessagingError as error:
+            if error.code in {Code.AI_STALE, Code.STALE_CLAIM}:
+                status = "STALE"
+            elif error.code in {
+                Code.NOT_ALLOWED,
+                Code.ACCESS_DENIED,
+                Code.AI_BUDGET,
+                Code.AI_INCOMPLETE,
+            }:
+                status = "DENIED"
+            else:
+                raise
+        return decoded(
+            SearchAuthorityDecision,
+            {
+                "status": status,
+                "binding": binding.model_dump(mode="json"),
+                "knowledge_pin": pin.model_dump(mode="json"),
+                "search_pin": search_pin.model_dump(mode="json"),
+            },
+        )
+
+    async def read_current(
+        self, binding: ContextBinding, pin: KnowledgePin, search_pin: SearchPin
+    ) -> SearchContextRead:
+        return decoded(
+            SearchContextRead,
+            await self.database._command(
+                self.claim,
+                "READ",
+                run_id=str(self.run.run_id),
+                binding=binding.model_dump(mode="json"),
+                knowledge_pin=pin.model_dump(mode="json"),
+                search_pin=search_pin.model_dump(mode="json"),
             ),
         )
 
