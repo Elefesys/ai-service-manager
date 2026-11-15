@@ -445,6 +445,106 @@ candidate. При падении отделить code defect от runner/storag
 владельца на merge обязательны. Новых provider/VM/client-data допусков нет;
 C6 HOLD, M5.2D не начинать. Следующий исполнитель — C4 в той же ветке.
 
+### Возврат C4 — первый full CI и два запроса C0 / 2026-11-15
+
+**IN_PROGRESS; приёмка actual S3/browser остаётся OPEN.** Один Draft
+[PR50](https://github.com/Elefesys/ai-service-manager/pull/50) открыт в main7080486.
+Проверенный CI head `aa31a88db7e8650d33a688c848c514285e31bd86`,
+tree `d93f8ec529ecd603528681abe2adcc32c10b00f8`, parent114a027;
+checkpoint9317424 и все принятые assignments сохранены в ancestry.
+[Первый штатный full CI43730073008](https://github.com/Elefesys/ai-service-manager/actions/runs/43730073008),
+attempt1, завершился **FAILURE: 7 PASS / 4 FAIL / 1 SKIPPED**.
+Повторный CI на неизменённом source не запускался.
+
+- PASS: native-context-db и все6 connect5 migration lanes
+  (normal/docker29 × intent/image/state).
+- foundation-durable и docker29-compatibility остановились в одном current
+  prerequisite: `current_durable_fingerprint` ожидает0020/59, установлен0021/68.
+  foundation пропущена через needs; все9 новых actual S3 API cases **NOT_RUN**.
+- m4-runtime-db выполнил все160 cases:127 PASS/33 FAIL. Из них32 падают при
+  provider admission: новая схема сохраняет вызов исторического0020 verifier;
+  ещё1 current application readiness использует историческую knowledge fixture0020.
+- Browser:66 PASS/3 FAIL, skip нет; API/PG/private MinIO healthy, startup ошибки
+  отсутствуют. Старый inbound private-image/signed-GET journey PASS. Два новых
+  actual S3 journeys дошли через настоящий PNG>4096B upload/finalize до private
+  preview HTTP200, затем остановились на `nosniff, nosniff` вместо одного
+  `nosniff`. Проверки последующего hash/decode/review/reload/revoke и actual
+  browser OPTIONS→PUT/foreign-origin ещё **NOT_REACHED**, не PASS.
+  Третье падение — прежний escalation login/CSRF startup barrier: новый GET
+  референса начинался до initial history и сразу отменялся после её завершения.
+
+**Разрешённые исправления подготовлены и проверены отдельно от CI.**
+Code checkpoint
+[`5dcf7f180edb511b71150a69f3f9a04cef1e96c3`](https://github.com/Elefesys/ai-service-manager/commit/5dcf7f180edb511b71150a69f3f9a04cef1e96c3),
+tree `ead22a4b2422599487b89a69e9b13dc1b7a4015c`, parentaa31a88.
+Это сохранённый review commit; PR branch ref пока остаётся aa31a88 до решения
+двух запросов ниже, чтобы не запускать заведомо красный второй full CI.
+
+1. Только в новой0021 добавлена13-я replacement:
+   `ai_provider_session(jsonb,boolean)` обращается к `portfolio_schema_profile()`.
+   Exact0020 definition сохранена в ORIGINAL для downgrade. Старый operator DTO,
+   text-only profiles, session_user/asm_test/identity/budget/currentness guards
+   и все applied0001–0020 неизменны; новый paid/Vision route не открыт.
+   Независимый actual PG catalog289 functions/68 tables/1001 columns PASS;
+   profile `da169523db6ecaf26b566e52c7457fbb8785ff0921fefe71d24f006fc9ec87aa`,
+   body `df2ab97e8fe09ead37d2dd16f70526f4f47073eaed3314686ceb319e7773d06b`;
+   nonfunction hash остаётся `dcc311ce3d0b978428f63ca27b69dbe8bc621b485d4f67bcae9a1964d08f4ac9`.
+2. Только current application knowledge case получает отдельную function fixture
+   с upgrade0021 и точным finally downgrade0020. Остальные historical knowledge
+   cases остаются на0020. Этот уже разрешённый `test_m5_knowledge_runtime_postgres.py`
+   добавлен в конечный M5.2C source admission.
+3. Selected-conversation render slot ждёт initial history; затем один reference
+   GET без немедленной отмены. Новые AI действия также блокируются на время
+   чтения истории. Владение selection и server authority сохранены; старый
+   escalation browser test/его assertions не менялись.
+
+Фактические целевые команды: pytest `tests/test_m4_polza_runtime_postgres.py`
+**41 PASS/142.70s**, `tests/test_m5_knowledge_runtime_postgres.py`
+**11 PASS/52.77s**, `tests/test_m5_portfolio_migrations.py` **4 PASS/1.23s**;
+`tests/test_m4_runtime_db_runner.py -k 'portfolio or m5'`
+**259 PASS/42.45s**. App/Messaging/Portfolio Vitest **91 PASS/7.29s**,
+TypeScript и Ruff PASS. Actual fresh0021 / exact0020 reverse / populated0020→0021
+и byte-exact старый receipt replay PASS. PG source metadata для локальных
+targeted tests явно constructed LOCAL, не GitHub CI; все данные синтетические,
+owned PG остановлены. Full CI этого fix checkpoint **NOT_RUN**.
+
+**Запрос1 — дополнительный current-compatibility path, REQUESTED.**
+Нужен только `tests/test_telegram_egress_postgres.py`, отсутствующий в текущем
+write-set, и его точечный admission. Не применён следующий двухстрочный патч:
+
+```diff
+ async def current_durable_fingerprint(connection):
+-    revision = "0020"
++    revision = "0021"
+ ...
+-    assert len(tables) == 59, "E05_CURRENT_NATIVE_TABLES"
++    assert len(tables) == 68, "E05_CURRENT_NATIVE_TABLES"
+```
+
+Вне-Git proposal на actual PG воспроизвёл отказ исходника и получил полный
+read-only fingerprint68 таблиц, точное равенство повторного чтения; отсутствие
+каждой из9 новых таблиц и лишняя таблица отвергнуты. Historical
+`canonical_fingerprint`0009–0012 byte-identical. Полный Docker/Xray/S3 durable
+lane этим локальным proof не заменён. Другие Telegram paths/semantics не нужны.
+
+**Запрос2 — исправить новое browser assertion, REQUESTED.**
+`infra/nginx.conf:6` уже в main708 добавляет `X-Content-Type-Options: nosniff`;
+AuthBoundary добавляет такой же header. Новая проверка ошибочно требует один
+токен от ответа через оба слоя. Не меняя production/deploy и не ослабляя backend
+API assertion одного header, предлагается в уже разрешённом portfolio.spec.ts
+проверять точные два edge токена:
+
+```typescript
+expect(fetched.headers()['x-content-type-options'].split(',').map(v => v.trim()))
+  .toEqual(['nosniff', 'nosniff']);
+```
+
+Патч не применён: решение114a запрещает менять expected после падения.
+Не требуется менять nginx/AuthBoundary, MIME, no-store, private access, transport
+или подставлять ответы actual S3. После решения C0 — C4 применяет только
+согласованные поправки в той же ветке/PR50, проверяет их и запускает следующий
+штатный full CI изменённого кандидата. Merge/VM/provider/client-data не выполнялись.
+
 ## 1. Проверяемый результат всего этапа
 
 Владелец может завести услуги и подтверждённые знания, проверить изменения и
