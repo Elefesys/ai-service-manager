@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configurationApi, parseActive, parseBundle, parseCommand, parseConfigurationError, parseDraft, parsePreview, SaveSource, KnowledgeOperation, KnowledgeBody, knowledgeApi, normalizeSource, validateKnowledgeCommand, parseKnowledgeState, parseKnowledgeCommand } from './configuration-api';
-import { active, actor, bundle, businessId, command, draft, ok, preview, releaseId, workspace, sourceId, revisionId, buildId, knowledgeState, knowledgeSource, knowledgeCommand } from './configuration-fixtures.test-helper';
+import { active, actor, bundle, businessId, command, draft, ok, preview, releaseId, workspace, sourceId, revisionId, buildId, knowledgeState, knowledgeSource, knowledgeCommand, emptyReadyBuild, emptyBuildId } from './configuration-fixtures.test-helper';
 afterEach(()=>vi.restoreAllMocks());
 describe('configuration owner wire',()=>{
   it('preserves independent modes, null unknowns, sources and explicit unpublished state',()=>{
@@ -36,6 +36,13 @@ describe('configuration owner wire',()=>{
   it('propagates cancellation and invalid-body uncertainty without raw payload',async()=>{
     const c=new AbortController();c.abort();const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async(_url,init)=>{expect(init?.signal?.aborted).toBe(true);throw new DOMException('Aborted','AbortError');});await expect(configurationApi.draft(workspace,businessId,c.signal)).rejects.toThrow('Aborted');fetch.mockResolvedValue(new Response('private invalid body'));await expect(configurationApi.active(workspace,businessId)).rejects.toThrow('INVALID_RESPONSE');
   });
+  it('treats the linked-build publication refusal as a definite closed 409 without retry',async()=>{
+    const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(ok({error:{code:'KNOWLEDGE_BUILD_REQUIRED'}},409));
+    await expect(configurationApi.command(workspace,businessId,'PUBLISH',{expected_draft_version:'1',expected_activation_version:'1'},'joint-required','csrf')).rejects.toMatchObject({status:409,code:'KNOWLEDGE_BUILD_REQUIRED'});
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(()=>parseConfigurationError({error:{code:'KNOWLEDGE_BUILD_REQUIRED'}},503)).toThrow('INVALID_RESPONSE');
+  });
+
 });
 
 describe('knowledge owner wire',()=>{
@@ -91,4 +98,13 @@ describe('knowledge owner wire',()=>{
     fetch.mockResolvedValueOnce(ok({error:{code:'RAW_PROVIDER_PRIVATE'}},503));
     await expect(knowledgeApi.state(workspace,businessId)).rejects.toThrow('INVALID_RESPONSE');
   });
+  it('sends an explicit empty build and reads its zero-reservation READY state',async()=>{
+    const empty=emptyReadyBuild(),state={...knowledgeState(),builds:[empty]};
+    const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(ok(knowledgeCommand('KNOWLEDGE_BUILD_CREATE',{build_id:emptyBuildId,build_version:'1'}))).mockResolvedValueOnce(ok(state));
+    await knowledgeApi.command(workspace,businessId,'KNOWLEDGE_BUILD_CREATE',{schema_version:1,expected_sources_hash:state.sources_hash,revision_ids:[]},'explicit-empty','csrf');
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).revision_ids).toEqual([]);
+    expect(await knowledgeApi.state(workspace,businessId)).toEqual(state);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
 });

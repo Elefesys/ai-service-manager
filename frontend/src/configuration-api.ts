@@ -77,7 +77,7 @@ export function parseCommand(value: unknown): CommandResponse {
 }
 export function parseConfigurationError(value: unknown,status: number): ConfigurationError {
   const e=object(object(value,['error']).error,['code']);
-  const codes:Record<number,string[]>={401:['SESSION_REQUIRED'],403:['ACCESS_DENIED','CSRF_REJECTED','ORIGIN_DENIED'],404:['NOT_FOUND'],409:['STALE_STATE','IDEMPOTENCY_KEY_CONFLICT','VALIDATION_FAILED','VERSION_EXHAUSTED','ROLLBACK_NOT_ALLOWED'],413:['BODY_TOO_LARGE'],415:['UNSUPPORTED_MEDIA_TYPE'],422:['INVALID_INPUT','INVALID_REQUEST'],429:['RATE_LIMITED'],500:['INTERNAL_ERROR'],503:['UNAVAILABLE']};
+  const codes:Record<number,string[]>={401:['SESSION_REQUIRED'],403:['ACCESS_DENIED','CSRF_REJECTED','ORIGIN_DENIED'],404:['NOT_FOUND'],409:['STALE_STATE','IDEMPOTENCY_KEY_CONFLICT','VALIDATION_FAILED','VERSION_EXHAUSTED','ROLLBACK_NOT_ALLOWED','KNOWLEDGE_BUILD_REQUIRED'],413:['BODY_TOO_LARGE'],415:['UNSUPPORTED_MEDIA_TYPE'],422:['INVALID_INPUT','INVALID_REQUEST'],429:['RATE_LIMITED'],500:['INTERNAL_ERROR'],503:['UNAVAILABLE']};
   if(typeof e.code!=='string'||!codes[status]?.includes(e.code))invalid();return new ConfigurationError(status,e.code as string);
 }
 async function request<T extends { workspace_id: string; business_id: string } | Preview | CommandResponse>(workspace: string,business: string,suffix: string,parser:(value:unknown)=>T,init:RequestInit,signal?:AbortSignal):Promise<T>{

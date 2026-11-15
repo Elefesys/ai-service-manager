@@ -7,9 +7,9 @@ vi.mock('./BillingPanel',()=>({BillingPanel:()=>null}));
 vi.mock('./MessagingPanel',()=>({MessagingPanel:()=>null}));
 vi.mock('./EscalationsPanel',()=>({EscalationsPanel:()=>null}));
 import { ActiveProjection, Bundle, ConfigurationError, DraftState, configurationApi, KnowledgeState, KnowledgeCommand, knowledgeApi, normalizeSource } from './configuration-api';
-import { active, bundle, business, businessId, command, deferred, draft, preview, releaseId, session, workspace, knowledgeSource, knowledgeState, knowledgeCommand, readyBuild, sourceId, revisionId, buildId } from './configuration-fixtures.test-helper';
+import { active, bundle, business, businessId, command, deferred, draft, preview, releaseId, session, workspace, knowledgeSource, knowledgeState, knowledgeCommand, readyBuild, sourceId, revisionId, buildId, emptyReadyBuild, emptyBuildId } from './configuration-fixtures.test-helper';
 let state:DraftState,current:ActiveProjection;
-beforeEach(()=>{state=draft();current=active();vi.spyOn(configurationApi,'draft').mockImplementation(async()=>structuredClone(state));vi.spyOn(configurationApi,'active').mockImplementation(async()=>structuredClone(current));vi.spyOn(configurationApi,'preview').mockImplementation(async()=>preview(structuredClone(state)));vi.spyOn(configurationApi,'command').mockImplementation(async(_w,_b,op,body)=>{
+beforeEach(()=>{state=draft();current=active();vi.spyOn(knowledgeApi,'state').mockImplementation(async(w,b)=>structuredClone({...knowledgeState(),workspace_id:w,business_id:b,activation_version:current.activation_version,release_id:current.release_id}));vi.spyOn(configurationApi,'draft').mockImplementation(async()=>structuredClone(state));vi.spyOn(configurationApi,'active').mockImplementation(async()=>structuredClone(current));vi.spyOn(configurationApi,'preview').mockImplementation(async()=>preview(structuredClone(state)));vi.spyOn(configurationApi,'command').mockImplementation(async(_w,_b,op,body)=>{
   if(op==='EDIT'&&'bundle'in body)state={...state,draft_version:String(BigInt(state.draft_version)+1n),bundle:structuredClone(body.bundle)};
   else{const id=op==='ROLLBACK'&&'release_id'in body?body.release_id:releaseId;state={...state,activation_version:String(BigInt(state.activation_version)+1n),release_id:id};current=active(structuredClone(state.bundle!),state.activation_version,id,state.draft_version);}
   return command(op,state.draft_version,state.activation_version,state.release_id);
@@ -38,7 +38,7 @@ describe('confirmed source owner flow',()=>{
   let knowledge:KnowledgeState;
   beforeEach(()=>{
     knowledge=knowledgeState();
-    vi.spyOn(knowledgeApi,'state').mockImplementation(async(w,b)=>structuredClone({...knowledge,workspace_id:w,business_id:b,activation_version:current.activation_version,release_id:current.release_id}));
+    vi.mocked(knowledgeApi.state).mockImplementation(async(w,b)=>structuredClone({...knowledge,workspace_id:w,business_id:b,activation_version:current.activation_version,release_id:current.release_id}));
     vi.spyOn(knowledgeApi,'command').mockImplementation(async(_w,_b,operation,body)=>{
       let result:Partial<KnowledgeCommand['result']>={};
       if(operation==='KNOWLEDGE_SAVE'&&'text'in body){
@@ -48,14 +48,20 @@ describe('confirmed source owner flow',()=>{
       }else if(operation==='KNOWLEDGE_CONFIRM'){
         knowledge.sources[0]={...knowledge.sources[0],source_version:'2',state:'CONFIRMED',head:{...knowledge.sources[0].head,confirmed:true}};result={source_id:sourceId,source_version:'2',revision_id:revisionId};
       }else if(operation==='KNOWLEDGE_BUILD_CREATE'){
-        knowledge.builds=[readyBuild()];result={build_id:buildId,build_version:'1'}; // creation ACK deliberately differs from fresh READY version3
+        const prepared='revision_ids'in body&&body.revision_ids.length===0?emptyReadyBuild():readyBuild();
+        knowledge.builds=[prepared,...knowledge.builds.filter(b=>b.build_id!==prepared.build_id)];result={build_id:prepared.build_id,build_version:'1'}; // nonempty creation ACK deliberately differs from fresh READY version3
       }else if(operation==='KNOWLEDGE_PUBLISH'){
-        knowledge.active_build_id=buildId;knowledge.release_id=releaseId;knowledge.activation_version='1';
-        state={...state,activation_version:'1',release_id:releaseId};current=active(structuredClone(state.bundle!),'1',releaseId);
-        result={build_id:buildId,build_version:'3',release_id:releaseId,activation_version:'1'};
+        if(!('build_id'in body))throw new Error('Expected a joint publication');
+        const prepared=knowledge.builds.find(b=>b.build_id===body.build_id)!;
+        const activation=String(BigInt(current.activation_version)+1n),release=current.release_id?crypto.randomUUID():releaseId;
+        knowledge.active_build_id=prepared.build_id;knowledge.release_id=release;knowledge.activation_version=activation;
+        knowledge.rollback_targets=[{release_id:release,build_id:prepared.build_id,eligible:true,reason_code:null},...knowledge.rollback_targets];
+        state={...state,activation_version:activation,release_id:release};current=active(structuredClone(state.bundle!),activation,release,state.draft_version);
+        result={build_id:prepared.build_id,build_version:prepared.build_version,release_id:release,activation_version:activation};
       }else if(operation==='KNOWLEDGE_REVOKE'||operation==='KNOWLEDGE_DELETE'){
         const activation=String(BigInt(current.activation_version)+1n);
-        if(operation==='KNOWLEDGE_REVOKE')knowledge.sources[0]={...knowledge.sources[0],source_version:'3',state:'REVOKED'};else knowledge.sources=[];
+        if(operation==='KNOWLEDGE_REVOKE')knowledge.sources[0]={...knowledge.sources[0],source_version:'3',state:'REVOKED',head:{...knowledge.sources[0].head,confirmed:false}};else knowledge.sources=[];
+        knowledge.rollback_targets=knowledge.rollback_targets.map(t=>({...t,eligible:false,reason_code:'ROLLBACK_NOT_ALLOWED'}));
         state={...state,activation_version:activation};current={...current,activation_version:activation};knowledge.activation_version=activation;
         result={source_id:sourceId,source_version:operation==='KNOWLEDGE_REVOKE'?'3':'4',release_id:current.release_id,activation_version:activation};
       }
@@ -127,11 +133,69 @@ describe('confirmed source owner flow',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Посмотреть источники'}));await screen.findByText(/Результат индексации неизвестен/);expect(knowledgeApi.command).not.toHaveBeenCalled();
   });
   it('hides a late source read after Business change and logout',async()=>{
-    const delayed=deferred<KnowledgeState>();vi.mocked(knowledgeApi.state).mockImplementationOnce(()=>delayed.promise);
-    const v=setup();await ready();fireEvent.click(screen.getByRole('button',{name:'Посмотреть источники'}));
+    const delayed=deferred<KnowledgeState>();const v=setup();await ready();
+    vi.mocked(knowledgeApi.state).mockImplementationOnce(()=>delayed.promise);fireEvent.click(screen.getByRole('button',{name:'Посмотреть источники'}));
     v.rerender(<ConfigurationPanel {...v.props} business={business('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')}/>);
     v.rerender(<ConfigurationPanel {...v.props} session={null} business={null}/>);
     await act(async()=>delayed.resolve({...knowledgeState(),sources:[knowledgeSource('PRIVATE_SOURCE_OTHER_SCOPE')]}));
     expect(screen.queryByText('PRIVATE_SOURCE_OTHER_SCOPE')).toBeNull();expect(screen.queryByRole('region',{name:'Настройки бизнеса'})).toBeNull();
   });
+  function publishedSource(){
+    current=active(bundle(),'1',releaseId);state=draft(bundle(),'1','1',releaseId);
+    knowledge.sources=[{...knowledgeSource(),source_version:'2',state:'CONFIRMED',head:{...knowledgeSource().head,confirmed:true}}];
+    knowledge.builds=[readyBuild()];knowledge.active_build_id=buildId;
+    knowledge.rollback_targets=[{release_id:releaseId,build_id:buildId,eligible:true,reason_code:null}];
+  }
+  it('retains a published build after remount with sources closed and joint-publishes changed settings',async()=>{
+    publishedSource();const first=setup();await openSources();first.unmount();
+    setup();await ready();expect(screen.queryByRole('textbox',{name:'Текст источника'})).toBeNull();
+    expect(knowledgeApi.state).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
+    await editFAQ('Settings after reload');
+    expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
+    expect(screen.queryByRole('textbox',{name:'Текст источника'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Выбрать набор для публикации'}));await screen.findByLabelText('Готовый набор источников');
+    expect(screen.getByLabelText('Готовый набор источников')).toHaveValue(buildId);
+    fireEvent.click(screen.getByRole('button',{name:'Опубликовать источники'}));
+    await waitFor(()=>expect(current.bundle?.faqs[0].answer).toBe('Settings after reload'));
+    expect(current.release_id).not.toBe(releaseId);expect(knowledge.active_build_id).toBe(buildId);
+    expect(vi.mocked(configurationApi.command).mock.calls.map(c=>c[2])).toEqual(['EDIT']);
+    expect(vi.mocked(knowledgeApi.command).mock.calls.map(c=>c[2])).toEqual(['KNOWLEDGE_PUBLISH']);
+    expect(vi.mocked(knowledgeApi.command).mock.calls[0][3]).toEqual({schema_version:1,expected_draft_version:'2',expected_activation_version:'1',build_id:buildId,expected_build_version:'3'});
+  });
+  it.each(['KNOWLEDGE_REVOKE','KNOWLEDGE_DELETE'] as const)('explicitly publishes changed settings without sources after last-source %s',async operation=>{
+    publishedSource();setup();await openSources();
+    fireEvent.click(screen.getByRole('button',{name:operation==='KNOWLEDGE_REVOKE'?'Отозвать источник':'Удалить источник'}));
+    if(operation==='KNOWLEDGE_DELETE')fireEvent.click(screen.getByRole('button',{name:'Удалить текст и индекс'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Подготовить пустой набор'})).toBeEnabled());
+    expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'Опубликовать источники'})).toBeDisabled();
+    await editFAQ('Settings after '+operation);
+    fireEvent.click(screen.getByRole('button',{name:'Подготовить пустой набор'}));
+    await screen.findByText('Пустой набор готов к публикации · фрагментов 0');
+    expect(screen.getByLabelText('Готовый набор источников')).toHaveValue(emptyBuildId);
+    expect(knowledge.active_build_id).toBe(buildId);
+    expect(vi.mocked(knowledgeApi.command).mock.calls.find(c=>c[2]==='KNOWLEDGE_BUILD_CREATE')?.[3]).toEqual({schema_version:1,expected_sources_hash:knowledge.sources_hash,revision_ids:[]});
+    expect(knowledge.builds.find(b=>b.build_id===emptyBuildId)).toMatchObject({state:'READY',calls_reserved:0,calls_completed:0,chunk_count:0,revision_ids:[]});
+    fireEvent.click(screen.getByRole('button',{name:'Опубликовать настройки без источников'}));
+    await screen.findByText('Настройки опубликованы без источников для поиска.');
+    expect(knowledge.active_build_id).toBe(emptyBuildId);expect(current.bundle?.faqs[0].answer).toBe('Settings after '+operation);
+    expect(vi.mocked(knowledgeApi.command).mock.calls.map(c=>c[2])).toEqual([operation,'KNOWLEDGE_BUILD_CREATE','KNOWLEDGE_PUBLISH']);
+    expect(vi.mocked(knowledgeApi.command).mock.calls.at(-1)?.[3]).toMatchObject({build_id:emptyBuildId,expected_build_version:'1'});
+    expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
+  });
+  it('does not allow publication until the required knowledge state has been read',async()=>{
+    publishedSource();vi.mocked(knowledgeApi.state).mockRejectedValueOnce(new ConfigurationError(503,'UNAVAILABLE'));
+    setup();await screen.findByRole('alert');expect(screen.queryByRole('button',{name:'Опубликовать черновик'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Обновить настройки'}));await ready();
+    expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();expect(configurationApi.command).not.toHaveBeenCalled();
+  });
+  it('shows the definite server publication refusal without an uncertain POST retry',async()=>{
+    setup();await ready();vi.mocked(configurationApi.command).mockRejectedValueOnce(new ConfigurationError(409,'KNOWLEDGE_BUILD_REQUIRED'));
+    fireEvent.click(screen.getByRole('button',{name:'Опубликовать черновик'}));
+    await screen.findByText('К настройкам подключён набор источников. Выберите его и опубликуйте настройки совместно с ним.');
+    expect(screen.queryByRole('button',{name:'Повторить исходную команду'})).toBeNull();
+    expect(configurationApi.command).toHaveBeenCalledTimes(1);expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
+  });
+
 });

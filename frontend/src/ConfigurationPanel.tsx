@@ -10,7 +10,7 @@ const blank = (scope: string, session: Session | null): View => ({ scope, sessio
 const initialBundle = (): Bundle => ({ schema_version: 1, communication_style: 'NEUTRAL', services: [], rules: [], faqs: [] });
 const newId = (prefix: string) => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 const newService = (): Service => ({ id: newId('service'), name: '', description: '', active: true, intake_fields: [], price: { mode: 'OWNER_QUOTE', amount_minor: null, formula_note: null }, duration: { mode: 'OWNER_DEFINED', minutes: null, rule_note: null }, deposit: { mode: 'NONE', amount_minor: null, percent: null } });
-const errors: Record<string, string> = { CSRF_REJECTED: 'Защита сессии изменилась. Проверьте сессию перед новой командой.', ORIGIN_DENIED: 'Сервер отклонил источник запроса.', STALE_STATE: 'Конфликт версии. Загрузите актуальное состояние и проверьте свой черновик перед новым сохранением.', IDEMPOTENCY_KEY_CONFLICT: 'Конфликт ключа команды. Проверьте актуальное состояние перед новой командой.', VALIDATION_FAILED: 'Публикация отклонена: в черновике есть ошибки. Обновите предпросмотр.', VERSION_EXHAUSTED: 'Достигнут предел версии. Новая команда недоступна.', ROLLBACK_NOT_ALLOWED: 'Этот откат недопустим: удалённые или изменённые сведения нельзя восстановить старой публикацией.', BODY_TOO_LARGE: 'Набор слишком большой. Сократите описания, FAQ или число элементов.', INVALID_INPUT: 'Проверьте значения и ссылки в форме.', INVALID_REQUEST: 'Проверьте значения в форме.', RATE_LIMITED: 'Слишком много запросов. Повторите позже.' };
+const errors: Record<string, string> = { CSRF_REJECTED: 'Защита сессии изменилась. Проверьте сессию перед новой командой.', ORIGIN_DENIED: 'Сервер отклонил источник запроса.', STALE_STATE: 'Конфликт версии. Загрузите актуальное состояние и проверьте свой черновик перед новым сохранением.', IDEMPOTENCY_KEY_CONFLICT: 'Конфликт ключа команды. Проверьте актуальное состояние перед новой командой.', VALIDATION_FAILED: 'Публикация отклонена: в черновике есть ошибки. Обновите предпросмотр.', VERSION_EXHAUSTED: 'Достигнут предел версии. Новая команда недоступна.', KNOWLEDGE_BUILD_REQUIRED: 'К настройкам подключён набор источников. Выберите его и опубликуйте настройки совместно с ним.', ROLLBACK_NOT_ALLOWED: 'Этот откат недопустим: удалённые или изменённые сведения нельзя восстановить старой публикацией.', BODY_TOO_LARGE: 'Набор слишком большой. Сократите описания, FAQ или число элементов.', INVALID_INPUT: 'Проверьте значения и ссылки в форме.', INVALID_REQUEST: 'Проверьте значения в форме.', RATE_LIMITED: 'Слишком много запросов. Повторите позже.' };
 const errorText = (e: unknown) => e instanceof ConfigurationError && errors[e.code] ? errors[e.code] : 'Не удалось получить подтверждение сервера.';
 
 export function ConfigurationPanel({ session, workspace, business, recover, expired, accessDenied }: Props) {
@@ -33,15 +33,17 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
   const dirty = loaded && JSON.stringify(form) !== JSON.stringify(view.draft!.bundle ?? initialBundle());
   const locked = !loaded || view.busy || attached;
   const knownReleases = (releases.current.get(scope) ?? []).filter(r => r.id !== view.active?.release_id);
-  const knowledgeVisible=loaded&&!!view.knowledge&&view.knowledge.activation_version===view.active!.activation_version&&view.knowledge.release_id===view.active!.release_id;
-  const editingSource=knowledgeVisible?view.knowledge!.sources.find(s=>s.source_id===sourceEdit):undefined;
+  const knowledgeLoaded=loaded&&!!view.knowledge&&view.knowledge.activation_version===view.active!.activation_version&&view.knowledge.release_id===view.active!.release_id;
+  const editingSource=knowledgeLoaded?view.knowledge!.sources.find(s=>s.source_id===sourceEdit):undefined;
   const sourceDirty=JSON.stringify(sourceForm)!==JSON.stringify(sourceInput(editingSource?.head));
   const sourceBytes=new TextEncoder().encode(sourceForm.text).length;
-  const sourceLocked=locked||!knowledgeVisible;
-  const confirmedSources=knowledgeVisible?view.knowledge!.sources.filter(s=>s.state==='CONFIRMED'&&s.head.confirmed):[];
+  const sourceLocked=locked||!knowledgeLoaded;
+  const confirmedSources=knowledgeLoaded?view.knowledge!.sources.filter(s=>s.state==='CONFIRMED'&&s.head.confirmed):[];
   const revisionIds=confirmedSources.map(s=>s.head.revision_id);
-  const readyBuilds=knowledgeVisible?view.knowledge!.builds.filter(b=>b.state==='READY'&&b.revision_ids.length===revisionIds.length&&b.revision_ids.every(id=>revisionIds.includes(id))):[];
-  const selectedBuild=readyBuilds.find(b=>b.build_id===buildChoice)??readyBuilds[0];
+  const publishedBuild=knowledgeLoaded?view.knowledge!.builds.find(b=>b.build_id===view.knowledge!.active_build_id):undefined;
+  const publishedEligible=knowledgeLoaded&&view.knowledge!.rollback_targets.some(t=>t.release_id===view.knowledge!.release_id&&t.build_id===view.knowledge!.active_build_id&&t.eligible);
+  const readyBuilds=knowledgeLoaded?view.knowledge!.builds.filter(b=>b.state==='READY'&&(b.revision_ids.length===revisionIds.length&&b.revision_ids.every(id=>revisionIds.includes(id))||b.build_id===view.knowledge!.active_build_id&&publishedEligible)):[];
+  const selectedBuild=readyBuilds.find(b=>b.build_id===buildChoice)??readyBuilds.find(b=>b.build_id===view.knowledge?.active_build_id)??readyBuilds[0];
   const owns = (owner: number, principal: Session, context: string, c: AbortController) => mounted.current && !c.signal.aborted && generation.current === owner && current.current.session === principal && current.current.scope === context;
   function remember(context: string, active: ActiveProjection) {
     if (!active.release_id || !active.source_draft_version) return;
@@ -55,21 +57,20 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
     else if (e instanceof ConfigurationError && e.status === 404) setView({ ...blank(context, principal), busy: false, error: 'Business не найден или недоступен. Обновите доступ.' });
     else setView(v => ({ ...v, busy: false, error: errorText(e) }));
   }
-  async function load(preserve = false, confirmed = false, includeSources=false) {
+  async function load(preserve = false, confirmed = false) {
     const context = current.current;
     if (!context.session || !context.scope || !context.business) return;
-    const wantsSources=includeSources||showSources||intents.current.get(context.scope)?.kind==='knowledge';
     const principal = context.session, owner = ++generation.current, c = new AbortController();
     controllers.current.forEach(c => c.abort()); controllers.current.clear(); controllers.current.add(c);
     setView(v => v.scope === context.scope && v.session === principal ? { ...v, busy: true, error: '' } : blank(context.scope, principal));
     try {
-      const [draft, active, preview, knowledge] = await Promise.all([configurationApi.draft(context.workspace, context.business, c.signal), configurationApi.active(context.workspace, context.business, c.signal), configurationApi.preview(context.workspace, context.business, c.signal),wantsSources?knowledgeApi.state(context.workspace,context.business,c.signal):Promise.resolve(null)]);
+      const [draft, active, preview, knowledge] = await Promise.all([configurationApi.draft(context.workspace, context.business, c.signal), configurationApi.active(context.workspace, context.business, c.signal), configurationApi.preview(context.workspace, context.business, c.signal),knowledgeApi.state(context.workspace,context.business,c.signal)]);
       if (!owns(owner, principal, context.scope, c)) return;
-      if (preview.state.draft_version !== draft.draft_version || preview.state.activation_version !== draft.activation_version || active.activation_version !== draft.activation_version || JSON.stringify(preview.state.bundle) !== JSON.stringify(draft.bundle)||knowledge!==null&&(knowledge.activation_version!==active.activation_version||knowledge.release_id!==active.release_id)) throw new ConfigurationError(409, 'STALE_STATE');
+      if (preview.state.draft_version !== draft.draft_version || preview.state.activation_version !== draft.activation_version || active.activation_version !== draft.activation_version || JSON.stringify(preview.state.bundle) !== JSON.stringify(draft.bundle)||knowledge.activation_version!==active.activation_version||knowledge.release_id!==active.release_id) throw new ConfigurationError(409, 'STALE_STATE');
       remember(context.scope, active); if (!preserve) {setForm(structuredClone(draft.bundle ?? initialBundle()));setSourceForm(sourceInput());setSourceEdit('');setDeleteSource('');}
       if (confirmed) intents.current.delete(context.scope);
       setView({ scope: context.scope, session: principal, draft, active, preview, knowledge, busy: false, error: '', notice: confirmed ? 'Команда подтверждена. Текущее состояние получено.' : '', denied: false });
-    } catch (e) { if(wantsSources&&owns(owner,principal,context.scope,c))setView(v=>({...v,knowledge:null}));failure(e, owner, principal, context.scope, c); }
+    } catch (e) { if(owns(owner,principal,context.scope,c))setView(v=>({...v,knowledge:null}));failure(e, owner, principal, context.scope, c); }
     finally { controllers.current.delete(c); }
   }
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; controllers.current.forEach(c => c.abort()); }; }, []);
@@ -100,6 +101,7 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
       if (e instanceof ConfigurationError && [403,404,409,413,415,422,429].includes(e.status)) {
         intents.current.delete(intent.scope); redraw(n => n + 1); failure(e, owner, principal, intent.scope, c);
         if (e.code === 'STALE_STATE') setView(v => ({ ...v, preview: null }));
+        if(e.code==='KNOWLEDGE_BUILD_REQUIRED'){setShowSources(true);setView(v=>({...v,knowledge:null}));}
       } else {
         intent.phase = 'uncertain'; redraw(n => n + 1);
         if (e instanceof ConfigurationError && e.status === 401) expired();
@@ -112,7 +114,7 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
     let body: CommandBody;
     if (operation === 'EDIT') body = { expected_draft_version: view.draft.draft_version, bundle: structuredClone(form) };
     else if (operation === 'PUBLISH') {
-      if (dirty || knowledgeVisible&&view.knowledge!.active_build_id!==null || !view.preview?.validation.valid || view.preview.state.draft_version !== view.draft.draft_version) return;
+      if (dirty || !knowledgeLoaded || view.knowledge!.active_build_id!==null || !view.preview?.validation.valid || view.preview.state.draft_version !== view.draft.draft_version) return;
       body = { expected_draft_version: view.draft.draft_version, expected_activation_version: view.active.activation_version };
     } else { if (!knownReleases.some(r => r.id === rollback)) return; body = { expected_activation_version: view.active.activation_version, release_id: rollback }; }
     try { validateCommand(operation, body); } catch (e) { setView(v => ({ ...v, error: e instanceof ConfigurationError && e.code === 'INVALID_RESPONSE' ? 'Заполните обязательные поля и проверьте допустимые размеры.' : errorText(e) })); return; }
@@ -129,7 +131,6 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
       if(!source||source.state!=='DRAFT'||source.head.confirmed||source.preview.issues.length)return;
       body={schema_version:1,expected_source_version:source.source_version,revision_id:source.head.revision_id,canonical_sha256:source.head.canonical_sha256};
     }else if(operation==='KNOWLEDGE_BUILD_CREATE'){
-      if(!confirmedSources.length)return;
       body={schema_version:1,expected_sources_hash:view.knowledge.sources_hash,revision_ids:revisionIds};
     }else if(operation==='KNOWLEDGE_PUBLISH'){
       if(dirty||!selectedBuild||!view.preview?.validation.valid)return;
@@ -147,6 +148,7 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
     const intent:Intent={kind:'knowledge',scope,actor:session.user_account_id,operation,body,key:crypto.randomUUID(),phase:'uncertain',source:sourceId};
     intents.current.set(scope,intent);void send(intent);
   }
+  function openSources(){setShowSources(true);void load(dirty||sourceDirty);}
   const change = (update: Partial<Bundle>) => setForm(b => ({ ...b, ...update }));
   const serviceAt = (i: number, update: Partial<Service>) => change({ services: form.services.map((s,j) => i===j ? { ...s, ...update } : s) });
   const ruleAt = (i: number, update: Partial<Rule>) => change({ rules: form.rules.map((r,j) => i===j ? { ...r, ...update } : r) });
@@ -172,16 +174,16 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
         <h4>Структурированные правила</h4><p>Эти правила имеют приоритет над поясняющими FAQ.</p>{form.rules.map((r,i)=><fieldset key={i} className="configuration-card"><legend>Правило {i+1}</legend><ServiceChoice label={`Услуга правила ${i+1}`} value={r.service_id} services={form.services} change={service_id=>ruleAt(i,{service_id})}/><label>Тип правила {i+1}<Choice value={r.kind} values={{MIN_AGE:'Минимальный возраст',OWNER_HANDOFF:'Решение владельца'}} change={kind=>ruleAt(i,{kind,value:kind==='OWNER_HANDOFF'?false:18})}/></label>{r.kind==='OWNER_HANDOFF'?<label><input type="checkbox" checked={r.value===true} onChange={e=>ruleAt(i,{value:e.target.checked})}/>Нужно решение владельца по правилу {i+1}</label>:<NullableNumber label={`Значение правила ${i+1}`} value={typeof r.value==='number'?r.value:null} change={value=>ruleAt(i,{value:value??0})}/>}<button type="button" className="danger" onClick={()=>change({rules:form.rules.filter((_,j)=>i!==j)})}>Удалить правило {i+1}</button></fieldset>)}<button type="button" className="secondary" disabled={form.rules.length>=12} onClick={()=>change({rules:[...form.rules,{id:newId('rule'),service_id:null,kind:'MIN_AGE',value:18}]})}>Добавить правило</button>
         <h4>Подтверждённые FAQ</h4>{form.faqs.map((f,i)=><fieldset key={i} className="configuration-card"><legend>FAQ {i+1}</legend><ServiceChoice label={`Услуга FAQ ${i+1}`} value={f.service_id} services={form.services} change={service_id=>faqAt(i,{service_id})}/><label>Вопрос FAQ {i+1}<input required maxLength={200} value={f.question} onChange={e=>faqAt(i,{question:e.target.value})}/></label><label>Ответ FAQ {i+1}<textarea required maxLength={500} rows={3} value={f.answer} onChange={e=>faqAt(i,{answer:e.target.value})}/></label><label>Источник FAQ {i+1}<input maxLength={120} value={f.source} onChange={e=>faqAt(i,{source:e.target.value})}/></label><label><input type="checkbox" checked={f.confirmed} onChange={e=>faqAt(i,{confirmed:e.target.checked})}/>Владелец подтвердил FAQ {i+1}</label><fieldset><legend>Связанные правила FAQ {i+1}</legend>{[...form.rules.map(r=>r.id),...f.rule_ids.filter(id=>!form.rules.some(r=>r.id===id))].map(id=><label key={id}><input type="checkbox" checked={f.rule_ids.includes(id)} disabled={!f.rule_ids.includes(id)&&f.rule_ids.length>=6} onChange={e=>faqAt(i,{rule_ids:e.target.checked?[...f.rule_ids,id]:f.rule_ids.filter(x=>x!==id)})}/>{ruleLabel(form.rules.find(r=>r.id===id),form)}</label>)}</fieldset><button type="button" className="danger" onClick={()=>change({faqs:form.faqs.filter((_,j)=>i!==j)})}>Удалить FAQ {i+1}</button></fieldset>)}<button type="button" className="secondary" disabled={form.faqs.length>=12} onClick={()=>change({faqs:[...form.faqs,{id:newId('faq'),service_id:null,question:'',answer:'',source:'',confirmed:false,rule_ids:[]}]})}>Добавить FAQ</button><button type="submit" disabled={!dirty}>Сохранить черновик</button>
       </fieldset></form>
-      <section aria-label="Предпросмотр публикации"><h3>Предпросмотр</h3><p>Детерминированная проверка сохранённого черновика. Вызовы AI и отправка клиенту не выполняются.</p><button className="secondary" disabled={locked||dirty} onClick={()=>void load()}>Проверить и показать предпросмотр</button>{dirty&&<p>Сначала сохраните изменения черновика.</p>}{view.preview&&<><ul className="configuration-issues">{view.preview.validation.issues.map((issue,i)=><li key={i} className={issue.severity==='ERROR'?'error':'muted'}>{issue.severity==='ERROR'?'ERROR — ошибка':'WARNING — предупреждение'}: {issueLabel(issue,view.preview!.state.bundle)}</li>)}</ul><p>{view.preview.validation.valid?'Ошибок публикации нет.':'Публикация заблокирована ошибками.'}</p>{view.preview.state.bundle&&<details><summary>Сведения сохранённого черновика</summary><BundleView bundle={view.preview.state.bundle}/></details>}</>}<p>Для совместной публикации настроек и поиска используйте готовый набор в разделе источников.</p>{knowledgeVisible&&view.knowledge!.active_build_id&&<p>Текущий набор источников подключён. Опубликуйте изменения кнопкой «Опубликовать источники».</p>}<button disabled={locked||dirty||!view.preview?.validation.valid||knowledgeVisible&&view.knowledge!.active_build_id!==null} onClick={()=>start('PUBLISH')}>Опубликовать черновик</button></section>
+      <section aria-label="Предпросмотр публикации"><h3>Предпросмотр</h3><p>Детерминированная проверка сохранённого черновика. Вызовы AI и отправка клиенту не выполняются.</p><button className="secondary" disabled={locked||dirty} onClick={()=>void load()}>Проверить и показать предпросмотр</button>{dirty&&<p>Сначала сохраните изменения черновика.</p>}{view.preview&&<><ul className="configuration-issues">{view.preview.validation.issues.map((issue,i)=><li key={i} className={issue.severity==='ERROR'?'error':'muted'}>{issue.severity==='ERROR'?'ERROR — ошибка':'WARNING — предупреждение'}: {issueLabel(issue,view.preview!.state.bundle)}</li>)}</ul><p>{view.preview.validation.valid?'Ошибок публикации нет.':'Публикация заблокирована ошибками.'}</p>{view.preview.state.bundle&&<details><summary>Сведения сохранённого черновика</summary><BundleView bundle={view.preview.state.bundle}/></details>}</>}<p>Для совместной публикации настроек и поиска используйте готовый набор в разделе источников.</p>{knowledgeLoaded&&view.knowledge!.active_build_id&&<><p>{publishedBuild?.revision_ids.length===0?'Настройки опубликованы без источников. Сохраните этот пустой набор либо выберите другой для новой публикации.':'У настроек есть опубликованный набор источников. Сохраните его либо явно выберите другой для новой публикации.'}</p><button className="secondary" disabled={locked} onClick={openSources}>Выбрать набор для публикации</button></>}<button disabled={locked||dirty||!knowledgeLoaded||!view.preview?.validation.valid||view.knowledge!.active_build_id!==null} onClick={()=>start('PUBLISH')}>Опубликовать черновик</button></section>
       <section aria-label="Откат публикации"><h3>Откат</h3><p>Можно выбрать прежнюю публикацию, просмотренную в этой сессии страницы. Сервер проверит допустимость; активация всегда будет новой.</p><label>Предыдущая публикация<select value={rollback} disabled={locked||knownReleases.length===0} onChange={e=>setRollback(e.target.value)}><option value="">Выберите публикацию</option>{knownReleases.map(r=><option key={r.id} value={r.id}>Из черновика {r.version} · активация {r.activation}</option>)}</select></label><button className="secondary" disabled={locked||!knownReleases.some(r=>r.id===rollback)} onClick={()=>start('ROLLBACK')}>Откатить публикацию</button></section>
     </>}
 
     {loaded&&<section aria-label="Источники для поиска" className="knowledge-sources">
       <h3>Источники для поиска</h3><p>Подготовьте небольшой текст, проверьте его и подтвердите перед публикацией.</p>
-      <button className="secondary" disabled={locked} onClick={()=>{setShowSources(true);void load(dirty||sourceDirty,false,true);}}>Посмотреть источники</button>
-      {showSources&&!knowledgeVisible&&<p role="status">Источники пока не загружены.</p>}
-      {showSources&&knowledgeVisible&&<>
-        <p>{view.knowledge!.active_build_id?'Опубликованный поиск подключён к текущим настройкам.':'Поиск по источникам ещё не опубликован.'}</p>
+      <button className="secondary" disabled={locked} onClick={openSources}>Посмотреть источники</button>
+      {showSources&&!knowledgeLoaded&&<p role="status">Источники пока не загружены.</p>}
+      {showSources&&knowledgeLoaded&&<>
+        <p>{view.knowledge!.active_build_id?(publishedBuild?.revision_ids.length===0?'Настройки опубликованы без источников для поиска.':'Опубликованный поиск подключён к текущим настройкам.'):'Поиск по источникам ещё не опубликован.'}</p>
         {view.knowledge!.embedding_mode==='DISABLED'&&<p className="muted">Индексация сейчас отключена. Подготовленный текст можно сохранить и подтвердить.</p>}
         <form onSubmit={e=>{e.preventDefault();startKnowledge('KNOWLEDGE_SAVE');}}><fieldset disabled={sourceLocked} className="configuration-fields">
           <legend>{editingSource?'Новая ревизия источника':'Новый источник'}</legend>
@@ -218,12 +220,13 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
         </article>)}
         <p className="muted">Отзыв исключает опубликованные ревизии. Для возвращения текста сохраните новую ревизию и подтвердите её.</p>
         <section aria-label="Подготовка поиска"><h4>Подготовить и опубликовать поиск</h4>
-          <button disabled={sourceLocked||sourceDirty||confirmedSources.length===0} onClick={()=>startKnowledge('KNOWLEDGE_BUILD_CREATE')}>Подготовить поиск</button>
-          {view.knowledge!.builds.map(b=><p key={b.build_id} role={b.state==='ERROR'||b.state==='UNKNOWN'?'alert':undefined} className={b.state==='ERROR'||b.state==='UNKNOWN'?'error':'muted'}>{buildLabel[b.state]} · фрагментов {b.chunk_count}{b.error_code?` · ${buildError(b.error_code,view.knowledge!.embedding_mode)}`:''}</p>)}
-          <label>Готовый набор источников<select disabled={sourceLocked||readyBuilds.length===0} value={selectedBuild?.build_id??''} onChange={e=>setBuildChoice(e.target.value)}><option value="">Нет готового набора</option>{readyBuilds.map((b,i)=><option key={b.build_id} value={b.build_id}>Набор {i+1} · фрагментов {b.chunk_count}</option>)}</select></label>
+          {confirmedSources.length===0&&<p>Подтверждённых источников нет. Подготовьте пустой набор, чтобы явно опубликовать настройки без источников. Индексация для него не нужна.</p>}
+          <button disabled={sourceLocked||sourceDirty} onClick={()=>startKnowledge('KNOWLEDGE_BUILD_CREATE')}>{confirmedSources.length===0?'Подготовить пустой набор':'Подготовить поиск'}</button>
+          {view.knowledge!.builds.map(b=><p key={b.build_id} role={b.state==='ERROR'||b.state==='UNKNOWN'?'alert':undefined} className={b.state==='ERROR'||b.state==='UNKNOWN'?'error':'muted'}>{b.state==='READY'&&b.revision_ids.length===0?'Пустой набор готов к публикации':buildLabel[b.state]} · фрагментов {b.chunk_count}{b.error_code?` · ${buildError(b.error_code,view.knowledge!.embedding_mode)}`:''}</p>)}
+          <label>Готовый набор источников<select disabled={sourceLocked||readyBuilds.length===0} value={selectedBuild?.build_id??''} onChange={e=>setBuildChoice(e.target.value)}><option value="">Нет готового набора</option>{readyBuilds.map((b,i)=><option key={b.build_id} value={b.build_id}>{b.revision_ids.length===0?'Без источников · пустой набор':`${b.build_id===view.knowledge!.active_build_id?'Опубликованный набор':`Набор ${i+1}`} · фрагментов ${b.chunk_count}`}</option>)}</select></label>
           <p>Публикация включает сохранённый черновик настроек и готовый набор источников.</p>
           {(dirty||sourceDirty)&&<p>Сначала сохраните изменения настроек и текста.</p>}
-          <button disabled={sourceLocked||sourceDirty||dirty||!view.preview?.validation.valid||!selectedBuild} onClick={()=>startKnowledge('KNOWLEDGE_PUBLISH')}>Опубликовать источники</button>
+          <button disabled={sourceLocked||sourceDirty||dirty||!view.preview?.validation.valid||!selectedBuild} onClick={()=>startKnowledge('KNOWLEDGE_PUBLISH')}>{selectedBuild?.revision_ids.length===0?'Опубликовать настройки без источников':'Опубликовать источники'}</button>
         </section>
         <section aria-label="Откат источников"><h4>Предыдущая публикация с источниками</h4>
           <label>Набор для отката<select disabled={sourceLocked||sourceDirty} value={knowledgeRollback} onChange={e=>setKnowledgeRollback(e.target.value)}><option value="">Выберите публикацию</option>{view.knowledge!.rollback_targets.filter(t=>t.release_id!==view.knowledge!.release_id).map((t,i)=><option key={t.release_id} value={t.release_id} disabled={!t.eligible}>Публикация {i+1}{t.eligible?'':' · недоступна'}</option>)}</select></label>

@@ -4,13 +4,15 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from asm.ai.runtime_contracts import PreparedSearchRun, SearchRuntimeReceipt
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind
+from generic_pg_schema import current_snapshot
+from m5_configuration_fixtures import configuration_bundle
 from m5_knowledge_search_fixtures import (
     ControlledEmbeddings,
     application,
@@ -28,6 +30,7 @@ from m5_knowledge_search_fixtures import (
 from m5_knowledge_search_fixtures import (
     seeded as seeded,
 )
+from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_postgres import query
 from test_m2_3_db_postgres import OWNER
@@ -35,9 +38,208 @@ from test_m3_1_native_context_postgres import claim_job, incoming, reconcile, sc
 from test_m4_delivery_postgres import enrollment, run_turn, source_turn
 from test_m4_reply_rights_postgres import connection, telegram
 from test_m4_runtime_postgres import COUNTER, owner
+from test_m5_knowledge_postgres import (
+    configuration_command,
+    configuration_read,
+    edit_configuration,
+)
 from test_tenancy_postgres import BA2, BB, UA, UB, A, B
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+
+
+async def publication_snapshot(h):
+    async with h.migrator.connect() as connection:
+        return await current_snapshot(connection)
+
+
+async def assert_legacy_publish_refused(h, body, code, *, key=None):
+    before = await publication_snapshot(h)
+    with pytest.raises(DBAPIError) as refused:
+        await configuration_command(h, "PUBLISH", body, key=key)
+    assert refused.value.orig.sqlstate == "P2701"
+    assert refused.value.orig.diag.message_primary == code
+    assert await publication_snapshot(h) == before
+
+
+async def test_linked_build_requires_joint_publication_without_breaking_old_replay(search_pg):
+    h = search_pg
+    await edit_configuration(h)
+    draft = await configuration_read(h)
+    original_body = {
+        "expected_draft_version": draft["draft_version"],
+        "expected_activation_version": draft["activation_version"],
+    }
+    key = str(uuid4())
+    original = await configuration_command(h, "PUBLISH", original_body, key=key)
+    assert original["outcome"] == "ACCEPTED"
+    assert (await knowledge_state(h))["active_build_id"] is None
+
+    _, linked, _ = await publication(h, ["Retain this explicitly published source."])
+    assert linked["active_build_id"] is not None
+    before = await publication_snapshot(h)
+    replay = await configuration_command(h, "PUBLISH", original_body, key=key)
+    assert replay == {"outcome": "REPLAY", "result": original["result"]}
+    assert await publication_snapshot(h) == before
+
+    draft = await configuration_read(h)
+    current = {
+        "expected_draft_version": draft["draft_version"],
+        "expected_activation_version": draft["activation_version"],
+    }
+    await assert_legacy_publish_refused(h, current, "KNOWLEDGE_BUILD_REQUIRED")
+    await assert_legacy_publish_refused(h, current, "IDEMPOTENCY_KEY_CONFLICT", key=key)
+    await assert_legacy_publish_refused(
+        h, current | {"expected_activation_version": "0"}, "STALE_STATE"
+    )
+    await assert_legacy_publish_refused(h, current | {"expected_draft_version": "0"}, "STALE_STATE")
+    async with h.migrator.begin() as connection:
+        await connection.execute(
+            text(
+                "UPDATE platform.workspace_memberships SET role='ADMIN' WHERE workspace_id=:w AND user_account_id=:u"
+            ),
+            {"w": A, "u": UA},
+        )
+    try:
+        # Live OWNER admission still precedes replay and the new publish check.
+        await assert_legacy_publish_refused(h, original_body, "ACCESS_DENIED", key=key)
+    finally:
+        async with h.migrator.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE platform.workspace_memberships SET role='OWNER' WHERE workspace_id=:w AND user_account_id=:u"
+                ),
+                {"w": A, "u": UA},
+            )
+
+
+@pytest.mark.parametrize("operation", ["KNOWLEDGE_REVOKE", "KNOWLEDGE_DELETE"])
+async def test_last_source_withdrawal_can_publish_explicit_empty_build_without_embedding_calls(
+    search_pg, operation
+):
+    h = search_pg
+    private_text = "This withdrawn source must never reach the new reply."
+    _, previous, embeddings = await publication(h, [private_text])
+    source = previous["sources"][0]
+    old_build = next(b for b in previous["builds"] if b["build_id"] == previous["active_build_id"])
+    await edit_configuration(h, configuration_bundle() | {"communication_style": "CONCISE"})
+    await knowledge_command(
+        h,
+        operation,
+        {
+            "schema_version": 1,
+            "source_id": source["source_id"],
+            "expected_source_version": source["source_version"],
+            "expected_activation_version": previous["activation_version"],
+        },
+    )
+    withdrawn = await knowledge_state(h)
+    assert withdrawn["release_id"] == previous["release_id"]
+    assert withdrawn["active_build_id"] == previous["active_build_id"]
+    if operation == "KNOWLEDGE_DELETE":
+        assert withdrawn["sources"] == []
+    else:
+        assert withdrawn["sources"][0]["state"] == "REVOKED"
+        assert not withdrawn["sources"][0]["head"]["confirmed"]
+    draft = await configuration_read(h)
+    await assert_legacy_publish_refused(
+        h,
+        {
+            "expected_draft_version": draft["draft_version"],
+            "expected_activation_version": withdrawn["activation_version"],
+        },
+        "KNOWLEDGE_BUILD_REQUIRED",
+    )
+    calls = await query(
+        h,
+        "SELECT to_jsonb(c) AS row FROM platform.knowledge_embedding_calls c WHERE workspace_id=:w ORDER BY id",
+        w=A,
+    )
+    posts = len(embeddings.requests)
+    created = await knowledge_command(
+        h,
+        "KNOWLEDGE_BUILD_CREATE",
+        {
+            "schema_version": 1,
+            "expected_sources_hash": withdrawn["sources_hash"],
+            "revision_ids": [],
+        },
+    )
+    prepared = await knowledge_state(h)
+    empty = next(b for b in prepared["builds"] if b["build_id"] == created["result"]["build_id"])
+    assert empty["state"] == "READY" and empty["revision_ids"] == []
+    assert empty["chunk_count"] == empty["calls_reserved"] == empty["calls_completed"] == 0
+    raw = (
+        await query(
+            h,
+            "SELECT manifest,plan FROM platform.knowledge_builds WHERE id=:id",
+            id=UUID(empty["build_id"]),
+        )
+    )[0]
+    assert raw == {"manifest": [], "plan": []}
+    assert (
+        prepared["release_id"],
+        prepared["active_build_id"],
+        prepared["activation_version"],
+    ) == (
+        withdrawn["release_id"],
+        withdrawn["active_build_id"],
+        withdrawn["activation_version"],
+    )
+    with pytest.raises(DBAPIError) as old_refused:
+        await knowledge_command(
+            h,
+            "KNOWLEDGE_PUBLISH",
+            {
+                "schema_version": 1,
+                "expected_draft_version": draft["draft_version"],
+                "expected_activation_version": withdrawn["activation_version"],
+                "build_id": old_build["build_id"],
+                "expected_build_version": old_build["build_version"],
+            },
+        )
+    assert old_refused.value.orig.diag.message_primary == "BUILD_NOT_READY"
+    published = await knowledge_command(
+        h,
+        "KNOWLEDGE_PUBLISH",
+        {
+            "schema_version": 1,
+            "expected_draft_version": draft["draft_version"],
+            "expected_activation_version": withdrawn["activation_version"],
+            "build_id": empty["build_id"],
+            "expected_build_version": empty["build_version"],
+        },
+    )
+    final = await knowledge_state(h)
+    assert final["release_id"] == published["result"]["release_id"] != previous["release_id"]
+    assert final["active_build_id"] == empty["build_id"]
+    assert int(final["activation_version"]) == int(withdrawn["activation_version"]) + 1
+    assert (await configuration_read(h, active=True))["bundle"]["communication_style"] == "CONCISE"
+    # An explicit empty manifest remains linked; subsequent settings publications
+    # must continue using the joint path instead of silently dropping its link.
+    await assert_legacy_publish_refused(
+        h,
+        {
+            "expected_draft_version": draft["draft_version"],
+            "expected_activation_version": final["activation_version"],
+        },
+        "KNOWLEDGE_BUILD_REQUIRED",
+    )
+    _, turn, _ = await source_turn(h, native=True, message_text="What should I prepare?")
+    worker, fake = application(h, embeddings)
+    await run_turn(h, worker, turn)
+    assert len(fake.requests) == 1
+    assert fake.views[0]["search"]["status"] == "EMPTY"
+    assert fake.views[0]["search"]["fragments"] == []
+    assert private_text not in json.dumps(fake.views[0])
+    assert len(embeddings.requests) == posts
+    assert (
+        await query(
+            h,
+            "SELECT to_jsonb(c) AS row FROM platform.knowledge_embedding_calls c WHERE workspace_id=:w ORDER BY id",
+            w=A,
+        )
+    ) == calls
 
 
 async def test_fragment_reaches_reply_and_durable_refs_contain_no_text(search_pg):

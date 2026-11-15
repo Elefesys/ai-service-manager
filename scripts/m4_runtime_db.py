@@ -245,6 +245,8 @@ M5_SEARCH_PATHS = M5_SEARCH_C0_DOCS | {
     "backend/src/asm/ai/runtime_settings.py",
     "backend/src/asm/ai/schemas/conversation_result_v2.json",
     "backend/src/asm/ai/settings.py",
+    # C0 publication R2: closed linked-build refusal only.
+    "backend/src/asm/configuration/errors.py",
     "backend/src/asm/configuration/http.py",
     "backend/src/asm/configuration/models.py",
     "backend/src/asm/configuration/repository.py",

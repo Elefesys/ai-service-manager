@@ -16,3 +16,6 @@ export const knowledgeSource=(text='Подтверждённый текст ис
 export const knowledgeState=():KnowledgeState=>({schema_version:1,workspace_id:workspace,business_id:businessId,sources_hash:'b'.repeat(64),activation_version:'0',release_id:null,active_build_id:null,profile_id:embeddingProfile,embedding_mode:'CONTROLLED',sources:[],builds:[],rollback_targets:[]});
 export const readyBuild=():KnowledgeBuild=>({build_id:buildId,build_version:'3',state:'READY',profile_id:embeddingProfile,manifest_hash:'c'.repeat(64),revision_ids:[revisionId],chunk_count:1,calls_reserved:1,calls_completed:1,error_code:null});
 export const knowledgeCommand=(operation:KnowledgeOperation='KNOWLEDGE_SAVE',result:Partial<KnowledgeCommand['result']>={}):KnowledgeCommand=>({schema_version:1,outcome:'ACCEPTED',result:{workspace_id:workspace,business_id:businessId,receipt_id:'99999999-9999-4999-8999-999999999999',operation,source_id:null,source_version:null,revision_id:null,build_id:null,build_version:null,release_id:null,activation_version:'0',recorded_at:stamp,request_hash:'d'.repeat(64),...result}});
+
+export const emptyBuildId='12121212-1212-4212-8212-121212121212';
+export const emptyReadyBuild=():KnowledgeBuild=>({...readyBuild(),build_id:emptyBuildId,build_version:'1',manifest_hash:'e'.repeat(64),revision_ids:[],chunk_count:0,calls_reserved:0,calls_completed:0});

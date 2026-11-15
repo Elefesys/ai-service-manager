@@ -642,6 +642,7 @@
           "VALIDATION_FAILED",
           "VERSION_EXHAUSTED",
           "ROLLBACK_NOT_ALLOWED",
+          "KNOWLEDGE_BUILD_REQUIRED",
           "UNAVAILABLE"
         ],
         "title": "ConfigurationCode",
@@ -8028,7 +8029,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/publish": {
       "post": {
-        "description": "Live OWNER including replay. SQL validation, draft/activation CAS and atomic immutable release. Replaying an old result never changes current activation.",
+        "description": "Live OWNER including replay. SQL validation, draft/activation CAS and atomic immutable release. A linked knowledge build requires joint publication (409 KNOWLEDGE_BUILD_REQUIRED). Replaying an old result never changes current activation.",
         "operationId": "publish_api_v1_workspaces__workspace_id__businesses__business_id__configuration_publish_post",
         "parameters": [
           {

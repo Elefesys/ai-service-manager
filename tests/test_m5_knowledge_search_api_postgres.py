@@ -1,8 +1,10 @@
 """Actual owner session/CSRF + runtime-role capabilities; controlled embedding HTTP only."""
 
 import asyncio
+import hashlib
 import json
 from types import SimpleNamespace
+from uuid import UUID
 
 import httpx
 import pytest
@@ -237,6 +239,262 @@ async def calls(h):
             {"w": A},
         )
         return list(rows.mappings())
+
+
+async def publication_rows(h):
+    """Complete domain row multisets, excluding unrelated session access bookkeeping."""
+    result = {}
+    async with h.migrator.connect() as connection:
+        for table in (
+            "platform.business_configuration_state",
+            "platform.business_configuration_releases",
+            "platform.business_configuration_receipts",
+            "platform.knowledge_sources",
+            "platform.knowledge_revisions",
+            "platform.knowledge_chunks",
+            "platform.knowledge_builds",
+            "platform.knowledge_build_chunks",
+            "platform.knowledge_release_builds",
+            "platform.knowledge_embedding_calls",
+            "app.audit_events",
+        ):
+            rows = (
+                await connection.execute(
+                    text("SELECT to_jsonb(r) FROM " + table + " r WHERE workspace_id=:w"),
+                    {"w": A},
+                )
+            ).scalars()
+            result[table] = sorted(json.dumps(row, sort_keys=True) for row in rows)
+    return result
+
+
+async def publish_build(h, build, *, draft="1", key="joint-publish"):
+    current = await state(h)
+    response = await send(
+        h,
+        "/publish",
+        {
+            "schema_version": 1,
+            "expected_draft_version": draft,
+            "expected_activation_version": current.activation_version,
+            "build_id": build.build_id,
+            "expected_build_version": build.build_version,
+        },
+        key,
+    )
+    assert response.status_code == 200, response.text
+    return response
+
+
+async def linked_publication(h, *, legacy=False):
+    await configuration(h)
+    original = None
+    if legacy:
+        original = await send(
+            h,
+            "",
+            {"expected_draft_version": "1", "expected_activation_version": "0"},
+            "legacy-original",
+            url=CONFIGURATION + "/publish",
+        )
+        assert original.status_code == 200, original.text
+        assert (await state(h)).active_build_id is None
+    await confirmed(h)
+    created = await send(h, "/builds", await build_body(h), "build-linked")
+    assert created.status_code == 200, created.text
+    current = await state(h)
+    build = next(b for b in current.builds if b.build_id == created.json()["result"]["build_id"])
+    assert build.state == "READY" and h.posts == 1
+    await publish_build(h, build)
+    return original, await state(h), build
+
+
+async def availability(h, current):
+    async with h.migrator.connect() as connection:
+        return (
+            await connection.execute(
+                text("SELECT platform.knowledge_availability(:w,:b,:r,:v)"),
+                {
+                    "w": A,
+                    "b": BA,
+                    "r": UUID(current.release_id),
+                    "v": int(current.activation_version),
+                },
+            )
+        ).scalar_one()
+
+
+async def test_legacy_publish_requires_joint_build_but_original_receipt_keeps_live_guards(
+    knowledge,
+):
+    h = knowledge
+    original, current, _ = await linked_publication(h, legacy=True)
+    assert current.active_build_id is not None
+    original_body = {"expected_draft_version": "1", "expected_activation_version": "0"}
+    fresh_body = original_body | {"expected_activation_version": current.activation_version}
+    before = await publication_rows(h)
+    for body, key, code in (
+        (fresh_body, "legacy-fresh", "KNOWLEDGE_BUILD_REQUIRED"),
+        (fresh_body, "legacy-original", "IDEMPOTENCY_KEY_CONFLICT"),
+        (fresh_body | {"expected_draft_version": "0"}, "stale-draft", "STALE_STATE"),
+        (original_body, "stale-activation", "STALE_STATE"),
+    ):
+        response = await send(h, "", body, key, url=CONFIGURATION + "/publish")
+        assert response.status_code == 409 and response.json() == {"error": {"code": code}}
+        assert response.headers["cache-control"] == "no-store"
+        assert await publication_rows(h) == before
+    replay = await send(h, "", original_body, "legacy-original", url=CONFIGURATION + "/publish")
+    assert replay.status_code == 200 and replay.json() == original.json() | {"outcome": "REPLAY"}
+    assert await publication_rows(h) == before
+    assert (await state(h)).model_dump() == current.model_dump()
+    async with h.migrator.begin() as connection:
+        await connection.execute(
+            text(
+                "UPDATE platform.workspace_memberships SET role='ADMIN' WHERE workspace_id=:w AND user_account_id=:u"
+            ),
+            {"w": A, "u": UA},
+        )
+    denied = await send(h, "", original_body, "legacy-original", url=CONFIGURATION + "/publish")
+    assert denied.status_code == 403 and denied.json() == {"error": {"code": "ACCESS_DENIED"}}
+    assert await publication_rows(h) == before
+
+
+@pytest.mark.parametrize("withdrawal", ["revoke", "delete"])
+async def test_http_last_source_withdrawal_publishes_explicit_empty_build_without_embeddings(
+    knowledge, withdrawal
+):
+    h = knowledge
+    _, published, old_build = await linked_publication(h)
+    source = published.sources[0]
+    empty_hash = hashlib.sha256(b"[]").hexdigest()
+    assert (await availability(h, published))["visible_revisions_sha256"] != empty_hash
+    updated = configuration_bundle() | {"communication_style": "CONCISE"}
+    edited = await h.client.put(
+        CONFIGURATION + "/draft",
+        json={"expected_draft_version": "1", "bundle": updated},
+        headers={**headers(h.client, h.csrf), "Idempotency-Key": "edit-after-publication"},
+    )
+    assert edited.status_code == 200, edited.text
+    removed = await send(
+        h,
+        f"/sources/{source.source_id}/{withdrawal}",
+        {
+            "schema_version": 1,
+            "expected_source_version": source.source_version,
+            "expected_activation_version": published.activation_version,
+        },
+        "withdraw-last",
+    )
+    assert removed.status_code == 200, removed.text
+    withdrawn = await state(h)
+    assert (withdrawn.release_id, withdrawn.active_build_id) == (
+        published.release_id,
+        published.active_build_id,
+    )
+    assert (await availability(h, withdrawn))["visible_revisions_sha256"] == empty_hash
+    before = await publication_rows(h)
+    blocked = await send(
+        h,
+        "",
+        {
+            "expected_draft_version": "2",
+            "expected_activation_version": withdrawn.activation_version,
+        },
+        "legacy-after-withdrawal",
+        url=CONFIGURATION + "/publish",
+    )
+    assert (
+        blocked.status_code == 409 and blocked.json()["error"]["code"] == "KNOWLEDGE_BUILD_REQUIRED"
+    )
+    assert await publication_rows(h) == before
+    before_calls, before_posts = await calls(h), h.posts
+    created = await send(
+        h,
+        "/builds",
+        {"schema_version": 1, "expected_sources_hash": withdrawn.sources_hash, "revision_ids": []},
+        "empty-build",
+    )
+    assert created.status_code == 200, created.text
+    prepared = await state(h)
+    empty = next(b for b in prepared.builds if b.build_id == created.json()["result"]["build_id"])
+    assert empty.state == "READY" and empty.revision_ids == []
+    assert empty.chunk_count == empty.calls_reserved == empty.calls_completed == 0
+    assert (prepared.release_id, prepared.active_build_id, prepared.activation_version) == (
+        withdrawn.release_id,
+        withdrawn.active_build_id,
+        withdrawn.activation_version,
+    )
+    old_rejected = await send(
+        h,
+        "/publish",
+        {
+            "schema_version": 1,
+            "expected_draft_version": "2",
+            "expected_activation_version": withdrawn.activation_version,
+            "build_id": old_build.build_id,
+            "expected_build_version": old_build.build_version,
+        },
+        "withdrawn-build",
+    )
+    assert (
+        old_rejected.status_code == 409
+        and old_rejected.json()["error"]["code"] == "BUILD_NOT_READY"
+    )
+    assert (await state(h)).activation_version == withdrawn.activation_version
+    result = await publish_build(h, empty, draft="2", key="publish-empty")
+    final = await state(h)
+    assert final.release_id == result.json()["result"]["release_id"] != published.release_id
+    assert final.active_build_id == empty.build_id
+    assert int(final.activation_version) == int(withdrawn.activation_version) + 1
+    assert (await h.client.get(CONFIGURATION + "/active")).json()["bundle"] == updated
+    assert not final.sources or (
+        final.sources[0].state == "REVOKED" and not final.sources[0].head.confirmed
+    )
+    assert (await availability(h, final))["visible_revisions_sha256"] == empty_hash
+    replay = await send(
+        h,
+        "/builds",
+        {"schema_version": 1, "expected_sources_hash": withdrawn.sources_hash, "revision_ids": []},
+        "empty-build",
+    )
+    assert replay.status_code == 200 and replay.json() == created.json() | {"outcome": "REPLAY"}
+    assert h.posts == before_posts and await calls(h) == before_calls
+    before = await publication_rows(h)
+    still_joint = await send(
+        h,
+        "",
+        {"expected_draft_version": "2", "expected_activation_version": final.activation_version},
+        "legacy-empty-linked",
+        url=CONFIGURATION + "/publish",
+    )
+    assert (
+        still_joint.status_code == 409
+        and still_joint.json()["error"]["code"] == "KNOWLEDGE_BUILD_REQUIRED"
+    )
+    assert await publication_rows(h) == before
+
+
+@pytest.mark.parametrize("knowledge", [False], indirect=True)
+async def test_http_explicit_empty_publication_works_with_default_disabled_embeddings(knowledge):
+    h = knowledge
+    await configuration(h)
+    current = await state(h)
+    assert current.embedding_mode == "DISABLED" and current.sources == []
+    created = await send(
+        h,
+        "/builds",
+        {"schema_version": 1, "expected_sources_hash": current.sources_hash, "revision_ids": []},
+        "empty-disabled",
+    )
+    assert created.status_code == 200, created.text
+    current = await state(h)
+    build = next(b for b in current.builds if b.build_id == created.json()["result"]["build_id"])
+    assert build.state == "READY" and build.revision_ids == []
+    assert build.calls_reserved == build.calls_completed == build.chunk_count == 0
+    await publish_build(h, build)
+    final = await state(h)
+    assert final.active_build_id == build.build_id and final.release_id is not None
+    assert h.posts == 0 and await calls(h) == []
 
 
 async def test_owner_build_publish_draft_revoke_delete_and_legacy_rollback_guard(knowledge):

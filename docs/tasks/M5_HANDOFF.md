@@ -6,7 +6,9 @@
 
 ## CURRENT — M5.2B → C4 / IN_PROGRESS / 2026-11-14
 
-Единственная активная задача **C4-M5.2B-KNOWLEDGE-SEARCH-R1**.
+Единственная активная задача **C4-M5.2B-KNOWLEDGE-SEARCH-R1**;
+продолжение **C4-M5.2B-PUBLICATION-R2** принято C0 в
+[review PR49](https://github.com/Elefesys/ai-service-manager/pull/49#pullrequestreview-5909000553).
 Ведущий C4; C1 помогает с configuration/API, C2 — со схемой, RLS и миграцией,
 последовательно в рамках этой задачи. Остальные срезы M5 не выданы; C6 HOLD.
 
@@ -101,6 +103,7 @@ C2 до SQL подтверждает отсутствие конкурирующ
   `repository.py`, `service.py`, `http.py`, `embeddings.py`.
   Не создавать пустые файлы/слои ради списка.
 - `backend/src/asm/configuration/{models,validation,repository,service,http}.py`;
+  `errors.py` дополнительно разрешён C0 для закрытого publication R2 отказа;
   `backend/src/asm/ai/{knowledge,contracts,context,agent,database,fake,gateway,runtime,runtime_contracts,runtime_settings,provider_runtime,settings,polza}.py`;
   новая версия conversation prompt/result schema, сохраняя старые версии.
 - `backend/src/asm/foundation.py`, `backend/src/asm/tenancy/database.py`,
@@ -174,7 +177,8 @@ C2 подтвердил свободный slot0020←0019 по checkout и GitH
 embedding_calls; canonical text отдельно от vector projection. Все tenant keys,
 FORCE RLS/private capabilities; один literal profile/preprocessing v1, без registry.
 Новый publish атомарно создаёт v1 configuration release и build manifest; старые
-releases/runs/receipts не переписываются. Legacy publish остаётся configuration-only;
+releases/runs/receipts не переписываются. Legacy publish без linked build остаётся
+configuration-only; при linked build требуется совместная публикация (R2 ниже);
 любой rollback проверяет linked build и необратимый отзыв/delete, без восстановления
 удалённого. SAVE draft не меняет активные revisions. Revoke/delete видимого материала
 повышает activation под прежним CONFIGURATION_V1 lock; до первой публикации остаётся0.
@@ -206,21 +210,38 @@ Reservation commit → controlled HTTP вне DB transaction → accounting comp
 сохраняется NOT_APPLICABLE; present только integer0; identity/usage/cost различаются.
 Source delete очищает text/chunks/vectors; safe manifests/receipts сохраняются.
 
-### Возврат C4 — M5.2B R1
+### Уточнение публикации R2 — принято C0 / 2026-11-15
+
+Continuation base `f46f0ee99f0a604fc4803257bdf010e15d77fb5c`, tree
+`3ecb1806c3d4675c80b4e530b3a8eff27f792125`; application base8eeeede1 и assignment4ce066b1
+сохранены. Это уточнение atomic publish из review C0, без новой архитектуры.
+Под прежним CONFIGURATION_V1 lock/CAS новый legacy PUBLISH при любом linked build,
+включая пустой, возвращает `KNOWLEDGE_BUILD_REQUIRED`/409 до изменения release.
+Проверка находится после replay старого successful receipt; OWNER/key/CAS сохранены.
+Knowledge state читается при открытии экрана независимо от раскрытия источников.
+Для изменения настроек владелец выбирает готовый опубликованный набор и публикует
+его совместно. После REVOKE/DELETE последнего источника доступен явный пустой READY
+набор и публикация «без источников»: manifest/plan/chunks пусты, новых embedding
+POST/reservations нет. Старые SOURCE_REVOKED/UNKNOWN и receipts не обходятся.
+
+### Возврат C4 — M5.2B / publication R2
 
 Реализованы owner API/UI, отдельные confirmed builds и scoped FTS/exact-vector
 retrieval с provenance в защищённом v4 runtime. Миграция0020←0019: семь таблиц,
 восемь private capabilities; applied0001–0019 и четыре C0 docs сохранены.
 Current profile:233 functions/59 tables/832 columns/914 DDL;
-SHA-256 `470350d66139c8fca806421186006b6d3a3fe555d32641d572193e259f13fe1e`.
+SHA-256 `c146dd44b8a13247c0c4ac3cd0c91433f0b07a8199242617ced6bf28cfb32097`.
 
-LOCAL/TEST: backend unit4142 PASS (18 launcher cases повторены с CI PYTHONPATH),
-финальные49 source/pin/sentinel PASS; frontend437 PASS, typecheck/build PASS;
-actual PG owner API6 и runtime28 cases PASS; SQL8 groups и lifecycle4 groups PASS.
-Реальный30s deadline сценарий подтвердил finite ERROR/UNKNOWN, неизменность
-ledger/active и no-resend. Chromium: CONTROLLED и DISABLED × desktop/narrow —4 PASS.
-Ruff/format/mypy/OpenAPI drift check PASS. Команды, head/tree и итог штатного CI —
-в PR этого возврата; K02–K06/K11/K12 проверяются в указанном synthetic scope.
+LOCAL/TEST R2: actual PG publication3 cases и owner HTTP API10 PASS;
+51 source/readiness и 43 source admission cases PASS; frontend444 PASS,
+typecheck/build PASS. SQL сохранил replay и полный snapshot59 таблиц/каталога
+при отказе; оба withdrawal → empty publish дали0 новых embedding HTTP/reservations.
+Chromium:8 PASS — CONTROLLED/DISABLED × desktop/narrow, remount с закрытыми
+источниками, сохранение выбранного build и оба withdrawal → empty publish.
+Локальный harness использует существующий TEST rate profile compose.browser.yaml.
+Ruff/format/mypy/OpenAPI drift PASS; весь actual PG runtime-набор31 PASS.
+Команды, финальный head/tree, Chromium и итог штатного CI — в PR49; прежний зелёный
+кандидат не повторяется без изменения. K02–K06/K11/K12 остаются в synthetic scope.
 
 Default embeddings остаются DISABLED/0HTTP; controlled vectors доказывают
 механику, не качество модели. Старые receipts/holds, M5.2A evidence и C6 HOLD
