@@ -297,6 +297,11 @@ C2 перед SQL проверяет текущий head и отсутствие
 - `tests/test_telegram_egress_postgres.py` — только revision/count в
   `current_durable_fingerprint` по решению C0 после первого CI ниже;
   historical canonical_fingerprint и Telegram/durable semantics не менять.
+- `tests/test_m1_3_http_contract.py`, `tests/test_telegram_egress.py` — только
+  current CORS/schema unit seams по решению C0 от2026-11-16 ниже.
+  `tests/test_m4_probe.py` — только четыре variants
+  `test_gpt_remainder_deadline_stops_and_keeps_earlier_settlement` и их
+  локальные timing helpers; production probe/fixtures/budgets не открываются.
 - `compose.browser.yaml`, `scripts/check_browser_compose.py`,
   `tests/test_browser_compose.py` — только согласованная topology внутреннего
   S3 endpoint и browser presign endpoint, с exact guards/negative checks.
@@ -620,90 +625,92 @@ login/CSRF recovery также должны PASS. Новый failed gate раз�
 Вернуть PR/final head/tree/CI и ограничения. Merge требует отдельного разрешения
 владельца после C0 review. Paid/provider/VM/client-data, C6 и M5.2D не открыты.
 
-### Возврат C4 — принятые поправки выполнены, foundation unit gate OPEN
+### Решение C0 — foundation unit fixes / 2026-11-16
 
-**IN_PROGRESS; PR50 Draft.** Решение cecb92c сохранено в ancestry и выполнено:
-exact0021/68 fingerprint с прежним full inventory/multiset, exact два edge
-nosniff и narrow admission. Затронутые проверки87 PASS/18.41s; actual read-only
-PG68 таблиц/1303 строки, повторный fingerprint exact equal,9 omissions/extra
-отвергнуты. Historical0009–0012 helper и applied0001–0020 неизменны.
+**Два запрошенных unit paths ACCEPTED FOR IMPLEMENTATION; дополнительно
+разрешена узкая test-only доработка deadline case.** M5.2C IN_PROGRESS,
+PR50 Draft; actual core PostgreSQL/S3 gate OPEN.
+Продолжает C4 в `c4/m5-2c-vision-portfolio-r1`, один существующий PR50.
+Exact continuation base — `4ddf6b0650480cf0ac935bb5b141ce5a399d5311`,
+tree `b039985cf19f2ef8c5b49664febd648cdeba7dbf`; подготовленный code fix
+`1c075904d88b98fbf4f133d83e63391f5dc5002b` сохранить в ancestry.
+Этот C0 docs commit также сохранить; PR branch пока остаётся
+`4f0973b13c5177c7c613a77ee9f954c5e145f858`, accepted main7080486 неизменён.
+Полный [возврат C4 и исходные proposals](https://github.com/Elefesys/ai-service-manager/blob/4ddf6b0650480cf0ac935bb5b141ce5a399d5311/docs/tasks/M5_HANDOFF.md#L623)
+сохранён в истории; не переносить подробные логи в новые документы.
 
-Один готовый push в PR50:
-head `4f0973b13c5177c7c613a77ee9f954c5e145f858`,
-tree `3248684c2c4d76672b9627250e5c14605b7abc4a`, parentcecb92c.
-[CI43734534033](https://github.com/Elefesys/ai-service-manager/actions/runs/43734534033)
-проверил merge `80d6cc884d9b0a1a0287fd101999d6ef181d14b7` с тем же tree;
-архив438 файлов совпал с actual candidate bytes/Git executable bits.
-Main7080486, protected4 bytes/modes, image pins/workflows не изменены.
+**Проверено C0.** CI43734534033: attempt1 —10 SUCCESS/2 FAILURE;
+после единственного повторения failed browser job итог11 SUCCESS/1 FAILURE.
+Runtime160/160 и normal/docker29 durable PASS. Browser artifact attempt2,
+сверенный с job ZIP digest, содержит69 PASS/505.964s при прежнем budget600s,
+включая оба полных unmocked private S3 journeys и старый escalation recovery.
+Первый browser timeout600s/65 PASS сохраняется как timing limitation; его
+точная причина не доказана, повтор не объявляется исправлением кода.
+Foundation unit4401 PASS/14 FAIL; core integration не выполнялась, включая
+9 actual S3 API и38 новых v5 PG cases. Browser PASS этот gate не заменяет.
 
-- Attempt1:10 SUCCESS/2 FAILURE. Native, runtime160/160 и все6 connect5 lanes
-  PASS. Normal и Docker29 durable прошли все6 lifecycle routes, без прежнего
-  раннего schema отказа; ZIP digests сверены.
-- Browser attempt1:65 PASS, затем общий phase600s/exit124; assertion failures
-  нет, последние4 narrow cases не достигнуты. На63 общих PASS cases медиана
-  времени была1.34× первого CI; источник замедления не установлен.
-  Только этот failed job повторён один раз на том же SHA/бюджете: attempt2
-  **69 PASS/505.964s**. Desktop+narrow actual private S3 upload/finalize/private
-  preview hash/decode/review/reload/revoke/delete/OPTIONS→PUT/foreign-origin
-  выполнены целиком. Legacy inbound signed GET и escalation login/CSRF PASS.
-  Остальные jobs/полный прогон не повторялись; первый timeout сохранён.
-- Foundation attempt1: **4401 PASS/14 FAIL**,1281 integration cases deselected
-  на unit-этапе,161 subtests PASS. Проверки PostgreSQL/S3 core вследствие этого
-  **NOT_RUN**, включая все9 actual S3 API cases и38 новых v5 PG cases.
-  Browser PASS не заменяет этот OPEN gate. Runner/storage startup failures нет.
+C0 сверил все14 failure names с исходниками. Source catalog независимо дал
+0020:233 functions/59 tables/832 columns;0021:289/68/1001, verifier body
+df2ab97e8fe09ead37d2dd16f70526f4f47073eaed3314686ceb319e7773d06b.
+Оба embedded profiles согласованы. В review checkpoint canonical OpenAPI
+ErrorResponse/CommandResponse/CommandResult точно совпадают с main7080486;
+все728 локальных refs разрешаются. Prefix новых Portfolio DTO и сохранение
+historical0020 в current M4 unit fixes принять в следующий кандидат.
+Локальные targeted PASS из возврата C4 — авторский отчёт, не новый full CI.
 
-Все14 unit failures разобраны, а не только первый:
+1. **tests/test_m1_3_http_contract.py:** разрешить только PUT preflight200
+   вместо400 и PUT в exact methods set. Это соответствует принятому a34834e
+   и фактическому CORSMiddleware GET/POST/PATCH/PUT. Все origins/credentials/
+   headers и foreign-origin/DELETE/if-match/x-forged-actor negative assertions,
+   billing/schema assertions сохранить. Успешный preflight не выдаёт authority
+   на фактический PUT billing-account; production routes/auth не менять.
 
-| Причина | Cases | Действие |
-|---|---:|---|
-| Старый CORS exact methods исключает принятый PUT; PUT ожидает400 | 4 | Запрос нового unit path ниже; production CORS не меняется |
-| M4 delivery/reply-rights current tests читают0020 verifier вместо0021 | 2 | Исправлены в уже разрешённых files; previous0020 и historical profiles сохранены отдельно |
-| Общие имена новых Portfolio ErrorResponse/CommandResponse/CommandResult вытесняют canonical auth/config OpenAPI names | 1 | Исправлен production DTO namespace; старые тестовые assertions сохранены |
-| Egress current-unit seams всё ещё задают0020/59 и233 functions/832 columns | 6 | Запрос нового unit path ниже; historical material0007/0012 не менять |
-| Probe test с deadline80ms: known_call_count0 вместо1 | 1 | Отдельные4 deadline variants локально PASS/1.04s; причина CI failure не закрыта, probe source/лимиты/expected не менялись |
+2. **tests/test_telegram_egress.py:** разрешить current-unit seams из указанных
+   C4 functions: current revision0021, profile289/68/1001,68 полных row reads,
+   native-host component material и mock revision0021. Менять только current
+   маркеры, а не делать global replace0020. Historical0007/0012 и явные wrong
+   revision cases сохранить; missing/extra/same-count substitution должны
+   достигать собственного corruption guard и отвергаться до row acceptance.
+   Read-only/database identity, exact inventory/multiset, before/after,
+   UNKNOWN/Console, dirty/mode/component checks сохраняются. Разрешено исправить
+   устаревшие0015/all48 имена именно этих current tests на0021/all68.
+   Production Telegram/Docker/source-switch behavior не открывается.
 
-**Разрешённые fixes сохранены для review**, без нового заведомо красного push:
-[`1c075904d88b98fbf4f133d83e63391f5dc5002b`](https://github.com/Elefesys/ai-service-manager/commit/1c075904d88b98fbf4f133d83e63391f5dc5002b),
-tree `b10e9db7694c033dcaddbad7a70a20409b1fca2c`, parent4f0973b.
-Только новые portfolio classes получили Portfolio-prefixed names; Python import
-aliases и JSON bodies сохранены. Generated contract обновлён; canonical
-ErrorResponse/CommandResponse/CommandResult побайтово совпали с main7080486,
-namespace collisions отсутствуют, все refs разрешаются. Current M4 unit guards
-читают source0021/289/68/1001 и установленный pin da1695/df2ab9; source0020
-сохраняется отдельным historical comparator. SQL/profile pins не менялись.
-Команды pytest configuration/delivery/reply-rights/portfolio-unit:103 PASS/16.56s;
-auth-contract1 PASS/2.26s; M5.2C admission75 PASS/16.68s; Ruff/mypy PASS.
-Full CI этого review checkpoint NOT_RUN; PR branch остаётся4f0973b.
+3. **tests/test_m4_probe.py — C0-UNIT-TIMING-01.** CI показал known_call_count0
+   вместо1 только в variant post. По коду тест ставит DURATION80ms до catalog,
+   планирования и первого settlement, но ожидает отмену второго POST; достижение
+   нужной фазы ничем не гарантировано. Локальный PASS не устраняет эту зависимость,
+   а конкретная задержка CI остаётся неустановленной.
+   Разрешить изменение только этого parametrized test (catalog/post/history/case)
+   и небольших test-local helpers. Сначала controlled воспроизведение с задержкой
+   до целевой фазы и trace порядка catalog/POST/settlement/cancellation; затем
+   синхронизировать начало проверяемого timeout с достижением нужной фазы.
+   Использовать реальную отмену существующего async timeout на управляемом
+   MockTransport; не подменять terminal summary/ledger/settlement и не бросать
+   готовый ожидаемый outcome вместо прохождения cancellation path.
+   Global deadline и case deadline проверять раздельно, без замены одного другим;
+   catalog отменяется до POST, в остальных variants первый вызов уже settled,
+   второй остаётся UNKNOWN, третьего POST нет. Сохранить exact known/unknown/
+   post counts, ранее подтверждённую сумму и holds, finite test watchdog/cleanup.
+   Дополнительно показать, что безопасная задержка до выбранной фазы не меняет
+   результат теста. Нельзя принимать0 или1, skip/xfail, retry-until-green,
+   увеличивать production deadlines/budget или менять paid admission.
+   Backend probe/Polza/Gateway, wire/profile/fixtures и реальные вызовы закрыты.
+   Если воспроизведение выявит production defect, вернуть точную причину C0;
+   тестовую доработку не выдавать за его исправление.
 
-**Запрос C0 — ровно два дополнительных unit paths / REQUESTED.**
-Оба отсутствуют в write-set; production/code fixes без них не устраняют10
-детерминированных unit failures. Вне-Git proposals подготовлены, но НЕ ПРИМЕНЕНЫ:
-
-1. `tests/test_m1_3_http_contract.py`: в существующем preflight test заменить
-   только PUT/content-type status400→200 и добавить PUT в exact allowed-methods
-   set. Это отражает уже принятое a34834e transport решение. Credentials,
-   exact origins/headers, foreign-origin/DELETE/if-match/x-forged-actor отказы
-   и остальные billing/schema tests сохранить.
-2. `tests/test_telegram_egress.py`: только current-unit block1935–2296.
-   Все11 его0020 markers/seams →0021; два current profile counts233/59→289/68,
-   total columns832→1001, full row-read count59→68. Включены native-host
-   component fingerprint и mock revision, чтобы negative cases достигали
-   проверяемого corruption guard. Historical0007/0012 source/defaults/guards,
-   wrong-database/read-only, multiset hashing, before/after/UNKNOWN/Console и
-   missing/extra/same-count negative assertions сохранить; не вводить dynamic
-   head/subset/count-only checks. Production egress/Docker lanes не менять.
-
-В отдельном unit process обе proposed test modules дали **174 PASS/9.58s**;
-original checkout bytes до/после совпали. Это только UNAPPLIED unit proposal
-proof, не actual PG/S3/CI и не разрешение C0. При принятии открыть ровно эти два
-M5.2C admission paths и перенести adjacent-Telegram refusal на иной вне scope
-path; общие allowlists не расширять. Решение о deadline-test timing оставить
-явным: один локальный PASS не объявляет CI failure исправленным.
-
-Следующий шаг — C0 решение по двум bounded unit paths, затем C4 в том же
-PR50 применяет только принятое, проверяет затронутые tests и запускает новый
-штатный CI изменённого кандидата до всех12 gates/9 S3 API без skips.
-Merge/VM/paid/provider/client-data не выполнялись; C6 HOLD, M5.2D не начата.
+В уже разрешённых scripts/m4_runtime_db.py и tests/test_m4_runtime_db_runner.py
+добавить только эти три M5.2C paths; adjacent-path refusal перенести на
+существующий, действительно неразрешённый path. Общие allowlists не расширять.
+До push выполнить затронутые unit modules, четыре deadline variants с указанным
+phase evidence и narrow admission checks; сохранить готовый1c07590 fix.
+Затем один push полного кандидата в PR50 и следующий штатный full CI.
+Требуется12/12, actual core PostgreSQL/S3 включая9 API cases и38 v5 cases
+без skips, сохранение browser/durable/runtime evidence на новом candidate.
+Предыдущие зелёные jobs отдельно не повторять и весь текущий красный run
+не перезапускать. До результата новых проверок VERIFIED/merge не объявлять.
+Merge — после C0 review и отдельного разрешения владельца. Новых paid/VM/
+client-data допусков нет; C6 HOLD, M5.2D не начинать.
 
 ## 1. Проверяемый результат всего этапа
 
