@@ -1,5 +1,5 @@
 import { HumanContextPanel, type HumanContextIntent } from './HumanContextPanel';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
 import { EscalationContext } from './escalation-api';
 import { ConversationControl, ControlIntent } from './ConversationControl';
@@ -21,7 +21,7 @@ function merge<T extends { created_at: string }>(old: T[], next: T[], id: (v: T)
 }
 
 // Page lifetime includes login/recovery. No storage, polling, or write on mount.
-export function MessagingPanel({ session, workspace, recover, expired, accessDenied, ownerDecision }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void; ownerDecision?: EscalationContext | null }) {
+export function MessagingPanel({ session, workspace, recover, expired, accessDenied, ownerDecision, portfolio }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void; ownerDecision?: EscalationContext | null; portfolio?: (context: Pick<Conversation, 'business_id'|'client_id'|'conversation_id'> | null, canAnalyse: boolean, refresh: number) => ReactNode }) {
   const owner = !!session && !!workspace && session.memberships.some(m => m.workspace_id === workspace && m.role === 'OWNER');
   const scope = useRef({ session, workspace, owner, generation: 0 });
   const selection = useRef({ id: '', epoch: 0 });
@@ -39,6 +39,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   const intent = useRef<Intent | null>(null);
   const humanIntent=useRef<HumanContextIntent|null>(null);
   const [nativeRefresh,setNativeRefresh]=useState(0);
+  const [portfolioRefresh,refreshPortfolio]=useState(0);
   const controlIntent = useRef<ControlIntent | null>(null);
   const [controlRefresh, refreshControl] = useState(0);
   const [, redraw] = useState(0);
@@ -107,6 +108,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       const page = await messagingApi.messages(workspace, id, cursor, c.signal);
       if (!inConversation(id, epoch) || seq !== sequence.current.messages) return;
       setView(v => ({ ...v, messages: { items: merge(cursor === null ? [] : v.messages.items ?? [], page.items, x => x.message_id), cursor: page.next_cursor, busy: false, error: '' } }));
+      refreshPortfolio(n => n + 1);
       const p = intent.current;
       if (p && p === confirmed && p.phase === 'confirmed' && sameActor(p) && p.conversation === id) {
         update({ receipt: p.receipt!, notice: 'Намерение принято. Доставка показана по текущей истории.', draft: '' });
@@ -232,6 +234,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {!view.selected && <p>Выберите диалог.</p>}
         {selected && <p className="muted">Окно ответа: {selected.reply_window_expires_at ?? 'Нет отметки Telegram'}. Текущее разрешение проверяет сервер.</p>}
         {control}{humanContext}
+        {portfolio?.(selected ? {business_id:selected.business_id,client_id:selected.client_id,conversation_id:selected.conversation_id} : null, !controlPending && !contextPending && !intent.current && humanState?.control_mode === 'AI' && (humanState.policy === 'OFF_UNUSED' ? humanState.context_blockers.every(b => b === 'POLICY_INACTIVE') : humanState.policy === 'ON' && humanState.context_blockers.length === 0), portfolioRefresh)}
         {ownerDecision?.workspace===workspace&&ownerDecision.conversation===selected?.conversation_id&&ownerDecision.client===selected.client_id&&<p role="status" className="notice">По этому диалогу сохранено внутреннее решение владельца. Обновите сообщения и режим перед следующим действием; решение не является отправкой клиенту.</p>}
         {view.messages.busy && <p role="status">Загружаем сообщения…</p>}{view.messages.error && <p role="alert">{view.messages.error}</p>}
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}

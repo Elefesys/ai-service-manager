@@ -72,3 +72,12 @@ describe('current conversation reference',()=>{
     vi.mocked(portfolioApi.conversation).mockResolvedValue({...referenceState(),embedding_mode:'CONTROLLED'});vi.mocked(portfolioApi.matches).mockRejectedValue(new PortfolioError(409,'CLIENT_MODEL_NOT_ALLOWED'));setupReference(true);await screen.findByText('Работа с графическим цветком.');action('Подобрать подтверждённые работы');await screen.findByText(/Новый анализ недоступен в текущем режиме разговора/);expect(portfolioApi.matches).toHaveBeenCalledTimes(1);expect(screen.queryByRole('button',{name:'Разрешить автоматику'})).toBeNull();
   });
 });
+
+describe('reference refresh and OWNER lifecycle',()=>{
+  it('uses ordinary history refresh for GET only while retaining readable derived observations in HUMAN',async()=>{
+    const props={session:session(),workspace,context:{business_id:businessId,conversation_id:conversationId,client_id:clientId},canAnalyse:false,refresh:0,recover:vi.fn(),expired:vi.fn(),accessDenied:vi.fn()};const v=render(<ReferencePortfolio {...props}/>);await screen.findByText('Работа с графическим цветком.');v.rerender(<ReferencePortfolio {...props} refresh={1}/>);await waitFor(()=>expect(portfolioApi.conversation).toHaveBeenCalledTimes(2));await screen.findByText('Размер неизвестен');expect(screen.getByRole('button',{name:'Подобрать подтверждённые работы'})).toBeDisabled();expect(portfolioApi.analysis).not.toHaveBeenCalled();expect(portfolioApi.matches).not.toHaveBeenCalled();
+  });
+  it('drops a late private reference when OWNER is lost without waiting for a new response',async()=>{
+    const late=deferred<ReturnType<typeof referenceState>>();vi.mocked(portfolioApi.conversation).mockReturnValueOnce(late.promise);const props={session:session(),workspace,context:{business_id:businessId,conversation_id:conversationId,client_id:clientId},canAnalyse:true,recover:vi.fn(),expired:vi.fn(),accessDenied:vi.fn()};const v=render(<ReferencePortfolio {...props}/>);v.rerender(<ReferencePortfolio {...props} session={{...session(),memberships:[{...session().memberships[0],role:'ADMIN'}]}}/>);expect(screen.queryByRole('region',{name:'Референс и подходящие работы'})).toBeNull();await act(async()=>late.resolve(referenceState()));expect(screen.queryByText('Работа с графическим цветком.')).toBeNull();expect(portfolioApi.analysis).not.toHaveBeenCalled();expect(portfolioApi.matches).not.toHaveBeenCalled();
+  });
+});

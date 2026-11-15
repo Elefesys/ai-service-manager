@@ -2395,7 +2395,16 @@ def test_m5_search_inherits_runtime_inventory_cleanup_and_budget(
 
 
 def prepare_m5_portfolio_event(
-    r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False, wrong_parent=False
+    r,
+    monkeypatch,
+    route,
+    *,
+    extra=None,
+    branch=None,
+    wrong_base=False,
+    wrong_parent=False,
+    wrong_checkpoint_parent=False,
+    wrong_finish_parent=False,
 ):
     """Construct real Git assignment, contract, C0 upload continuation and candidate."""
     f = r["f"]
@@ -2407,7 +2416,7 @@ def prepare_m5_portfolio_event(
         path.write_text("# constructed C0 portfolio assignment\n")
     f.git("add", ".")
     f.git("commit", "-qm", "constructed immutable C0 portfolio assignment")
-    for label in ("ASSIGNMENT", "CONTRACT", "CONTINUATION"):
+    for label in ("ASSIGNMENT", "CONTRACT", "CONTINUATION", "CHECKPOINT", "FINISH_ASSIGNMENT"):
         if label != "ASSIGNMENT":
             handoff = f.root / "docs/tasks/M5_HANDOFF.md"
             handoff.write_text(handoff.read_text() + "# approved " + label + "\n")
@@ -2417,7 +2426,14 @@ def prepare_m5_portfolio_event(
         monkeypatch.setattr(
             carrier, "M5_PORTFOLIO_" + label + "_TREE", f.git("rev-parse", "HEAD^{tree}")
         )
-        if wrong_parent and label == "CONTRACT":
+        if (
+            wrong_parent
+            and label == "CONTRACT"
+            or wrong_checkpoint_parent
+            and label == "CONTINUATION"
+            or wrong_finish_parent
+            and label == "CHECKPOINT"
+        ):
             f.git("commit", "--allow-empty", "-qm", "unapproved intermediate parent")
     for relative in sorted(
         (carrier.M5_PORTFOLIO_PATHS - carrier.M5_PORTFOLIO_C0_DOCS) | ({extra} if extra else set())
@@ -2487,7 +2503,7 @@ def test_m5_portfolio_admission_export_and_inner_binding(r11_event, monkeypatch,
     assert carrier.source_tree_from_evidence(path) == admission["tree"]
     for forbidden in (
         "backend/src/asm/auth/store.py",
-        "frontend/src/MessagingPanel.tsx",
+        "frontend/src/HumanContextPanel.tsx",
         "uv.lock",
     ):
         proof["paths"] = [forbidden]
@@ -2534,19 +2550,32 @@ def test_m5_portfolio_protected_assignment_files_refused_before_resources(
         "contract_ancestry",
         "continuation_ancestry",
         "continuation_parent",
+        "checkpoint_tree",
+        "finish_assignment_tree",
+        "checkpoint_ancestry",
+        "finish_assignment_ancestry",
+        "checkpoint_parent",
+        "finish_assignment_parent",
     ],
 )
 def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
     r11_event, monkeypatch, route, damage
 ):
     r = r11_event
-    prepare_m5_portfolio_event(r, monkeypatch, route, wrong_parent=damage == "continuation_parent")
+    prepare_m5_portfolio_event(
+        r,
+        monkeypatch,
+        route,
+        wrong_parent=damage == "continuation_parent",
+        wrong_checkpoint_parent=damage == "checkpoint_parent",
+        wrong_finish_parent=damage == "finish_assignment_parent",
+    )
     if damage == "base_tree":
         monkeypatch.setattr(carrier, "M5_PORTFOLIO_TREE", "f" * 40)
     elif damage.endswith("_tree"):
         monkeypatch.setattr(carrier, "M5_PORTFOLIO_" + damage.upper(), "f" * 40)
     elif damage.endswith("_ancestry"):
-        label = damage.split("_")[0].upper()
+        label = damage.removesuffix("_ancestry").upper()
         tree = r["f"].git("rev-parse", "HEAD^{tree}")
         unrelated = r["f"].git("commit-tree", tree, "-m", "unrelated same-tree assignment")
         monkeypatch.setattr(carrier, "M5_PORTFOLIO_" + label, unrelated)
@@ -2565,7 +2594,7 @@ def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
         "probe",
         "workflow",
         "auth_store",
-        "messaging_panel",
+        "human_context_panel",
         "future_migration",
     ],
 )
@@ -2582,7 +2611,7 @@ def test_m5_portfolio_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damag
             "probe": "backend/src/asm/ai/capability_probe.py",
             "workflow": ".github/workflows/ci.yml",
             "auth_store": "backend/src/asm/auth/store.py",
-            "messaging_panel": "frontend/src/MessagingPanel.tsx",
+            "human_context_panel": "frontend/src/HumanContextPanel.tsx",
             "future_migration": "migrations/versions/0022_future.py",
         }.get(damage),
     )

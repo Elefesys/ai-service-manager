@@ -36,7 +36,8 @@ def model():
                     "ASM_DATABASE_URL": "postgresql+psycopg://asm_runtime:canary@postgres:5432/asm_test",
                     "ASM_STORAGE_ENVIRONMENT": "TEST",
                     "ASM_STORAGE_BUCKET": "asm-private-test",
-                    "ASM_STORAGE_ENDPOINT": "http://127.0.0.1:9000",
+                    "ASM_STORAGE_ENDPOINT": "http://storage:9000",
+                    "ASM_STORAGE_PRESIGN_ENDPOINT": "http://127.0.0.1:9000",
                     "ASM_STORAGE_ACCESS_KEY": "runtime-access",
                     "ASM_STORAGE_SECRET_KEY": "runtime-secret",
                 }
@@ -261,7 +262,7 @@ def test_rejects_invalid_models(model, mutate, code):
         (
             "api",
             "ASM_STORAGE_ENDPOINT",
-            "http://storage:9000",
+            "http://127.0.0.1:9000",
             "BROWSER_COMPOSE_STORAGE_ORIGIN_INVALID",
         ),
         (
@@ -381,3 +382,38 @@ def test_cli_rejects_malformed_input_without_secret(tmp_path, payload):
     assert result.returncode != 0
     assert "canary-secret" not in result.stdout + result.stderr
     assert "BROWSER_COMPOSE_" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        None,
+        "",
+        "http://storage:9000",
+        "https://other.invalid",
+        "http://127.0.0.1:9000/",
+        "http://user:secret@127.0.0.1:9000",
+        "http://127.0.0.1:9000?x=1",
+    ],
+)
+def test_browser_presign_origin_is_explicit_exact_and_distinct_from_io(model, origin):
+    invalid(
+        model,
+        lambda v: v["services"]["api"]["environment"].update(ASM_STORAGE_PRESIGN_ENDPOINT=origin),
+        "BROWSER_COMPOSE_STORAGE_ORIGIN_INVALID",
+    )
+
+
+def test_browser_presign_origin_cannot_be_removed_or_passed_into_runner(model):
+    invalid(
+        model,
+        lambda v: v["services"]["api"]["environment"].pop("ASM_STORAGE_PRESIGN_ENDPOINT"),
+        "BROWSER_COMPOSE_STORAGE_ORIGIN_INVALID",
+    )
+    invalid(
+        model,
+        lambda v: v["services"]["browser-runtime"]["environment"].update(
+            ASM_STORAGE_PRESIGN_ENDPOINT="http://127.0.0.1:9000"
+        ),
+        "BROWSER_COMPOSE_RUNNER_ENVIRONMENT_INVALID",
+    )

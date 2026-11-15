@@ -432,3 +432,166 @@ async def test_explicit_fetch_dispatch_never_reaches_send():
     assert invocations == ["FETCH_IMAGE"]
     with pytest.raises(MessagingError, match="INVALID_INPUT"):
         await worker.execute(claim.model_copy(update={"kind": "FORGED_KIND"}))
+
+
+# Transport address split is operator configuration. These SDK tests never
+# claim actual S3; the existing private-S3/browser journeys retain that gate.
+def split_storage_settings(**changes):
+    from asm.files.config import StorageSettings
+
+    return StorageSettings(
+        environment="TEST",
+        endpoint="http://storage.invalid:9000",
+        bucket="asm-private-unit",
+        access_key="synthetic-unit-access-key",
+        secret_key="synthetic-unit-secret-key",
+        **changes,
+    )
+
+
+def signed_read_manifest():
+    from asm.files.models import ReadManifest
+
+    workspace, conversation, message, file = (uuid4() for _ in range(4))
+    return ReadManifest(
+        workspace_id=workspace,
+        conversation_id=conversation,
+        message_id=message,
+        file_id=file,
+        storage_key=f"workspaces/{workspace}/synthetic/{file}",
+        manifest=decode_image(image_bytes()),
+    )
+
+
+@pytest.mark.parametrize("field", ["endpoint", "presign_endpoint"])
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "",
+        "relative",
+        "ftp://storage.invalid",
+        "http://user:secret@storage.invalid",
+        "http://@storage.invalid",
+        "http://:secret@storage.invalid",
+        "http://storage.invalid:0",
+        "http://storage.invalid:bad",
+        "http://storage.invalid/path",
+        "http://storage.invalid?token=private",
+        "http://storage.invalid#fragment",
+        "http://[",
+    ],
+)
+def test_operator_io_and_presign_origins_use_same_closed_validator(field, origin):
+    from asm.files.config import StorageSettings
+    from pydantic import ValidationError
+
+    values = split_storage_settings().model_dump()
+    values[field] = origin
+    with pytest.raises(ValidationError):
+        StorageSettings.model_validate(values)
+
+
+@pytest.mark.parametrize(
+    "value", [None, "http://storage.invalid:9000", "http://storage.invalid:9000/"]
+)
+async def test_absent_or_equal_presign_origin_keeps_original_client_and_signed_url(
+    value, monkeypatch
+):
+    from urllib.parse import parse_qs, urlsplit
+
+    from asm.files.storage import S3ObjectStorage
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("PRESIGN_MUST_NOT_MAKE_REQUEST")
+
+    monkeypatch.setattr("botocore.endpoint.Endpoint.make_request", forbidden)
+    settings = split_storage_settings(presign_endpoint=value)
+    s = S3ObjectStorage(settings)
+    try:
+        assert s._presign_client is s._client
+        signed = s.presign_get(signed_read_manifest())
+        assert urlsplit(signed.url).netloc == "storage.invalid:9000"
+        assert parse_qs(urlsplit(signed.url).query)["X-Amz-Expires"] == ["60"]
+    finally:
+        await s.close()
+
+
+async def test_distinct_presign_origin_is_locally_signed_without_network_or_url_rewrite(
+    monkeypatch,
+):
+    from unittest.mock import Mock
+    from urllib.parse import parse_qs, urlsplit
+
+    from asm.files.storage import S3ObjectStorage
+
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("PRESIGN_MUST_NOT_MAKE_REQUEST")
+
+    monkeypatch.setattr("botocore.endpoint.Endpoint.make_request", forbidden)
+    s = S3ObjectStorage(split_storage_settings(presign_endpoint="http://127.0.0.1:9000/"))
+    backend_close, signer_close = Mock(wraps=s._client.close), Mock(wraps=s._presign_client.close)
+    monkeypatch.setattr(s._client, "close", backend_close)
+    monkeypatch.setattr(s._presign_client, "close", signer_close)
+    try:
+        assert s._presign_client is not s._client
+        assert s._client.meta.endpoint_url == "http://storage.invalid:9000"
+        assert s._presign_client.meta.endpoint_url == "http://127.0.0.1:9000"
+        assert s._client.meta.region_name == s._presign_client.meta.region_name == "us-east-1"
+        source = signed_read_manifest()
+        signed = s.presign_get(source)
+        parts = urlsplit(signed.url)
+        assert parts.scheme == "http" and parts.netloc == "127.0.0.1:9000"
+        assert parts.path == "/asm-private-unit/" + source.storage_key
+        query = parse_qs(parts.query)
+        assert query["X-Amz-Expires"] == ["60"] and len(query["X-Amz-Signature"][0]) == 64
+        assert "synthetic-unit-access-key/" in query["X-Amz-Credential"][0]
+        assert query["response-cache-control"] == ["private, no-store"]
+        assert 58 <= (signed.expires_at - datetime.now(UTC)).total_seconds() <= 60
+        assert "X-Amz" not in repr(signed) and not calls
+    finally:
+        await s.close()
+    backend_close.assert_called_once_with()
+    signer_close.assert_called_once_with()
+
+
+async def test_head_get_and_no_retry_transport_keep_using_server_origin(monkeypatch):
+    from asm.files.storage import S3ObjectStorage
+    from botocore.response import StreamingBody
+    from botocore.stub import Stubber
+
+    s = S3ObjectStorage(split_storage_settings(presign_endpoint="http://127.0.0.1:9000"))
+
+    def signer_never_serves_io(*args, **kwargs):
+        raise AssertionError("BROWSER_SIGNER_CANNOT_SERVE_OBJECT_IO")
+
+    monkeypatch.setattr(s._presign_client, "_make_api_call", signer_never_serves_io)
+    data = image_bytes()
+    key = "workspaces/synthetic/private-original"
+    try:
+        assert s._client.meta.endpoint_url == "http://storage.invalid:9000"
+        assert s._client.meta.config.retries["total_max_attempts"] == 1
+        assert s._presign_client.meta.config.retries["total_max_attempts"] == 1
+        with Stubber(s._client) as stub:
+            stub.add_response(
+                "head_object",
+                {"ContentLength": len(data), "ContentType": "image/png"},
+                {"Bucket": "asm-private-unit", "Key": key, "ChecksumMode": "ENABLED"},
+            )
+            stub.add_response(
+                "get_object",
+                {
+                    "Body": StreamingBody(BytesIO(data), len(data)),
+                    "ContentLength": len(data),
+                    "ContentType": "image/png",
+                },
+                {"Bucket": "asm-private-unit", "Key": key, "ChecksumMode": "ENABLED"},
+            )
+            info = await s.head(key)
+            assert info.size_bytes == len(data) and info.mime_type == "image/png"
+            assert await s.get(key) == data
+            stub.assert_no_pending_responses()
+    finally:
+        await s.close()

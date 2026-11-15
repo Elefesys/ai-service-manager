@@ -348,6 +348,10 @@ M5_PORTFOLIO_CONTRACT = "9bd32fbd2bb7bb27a0dca84334bd3e2d0039a567"
 M5_PORTFOLIO_CONTRACT_TREE = "c9de945f45669183094ba48489c93ecfa837e3f4"
 M5_PORTFOLIO_CONTINUATION = "a34834e004320de7257e7c9f98dcb4ac178b6c66"
 M5_PORTFOLIO_CONTINUATION_TREE = "ec72c51acece599264e8a9048047e4d4f661eaa6"
+M5_PORTFOLIO_CHECKPOINT = "93174249527c055f3a975ba097a8646b2d14f450"
+M5_PORTFOLIO_CHECKPOINT_TREE = "bad38d145fcf368f5b98c9f609e872722d418258"
+M5_PORTFOLIO_FINISH_ASSIGNMENT = "114a027be3417998360bb939690b55f5815bdaf1"
+M5_PORTFOLIO_FINISH_ASSIGNMENT_TREE = "2107bd20f2929fd931befb9d38850a3d6a0dfbab"
 M5_PORTFOLIO_BRANCH = "c4/m5-2c-vision-portfolio-r1"
 M5_PORTFOLIO_C0_DOCS = {
     "AGENTS.md",
@@ -438,6 +442,15 @@ M5_PORTFOLIO_PATHS = M5_PORTFOLIO_C0_DOCS | {
     "tests/test_native_context_db_runner.py",
     "tests/test_postgres.py",
     "tests/test_tenancy_postgres.py",
+    "backend/src/asm/files/config.py",
+    "compose.browser.yaml",
+    "scripts/check_browser_compose.py",
+    "tests/test_browser_compose.py",
+    "tests/test_m2_2_media.py",
+    "frontend/src/App.tsx",
+    "frontend/src/App.test.tsx",
+    "frontend/src/MessagingPanel.tsx",
+    "frontend/src/MessagingPanel.test.tsx",
 }
 
 DB_IMAGE = (
@@ -1226,6 +1239,12 @@ def admit_source(evidence):
             ("ASSIGNMENT", M5_PORTFOLIO_ASSIGNMENT, M5_PORTFOLIO_ASSIGNMENT_TREE),
             ("CONTRACT", M5_PORTFOLIO_CONTRACT, M5_PORTFOLIO_CONTRACT_TREE),
             ("CONTINUATION", M5_PORTFOLIO_CONTINUATION, M5_PORTFOLIO_CONTINUATION_TREE),
+            ("CHECKPOINT", M5_PORTFOLIO_CHECKPOINT, M5_PORTFOLIO_CHECKPOINT_TREE),
+            (
+                "FINISH_ASSIGNMENT",
+                M5_PORTFOLIO_FINISH_ASSIGNMENT,
+                M5_PORTFOLIO_FINISH_ASSIGNMENT_TREE,
+            ),
         ):
             require(
                 capture(["git", "rev-parse", revision + "^{tree}"]) == tree,
@@ -1243,6 +1262,16 @@ def admit_source(evidence):
         require(
             capture(["git", "rev-parse", M5_PORTFOLIO_CONTINUATION + "^"]) == M5_PORTFOLIO_CONTRACT,
             "PORTFOLIO_CONTINUATION_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_CHECKPOINT + "^"])
+            == M5_PORTFOLIO_CONTINUATION,
+            "PORTFOLIO_CHECKPOINT_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_FINISH_ASSIGNMENT + "^"])
+            == M5_PORTFOLIO_CHECKPOINT,
+            "PORTFOLIO_FINISH_ASSIGNMENT_PARENT",
         )
         require(
             not capture(

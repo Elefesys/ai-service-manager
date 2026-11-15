@@ -1,13 +1,14 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { parseSession } from './api';
+import { api, parseSession } from './api';
 
 // Preserve the exact M1.2 request/assertion suite; M1.3 integration is covered separately.
 vi.mock('./BillingPanel', () => ({ BillingPanel: () => null }));
 // Keep the accepted auth request assertions; full messaging integration has its own suite.
-vi.mock('./MessagingPanel', () => ({ MessagingPanel: () => null }));
+const messagingIntegration=vi.hoisted(()=>({enabled:false}));
+vi.mock('./MessagingPanel', async importOriginal => {const actual=await importOriginal<typeof import('./MessagingPanel')>();return {MessagingPanel:(props:Parameters<typeof actual.MessagingPanel>[0])=>messagingIntegration.enabled?<actual.MessagingPanel {...props}/>:null};});
 // Auth request ordering stays exact; the new owner's boundary is tested in its suite.
 vi.mock('./EscalationsPanel', () => ({ EscalationsPanel: () => null }));
 
@@ -279,4 +280,54 @@ describe('Business Console auth', () => {
 describe('Ops shell', () => {
   it('keeps readiness and contains no tenant data', async () => { vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ok({ status: 'ok', component: 'database' }))); render(<App pathname="/ops/" />); expect(await screen.findByText('Проверка готовности пройдена')).toBeVisible(); expect(screen.queryByText(uid)).not.toBeInTheDocument(); });
   it('does not accept invalid readiness or offline responses', async () => { vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ok({ status: 'invented' }))); render(<App pathname="/ops/" />); expect(await screen.findByText('Сервис недоступен или не готов')).toBeVisible(); });
+});
+
+import { messagingApi, type Conversation } from './messaging-api';
+import { controlApi, type ControlContext } from './conversation-control-api';
+import { humanContextApi, type HumanContextState } from './human-context-api';
+import { configurationApi, knowledgeApi } from './configuration-api';
+import { PortfolioError, portfolioApi } from './portfolio-api';
+import { business as fixtureBusiness, session as fixtureSession, draft as fixtureDraft, active as fixtureActive, preview as fixturePreview, knowledgeState as fixtureKnowledge } from './configuration-fixtures.test-helper';
+import { ownerState, referenceState, conversationId, clientId, assetId } from './portfolio-fixtures.test-helper';
+
+describe('selected conversation portfolio integration',()=>{
+  let mode:'HUMAN'|'AI',barrier:boolean;
+  const otherWorkspace='c1111111-1111-4111-8111-111111111111';
+  const selectedConversation=(id=conversationId,client=clientId,business=bid):Conversation=>({conversation_id:id,connection_id:assetId,business_id:business,client_id:client,created_at:'2030-01-01T00:00:00.000000Z',version:'1',reply_window_expires_at:null});
+  const currentReference=(w=wid,b=bid,id=conversationId,client=clientId)=>({...referenceState(),workspace_id:w,business_id:b,conversation_id:id,client_id:client,media_pin:{...referenceState().media_pin,business_id:b,conversation_id:id,client_id:client},portfolio_pin:{...referenceState().portfolio_pin,business_id:b}});
+  const control=(c:ControlContext)=>({workspace_id:c.workspace,conversation_id:c.conversation,client_id:c.client,control_mode:mode,control_generation:'1',context_version:'1',observed_at:'2030-01-01T00:00:00.000000Z',manual_delivery:{has_dispatching:false,has_unknown:false}});
+  const native=(c:ControlContext):HumanContextState=>({...control(c),policy:barrier?'PAUSED':'OFF_UNUSED',policy_epoch:barrier?'1':'0',observation_epoch:'0',ingress_checkpoint:'0',input_state_hash:'a'.repeat(64),input_gap_limit_exceeded:false,has_unsequenced_context_input:false,current_revision:null,review_status:barrier?'POLICY_PAUSED':'POLICY_INACTIVE',context_blockers:barrier?['POLICY_PAUSED','CONTEXT_CONFIRMATION_REQUIRED']:['POLICY_INACTIVE'],resume_blockers:barrier?['POLICY_PAUSED','HUMAN_REQUIRED','CONTEXT_CONFIRMATION_REQUIRED']:[],history_truncated:false,coverage_status:'UNCONFIRMED',pending_context_input:false,has_failed_context_input:false,unreviewed_failed_context_input:false,automation_work:{state:'IDLE',reason:null,job_id:null,turn_id:null,observed_at:'2030-01-01T00:00:00.000000Z'}});
+  beforeEach(()=>{
+    mode='HUMAN';barrier=false;messagingIntegration.enabled=true;
+    vi.spyOn(api,'session').mockResolvedValue(fixtureSession());vi.spyOn(api,'businesses').mockImplementation(async w=>[{...fixtureBusiness(),workspace_id:w},{...fixtureBusiness(),workspace_id:w,id:assetId,name:'Другой бизнес'}]);vi.spyOn(api,'business').mockImplementation(async(w,id)=>({...fixtureBusiness(),workspace_id:w,id,name:id===bid?'Тестовая мастерская':'Другой бизнес'}));
+    vi.spyOn(messagingApi,'connections').mockResolvedValue({items:[],next_cursor:null});vi.spyOn(messagingApi,'conversations').mockResolvedValue({items:[selectedConversation(),selectedConversation(assetId,assetId,assetId)],next_cursor:null});vi.spyOn(messagingApi,'messages').mockResolvedValue({items:[],next_cursor:null});vi.spyOn(messagingApi,'send');
+    vi.spyOn(controlApi,'read').mockImplementation(async c=>control(c));vi.spyOn(controlApi,'command');vi.spyOn(humanContextApi,'read').mockImplementation(async c=>native(c));vi.spyOn(humanContextApi,'observations').mockResolvedValue({items:[],next_cursor:null,through_epoch:'0',current_epoch:'0',observed_at:'2030-01-01T00:00:00.000000Z'});vi.spyOn(humanContextApi,'reconcile');
+    vi.spyOn(configurationApi,'draft').mockImplementation(async(w,b)=>({...fixtureDraft(),workspace_id:w,business_id:b}));vi.spyOn(configurationApi,'active').mockImplementation(async(w,b)=>({...fixtureActive(),workspace_id:w,business_id:b}));vi.spyOn(configurationApi,'preview').mockImplementation(async(w,b)=>fixturePreview({...fixtureDraft(),workspace_id:w,business_id:b}));vi.spyOn(knowledgeApi,'state').mockImplementation(async(w,b)=>({...fixtureKnowledge(),workspace_id:w,business_id:b}));vi.spyOn(portfolioApi,'state').mockImplementation(async(w,b)=>({...ownerState(),workspace_id:w,business_id:b}));
+    vi.spyOn(portfolioApi,'conversation').mockImplementation(async(w,b,id,client)=>currentReference(w,b,id,client));vi.spyOn(portfolioApi,'analysis');vi.spyOn(portfolioApi,'matches').mockResolvedValue(currentReference());
+  });
+  afterEach(()=>{messagingIntegration.enabled=false;vi.restoreAllMocks();});
+  async function open(){render(<App/>);await screen.findByText('Работа с графическим цветком.');}
+  it('reads the server-selected client/Business in HUMAN without selecting a global Business or starting any POST',async()=>{
+    await open();expect(configurationApi.draft).not.toHaveBeenCalled();expect(portfolioApi.conversation).toHaveBeenCalledWith(wid,bid,conversationId,clientId,expect.any(AbortSignal));expect(screen.getByRole('button',{name:'Подобрать подтверждённые работы'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));await waitFor(()=>expect(messagingApi.messages).toHaveBeenCalledTimes(2));fireEvent.click(screen.getByRole('button',{name:'Обновить референс и подбор'}));await waitFor(()=>expect(vi.mocked(portfolioApi.conversation).mock.calls.length).toBeGreaterThan(1));
+    expect(portfolioApi.analysis).not.toHaveBeenCalled();expect(portfolioApi.matches).not.toHaveBeenCalled();expect(controlApi.command).not.toHaveBeenCalled();expect(humanContextApi.reconcile).not.toHaveBeenCalled();expect(messagingApi.send).not.toHaveBeenCalled();
+  });
+  it('follows two trusted conversation rows across Businesses regardless of the global Business selection',async()=>{
+    await open();fireEvent.click(screen.getByRole('button',{name:/Другой бизнес/}));await screen.findByRole('heading',{name:'Настройки: Другой бизнес'});expect(screen.getByText('Работа с графическим цветком.')).toBeVisible();expect(vi.mocked(portfolioApi.conversation).mock.calls.at(-1)?.slice(0,4)).toEqual([wid,bid,conversationId,clientId]);
+    fireEvent.click(screen.getByTestId(`conversation-${assetId}`));await waitFor(()=>expect(portfolioApi.conversation).toHaveBeenCalledWith(wid,assetId,assetId,assetId,expect.any(AbortSignal)));fireEvent.click(screen.getByRole('button',{name:/Тестовая мастерская/}));await screen.findByRole('heading',{name:'Настройки: Тестовая мастерская'});expect(vi.mocked(portfolioApi.conversation).mock.calls.at(-1)?.slice(0,4)).toEqual([wid,assetId,assetId,assetId]);expect(portfolioApi.analysis).not.toHaveBeenCalled();
+  });
+  it.each(['conversation','workspace'] as const)('discards a late old reference after changing %s',async change=>{
+    const late=deferred<ReturnType<typeof currentReference>>();vi.mocked(portfolioApi.conversation).mockReturnValueOnce(late.promise);vi.mocked(api.session).mockResolvedValue({...fixtureSession(),memberships:[...fixtureSession().memberships,{workspace_id:otherWorkspace,role:'OWNER',permissions:[]}]});if(change==='workspace')vi.mocked(messagingApi.conversations).mockImplementation(async w=>({items:[w===wid?selectedConversation():selectedConversation(assetId,assetId,assetId)],next_cursor:null}));
+    render(<App/>);await waitFor(()=>expect(portfolioApi.conversation).toHaveBeenCalled());if(change==='workspace')fireEvent.change(screen.getByLabelText('Workspace'),{target:{value:otherWorkspace}});else fireEvent.click(screen.getByTestId(`conversation-${assetId}`));await waitFor(()=>expect(portfolioApi.conversation).toHaveBeenCalledWith(change==='workspace'?otherWorkspace:wid,assetId,assetId,assetId,expect.any(AbortSignal)));
+    await act(async()=>late.resolve({...currentReference(),matches:{...currentReference().matches!,matches:[{...currentReference().matches!.matches[0],text:'Устаревший приватный результат'}]}}));expect(screen.queryByText('Устаревший приватный результат')).toBeNull();expect(portfolioApi.analysis).not.toHaveBeenCalled();expect(portfolioApi.matches).not.toHaveBeenCalled();
+  });
+  it('enables an explicit AI action only after existing context gates, with no MODEL on mount',async()=>{
+    mode='AI';vi.mocked(portfolioApi.conversation).mockImplementation(async(w,b,id,client)=>({...currentReference(w,b,id,client),embedding_mode:'CONTROLLED'}));await open();await waitFor(()=>expect(screen.getByRole('button',{name:'Подобрать подтверждённые работы'})).toBeEnabled());expect(portfolioApi.matches).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Подобрать подтверждённые работы'}));await waitFor(()=>expect(portfolioApi.matches).toHaveBeenCalledTimes(1));expect(controlApi.command).not.toHaveBeenCalled();
+  });
+  it('keeps derived observations readable while native barriers block new model actions',async()=>{
+    mode='AI';barrier=true;vi.mocked(portfolioApi.conversation).mockImplementation(async(w,b,id,client)=>({...currentReference(w,b,id,client),embedding_mode:'CONTROLLED'}));await open();expect(screen.getByRole('button',{name:'Подобрать подтверждённые работы'})).toBeDisabled();expect(screen.getByText('Размер неизвестен')).toBeVisible();expect(portfolioApi.matches).not.toHaveBeenCalled();expect(controlApi.command).not.toHaveBeenCalled();
+  });
+  it('hides reference and all owner views on live OWNER denial and ignores late reads after OWNER loss',async()=>{
+    await open();vi.mocked(portfolioApi.conversation).mockRejectedValueOnce(new PortfolioError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить референс и подбор'}));await screen.findByText('Нет доступа к данным владельца');expect(screen.queryByRole('region',{name:'Референс и подходящие работы'})).toBeNull();expect(screen.queryByText('Работа с графическим цветком.')).toBeNull();expect(portfolioApi.analysis).not.toHaveBeenCalled();
+  });
 });
