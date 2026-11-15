@@ -324,7 +324,7 @@ class ConversationState(ConversationProjection):
     embedding_mode: Literal["CONTROLLED", "DISABLED"]
 
 
-class CommandResult(ConfigurationModel):
+class PortfolioCommandResult(ConfigurationModel):
     workspace_id: CanonicalUUID
     business_id: CanonicalUUID
     receipt_id: CanonicalUUID
@@ -349,9 +349,15 @@ class CommandResult(ConfigurationModel):
     request_hash: Digest
 
 
-class CommandResponse(VersionedModel):
+CommandResult = PortfolioCommandResult
+
+
+class PortfolioCommandResponse(VersionedModel):
     outcome: Literal["ACCEPTED", "REPLAY"]
     result: CommandResult
+
+
+CommandResponse = PortfolioCommandResponse
 
 
 class UploadResponse(VersionedModel):
@@ -437,5 +443,8 @@ class ErrorValue(ConfigurationModel):
     code: PortfolioCode | AuthCode
 
 
-class ErrorResponse(ConfigurationModel):
+class PortfolioErrorResponse(ConfigurationModel):
     error: ErrorValue
+
+
+ErrorResponse = PortfolioErrorResponse

@@ -435,6 +435,8 @@ M5_PORTFOLIO_PATHS = M5_PORTFOLIO_C0_DOCS | {
     "tests/test_m4_schema_postgres.py",
     "tests/test_m5_portfolio_api_postgres.py",
     "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_reply_rights.py",
     "tests/test_telegram_egress_postgres.py",
     "tests/test_telegram_egress_migration.py",
     "tests/test_m5_portfolio_auth_boundary.py",
