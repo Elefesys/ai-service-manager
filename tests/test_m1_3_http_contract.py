@@ -29,7 +29,7 @@ def app():
         ("http://localhost:8000", "POST", "content-type,x-csrf-bootstrap", 200),
         ("http://localhost:8000", "GET", "x-csrf-token", 200),
         ("http://outside.example", "PATCH", "content-type,x-csrf-token,idempotency-key", 400),
-        ("http://localhost:8000", "PUT", "content-type", 400),
+        ("http://localhost:8000", "PUT", "content-type", 200),
         ("http://localhost:8000", "DELETE", "content-type", 400),
         ("http://localhost:8000", "PATCH", "if-match", 400),
         ("http://localhost:8000", "PATCH", "x-forged-actor", 400),
@@ -56,6 +56,7 @@ def test_additive_cors_preserves_configured_origin_credentials_and_old_headers(
             "GET",
             "POST",
             "PATCH",
+            "PUT",
         }
         allowed = response.headers["access-control-allow-headers"].lower()
         assert all(
