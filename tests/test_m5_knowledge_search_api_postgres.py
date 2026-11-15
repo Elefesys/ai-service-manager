@@ -15,6 +15,7 @@ from asm.knowledge.models import KnowledgeCommandResponse, KnowledgeOwnerState
 from asm.tenancy import TenancyError, current_workspace_context
 from m5_configuration_fixtures import configuration_bundle
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from test_auth_postgres import auth as auth
 from test_auth_postgres import headers, login
 from test_tenancy_postgres import BA, BB, UA, A, B
@@ -35,6 +36,17 @@ class Bytes(httpx.AsyncByteStream):
         yield self.value
 
 
+async def assert_publication_boundary(connection):
+    # A competing owner command may briefly hold this same business lock.
+    # A transaction spanning HTTP cannot release it until this probe returns:
+    # the bounded SQL wait must fail in that case, rather than accepting it.
+    await connection.execute(text("SET LOCAL lock_timeout='1s'"))
+    await connection.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:scope,2018))"),
+        {"scope": f"{A}:{BA}|CONFIGURATION_V1"},
+    )
+
+
 @pytest_asyncio.fixture
 async def knowledge(auth, request):
     h = SimpleNamespace(**vars(auth), posts=0, behavior=None, inputs=[])
@@ -48,13 +60,7 @@ async def knowledge(auth, request):
         async with h.migrator.begin() as connection:
             # A separate physical transaction can acquire the exact publication
             # lock while the provider runs. No owner transaction spans HTTP.
-            locked = (
-                await connection.execute(
-                    text("SELECT pg_try_advisory_xact_lock(hashtextextended(:scope,2018))"),
-                    {"scope": f"{A}:{BA}|CONFIGURATION_V1"},
-                )
-            ).scalar_one()
-            assert locked
+            await assert_publication_boundary(connection)
             count = (
                 await connection.execute(
                     text(
@@ -666,6 +672,53 @@ async def test_unknown_transport_and_competing_build_replay_do_not_resend(knowle
     assert (await state(h)).builds[0].state == "UNKNOWN"
     await send(h, "/builds", body, "new-key")
     assert h.posts == 1 and len(await calls(h)) == 1
+
+
+@pytest.mark.parametrize("release_competitor", [True, False])
+async def test_provider_boundary_probe_waits_for_competitor_but_refuses_retained_lock(
+    knowledge, release_competitor
+):
+    h = knowledge
+    probe_pid = asyncio.get_running_loop().create_future()
+
+    async def probe():
+        async with h.migrator.begin() as connection:
+            probe_pid.set_result(
+                (await connection.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+            )
+            await assert_publication_boundary(connection)
+
+    async with h.migrator.begin() as holder:
+        await holder.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:scope,2018))"),
+            {"scope": f"{A}:{BA}|CONFIGURATION_V1"},
+        )
+        task = asyncio.create_task(probe())
+        try:
+            pid = await probe_pid
+            async with h.migrator.connect() as observer, asyncio.timeout(2):
+                while not (
+                    await observer.execute(
+                        text(
+                            "SELECT EXISTS(SELECT 1 FROM pg_locks "
+                            "WHERE pid=:pid AND locktype='advisory' AND NOT granted)"
+                        ),
+                        {"pid": pid},
+                    )
+                ).scalar_one():
+                    await asyncio.sleep(0.005)
+            if release_competitor:
+                await holder.commit()
+                await task
+            else:
+                with pytest.raises(DBAPIError) as rejected:
+                    await task
+                assert rejected.value.orig.sqlstate == "55P03"
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    assert h.posts == 0 and not await calls(h)
 
 
 async def test_source_confirmation_cas_and_chunk_limit_before_any_embedding(knowledge):

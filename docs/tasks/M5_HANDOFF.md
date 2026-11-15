@@ -232,7 +232,7 @@ retrieval с provenance в защищённом v4 runtime. Миграция0020
 Current profile:233 functions/59 tables/832 columns/914 DDL;
 SHA-256 `c146dd44b8a13247c0c4ac3cd0c91433f0b07a8199242617ced6bf28cfb32097`.
 
-LOCAL/TEST R2: actual PG publication3 cases и owner HTTP API10 PASS;
+LOCAL/TEST R2: actual PG publication3 cases и owner HTTP API12 PASS;
 51 source/readiness и 43 source admission cases PASS; frontend444 PASS,
 typecheck/build PASS. SQL сохранил replay и полный snapshot59 таблиц/каталога
 при отказе; оба withdrawal → empty publish дали0 новых embedding HTTP/reservations.
@@ -240,6 +240,13 @@ Chromium:8 PASS — CONTROLLED/DISABLED × desktop/narrow, remount с закры
 источниками, сохранение выбранного build и оба withdrawal → empty publish.
 Локальный harness использует существующий TEST rate profile compose.browser.yaml.
 Ruff/format/mypy/OpenAPI drift PASS; весь actual PG runtime-набор31 PASS.
+CI43680006728 на892fe7e:11/12 SUCCESS, unit4145 PASS, generic PG937 PASS/1 FAIL.
+Единственный сбой воспроизведён в MockTransport-фикстуре: мгновенный lock probe
+конфликтовал с короткой транзакцией параллельного replay и давал AssertionError/500.
+Probe теперь ждёт SQL lock не более1s; actual PG подтверждает ожидание временного
+конкурента и отказ55P03 при удержанном lock. Исходные200/200, один POST и no-resend
+не изменены; API12 и20 независимых конкурентных прогонов PASS. Production code,
+0020/profile и guards не менялись; после этой коррекции выполняется новый полный CI.
 Команды, финальный head/tree, Chromium и итог штатного CI — в PR49; прежний зелёный
 кандидат не повторяется без изменения. K02–K06/K11/K12 остаются в synthetic scope.
 
