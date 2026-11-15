@@ -294,6 +294,9 @@ C2 перед SQL проверяет текущий head и отсутствие
   `tests/test_m2_4_browser_fixture.py`, `scripts/prepare_telegram_egress.py`,
   `scripts/test_telegram_egress.sh`, `tests/test_telegram_egress_migration.py`.
   Это не разрешение менять Telegram/native behavior или исторические expected.
+- `tests/test_telegram_egress_postgres.py` — только revision/count в
+  `current_durable_fingerprint` по решению C0 после первого CI ниже;
+  historical canonical_fingerprint и Telegram/durable semantics не менять.
 - `compose.browser.yaml`, `scripts/check_browser_compose.py`,
   `tests/test_browser_compose.py` — только согласованная topology внутреннего
   S3 endpoint и browser presign endpoint, с exact guards/negative checks.
@@ -508,7 +511,8 @@ TypeScript и Ruff PASS. Actual fresh0021 / exact0020 reverse / populated0020→
 targeted tests явно constructed LOCAL, не GitHub CI; все данные синтетические,
 owned PG остановлены. Full CI этого fix checkpoint **NOT_RUN**.
 
-**Запрос1 — дополнительный current-compatibility path, REQUESTED.**
+**Запрос1 — дополнительный current-compatibility path, REQUESTED на возврате;
+ACCEPTED C0 решением ниже.**
 Нужен только `tests/test_telegram_egress_postgres.py`, отсутствующий в текущем
 write-set, и его точечный admission. Не применён следующий двухстрочный патч:
 
@@ -527,7 +531,8 @@ read-only fingerprint68 таблиц, точное равенство повто
 `canonical_fingerprint`0009–0012 byte-identical. Полный Docker/Xray/S3 durable
 lane этим локальным proof не заменён. Другие Telegram paths/semantics не нужны.
 
-**Запрос2 — исправить новое browser assertion, REQUESTED.**
+**Запрос2 — исправить новое browser assertion, REQUESTED на возврате;
+ACCEPTED C0 решением ниже.**
 `infra/nginx.conf:6` уже в main708 добавляет `X-Content-Type-Options: nosniff`;
 AuthBoundary добавляет такой же header. Новая проверка ошибочно требует один
 токен от ответа через оба слоя. Не меняя production/deploy и не ослабляя backend
@@ -544,6 +549,76 @@ expect(fetched.headers()['x-content-type-options'].split(',').map(v => v.trim())
 или подставлять ответы actual S3. После решения C0 — C4 применяет только
 согласованные поправки в той же ветке/PR50, проверяет их и запускает следующий
 штатный full CI изменённого кандидата. Merge/VM/provider/client-data не выполнялись.
+
+### Решение C0 — два запроса после первого CI / 2026-11-15
+
+**Оба запроса ACCEPTED FOR IMPLEMENTATION. M5.2C остаётся IN_PROGRESS;
+PR50 Draft; actual S3/browser OPEN.** Новой функции или изменения архитектуры нет.
+Exact continuation base — `da3007ae464d505f2d7c98b57f0f88836709d87d`,
+tree `cc433bed24cab28e641ddb72c2f09431bcf32f26`, с code fix
+`5dcf7f180edb511b71150a69f3f9a04cef1e96c3` в ancestry.
+Сохранить этот C0 docs commit поверх review base. PR branch остаётся
+`aa31a88db7e8650d33a688c848c514285e31bd86` до готового исправленного кандидата:
+docs-only push в открытый PR запустил бы заведомо незавершённый CI.
+Продолжает C4, та же ветка и тот же PR50; main7080486 не изменяется.
+
+C0 независимо сверил jobs/логи и распакованные artifacts CI43730073008/attempt1:
+7 SUCCESS /4 FAILURE /1 SKIPPED; durable отказ на0021≠0020;
+runtime JUnit160/33 failures/0 skips; browser66 PASS/3 FAIL.
+Browser startup завершился успешно; новые actual journeys действительно
+дошли до preview200 и остановились на header assertion; последующие проверки
+не выполнены. Artifact ZIP hashes совпали с опубликованными job digests.
+Локальные PASS для fix5dcf7f1 остаются авторским evidence, не новым full CI.
+
+1. **Current fingerprint:** разрешены ровно две указанные строки в
+   `tests/test_telegram_egress_postgres.py::current_durable_fingerprint`:
+   revision0021 и count68 вместо0020/59. C0 сопоставил actual CI nonfunction
+   catalog с `SCHEMA_TABLES["0021"]`: точное равенство68 таблиц, ровно9 новых
+   относительно0020. Существующий `schema_inventory` проверяет полное равенство
+   набора, а fingerprint читает все строки каждой таблицы, включая новые.
+   Эти проверки сохранить; не заменять их одним count, subset или dynamic
+   current head. Historical0009–0012 `canonical_fingerprint`, applied0001–0020,
+   before/after multiset comparison, receipts, wire counters, UNKNOWN и
+   cleanup/rollback assertions неизменны. В уже разрешённых
+   scripts/m4_runtime_db.py / tests/test_m4_runtime_db_runner.py открыть только
+   этот дополнительный M5.2C path; никаких общих исключений для Telegram tests.
+   Зафиксировать targeted positive68 и отрицательные missing/extra inventory
+   checks. Полные normal/docker29 durable lanes обязательны в следующем CI.
+
+2. **Browser edge assertion:** разрешён предложенный exact split/trim и
+   `toEqual(['nosniff', 'nosniff'])` только в новом actual portfolio browser
+   preview case. C0 подтвердил: nginx.conf byte-identical main7080486 добавляет
+   один header; AuthBoundary также добавлял один ещё в main. CI browser log
+   показывает их объединение. Это исправление неверного ожидания нового теста
+   для существующего API→nginx пути, не общий допуск менять expected после FAIL.
+   Backend/direct-API assertion одного nosniff, production headers/nginx,
+   MIME/no-store/private authorization, hash/decode и остальные journey checks
+   сохранить; `includes('nosniff')`, optional header или произвольное число
+   токенов не заменяют exact assertion.
+   [Fetch §3.6](https://fetch.spec.whatwg.org/#x-content-type-options-header)
+   определяет действие nosniff по первому разделённому значению; проверка двух
+   известных edge headers не означает принятия их как нового canonical API
+   формата и не требует production/deploy поправки в этом срезе.
+
+C0 также проверил ограниченность подготовленных fixes: provider replacement
+меняет только вызов verifier knowledge_search→portfolio; ORIGINAL совпадает
+с реально устанавливаемым REPLACEMENTS0020. Profile hashes должны проверяться
+по установленному catalog; нельзя копировать expected лишь по результату FAIL.
+Current knowledge fixture изолирует upgrade0021 и finally downgrade0020;
+остальные historical cases не переводить массово. Render-slot fix и новый
+App regression сохраняют existing escalation assertions. Эти исправления
+сохранить вместе с двумя принятыми поправками в одном кандидате.
+
+Следующее действие C4: локально продолжить от этого C0 commit, применить две
+поправки/admission, выполнить только затронутые целевые проверки и один push
+готового кандидата в существующий PR50. Затем следующий штатный full CI:
+все12 jobs, включая normal/docker29 durable, runtime,9 actual S3 API cases
+без skip и unmocked desktop/narrow journeys полностью до review/reload/revoke/
+delete/OPTIONS→PUT/foreign-origin; старый inbound signed GET и escalation
+login/CSRF recovery также должны PASS. Новый failed gate разбирать по его
+собственной причине; ранний PASS не заменяет ещё не достигнутые assertions.
+Вернуть PR/final head/tree/CI и ограничения. Merge требует отдельного разрешения
+владельца после C0 review. Paid/provider/VM/client-data, C6 и M5.2D не открыты.
 
 ## 1. Проверяемый результат всего этапа
 
