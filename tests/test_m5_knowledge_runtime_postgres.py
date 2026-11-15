@@ -5,6 +5,7 @@ import json
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from asm.ai.fake import FakeAdapter
 from asm.foundation import RuntimeDatabase, Settings
 from asm.messaging.adapter import ControlledAdapter
@@ -12,7 +13,7 @@ from asm.messaging.models import OutcomeKind
 from asm.tenancy import AuthenticatedAccount
 from m5_configuration_fixtures import configuration_bundle
 from test_m2_1_postgres import query
-from test_m3_1_native_context_postgres import claim_job, incoming, reconcile, scalar
+from test_m3_1_native_context_postgres import claim_job, incoming, migrate, reconcile, scalar
 from test_m4_delivery_postgres import application, enrollment, run_turn, source_turn
 from test_m4_reply_rights_postgres import connection, telegram
 from test_m4_runtime_postgres import COUNTER, owner
@@ -93,8 +94,24 @@ async def outbound_text(h, delivery):
     )
 
 
-async def test_current0020_application_readiness_and_published_faq_effect(knowledge_pg, tmp_path):
+@pytest_asyncio.fixture(loop_scope="module")
+async def current_knowledge_pg(knowledge_pg):
+    """Only the current-application case advances the historical knowledge fixture."""
     h = knowledge_pg
+    assert h.schema_revision == "0020"
+    await migrate("upgrade", "0021")
+    h.schema_revision = "0021"
+    try:
+        yield h
+    finally:
+        await migrate("downgrade", "0020")
+        h.schema_revision = "0020"
+
+
+async def test_current0021_application_readiness_and_published_faq_effect(
+    current_knowledge_pg, tmp_path
+):
+    h = current_knowledge_pg
     current = RuntimeDatabase(Settings())
     try:
         await current.check()

@@ -307,6 +307,14 @@ describe('selected conversation portfolio integration',()=>{
   });
   afterEach(()=>{messagingIntegration.enabled=false;vi.restoreAllMocks();});
   async function open(){render(<App/>);await screen.findByText('Работа с графическим цветком.');}
+  it('waits for initial selected history, then issues one uncancelled reference GET',async()=>{
+    const history=deferred<Awaited<ReturnType<typeof messagingApi.messages>>>();vi.mocked(messagingApi.messages).mockReturnValueOnce(history.promise);
+    const reference=deferred<ReturnType<typeof currentReference>>();vi.mocked(portfolioApi.conversation).mockReturnValueOnce(reference.promise);
+    render(<App/>);await waitFor(()=>expect(messagingApi.messages).toHaveBeenCalledTimes(1));expect(portfolioApi.conversation).not.toHaveBeenCalled();expect(portfolioApi.analysis).not.toHaveBeenCalled();expect(portfolioApi.matches).not.toHaveBeenCalled();
+    await act(async()=>history.resolve({items:[],next_cursor:null}));await waitFor(()=>expect(portfolioApi.conversation).toHaveBeenCalledTimes(1));
+    const signal=vi.mocked(portfolioApi.conversation).mock.calls[0][4];expect(signal?.aborted).toBe(false);
+    await act(async()=>reference.resolve(currentReference()));await screen.findByText('Работа с графическим цветком.');expect(portfolioApi.conversation).toHaveBeenCalledTimes(1);expect(signal?.aborted).toBe(false);expect(portfolioApi.analysis).not.toHaveBeenCalled();expect(portfolioApi.matches).not.toHaveBeenCalled();
+  });
   it('reads the server-selected client/Business in HUMAN without selecting a global Business or starting any POST',async()=>{
     await open();expect(configurationApi.draft).not.toHaveBeenCalled();expect(portfolioApi.conversation).toHaveBeenCalledWith(wid,bid,conversationId,clientId,expect.any(AbortSignal));expect(screen.getByRole('button',{name:'Подобрать подтверждённые работы'})).toBeDisabled();
     fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));await waitFor(()=>expect(messagingApi.messages).toHaveBeenCalledTimes(2));fireEvent.click(screen.getByRole('button',{name:'Обновить референс и подбор'}));await waitFor(()=>expect(vi.mocked(portfolioApi.conversation).mock.calls.length).toBeGreaterThan(1));
