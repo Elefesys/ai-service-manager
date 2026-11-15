@@ -2405,6 +2405,7 @@ def prepare_m5_portfolio_event(
     wrong_parent=False,
     wrong_checkpoint_parent=False,
     wrong_finish_parent=False,
+    wrong_ci_fix_parent=False,
 ):
     """Construct real Git assignment, contract, C0 upload continuation and candidate."""
     f = r["f"]
@@ -2416,7 +2417,15 @@ def prepare_m5_portfolio_event(
         path.write_text("# constructed C0 portfolio assignment\n")
     f.git("add", ".")
     f.git("commit", "-qm", "constructed immutable C0 portfolio assignment")
-    for label in ("ASSIGNMENT", "CONTRACT", "CONTINUATION", "CHECKPOINT", "FINISH_ASSIGNMENT"):
+    for label in (
+        "ASSIGNMENT",
+        "CONTRACT",
+        "CONTINUATION",
+        "CHECKPOINT",
+        "FINISH_ASSIGNMENT",
+        "REVIEW_BASE",
+        "CI_FIX_ASSIGNMENT",
+    ):
         if label != "ASSIGNMENT":
             handoff = f.root / "docs/tasks/M5_HANDOFF.md"
             handoff.write_text(handoff.read_text() + "# approved " + label + "\n")
@@ -2433,6 +2442,8 @@ def prepare_m5_portfolio_event(
             and label == "CONTINUATION"
             or wrong_finish_parent
             and label == "CHECKPOINT"
+            or wrong_ci_fix_parent
+            and label == "REVIEW_BASE"
         ):
             f.git("commit", "--allow-empty", "-qm", "unapproved intermediate parent")
     for relative in sorted(
@@ -2556,6 +2567,11 @@ def test_m5_portfolio_protected_assignment_files_refused_before_resources(
         "finish_assignment_ancestry",
         "checkpoint_parent",
         "finish_assignment_parent",
+        "review_base_tree",
+        "ci_fix_assignment_tree",
+        "review_base_ancestry",
+        "ci_fix_assignment_ancestry",
+        "ci_fix_assignment_parent",
     ],
 )
 def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
@@ -2569,6 +2585,7 @@ def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
         wrong_parent=damage == "continuation_parent",
         wrong_checkpoint_parent=damage == "checkpoint_parent",
         wrong_finish_parent=damage == "finish_assignment_parent",
+        wrong_ci_fix_parent=damage == "ci_fix_assignment_parent",
     )
     if damage == "base_tree":
         monkeypatch.setattr(carrier, "M5_PORTFOLIO_TREE", "f" * 40)
@@ -2596,6 +2613,7 @@ def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
         "auth_store",
         "human_context_panel",
         "future_migration",
+        "adjacent_telegram",
     ],
 )
 def test_m5_portfolio_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damage):
@@ -2613,6 +2631,7 @@ def test_m5_portfolio_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damag
             "auth_store": "backend/src/asm/auth/store.py",
             "human_context_panel": "frontend/src/HumanContextPanel.tsx",
             "future_migration": "migrations/versions/0022_future.py",
+            "adjacent_telegram": "tests/test_telegram_egress.py",
         }.get(damage),
     )
     with pytest.raises((carrier.Refusal, catalog.Refusal)):

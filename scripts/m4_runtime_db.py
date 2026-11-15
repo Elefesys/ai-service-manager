@@ -352,6 +352,10 @@ M5_PORTFOLIO_CHECKPOINT = "93174249527c055f3a975ba097a8646b2d14f450"
 M5_PORTFOLIO_CHECKPOINT_TREE = "bad38d145fcf368f5b98c9f609e872722d418258"
 M5_PORTFOLIO_FINISH_ASSIGNMENT = "114a027be3417998360bb939690b55f5815bdaf1"
 M5_PORTFOLIO_FINISH_ASSIGNMENT_TREE = "2107bd20f2929fd931befb9d38850a3d6a0dfbab"
+M5_PORTFOLIO_REVIEW_BASE = "da3007ae464d505f2d7c98b57f0f88836709d87d"
+M5_PORTFOLIO_REVIEW_BASE_TREE = "cc433bed24cab28e641ddb72c2f09431bcf32f26"
+M5_PORTFOLIO_CI_FIX_ASSIGNMENT = "cecb92c5edd073f9b9d924c01d391d07f5373436"
+M5_PORTFOLIO_CI_FIX_ASSIGNMENT_TREE = "8f4668dacb0e39e281f79341a9a52b1e197069ad"
 M5_PORTFOLIO_BRANCH = "c4/m5-2c-vision-portfolio-r1"
 M5_PORTFOLIO_C0_DOCS = {
     "AGENTS.md",
@@ -431,6 +435,8 @@ M5_PORTFOLIO_PATHS = M5_PORTFOLIO_C0_DOCS | {
     "tests/test_m4_schema_postgres.py",
     "tests/test_m5_portfolio_api_postgres.py",
     "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_telegram_egress_migration.py",
     "tests/test_m5_portfolio_auth_boundary.py",
     "tests/test_m5_portfolio_context.py",
     "tests/test_m5_portfolio_migrations.py",
@@ -1246,6 +1252,12 @@ def admit_source(evidence):
                 M5_PORTFOLIO_FINISH_ASSIGNMENT,
                 M5_PORTFOLIO_FINISH_ASSIGNMENT_TREE,
             ),
+            ("REVIEW_BASE", M5_PORTFOLIO_REVIEW_BASE, M5_PORTFOLIO_REVIEW_BASE_TREE),
+            (
+                "CI_FIX_ASSIGNMENT",
+                M5_PORTFOLIO_CI_FIX_ASSIGNMENT,
+                M5_PORTFOLIO_CI_FIX_ASSIGNMENT_TREE,
+            ),
         ):
             require(
                 capture(["git", "rev-parse", revision + "^{tree}"]) == tree,
@@ -1273,6 +1285,11 @@ def admit_source(evidence):
             capture(["git", "rev-parse", M5_PORTFOLIO_FINISH_ASSIGNMENT + "^"])
             == M5_PORTFOLIO_CHECKPOINT,
             "PORTFOLIO_FINISH_ASSIGNMENT_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_CI_FIX_ASSIGNMENT + "^"])
+            == M5_PORTFOLIO_REVIEW_BASE,
+            "PORTFOLIO_CI_FIX_ASSIGNMENT_PARENT",
         )
         require(
             not capture(
