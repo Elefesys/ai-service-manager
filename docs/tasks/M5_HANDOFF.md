@@ -147,6 +147,42 @@ C2 подтверждает слот миграции и минимальный 
    запускают скрытые model calls; действие анализа обозначено отдельно.
    Нет отдельного кабинета, bulk import или нового dashboard.
 
+### Короткий контракт C4/C1/C2 — до SQL / 2026-11-15
+
+Согласован ограниченный LOCAL/TEST контракт. C2 проверил Git-цепочку0001–0020,
+отсутствие0021 и неизменность applied исходников; слот0021←0020 свободен.
+Это source evidence, не выполненная миграция или новое архитектурное решение.
+
+| Область | Контракт |
+|---|---|
+| Private source | Owner Asset/immutable Version содержит один server-issued upload intent; origin MY_WORK/INSPIRATION неизменен. Client reference — отдельный binding реальных Client/conversation/message/current file, не owner asset и не кандидат promotion в MY_WORK. Storage keys/tickets наружу не выдаются. |
+| Upload | JSON init/finalize/abandon и один canonical PUT bytes по asset/version/intent. JPEG/PNG/WebP,10MiB/8192/20M и прежний full decode; максимум8 nondeleted assets/items и2 pending uploads/Business, intent120s, operation45s. Lost ACK — HEAD/GET того же key/hash, без повторного uncertain PUT. Cleanup сохраняет tombstone для late PUT; accepted-asset purge получает отдельный fresh owner delete permit, не staging cleanup. |
+| Vision | Новый vision_result_v1 и новый EXIF-orient/white-letterbox/RGB PNG256/strip-metadata profile. Subject/style/details/uncertainty остаются derived data; scale UNKNOWN, без authority над price/time/eligibility/authorship. Один POST на source/version/hash/profile identity; key/run/session/generation не входят в identity и не обходят UNKNOWN. Completion/accounting отдельно от fresh apply. |
+| Finite admission | Новый узкий portfolio_ai_sessions anchor, не registry: exact synthetic EVAL_ONLY profile, Business/server actor либо real conversation, ≤900s/4 calls/10RUB. Vision/query/index/v5 text суммируются под row lock; UNKNOWN сохраняет hold. Vision≤30s/512 output tokens/65536 response bytes/393216 wire/262144 derivative bytes, reserve≤3.89RUB. Старый text-only session не даёт image доступа. DISABLED/0 provider HTTP default; CONTROLLED только exact injected MockTransport. |
+| Portfolio/search | Canonical Item/Revision отделены от analysis и build projection. Shared evidence — только confirmed MY_WORK/show_permission. Text projection≤512 UTF-8 bytes/item; один INDEX batch≤8, ≤1 POST/3 HTTP/.08RUB. Весь serialized wire≤8192 проверяется до reservation; controls кроме TAB/LF запрещены, escaping overflow даёт WIRE_LIMIT без скрытого второго batch. Top3; visible analysis≤1024 и matches≤2048 bytes. |
+| Composite publish | Явно выбранные READY KB build/version и Portfolio build/version, включая empty; KB null только если прежней KB связи нет. Один immutable release/atomic activation. Legacy config/knowledge publish/rollback при current/target Portfolio link получают PORTFOLIO_BUILD_REQUIRED/409 после старого successful receipt replay. Revoke/delete/replacement немедленно исключают dependent reads/unsent effects; empty publish не резервирует AI calls. |
+| Runtime v5 | Новые versioned context/read/prompt, старые DTO/runs закрыты. Один server query≤1024 UTF-8 из current text и exact applied image observations; один1536/cosine vector отдельно используется в BUSINESS_KNOWLEDGE и PORTFOLIO. Старый eager v4 QUERY не запускается дополнительно. ≤2 text calls/1 READ, общие business6144/context8192 и прежние run deadlines/cost budgets сохранены. Все MODEL/READ/FOLLOWUP/CANDIDATE/COMMIT/SEND fences проверяют media/portfolio pins. |
+
+Новые client-reference MODEL/semantic операции сохраняют AI-mode/Resume/barrier
+guards. Manual MODEL при HUMAN остаётся OPEN и этим контрактом не включается;
+owner может авторизованно просмотреть доступный derived draft без нового POST.
+Owner asset analysis без conversation имеет отдельный OWNER permit. Actor не
+выбирается DTO. Физическую схему C2 реализует только под эти операции, без fake
+Job/AIRun/messages и без универсальных media/job/provider registries.
+
+**Необходимый дополнительный path — запрос C0:** `backend/src/asm/auth/http.py`.
+Текущий JSON-only boundary4096B отклоняет raw image до portfolio endpoint:
+реальный PNG>4096B воспроизводимо получает415. Подготовленная вне Git поправка
+добавляет streaming admission только для PUT
+`/api/v1/workspaces/{w}/businesses/{b}/portfolio/assets/{a}/versions/{v}/uploads/{u}/content`
+с canonical UUID/raw path,10MiB, JPEG/PNG/WebP и общим receive deadline15s.
+Endpoint получает управление до body read для live OWNER/intent проверки.
+Старые JSON4096/manual-send65536, Host/Origin/header/rate/cookie/CSRF и прежние
+JSON deadlines сохраняются. На предлагаемом модуле76 UNIT PASS18.31s,
+shadow mypy и Ruff PASS; это не actual PG/S3/browser evidence. Auth исходник
+не изменён; дополнительный path ожидает допуска C0. SQL/основная реализация,
+PR и новый полный CI ещё не запускались.
+
 ### Миграция и разрешённые paths
 
 Фактический head **0020**; applied0001–0020 immutable. Для этого среза C0 выделяет
