@@ -344,6 +344,27 @@ C0 review → отдельное owner merge → post-merge CI. ВМ, real provi
 новый ключ и реальные клиентские данные не разрешены. C6 HOLD; старые
 UNKNOWN/holds, receiver ACK/fence и полный live HUMAN/Resume сохраняются отдельно.
 
+**C4 checkpoint, 2026-11-15 — IN_PROGRESS, до PR/CI.** Реализованы private owner
+upload/review/composite publish, pixel Vision и отдельный v5 runtime с одним
+QUERY для KB+Portfolio. 0021:9 таблиц,55 helpers+private verifier,25 runtime
+capabilities,12 ограниченных replacements; дополнительный replacement меняет
+только current native-policy prerequisite0020→0021 с exact0020 restore.
+Actual PG:38 runtime сценариев,18 owner API и11 SQL сценариев прошли;
+fresh install/exact0020 reverse/populated0020→0021/старый receipt replay — PASS.
+Current/source-admission unit669 PASS, backend mypy107 files PASS;
+frontend485 PASS и3 controlled browser journeys PASS (route fixtures).
+
+Два gates остаются OPEN. Selected conversation хранится внутри
+`frontend/src/MessagingPanel.tsx`, отсутствующего в write-set. Подготовлен
+неприменённый узкий render-slot patch, App/App.test остаются в разрешённых
+paths; isolated App27+Messaging35 PASS. Нужен допуск ровно одного указанного
+production path, без нового selector/auto MODEL/изменения control guards.
+Actual private S3/browser приёмка пока NOT_RUN: pinned MinIO завершается
+`netlinkrib: operation not permitted` до запуска listener. Девять отдельных
+actual-S3 API проверок подготовлены без skip/fake fallback. Требуется решение
+C0 о доступной TEST-среде либо переносе этого gate в штатный CI; controlled
+storage/browser не выдаются за S3 evidence. Общий PR/CI и merge не запускались.
+
 
 ## 1. Проверяемый результат всего этапа
 

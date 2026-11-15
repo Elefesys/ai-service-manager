@@ -34,6 +34,14 @@ BODY_LIMIT = 4096
 _UUID_PATH = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 _MESSAGES_PATH = re.compile(rf"/api/v1/workspaces/{_UUID_PATH}/conversations/{_UUID_PATH}/messages")
 HEADER_LIMIT = 16384
+_PORTFOLIO_UPLOAD_PATH = re.compile(
+    rf"/api/v1/workspaces/{_UUID_PATH}/businesses/{_UUID_PATH}"
+    rf"/portfolio/assets/{_UUID_PATH}/versions/{_UUID_PATH}"
+    rf"/uploads/{_UUID_PATH}/content"
+)
+_PORTFOLIO_UPLOAD_LIMIT = 10_485_760
+_PORTFOLIO_UPLOAD_SECONDS = 15.0
+_PORTFOLIO_UPLOAD_TYPES = frozenset(("image/jpeg", "image/png", "image/webp"))
 
 
 def error_response(code: AuthCode, status: int, retry_after: int = 60) -> JSONResponse:
@@ -122,8 +130,16 @@ class AuthBoundary:
             await send(message)
 
         try:
+            portfolio_upload = bool(
+                scope["method"] == "PUT"
+                and _PORTFOLIO_UPLOAD_PATH.fullmatch(path)
+                and scope.get("raw_path") == path.encode("ascii")
+                and not scope.get("query_string", b"")
+            )
             body_limit = (
-                65536
+                _PORTFOLIO_UPLOAD_LIMIT
+                if portfolio_upload
+                else 65536
                 if scope["method"] == "POST" and _MESSAGES_PATH.fullmatch(path)
                 else BODY_LIMIT
             )
@@ -143,15 +159,18 @@ class AuthBoundary:
                 if len(origins) != 1:
                     raise AuthError(AuthCode.ORIGIN_DENIED, 403)
                 types = headers.getlist("content-type")
-                if (
-                    len(types) != 1
-                    or types[0].split(";", 1)[0].strip().lower() != "application/json"
+                if len(types) != 1 or (
+                    types[0].strip().lower() not in _PORTFOLIO_UPLOAD_TYPES
+                    if portfolio_upload
+                    else types[0].split(";", 1)[0].strip().lower() != "application/json"
                 ):
                     raise AuthError(AuthCode.UNSUPPORTED_MEDIA_TYPE, 415)
                 peer = (scope.get("client") or ("unknown", 0))[0]
                 # Forwarded/X-Forwarded-For are not used as limiter identities.
                 self.limiter.consume("global", self.settings.auth_global_limit)
                 self.limiter.consume("peer:" + peer, self.settings.auth_peer_limit)
+            if portfolio_upload and len(headers.getlist("content-encoding")) > 1:
+                raise AuthError(AuthCode.UNSUPPORTED_MEDIA_TYPE, 415)
             if headers.get("content-encoding", "identity").lower() != "identity":
                 raise AuthError(AuthCode.UNSUPPORTED_MEDIA_TYPE, 415)
             lengths = headers.getlist("content-length")
@@ -160,8 +179,47 @@ class AuthBoundary:
             if lengths:
                 if not lengths[0].isascii() or not lengths[0].isdigit():
                     raise AuthError(AuthCode.INVALID_REQUEST, 422)
-                if len(lengths[0]) > 6 or int(lengths[0]) > body_limit:
+                if len(lengths[0]) > (8 if portfolio_upload else 6) or int(lengths[0]) > body_limit:
                     raise AuthError(AuthCode.BODY_TOO_LARGE, 413)
+            if portfolio_upload:
+                # Delegate before receiving bytes: the endpoint must check live
+                # OWNER and its committed upload intent before consuming input.
+                received = 0
+                finished = False
+                deadline: float | None = None
+
+                async def upload_receive() -> Message:
+                    nonlocal received, finished, deadline
+                    if finished:
+                        return {"type": "http.disconnect"}
+                    now = asyncio.get_running_loop().time()
+                    if deadline is None:
+                        deadline = now + _PORTFOLIO_UPLOAD_SECONDS
+                    if now >= deadline:
+                        raise TimeoutError
+                    async with asyncio.timeout_at(deadline):
+                        message = await receive()
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise TimeoutError
+                    if message["type"] == "http.disconnect":
+                        finished = True
+                        return message
+                    chunk = message.get("body", b"")
+                    if type(chunk) is not bytes:
+                        raise AuthError(AuthCode.INVALID_REQUEST, 422)
+                    received += len(chunk)
+                    if received > body_limit:
+                        raise AuthError(AuthCode.BODY_TOO_LARGE, 413)
+                    if lengths and received > int(lengths[0]):
+                        raise AuthError(AuthCode.INVALID_REQUEST, 422)
+                    if not message.get("more_body", False):
+                        if lengths and received != int(lengths[0]):
+                            raise AuthError(AuthCode.INVALID_REQUEST, 422)
+                        finished = True
+                    return message
+
+                await self.app(scope, upload_receive, secured_send)
+                return
             body = bytearray()
             async with asyncio.timeout(3):
                 while True:
@@ -296,7 +354,7 @@ def install_auth(app: FastAPI, service: AuthService, settings: AuthSettings) -> 
         CORSMiddleware,
         allow_origins=list(settings.auth_origins),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH"],
+        allow_methods=["GET", "POST", "PATCH", "PUT"],
         allow_headers=["Content-Type", "X-CSRF-Token", "X-CSRF-Bootstrap", "Idempotency-Key"],
         max_age=600,
     )

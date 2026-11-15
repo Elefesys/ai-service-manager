@@ -33,16 +33,28 @@ from asm.ai.contracts import (
     AnyGatewayConfig,
     Budget,
     ConversationResult,
+    PortfolioGatewayConfig,
     Reply,
     validate_gateway_config,
 )
 from asm.ai.gateway import ModelAdapter
 from asm.ai.knowledge import KnowledgePin, SearchPin, SearchProjection
+from asm.ai.portfolio import (
+    MediaPin,
+    PortfolioAuthorityDecision,
+    PortfolioContextRead,
+    PortfolioConversationAgent,
+    PortfolioPin,
+)
 from asm.ai.runtime_contracts import (
     AnyPreparedRun,
     CallCompletion,
     KnowledgeRuntimeReceipt,
+    PortfolioQueryData,
+    PortfolioQueryReservation,
+    PortfolioRuntimeReceipt,
     PreparedKnowledgeRun,
+    PreparedPortfolioRun,
     PreparedRun,
     PreparedSearchRun,
     QueryReservation,
@@ -91,6 +103,7 @@ class AIDatabase:
         delivery: bool = False,
         provider: "RuntimeSettings | None" = None,
         embeddings: EmbeddingClient | None = None,
+        portfolio_session_id: UUID | None = None,
     ):
         if environment not in {"LOCAL", "TEST"}:
             raise MessagingError(Code.NOT_ALLOWED)
@@ -100,12 +113,24 @@ class AIDatabase:
         self.delivery = delivery
         if provider is not None and not delivery:
             raise MessagingError(Code.NOT_ALLOWED)
+        if portfolio_session_id is not None and (
+            type(portfolio_session_id) is not UUID
+            or environment != "TEST"
+            or not delivery
+            or provider is not None
+        ):
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.portfolio_session_id = portfolio_session_id
         self.provider = provider
         if embeddings is not None and type(embeddings) is not EmbeddingClient:
             raise MessagingError(Code.NOT_ALLOWED)
         self.embeddings = embeddings if embeddings is not None else EmbeddingClient()
 
     def config(self, config: AnyGatewayConfig) -> AnyGatewayConfig:
+        if self.portfolio_session_id is not None:
+            if not isinstance(config, PortfolioGatewayConfig):
+                raise MessagingError(Code.NOT_ALLOWED)
+            return PortfolioGatewayConfig.model_validate(config)
         if self.provider is None:
             return runtime_config(config)
         config = validate_gateway_config(config)
@@ -133,12 +158,20 @@ class AIDatabase:
         config = self.config(config)
         if deadline.tzinfo is None or deadline.utcoffset() is None:
             raise MessagingError(Code.INVALID_INPUT)
-        raw = await self._command(
-            claim,
-            "PREPARE",
-            config=config.model_dump(mode="json"),
-            deadline=deadline.isoformat(),
-        )
+        payload: dict[str, Any] = {
+            "config": config.model_dump(mode="json"),
+            "deadline": deadline.isoformat(),
+        }
+        if isinstance(config, PortfolioGatewayConfig):
+            if self.portfolio_session_id is None:
+                raise MessagingError(Code.NOT_ALLOWED)
+            payload["portfolio_session_id"] = str(self.portfolio_session_id)
+        raw = await self._command(claim, "PREPARE", **payload)
+        if config.prompt_revision == "conversation_v5":
+            run = decoded(PreparedPortfolioRun, raw)
+            if run.portfolio_session_id != self.portfolio_session_id:
+                raise MessagingError(Code.AI_STALE)
+            return run
         if config.prompt_revision == "conversation_v4":
             return decoded(PreparedSearchRun, raw)
         if config.prompt_revision == "conversation_v3":
@@ -147,7 +180,9 @@ class AIDatabase:
 
     def authority(
         self, claim: JobClaim, run: AnyPreparedRun
-    ) -> "PostgresAuthority | PostgresKnowledgeAuthority | PostgresSearchAuthority":
+    ) -> "PostgresAuthority | PostgresKnowledgeAuthority | PostgresSearchAuthority | PostgresPortfolioAuthority":
+        if isinstance(run, PreparedPortfolioRun):
+            return PostgresPortfolioAuthority(self, claim, run)
         if isinstance(run, PreparedSearchRun):
             return PostgresSearchAuthority(self, claim, run)
         if isinstance(run, PreparedKnowledgeRun):
@@ -156,7 +191,9 @@ class AIDatabase:
 
     def receipt(self, config: AnyGatewayConfig, raw: Any) -> RuntimeReceipt:
         return decoded(
-            SearchRuntimeReceipt
+            PortfolioRuntimeReceipt
+            if config.prompt_revision == "conversation_v5"
+            else SearchRuntimeReceipt
             if config.prompt_revision == "conversation_v4"
             else KnowledgeRuntimeReceipt
             if config.prompt_revision == "conversation_v3"
@@ -236,6 +273,18 @@ class AIDatabase:
             # cannot reconstruct its Gateway and never starts another POST.
             return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
         projection: SearchProjection | None = None
+        portfolio_data: PortfolioQueryData | None = None
+        if isinstance(run, PreparedPortfolioRun):
+            portfolio_data = await self.portfolio_query(claim, run)
+            if portfolio_data is None:
+                return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
+            # The shared QUERY has a durable hold. Re-read the same saved run so
+            # Gateway starts with all auxiliary cost under the original budget.
+            refreshed = await self.prepare(claim, config, deadline=run.deadline)
+            if not isinstance(refreshed, PreparedPortfolioRun):
+                raise MessagingError(Code.AI_STALE)
+            run = refreshed
+            self._portfolio_data_current(run, portfolio_data)
         if isinstance(run, PreparedSearchRun):
             projection = await self.query(claim, run)
             if projection is None:
@@ -245,7 +294,24 @@ class AIDatabase:
             )
         wrapped = DurableAdapter(self, claim, run, adapter)
         agent: ConversationAgent
-        if isinstance(run, PreparedSearchRun):
+        if isinstance(run, PreparedPortfolioRun):
+            assert portfolio_data is not None
+            agent = PortfolioConversationAgent(
+                config,
+                wrapped,
+                PostgresPortfolioAuthority(self, claim, run),
+                knowledge_pin=run.knowledge_pin,
+                active_projection=run.active_projection,
+                search_pin=run.search_pin,
+                portfolio_pin=run.portfolio_pin,
+                media_pin=run.media_pin,
+                search_projection=portfolio_data.knowledge,
+                portfolio_projection=portfolio_data.portfolio,
+                vision_analysis=run.vision_analysis,
+                search_query=run.search_query,
+                initial_budget=run.budget,
+            )
+        elif isinstance(run, PreparedSearchRun):
             assert projection is not None
             agent = SearchConversationAgent(
                 config,
@@ -372,6 +438,99 @@ class AIDatabase:
                 run.run_id, call, ticket, outcome["vectors"]
             )
         return decoded(SearchProjection, projection)
+
+    @staticmethod
+    def _portfolio_pins(run: PreparedPortfolioRun) -> dict[str, Any]:
+        return {
+            "search_pin": run.search_pin.model_dump(mode="json"),
+            "portfolio_pin": run.portfolio_pin.model_dump(mode="json"),
+            "media_pin": run.media_pin.model_dump(mode="json"),
+        }
+
+    @staticmethod
+    def _portfolio_data_current(run: PreparedPortfolioRun, data: PortfolioQueryData) -> None:
+        if (
+            (
+                data.portfolio_pin,
+                data.media_pin,
+                data.portfolio_session_id,
+                data.search_query,
+                data.vision_analysis,
+            )
+            != (
+                run.portfolio_pin,
+                run.media_pin,
+                run.portfolio_session_id,
+                run.search_query,
+                run.vision_analysis,
+            )
+            or data.knowledge.profile_id != run.search_pin.profile_id
+            or data.portfolio.profile_id != run.portfolio_pin.profile_id
+        ):
+            raise MessagingError(Code.AI_STALE)
+
+    async def _portfolio_read(
+        self, claim: JobClaim, run: PreparedPortfolioRun
+    ) -> PortfolioQueryData:
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit.portfolio_runtime_read(run.run_id, self._portfolio_pins(run))
+        value = decoded(PortfolioQueryData, raw)
+        self._portfolio_data_current(run, value)
+        return value
+
+    async def portfolio_query(
+        self, claim: JobClaim, run: PreparedPortfolioRun
+    ) -> PortfolioQueryData | None:
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit.portfolio_query_reserve(run.run_id, self._portfolio_pins(run))
+        reservation = decoded(PortfolioQueryReservation, raw)
+        if reservation.status == "REPLAY":
+            try:
+                return await self._portfolio_read(claim, run)
+            except MessagingError as error:
+                if error.code == Code.AI_INCOMPLETE:
+                    return None
+                raise
+        assert reservation.call_id is not None and reservation.ticket is not None
+        assert (
+            reservation.wire is not None
+            and reservation.wire_sha256 is not None
+            and reservation.deadline is not None
+        )
+        call, ticket = reservation.call_id, reservation.ticket
+        try:
+            try:
+                outcome = await self.embeddings.complete(
+                    reservation.wire,
+                    deadline=reservation.deadline,
+                    wire_sha256=reservation.wire_sha256,
+                )
+            except EmbeddingFailure as error:
+                outcome = unavailable(error.code)
+            # Opaque private accounting, even if OWNER/HUMAN/media changes during HTTP.
+            completed = await self.messaging.complete_embedding(call, ticket, outcome)
+        except asyncio.CancelledError:
+            try:
+                async with asyncio.timeout(1):
+                    await self.messaging.complete_embedding(
+                        call, ticket, unavailable("CANCELLED", unknown=True)
+                    )
+            except (
+                KnowledgeError,
+                MessagingError,
+                SQLAlchemyError,
+                TimeoutError,
+                asyncio.CancelledError,
+            ):
+                pass
+            raise
+        if outcome["kind"] != "SUCCESS" or completed["state"] != "SUCCESS":
+            return None
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit.portfolio_query_apply(run.run_id, call, ticket, outcome["vectors"])
+        value = decoded(PortfolioQueryData, raw)
+        self._portfolio_data_current(run, value)
+        return value
 
 
 class PostgresAuthority:
@@ -522,6 +681,84 @@ class PostgresSearchAuthority:
                 knowledge_pin=pin.model_dump(mode="json"),
                 search_pin=search_pin.model_dump(mode="json"),
             ),
+        )
+
+
+class PostgresPortfolioAuthority:
+    def __init__(self, database: AIDatabase, claim: JobClaim, run: PreparedPortfolioRun):
+        self.database, self.claim, self.run = database, claim, run
+
+    async def authorize(
+        self,
+        binding: ContextBinding,
+        knowledge_pin: KnowledgePin,
+        search_pin: SearchPin,
+        portfolio_pin: PortfolioPin,
+        media_pin: MediaPin,
+        boundary: Boundary,
+    ) -> PortfolioAuthorityDecision:
+        status = "ALLOWED"
+        try:
+            await self.database._command(
+                self.claim,
+                "AUTHORIZE",
+                run_id=str(self.run.run_id),
+                binding=binding.model_dump(mode="json"),
+                knowledge_pin=knowledge_pin.model_dump(mode="json"),
+                search_pin=search_pin.model_dump(mode="json"),
+                portfolio_pin=portfolio_pin.model_dump(mode="json"),
+                media_pin=media_pin.model_dump(mode="json"),
+                boundary=boundary,
+            )
+        except MessagingError as error:
+            if error.code in {Code.AI_STALE, Code.STALE_CLAIM}:
+                status = "STALE"
+            elif error.code in {
+                Code.NOT_ALLOWED,
+                Code.ACCESS_DENIED,
+                Code.AI_BUDGET,
+                Code.AI_INCOMPLETE,
+            }:
+                status = "DENIED"
+            else:
+                raise
+        return decoded(
+            PortfolioAuthorityDecision,
+            {
+                "status": status,
+                "binding": binding.model_dump(mode="json"),
+                "knowledge_pin": knowledge_pin.model_dump(mode="json"),
+                "search_pin": search_pin.model_dump(mode="json"),
+                "portfolio_pin": portfolio_pin.model_dump(mode="json"),
+                "media_pin": media_pin.model_dump(mode="json"),
+            },
+        )
+
+    async def read_current(
+        self,
+        binding: ContextBinding,
+        knowledge_pin: KnowledgePin,
+        search_pin: SearchPin,
+        portfolio_pin: PortfolioPin,
+        media_pin: MediaPin,
+    ) -> PortfolioContextRead:
+        raw = await self.database._command(
+            self.claim,
+            "READ",
+            run_id=str(self.run.run_id),
+            binding=binding.model_dump(mode="json"),
+            knowledge_pin=knowledge_pin.model_dump(mode="json"),
+            search_pin=search_pin.model_dump(mode="json"),
+            portfolio_pin=portfolio_pin.model_dump(mode="json"),
+            media_pin=media_pin.model_dump(mode="json"),
+        )
+        if type(raw) is not dict or raw.get("portfolio_session_id") != str(
+            self.run.portfolio_session_id
+        ):
+            raise MessagingError(Code.AI_STALE)
+        # Admission metadata is private to this authority adapter, not a READ fact.
+        return decoded(
+            PortfolioContextRead, {k: v for k, v in raw.items() if k != "portfolio_session_id"}
         )
 
 

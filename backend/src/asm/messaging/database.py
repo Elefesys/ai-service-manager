@@ -231,6 +231,61 @@ class WorkerUnitOfWork:
             {"run": run, "pin": json.dumps(pin, allow_nan=False)},
         )
 
+    async def _portfolio_command(self, sql: str, extra: dict[str, object]) -> Any:
+        try:
+            return await self._execute(sql, extra)
+        except DBAPIError as error:
+            if getattr(error.orig, "sqlstate", None) != "P2901":
+                raise
+            primary = getattr(getattr(error.orig, "diag", None), "message_primary", None)
+            code = (
+                {
+                    "ACCESS_DENIED": Code.ACCESS_DENIED,
+                    "NOT_ALLOWED": Code.NOT_ALLOWED,
+                    "SESSION_NOT_ALLOWED": Code.NOT_ALLOWED,
+                    "SOURCE_STALE": Code.AI_STALE,
+                    "BUDGET_EXHAUSTED": Code.AI_BUDGET,
+                    "WIRE_LIMIT": Code.AI_BUDGET,
+                    "ANALYSIS_UNAVAILABLE": Code.AI_INCOMPLETE,
+                    "INVALID_INPUT": Code.INVALID_INPUT,
+                    "NOT_FOUND": Code.NOT_FOUND,
+                }.get(primary)
+                if type(primary) is str
+                else None
+            )
+            if code is None:
+                raise
+            raise MessagingError(code) from None
+
+    async def portfolio_query_reserve(self, run: UUID, pin: dict[str, Any]) -> Any:
+        require_uuid(run)
+        return await self._portfolio_command(
+            "SELECT platform.portfolio_query_reserve(:job,:token,:run,CAST(:pin AS jsonb))",
+            {"run": run, "pin": json.dumps(pin, allow_nan=False)},
+        )
+
+    async def portfolio_query_apply(
+        self, run: UUID, call_id: UUID, ticket: UUID, vectors: list[list[float]]
+    ) -> Any:
+        for value in (run, call_id, ticket):
+            require_uuid(value)
+        return await self._portfolio_command(
+            "SELECT platform.portfolio_query_apply(:job,:token,:run,:call,:ticket,CAST(:vectors AS jsonb))",
+            {
+                "run": run,
+                "call": call_id,
+                "ticket": ticket,
+                "vectors": json.dumps(vectors, allow_nan=False),
+            },
+        )
+
+    async def portfolio_runtime_read(self, run: UUID, pin: dict[str, Any]) -> Any:
+        require_uuid(run)
+        return await self._portfolio_command(
+            "SELECT platform.portfolio_runtime_read(:job,:token,:run,CAST(:pin AS jsonb))",
+            {"run": run, "pin": json.dumps(pin, allow_nan=False)},
+        )
+
     async def process_inbox(self) -> InboxProcessingResult | MutationInboxProcessingResult:
         return parse_inbox_result(
             await self._execute("SELECT platform.messaging_process_inbox(:job, :token)")

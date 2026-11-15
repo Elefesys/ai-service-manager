@@ -182,6 +182,21 @@ class TenantUnitOfWork:
             "SELECT platform.knowledge_owner_read(:business)", {"business": business}
         )
 
+    async def _portfolio_execute(self, sql: str, params: dict[str, object]) -> Any:
+        from asm.messaging.database import physical_transaction
+        from asm.portfolio.errors import database_error
+
+        self._assert_active()
+        try:
+            await physical_transaction(self._connection)
+            return (await self._connection.execute(text(sql), params)).scalar_one()
+        except DBAPIError as error:
+            self._failed = True
+            raise database_error(error) from None
+        except BaseException:
+            self._failed = True
+            raise
+
     async def knowledge_owner_command(
         self, business: UUID, operation: str, key: str, body: dict[str, Any]
     ) -> Any:

@@ -82,6 +82,29 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/publish",
         "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/knowledge/rollback",
     ]
+    portfolio_prefix = "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/portfolio"
+    portfolio_upload = "/assets/{asset_id}/versions/{version_id}/uploads/{upload_id}"
+    portfolio_endpoints = [
+        f"GET {portfolio_prefix}",
+        f"POST {portfolio_prefix}/assets/uploads",
+        f"PUT {portfolio_prefix}{portfolio_upload}/content",
+        f"POST {portfolio_prefix}{portfolio_upload}/finalize",
+        f"POST {portfolio_prefix}{portfolio_upload}/abandon",
+        f"POST {portfolio_prefix}{portfolio_upload}/recover",
+        f"GET {portfolio_prefix}/assets/{{asset_id}}/versions/{{version_id}}/preview",
+        f"POST {portfolio_prefix}/assets/{{asset_id}}/versions/{{version_id}}/purge",
+        f"POST {portfolio_prefix}/assets/{{asset_id}}/versions/{{version_id}}/analysis",
+        f"POST {portfolio_prefix}/items",
+        f"POST {portfolio_prefix}/items/{{item_id}}/confirm",
+        f"POST {portfolio_prefix}/items/{{item_id}}/revoke",
+        f"POST {portfolio_prefix}/assets/{{asset_id}}/delete",
+        f"POST {portfolio_prefix}/builds",
+        f"POST {portfolio_prefix}/publish",
+        f"POST {portfolio_prefix}/rollback",
+        f"GET {portfolio_prefix}/conversations/{{conversation_id}}",
+        f"POST {portfolio_prefix}/conversations/{{conversation_id}}/analysis",
+        f"POST {portfolio_prefix}/conversations/{{conversation_id}}/matches",
+    ]
     assert len(contract["endpoints"]) == 7
     assert actual_endpoints == sorted(
         contract["endpoints"]
@@ -92,6 +115,7 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         + native_context_endpoints
         + configuration_endpoints
         + knowledge_endpoints
+        + portfolio_endpoints
     )
     assert contract["schema_revision"] == "0003" and contract["down_revision"] == "0002"
     assert contract["environments"] == ["LOCAL", "TEST"]

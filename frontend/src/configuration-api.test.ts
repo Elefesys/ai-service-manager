@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { configurationApi, parseActive, parseBundle, parseCommand, parseConfigurationError, parseDraft, parsePreview, SaveSource, KnowledgeOperation, KnowledgeBody, knowledgeApi, normalizeSource, validateKnowledgeCommand, parseKnowledgeState, parseKnowledgeCommand } from './configuration-api';
+import { ConfigurationError, configurationApi, parseActive, parseBundle, parseCommand, parseConfigurationError, parseDraft, parsePreview, SaveSource, KnowledgeOperation, KnowledgeBody, knowledgeApi, normalizeSource, validateKnowledgeCommand, parseKnowledgeState, parseKnowledgeCommand } from './configuration-api';
 import { active, actor, bundle, businessId, command, draft, ok, preview, releaseId, workspace, sourceId, revisionId, buildId, knowledgeState, knowledgeSource, knowledgeCommand, emptyReadyBuild, emptyBuildId } from './configuration-fixtures.test-helper';
 afterEach(()=>vi.restoreAllMocks());
 describe('configuration owner wire',()=>{
@@ -108,3 +108,6 @@ describe('knowledge owner wire',()=>{
   });
 
 });
+
+
+it('accepts the closed portfolio publication guard without widening other error codes',()=>{expect(parseConfigurationError({error:{code:'PORTFOLIO_BUILD_REQUIRED'}},409)).toEqual(new ConfigurationError(409,'PORTFOLIO_BUILD_REQUIRED'));});

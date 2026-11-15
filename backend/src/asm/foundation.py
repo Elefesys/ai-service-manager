@@ -35,21 +35,23 @@ if TYPE_CHECKING:
     from asm.ai.contracts import AnyGatewayConfig
     from asm.ai.fake import FakeAdapter
     from asm.ai.runtime import SyntheticRuntime
-    from asm.ai.runtime_settings import RuntimeSettings
+    from asm.ai.runtime_settings import PortfolioRuntimeSettings, RuntimeSettings
+    from asm.ai.vision import VisionClient
     from asm.files.storage import ObjectStorage
     from asm.knowledge.embeddings import EmbeddingClient
     from asm.messaging.adapter import ControlledAdapter
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.worker import Worker
+    from asm.portfolio.storage import PortfolioStorage
     from asm.telegram.client import TelegramClient
 
 tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0020"
-NATIVE_CONTEXT_PROFILE_SHA256 = "c146dd44b8a13247c0c4ac3cd0c91433f0b07a8199242617ced6bf28cfb32097"
-NATIVE_PROFILE_BODY_SHA256 = "cf34e26318a521e4b02103597962c97b03f89c74990937264db6c7b0236e3c46"
+DATABASE_SCHEMA_REVISION = "0021"
+NATIVE_CONTEXT_PROFILE_SHA256 = "53ae75d0541399821a5a134a00b9c6a47dc970ea313bb167c304c86b88975968"
+NATIVE_PROFILE_BODY_SHA256 = "85fac0fcba5194038e708b4098f43829a5a2486b3e2d68ae941ec8ef6c721086"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -86,7 +88,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.knowledge_search_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.portfolio_schema_profile()')
             """)
             )
         )
@@ -130,7 +132,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
     if (
         declared
         != {
-            "schema_revision": "0020",
+            "schema_revision": DATABASE_SCHEMA_REVISION,
             "valid": True,
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
         }
@@ -270,6 +272,9 @@ def create_app(
     telegram: "TelegramClient | None" = None,
     object_storage: "ObjectStorage | None" = None,
     knowledge_embeddings: "EmbeddingClient | None" = None,
+    portfolio_storage: "PortfolioStorage | None" = None,
+    portfolio_vision: "VisionClient | None" = None,
+    portfolio_embeddings: "EmbeddingClient | None" = None,
 ) -> FastAPI:
     from asm.configuration.http import install_configuration
     from asm.conversations.escalation_http import install_escalations
@@ -280,6 +285,8 @@ def create_app(
     from asm.knowledge.http import install_knowledge
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.http import install_messaging
+    from asm.portfolio.http import install_portfolio
+    from asm.portfolio.service import PortfolioService
     from asm.telegram.adapter import TelegramRefresher
     from asm.telegram.client import TelegramClient
     from asm.telegram.config import TelegramSettings
@@ -303,6 +310,18 @@ def create_app(
             raise RuntimeError("Storage environment mismatch")
         storage = S3ObjectStorage(storage_settings)
 
+    portfolio = PortfolioService(
+        auth,
+        portfolio_storage
+        if portfolio_storage is not None
+        else storage
+        if isinstance(storage, S3ObjectStorage)
+        else None,
+        vision=portfolio_vision,
+        embeddings=portfolio_embeddings,
+        environment=config.environment,
+    )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
@@ -312,6 +331,7 @@ def create_app(
                 await db.check()
             yield
         finally:
+            await portfolio.close()
             if telegram_client is not None:
                 await telegram_client.aclose()
             if isinstance(storage, S3ObjectStorage):
@@ -344,6 +364,8 @@ def create_app(
     install_billing(app, auth, config)
     install_configuration(app, auth, config)
     install_knowledge(app, auth, config, embeddings=knowledge_embeddings)
+    app.state.portfolio_service = portfolio
+    install_portfolio(app, portfolio, config)
     install_messaging(
         app,
         auth,
@@ -374,19 +396,21 @@ def create_worker(
     model: "Callable[[], FakeAdapter] | None" = None,
     ai_telegram: "TelegramClient | None" = None,
     ai_embeddings: "EmbeddingClient | None" = None,
+    portfolio_settings: "PortfolioRuntimeSettings | None" = None,
     provider_settings: "RuntimeSettings | None" = None,
     provider_key_file: Path | None = None,
     provider_transport: "AsyncBaseTransport | None" = None,
 ) -> "Worker":
     """Explicit synthetic application entry. Default composition has AI disabled."""
     from asm.ai.provider_runtime import ProviderRuntime
-    from asm.ai.runtime import SyntheticRuntime
+    from asm.ai.runtime import PortfolioSyntheticRuntime, SyntheticRuntime
     from asm.messaging.errors import Code, MessagingError
     from asm.messaging.worker import Worker
 
     if provider_settings is not None:
         if (
-            ai_embeddings is not None
+            portfolio_settings is not None
+            or ai_embeddings is not None
             or ai_config is not None
             or model is not None
             or provider_key_file is None
@@ -408,6 +432,21 @@ def create_worker(
         )
     if provider_key_file is not None or provider_transport is not None:
         raise MessagingError(Code.INVALID_INPUT)
+    if portfolio_settings is not None:
+        if ai_config is not None or model is None:
+            raise MessagingError(Code.INVALID_INPUT)
+        return Worker(
+            database,
+            adapter,
+            ai=PortfolioSyntheticRuntime(
+                database,
+                portfolio_settings,
+                model,
+                environment=environment,
+                telegram=ai_telegram,
+                embeddings=ai_embeddings,
+            ),
+        )
     if ai_config is None and ai_embeddings is not None:
         raise MessagingError(Code.INVALID_INPUT)
     if (ai_config is None) != (model is None) or (ai_config is None and ai_telegram is not None):
@@ -438,6 +477,7 @@ async def serve(
     from asm.messaging.adapter import ControlledAdapter
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.worker import run
+    from asm.portfolio.storage import PortfolioCleanupSweep
     from asm.telegram.client import TelegramClient
     from asm.telegram.config import TelegramSettings
 
@@ -510,6 +550,7 @@ async def serve(
             stop,
             files=files,
             cleanup=CleanupSweep(file_db, storage),
+            portfolio_cleanup=PortfolioCleanupSweep(kernel, storage),
             telegram=telegram,
             ai=ai,
         )

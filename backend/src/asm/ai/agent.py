@@ -1,10 +1,12 @@
 """One bounded ConversationAgent invocation, returning an effect-free candidate only."""
 
+from __future__ import annotations
+
 import asyncio
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Literal, Protocol, Self
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Self
 
 from pydantic import Field, model_validator
 
@@ -47,6 +49,10 @@ from asm.ai.knowledge import (
     SearchRefs,
 )
 from asm.configuration.models import ActiveProjection
+
+if TYPE_CHECKING:
+    from asm.ai.portfolio import PreparedPortfolioContext
+
 
 Boundary = Literal["MODEL", "READ", "FOLLOWUP", "CANDIDATE"]
 StopCode = (
@@ -149,6 +155,7 @@ class ConversationAgent:
         authority: ContextAuthority,
         *,
         builder: ContextBuilder | None = None,
+        initial_budget: Budget | None = None,
     ):
         self.config = validate_gateway_config(config)
         if (
@@ -161,6 +168,7 @@ class ConversationAgent:
         self.adapter = adapter
         self.authority = authority
         self.builder = builder if builder is not None else ContextBuilder()
+        self._initial_budget = initial_budget
         self._used = False
         self._gateway: ModelGateway | None = None
         self._reads = 0
@@ -196,11 +204,19 @@ class ConversationAgent:
 
     def _project(
         self, snapshot: object, binding: ContextBinding
-    ) -> PreparedContext | PreparedKnowledgeContext | PreparedSearchContext:
+    ) -> (
+        PreparedContext
+        | PreparedKnowledgeContext
+        | PreparedSearchContext
+        | PreparedPortfolioContext
+    ):
         return self.builder.build(snapshot, binding)
 
     def _tool(self) -> ReadTool:
         return current_context_tool()
+
+    def _read_result(self, view: DTO) -> str:
+        return view.model_dump_json()
 
     async def _authorize(self, binding: ContextBinding, boundary: Boundary) -> None:
         self._time_left()
@@ -244,7 +260,13 @@ class ConversationAgent:
                     tools=(self._tool(),) if self.config.limits.read_executions else (),
                 )
                 await self._authorize(binding, "MODEL")
-                self._gateway = ModelGateway(self.config, request, self.adapter)
+                self._gateway = (
+                    ModelGateway(
+                        self.config, request, self.adapter, initial_budget=self._initial_budget
+                    )
+                    if self._initial_budget is not None
+                    else ModelGateway(self.config, request, self.adapter)
+                )
                 result = await self._call()
                 if result.kind == "TOOLS":
                     # The existing Gateway already validated allowlist, arguments and budget.
@@ -270,7 +292,7 @@ class ConversationAgent:
                     tool_result = ToolResult(
                         call_id=call.call_id,
                         name=call.name,
-                        result_json=refreshed.view.model_dump_json(),
+                        result_json=self._read_result(refreshed.view),
                     )
                     await self._authorize(binding, "FOLLOWUP")
                     result = await self._call((tool_result,))

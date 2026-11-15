@@ -15,7 +15,14 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import Field
 
 from asm.files.config import StorageSettings
-from asm.files.models import CleanupClaim, ReadManifest, UploadPermit
+from asm.files.models import (
+    CleanupClaim,
+    OwnerCleanupPermit,
+    OwnerDeletePermit,
+    OwnerUploadPermit,
+    ReadManifest,
+    UploadPermit,
+)
 from asm.messaging.database import worker_active
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.results import Result
@@ -140,6 +147,59 @@ class S3ObjectStorage:
             raise MessagingError(Code.INVALID_INPUT)
 
         def operation() -> None:
+            self._client.delete_object(Bucket=self._settings.bucket, Key=permit.storage_key)
+
+        await self._io(operation)
+
+    async def put_owner(self, permit: OwnerUploadPermit, data: bytes) -> None:
+        if (
+            type(permit) is not OwnerUploadPermit
+            or type(data) is not bytes
+            or len(data) != permit.manifest.size_bytes
+            or hashlib.sha256(data).hexdigest() != permit.manifest.sha256
+            or permit.storage_key
+            != f"workspaces/{permit.workspace_id}/portfolio/{permit.asset_id}/versions/{permit.version_id}/uploads/{permit.upload_id}"
+            or permit.operation_deadline.tzinfo is None
+            or datetime.now(UTC) >= permit.operation_deadline
+        ):
+            raise MessagingError(Code.INVALID_INPUT)
+        checksum = base64.b64encode(bytes.fromhex(permit.manifest.sha256)).decode("ascii")
+
+        def operation() -> None:
+            if datetime.now(UTC) >= permit.operation_deadline:
+                raise MessagingError(Code.INVALID_INPUT)
+            response = self._client.put_object(
+                Bucket=self._settings.bucket,
+                Key=permit.storage_key,
+                Body=data,
+                ContentLength=len(data),
+                ContentType=permit.manifest.mime_type,
+                CacheControl="private, no-store",
+                ChecksumSHA256=checksum,
+                IfNoneMatch="*",
+            )
+            if response.get("ChecksumSHA256") != checksum:
+                raise MessagingError(Code.DEPENDENCY_UNAVAILABLE)
+
+        await self._io(operation)
+
+    async def delete_owner(self, permit: OwnerCleanupPermit | OwnerDeletePermit) -> None:
+        if type(permit) not in {OwnerCleanupPermit, OwnerDeletePermit}:
+            raise MessagingError(Code.INVALID_INPUT)
+        deadline = (
+            permit.lease_until if isinstance(permit, OwnerCleanupPermit) else permit.purge_deadline
+        )
+        if (
+            deadline.tzinfo is None
+            or datetime.now(UTC) >= deadline
+            or permit.storage_key
+            != f"workspaces/{permit.workspace_id}/portfolio/{permit.asset_id}/versions/{permit.version_id}/uploads/{permit.upload_id}"
+        ):
+            raise MessagingError(Code.INVALID_INPUT)
+
+        def operation() -> None:
+            if datetime.now(UTC) >= deadline:
+                raise MessagingError(Code.INVALID_INPUT)
             self._client.delete_object(Bucket=self._settings.bucket, Key=permit.storage_key)
 
         await self._io(operation)
