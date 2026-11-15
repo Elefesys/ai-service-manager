@@ -302,6 +302,8 @@ C2 перед SQL проверяет текущий head и отсутствие
   `tests/test_m4_probe.py` — только четыре variants
   `test_gpt_remainder_deadline_stops_and_keeps_earlier_settlement` и их
   локальные timing helpers; production probe/fixtures/budgets не открываются.
+- `scripts/test_browser.sh` — только общий budget фазы browser-tests600→900
+  по решению C0 от2026-11-16 ниже; остальные budgets/retries/cleanup неизменны.
 - `compose.browser.yaml`, `scripts/check_browser_compose.py`,
   `tests/test_browser_compose.py` — только согласованная topology внутреннего
   S3 endpoint и browser presign endpoint, с exact guards/negative checks.
@@ -712,145 +714,89 @@ phase evidence и narrow admission checks; сохранить готовый1c07
 Merge — после C0 review и отдельного разрешения владельца. Новых paid/VM/
 client-data допусков нет; C6 HOLD, M5.2D не начинать.
 
-### Возврат C4 — f7ef unit fixes / 2026-11-16
+### Решение C0 — current migration test и browser suite budget / 2026-11-16
 
-**M5.2C IN_PROGRESS; PR50 Draft, без merge.** Проверенный source HEAD
-`07931171b444833876ee7719d2da0b6a9f0b81ba`, tree
-`24b61237de7e9c7a19175a77eb8958bf499e442c`, parent — C0f7ef621.
-Этот возврат — отдельный docs-only checkpoint; PR branch остаётся0793117.
-Code fix1c07590 и все прежние C0 pins сохранены. В последнем source commit
-изменены ровно5 разрешённых paths; protected4/applied20 неизменны.
+**ACCEPTED FOR IMPLEMENTATION; M5.2C остаётся IN_PROGRESS, PR50 Draft.**
+Exact continuation base — `30127f143349645fa1c75d00cf34a4bd3b5e6d03`,
+tree `edf04c471782439a78391ce2c7065b99b1dff470`.
+Сохранить parent source `07931171b444833876ee7719d2da0b6a9f0b81ba`,
+tree `24b61237de7e9c7a19175a77eb8958bf499e442c`, прежние C0 assignments
+и этот docs commit в ancestry. Ведущий C4, та же ветка/PR50; PR branch пока
+на0793117. Main7080486 неизменён. Подробный [возврат C4 с точным патчем](https://github.com/Elefesys/ai-service-manager/blob/30127f143349645fa1c75d00cf34a4bd3b5e6d03/docs/tasks/M5_HANDOFF.md#L715)
+остаётся в истории, не дублировать его логи в новых документах.
 
-[Штатный CI43741605824](https://github.com/Elefesys/ai-service-manager/actions/runs/43741605824),
-attempt1:10 SUCCESS/2 FAILURE. Все принятые foundation unit fixes прошли:
-**4431 PASS,161 subtests PASS,0 FAIL**,1281 integration deselected,471.83s.
-Actual core PG выполнил весь inventory:1016 cases, **1015 PASS/1 FAIL/0 SKIP**,
-1577.90s. Обязательные **9 actual private S3 API и38 v5 PG cases —47 PASS**:
-для каждого сверены source node SHA256, start, setup/call/teardown PASS без
-xfail и case-end PASSED. Browser эти результаты не заменяет.
+**Проверено C0 по CI43741605824.** Latest11 SUCCESS/1 FAILURE.
+Unit4431 PASS/0 FAIL; весь generic PG inventory1016 завершён:
+1015 PASS/1 FAIL/0 SKIP. C0 скачал core artifact14174112862, сверил ZIP
+SHA256395f30aa854290f2c149b900067e81a50eadb4ca7a894d0f3058741ad543651c,
+подтвердил complete1016/1016/evidence_failed=false и единственное падение
+configuration migration test на profile0020 при фактической0021.
+Для всех9 actual S3 API и38 portfolio runtime PG cases независимо сверены
+node SHA256/start/setup-call-teardown PASS/no xfail/case-end PASSED.
+Эти47 сценариев подтверждены на0793117; весь M5.2C ещё не VERIFIED:
+последующие foundation downgrade/reupgrade/contracts/wheel НЕ ВЫПОЛНЕНЫ.
 
-Единственное core падение:
-`tests/test_m5_configuration_postgres.py::test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refusal`.
-Fixture использует current0021; первая проверка `profile("0020")` падает до
-начала downgrade: `0021 != 0020`, строки424/452. Из-за generic exit1 дальнейшие
-foundation downgrade/reupgrade, contracts и wheel reproducibility **NOT_RUN**.
-Primary exit1/owned cleanup0; evidence complete1016/1016, sink issues0.
-[Artifact14174112862](https://github.com/Elefesys/ai-service-manager/actions/runs/43741605824/artifacts/14174112862),
-ZIP SHA256 `395f30aa854290f2c149b900067e81a50eadb4ca7a894d0f3058741ad543651c`.
-Binding совпал с438 Git modes/SHA256; архив — с438 bytes/executable bits;
-tree24b, tested merge
-`f78668f9ad01847e6a4c84337e0e7ae2cc1662b8`, parents main7080486+head0793117.
-Runtime160/160 без skips, native105 resets/independent historical0013 catalog/
-owned cleanup, все6 normal/docker29 durable lifecycles и6 connect5 lanes PASS.
+**1. Исправление configuration migration test принято.**
+Файл `tests/test_m5_configuration_postgres.py` уже входит в действующий
+write-set `tests/test_m5_configuration*.py`. Пропуск в M5_PORTFOLIO_PATHS —
+техническое расхождение admission, а не новая продуктовая область.
+Принят ровно proposal из возврата30127f1 для
+`test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refusal`
+и вложенных rows/profile helpers:
+- initial current0021 и portfolio_schema_profile; legacy knowledge_pin=NULL
+  проверяется также на0021;
+- отдельный downgrade/checkpoint0020 с independent full catalog/valid profile,
+  прежними legacy rows и отказом current runtime readiness;
+- прежние0019/0018/0017 проверки сохраняются;
+- finally восстанавливает0018→0019→0020→0021 с точным сравнением сохранённых
+  historical profiles; повторный upgrade0021 сохраняет rows/current profile;
+- после edit отказ downgrade до0017 атомарен: counts, revision0021, current
+  profile/readiness неизменны. Не ослаблять CONFIGURATION_DURABLE_DATA.
+Production/schema/fixtures/applied migrations не менять, остальные функции
+модуля сохранить. C4 isolated actual-PG1 PASS — авторский targeted результат;
+он не заменяет успешную проверку внесённого кандидата в CI.
 
-Browser attempt1:66 PASS/TIMEOUT124/600.014s без assertion failure;
-desktop actual S3, оба old signed GET и old login/CSRF recovery PASS,
-последние3 narrow cases NOT_REACHED. После завершения run однократно повторён
-только failed browser job132910690424 на том же SHA и budget600s.
-**Attempt2:69 PASS/599.052s**, включая оба полных unmocked private S3 journeys
-(desktop+narrow), оба old signed GET и прежний escalation login/CSRF recovery.
-Margin до600s меньше секунды: первый timeout и timing limitation сохраняются,
-точная причина не доказана; повтор не объявляется исправлением кода.
-[Artifact14174637753](https://github.com/Elefesys/ai-service-manager/actions/runs/43741605824/artifacts/14174637753),
-ZIP SHA256 `65562454e9199d92bf80c78a786b7b9785e337834b38b48ad3b2d7f705eb1942` сверён;
-job log подтверждает checkout merge f78668f. Остальные jobs не исполнялись
-повторно: новые attempt2 IDs сохранили исходные start/end timestamps.
-Latest jobs **11 SUCCESS/1 FAILURE**, overall FAILURE из-за configuration test.
+В scripts/m4_runtime_db.py / tests/test_m4_runtime_db_runner.py добавить ровно
+этот path для текущей M5.2C continuation и проверить позитивный/соседний отказ.
+**Правило продолжения:** при таком же пропуске технического admission для path,
+уже явно включённого в текущий write-set, C4 может синхронно добавить именно
+нужный path в M5.2C admission с обоснованием diff и targeted checks, без новой
+выдачи C0. Это не разрешение опираться на старые M5 allowlists, добавлять wildcard,
+расширять global/historical admission или менять непринятые контракты.
+Новый path вне текущего write-set по-прежнему согласуется с C0.
 
+**2. Общий browser suite budget600→900s — явное решение C0.**
+Проверен artifact14174637753, ZIP
+SHA25665562454e9199d92bf80c78a786b7b9785e337834b38b48ad3b2d7f705eb1942.
+Attempt2:69 PASS/599.052s, оба полных actual S3 journeys выполнены;
+предшествующий timeout600s после66 PASS сохраняется. В предыдущем кандидате
+также был общий timeout600s без assertion failure. Запас меньше секунды после
+повтора недостаточен для последовательного набора69 tests на hosted runner.
+Причина разброса времени не установлена; PASS после повтора не считается fix.
 
-**Новый closed path — нужен допуск C0.**
-`tests/test_m5_configuration_postgres.py` отсутствует именно в
-`M5_PORTFOLIO_PATHS`; наличие этого path в прежних M5 allowlists не расширяет
-нынешний допуск. Файл checkout не изменён, SHA256
-`83c48191a9f578a6d0bd9e166963bd19a51553d9d0e37a7d6f8ee31809e9c46d`.
-Предлагается открыть только указанный test и его local helpers: current0021
-и `portfolio_schema_profile`, отдельный historical0020 checkpoint, затем
-прежние0019/0018/0017, точный обратный подъём до0021 и repeat/used-refusal.
-Legacy rows/knowledge-pin-NULL, independent catalog, exact historical
-profiles, readiness refusal и атомарность durable-data refusal сохраняются.
-Production, fixtures и applied migrations не меняются.
+Разрешён ровно `scripts/test_browser.sh`: строка запуска `step browser-tests`
+получает конечный budget900 вместо600. Это предел всего TEST-набора, не SLA
+приложения. Playwright per-test30s, workers1, retries0; workflow job25min;
+build/startup/fixtures/cleanup budgets, assertions и evidence остаются прежними.
+Workflow/image pins, production/provider deadlines и shared phase runner не
+менять. Новая граница даёт около300s запаса к реально завершённому прогону,
+сохраняя конечное прекращение зависшего набора. Повторно повышать её без C0 нельзя.
+Добавить только этот script path в M5.2C admission; исторический R11 и другие
+запреты изменения CI paths не ослаблять. До push: shell syntax и существующие
+phase/cleanup/exit-preservation проверки; отдельный full browser rerun старого
+SHA не нужен. Следующий кандидат проверит suite один раз с новым cap.
 
-Готовый патч ниже **не применён**. Его isolated copy прошла actual PostgreSQL
-18.6/pgvector0.8.6/btree_gist1.8/en_US.utf8: **1 PASS/12.89s**, final0021;
-Ruff check/format PASS. AST вне указанного test идентичен исходному модулю.
-Кластер был отдельным synthetic LOCAL/TEST, owned cleanup выполнен; это
-авторская targeted проверка proposal, не новый CI PASS.
-
-```diff
---- a/tests/test_m5_configuration_postgres.py
-+++ b/tests/test_m5_configuration_postgres.py
-@@ -389,7 +389,7 @@
-             revision = (
-                 await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-             ).scalar_one()
--            if revision in {"0019", "0020"}:
-+            if revision in {"0019", "0020", "0021"}:
-                 assert not (
-                     await c.execute(
-                         text(
-@@ -438,6 +438,7 @@
-             )
-             full, nonfunction = (await c.execute(text(catalog.CATALOG_SQL))).one()
-             name = {
-+                "0021": "portfolio_schema_profile",
-                 "0019": "published_knowledge_schema_profile",
-                 "0020": "knowledge_search_schema_profile",
-                 "0018": "business_configuration_schema_profile",
-@@ -449,11 +450,19 @@
-             )
- 
-     before = await rows()
--    current = await profile("0020")
-+    current = await profile("0021")
-     await h.runtime.engine.dispose()
-     historical18 = None
-     historical19 = None
-+    historical20 = None
-     try:
-+        # Keep 0020 as an independently checked historical checkpoint.
-+        await _migrate("downgrade", "0020")
-+        historical20 = await profile("0020")
-+        assert historical20[1]["valid"] is True
-+        assert await rows() == before
-+        with pytest.raises(RuntimeError, match="schema"):
-+            await h.runtime.check()
-         await _migrate("downgrade", "0019")
-         historical19 = await profile("0019")
-         assert historical19[1]["valid"] is True
-@@ -479,16 +488,19 @@
-         if historical19 is not None:
-             assert await profile("0019") == historical19
-         await _migrate("upgrade", "0020")
--    await _migrate("upgrade", "0020")
--    assert await rows() == before and await profile("0020") == current
-+        if historical20 is not None:
-+            assert await profile("0020") == historical20
-+        await _migrate("upgrade", "0021")
-+    await _migrate("upgrade", "0021")
-+    assert await rows() == before and await profile("0021") == current
-     await h.runtime.check()
-     await edit(h)
-     before_used = await counts(h)
-     with pytest.raises(AssertionError, match="CONFIGURATION_DURABLE_DATA"):
-         await _migrate("downgrade", "0017")
-     assert await counts(h) == before_used
--    assert await scalar_revision() == "0020"
--    assert await profile("0020") == current
-+    assert await scalar_revision() == "0021"
-+    assert await profile("0021") == current
-     await h.runtime.check()
- 
- 
-
-```
-
-После принятия нужен также точечный допуск одного path в уже разрешённых
-scripts/m4_runtime_db.py и tests/test_m4_runtime_db_runner.py с новым C0 pin;
-общие allowlists/attempt1/budgets не расширять. Затем affected target, один
-push полного принятого кандидата в тот же PR50 и новый normal full CI.
-Текущий красный full run и зелёные jobs отдельно не перезапускались.
-До C0 решения patch и admission не применять; VERIFIED/merge не объявлены.
-C6 HOLD; M5.2D, paid/VM/client-data не открыты.
+**Следующее действие C4:** применить принятый migration-test patch, одну строку
+browser budget и соответствующий narrow admission. Проверить затронутый actual
+PG case на внесённом source, exact return0021/исторические profiles/used refusal,
+Ruff и admission/phase checks. Затем один push полного кандидата в PR50 и
+один следующий штатный full CI. Нужны12/12 и прохождение всех стадий foundation,
+включая ранее недостигнутые downgrade/reupgrade/contracts/wheel;9 S3 API/38 v5
+PG и все browser journeys без skips. Если browser снова превысит900s, вернуть
+phase durations/последний достигнутый case, не запускать очередной unchanged
+rerun. Current red run и старые зелёные jobs отдельно не повторять.
+C0 review → отдельное owner merge → post-merge CI остаются обязательными.
+Paid/VM/client-data, M5.2D и C6 не открываются.
 
 ## 1. Проверяемый результат всего этапа
 
