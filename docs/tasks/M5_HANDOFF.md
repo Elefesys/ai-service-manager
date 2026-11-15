@@ -712,6 +712,146 @@ phase evidence и narrow admission checks; сохранить готовый1c07
 Merge — после C0 review и отдельного разрешения владельца. Новых paid/VM/
 client-data допусков нет; C6 HOLD, M5.2D не начинать.
 
+### Возврат C4 — f7ef unit fixes / 2026-11-16
+
+**M5.2C IN_PROGRESS; PR50 Draft, без merge.** Проверенный source HEAD
+`07931171b444833876ee7719d2da0b6a9f0b81ba`, tree
+`24b61237de7e9c7a19175a77eb8958bf499e442c`, parent — C0f7ef621.
+Этот возврат — отдельный docs-only checkpoint; PR branch остаётся0793117.
+Code fix1c07590 и все прежние C0 pins сохранены. В последнем source commit
+изменены ровно5 разрешённых paths; protected4/applied20 неизменны.
+
+[Штатный CI43741605824](https://github.com/Elefesys/ai-service-manager/actions/runs/43741605824),
+attempt1:10 SUCCESS/2 FAILURE. Все принятые foundation unit fixes прошли:
+**4431 PASS,161 subtests PASS,0 FAIL**,1281 integration deselected,471.83s.
+Actual core PG выполнил весь inventory:1016 cases, **1015 PASS/1 FAIL/0 SKIP**,
+1577.90s. Обязательные **9 actual private S3 API и38 v5 PG cases —47 PASS**:
+для каждого сверены source node SHA256, start, setup/call/teardown PASS без
+xfail и case-end PASSED. Browser эти результаты не заменяет.
+
+Единственное core падение:
+`tests/test_m5_configuration_postgres.py::test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refusal`.
+Fixture использует current0021; первая проверка `profile("0020")` падает до
+начала downgrade: `0021 != 0020`, строки424/452. Из-за generic exit1 дальнейшие
+foundation downgrade/reupgrade, contracts и wheel reproducibility **NOT_RUN**.
+Primary exit1/owned cleanup0; evidence complete1016/1016, sink issues0.
+[Artifact14174112862](https://github.com/Elefesys/ai-service-manager/actions/runs/43741605824/artifacts/14174112862),
+ZIP SHA256 `395f30aa854290f2c149b900067e81a50eadb4ca7a894d0f3058741ad543651c`.
+Binding совпал с438 Git modes/SHA256; архив — с438 bytes/executable bits;
+tree24b, tested merge
+`f78668f9ad01847e6a4c84337e0e7ae2cc1662b8`, parents main7080486+head0793117.
+Runtime160/160 без skips, native105 resets/independent historical0013 catalog/
+owned cleanup, все6 normal/docker29 durable lifecycles и6 connect5 lanes PASS.
+
+Browser attempt1:66 PASS/TIMEOUT124/600.014s без assertion failure;
+desktop actual S3, оба old signed GET и old login/CSRF recovery PASS,
+последние3 narrow cases NOT_REACHED. После завершения run однократно повторён
+только failed browser job132910690424 на том же SHA и budget600s.
+**Attempt2:69 PASS/599.052s**, включая оба полных unmocked private S3 journeys
+(desktop+narrow), оба old signed GET и прежний escalation login/CSRF recovery.
+Margin до600s меньше секунды: первый timeout и timing limitation сохраняются,
+точная причина не доказана; повтор не объявляется исправлением кода.
+[Artifact14174637753](https://github.com/Elefesys/ai-service-manager/actions/runs/43741605824/artifacts/14174637753),
+ZIP SHA256 `65562454e9199d92bf80c78a786b7b9785e337834b38b48ad3b2d7f705eb1942` сверён;
+job log подтверждает checkout merge f78668f. Остальные jobs не исполнялись
+повторно: новые attempt2 IDs сохранили исходные start/end timestamps.
+Latest jobs **11 SUCCESS/1 FAILURE**, overall FAILURE из-за configuration test.
+
+
+**Новый closed path — нужен допуск C0.**
+`tests/test_m5_configuration_postgres.py` отсутствует именно в
+`M5_PORTFOLIO_PATHS`; наличие этого path в прежних M5 allowlists не расширяет
+нынешний допуск. Файл checkout не изменён, SHA256
+`83c48191a9f578a6d0bd9e166963bd19a51553d9d0e37a7d6f8ee31809e9c46d`.
+Предлагается открыть только указанный test и его local helpers: current0021
+и `portfolio_schema_profile`, отдельный historical0020 checkpoint, затем
+прежние0019/0018/0017, точный обратный подъём до0021 и repeat/used-refusal.
+Legacy rows/knowledge-pin-NULL, independent catalog, exact historical
+profiles, readiness refusal и атомарность durable-data refusal сохраняются.
+Production, fixtures и applied migrations не меняются.
+
+Готовый патч ниже **не применён**. Его isolated copy прошла actual PostgreSQL
+18.6/pgvector0.8.6/btree_gist1.8/en_US.utf8: **1 PASS/12.89s**, final0021;
+Ruff check/format PASS. AST вне указанного test идентичен исходному модулю.
+Кластер был отдельным synthetic LOCAL/TEST, owned cleanup выполнен; это
+авторская targeted проверка proposal, не новый CI PASS.
+
+```diff
+--- a/tests/test_m5_configuration_postgres.py
++++ b/tests/test_m5_configuration_postgres.py
+@@ -389,7 +389,7 @@
+             revision = (
+                 await c.execute(text("SELECT version_num FROM platform.alembic_version"))
+             ).scalar_one()
+-            if revision in {"0019", "0020"}:
++            if revision in {"0019", "0020", "0021"}:
+                 assert not (
+                     await c.execute(
+                         text(
+@@ -438,6 +438,7 @@
+             )
+             full, nonfunction = (await c.execute(text(catalog.CATALOG_SQL))).one()
+             name = {
++                "0021": "portfolio_schema_profile",
+                 "0019": "published_knowledge_schema_profile",
+                 "0020": "knowledge_search_schema_profile",
+                 "0018": "business_configuration_schema_profile",
+@@ -449,11 +450,19 @@
+             )
+ 
+     before = await rows()
+-    current = await profile("0020")
++    current = await profile("0021")
+     await h.runtime.engine.dispose()
+     historical18 = None
+     historical19 = None
++    historical20 = None
+     try:
++        # Keep 0020 as an independently checked historical checkpoint.
++        await _migrate("downgrade", "0020")
++        historical20 = await profile("0020")
++        assert historical20[1]["valid"] is True
++        assert await rows() == before
++        with pytest.raises(RuntimeError, match="schema"):
++            await h.runtime.check()
+         await _migrate("downgrade", "0019")
+         historical19 = await profile("0019")
+         assert historical19[1]["valid"] is True
+@@ -479,16 +488,19 @@
+         if historical19 is not None:
+             assert await profile("0019") == historical19
+         await _migrate("upgrade", "0020")
+-    await _migrate("upgrade", "0020")
+-    assert await rows() == before and await profile("0020") == current
++        if historical20 is not None:
++            assert await profile("0020") == historical20
++        await _migrate("upgrade", "0021")
++    await _migrate("upgrade", "0021")
++    assert await rows() == before and await profile("0021") == current
+     await h.runtime.check()
+     await edit(h)
+     before_used = await counts(h)
+     with pytest.raises(AssertionError, match="CONFIGURATION_DURABLE_DATA"):
+         await _migrate("downgrade", "0017")
+     assert await counts(h) == before_used
+-    assert await scalar_revision() == "0020"
+-    assert await profile("0020") == current
++    assert await scalar_revision() == "0021"
++    assert await profile("0021") == current
+     await h.runtime.check()
+ 
+ 
+
+```
+
+После принятия нужен также точечный допуск одного path в уже разрешённых
+scripts/m4_runtime_db.py и tests/test_m4_runtime_db_runner.py с новым C0 pin;
+общие allowlists/attempt1/budgets не расширять. Затем affected target, один
+push полного принятого кандидата в тот же PR50 и новый normal full CI.
+Текущий красный full run и зелёные jobs отдельно не перезапускались.
+До C0 решения patch и admission не применять; VERIFIED/merge не объявлены.
+C6 HOLD; M5.2D, paid/VM/client-data не открыты.
+
 ## 1. Проверяемый результат всего этапа
 
 Владелец может завести услуги и подтверждённые знания, проверить изменения и
