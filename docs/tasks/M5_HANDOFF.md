@@ -620,6 +620,91 @@ login/CSRF recovery также должны PASS. Новый failed gate раз�
 Вернуть PR/final head/tree/CI и ограничения. Merge требует отдельного разрешения
 владельца после C0 review. Paid/provider/VM/client-data, C6 и M5.2D не открыты.
 
+### Возврат C4 — принятые поправки выполнены, foundation unit gate OPEN
+
+**IN_PROGRESS; PR50 Draft.** Решение cecb92c сохранено в ancestry и выполнено:
+exact0021/68 fingerprint с прежним full inventory/multiset, exact два edge
+nosniff и narrow admission. Затронутые проверки87 PASS/18.41s; actual read-only
+PG68 таблиц/1303 строки, повторный fingerprint exact equal,9 omissions/extra
+отвергнуты. Historical0009–0012 helper и applied0001–0020 неизменны.
+
+Один готовый push в PR50:
+head `4f0973b13c5177c7c613a77ee9f954c5e145f858`,
+tree `3248684c2c4d76672b9627250e5c14605b7abc4a`, parentcecb92c.
+[CI43734534033](https://github.com/Elefesys/ai-service-manager/actions/runs/43734534033)
+проверил merge `80d6cc884d9b0a1a0287fd101999d6ef181d14b7` с тем же tree;
+архив438 файлов совпал с actual candidate bytes/Git executable bits.
+Main7080486, protected4 bytes/modes, image pins/workflows не изменены.
+
+- Attempt1:10 SUCCESS/2 FAILURE. Native, runtime160/160 и все6 connect5 lanes
+  PASS. Normal и Docker29 durable прошли все6 lifecycle routes, без прежнего
+  раннего schema отказа; ZIP digests сверены.
+- Browser attempt1:65 PASS, затем общий phase600s/exit124; assertion failures
+  нет, последние4 narrow cases не достигнуты. На63 общих PASS cases медиана
+  времени была1.34× первого CI; источник замедления не установлен.
+  Только этот failed job повторён один раз на том же SHA/бюджете: attempt2
+  **69 PASS/505.964s**. Desktop+narrow actual private S3 upload/finalize/private
+  preview hash/decode/review/reload/revoke/delete/OPTIONS→PUT/foreign-origin
+  выполнены целиком. Legacy inbound signed GET и escalation login/CSRF PASS.
+  Остальные jobs/полный прогон не повторялись; первый timeout сохранён.
+- Foundation attempt1: **4401 PASS/14 FAIL**,1281 integration cases deselected
+  на unit-этапе,161 subtests PASS. Проверки PostgreSQL/S3 core вследствие этого
+  **NOT_RUN**, включая все9 actual S3 API cases и38 новых v5 PG cases.
+  Browser PASS не заменяет этот OPEN gate. Runner/storage startup failures нет.
+
+Все14 unit failures разобраны, а не только первый:
+
+| Причина | Cases | Действие |
+|---|---:|---|
+| Старый CORS exact methods исключает принятый PUT; PUT ожидает400 | 4 | Запрос нового unit path ниже; production CORS не меняется |
+| M4 delivery/reply-rights current tests читают0020 verifier вместо0021 | 2 | Исправлены в уже разрешённых files; previous0020 и historical profiles сохранены отдельно |
+| Общие имена новых Portfolio ErrorResponse/CommandResponse/CommandResult вытесняют canonical auth/config OpenAPI names | 1 | Исправлен production DTO namespace; старые тестовые assertions сохранены |
+| Egress current-unit seams всё ещё задают0020/59 и233 functions/832 columns | 6 | Запрос нового unit path ниже; historical material0007/0012 не менять |
+| Probe test с deadline80ms: known_call_count0 вместо1 | 1 | Отдельные4 deadline variants локально PASS/1.04s; причина CI failure не закрыта, probe source/лимиты/expected не менялись |
+
+**Разрешённые fixes сохранены для review**, без нового заведомо красного push:
+[`1c075904d88b98fbf4f133d83e63391f5dc5002b`](https://github.com/Elefesys/ai-service-manager/commit/1c075904d88b98fbf4f133d83e63391f5dc5002b),
+tree `b10e9db7694c033dcaddbad7a70a20409b1fca2c`, parent4f0973b.
+Только новые portfolio classes получили Portfolio-prefixed names; Python import
+aliases и JSON bodies сохранены. Generated contract обновлён; canonical
+ErrorResponse/CommandResponse/CommandResult побайтово совпали с main7080486,
+namespace collisions отсутствуют, все refs разрешаются. Current M4 unit guards
+читают source0021/289/68/1001 и установленный pin da1695/df2ab9; source0020
+сохраняется отдельным historical comparator. SQL/profile pins не менялись.
+Команды pytest configuration/delivery/reply-rights/portfolio-unit:103 PASS/16.56s;
+auth-contract1 PASS/2.26s; M5.2C admission75 PASS/16.68s; Ruff/mypy PASS.
+Full CI этого review checkpoint NOT_RUN; PR branch остаётся4f0973b.
+
+**Запрос C0 — ровно два дополнительных unit paths / REQUESTED.**
+Оба отсутствуют в write-set; production/code fixes без них не устраняют10
+детерминированных unit failures. Вне-Git proposals подготовлены, но НЕ ПРИМЕНЕНЫ:
+
+1. `tests/test_m1_3_http_contract.py`: в существующем preflight test заменить
+   только PUT/content-type status400→200 и добавить PUT в exact allowed-methods
+   set. Это отражает уже принятое a34834e transport решение. Credentials,
+   exact origins/headers, foreign-origin/DELETE/if-match/x-forged-actor отказы
+   и остальные billing/schema tests сохранить.
+2. `tests/test_telegram_egress.py`: только current-unit block1935–2296.
+   Все11 его0020 markers/seams →0021; два current profile counts233/59→289/68,
+   total columns832→1001, full row-read count59→68. Включены native-host
+   component fingerprint и mock revision, чтобы negative cases достигали
+   проверяемого corruption guard. Historical0007/0012 source/defaults/guards,
+   wrong-database/read-only, multiset hashing, before/after/UNKNOWN/Console и
+   missing/extra/same-count negative assertions сохранить; не вводить dynamic
+   head/subset/count-only checks. Production egress/Docker lanes не менять.
+
+В отдельном unit process обе proposed test modules дали **174 PASS/9.58s**;
+original checkout bytes до/после совпали. Это только UNAPPLIED unit proposal
+proof, не actual PG/S3/CI и не разрешение C0. При принятии открыть ровно эти два
+M5.2C admission paths и перенести adjacent-Telegram refusal на иной вне scope
+path; общие allowlists не расширять. Решение о deadline-test timing оставить
+явным: один локальный PASS не объявляет CI failure исправленным.
+
+Следующий шаг — C0 решение по двум bounded unit paths, затем C4 в том же
+PR50 применяет только принятое, проверяет затронутые tests и запускает новый
+штатный CI изменённого кандидата до всех12 gates/9 S3 API без skips.
+Merge/VM/paid/provider/client-data не выполнялись; C6 HOLD, M5.2D не начата.
+
 ## 1. Проверяемый результат всего этапа
 
 Владелец может завести услуги и подтверждённые знания, проверить изменения и
