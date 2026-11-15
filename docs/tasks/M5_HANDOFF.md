@@ -170,18 +170,70 @@ Owner asset analysis без conversation имеет отдельный OWNER per
 выбирается DTO. Физическую схему C2 реализует только под эти операции, без fake
 Job/AIRun/messages и без универсальных media/job/provider registries.
 
-**Необходимый дополнительный path — запрос C0:** `backend/src/asm/auth/http.py`.
-Текущий JSON-only boundary4096B отклоняет raw image до portfolio endpoint:
-реальный PNG>4096B воспроизводимо получает415. Подготовленная вне Git поправка
-добавляет streaming admission только для PUT
-`/api/v1/workspaces/{w}/businesses/{b}/portfolio/assets/{a}/versions/{v}/uploads/{u}/content`
-с canonical UUID/raw path,10MiB, JPEG/PNG/WebP и общим receive deadline15s.
-Endpoint получает управление до body read для live OWNER/intent проверки.
-Старые JSON4096/manual-send65536, Host/Origin/header/rate/cookie/CSRF и прежние
-JSON deadlines сохраняются. На предлагаемом модуле76 UNIT PASS18.31s,
-shadow mypy и Ruff PASS; это не actual PG/S3/browser evidence. Auth исходник
-не изменён; дополнительный path ожидает допуска C0. SQL/основная реализация,
-PR и новый полный CI ещё не запускались.
+### Решение C0 — upload HTTP boundary / ACCEPTED FOR IMPLEMENTATION / 2026-11-15
+
+Запрос C4 из `9bd32fbd2bb7bb27a0dca84334bd3e2d0039a567` принят.
+Короткий контракт выше согласован C0 для реализации в пределах M5.2C;
+это не приёмка ещё не предъявленного кода, migration или PG/S3/browser evidence.
+Application base `70804866f6838f77c12bd281febae47887559d75` и исходный assignment
+`031af2b091d40800c103d182d135f0677e4fca53` сохраняются.
+Exact continuation base — `9bd32fbd2bb7bb27a0dca84334bd3e2d0039a567`,
+tree `c9de945f45669183094ba48489c93ecfa837e3f4`; сохранить в ancestry.
+
+**Дополнительно разрешён только `backend/src/asm/auth/http.py`** для streaming
+admission одного owner-upload маршрута и необходимого CORS PUT.
+C0 сверил исходник: все mutation paths сейчас требуют application/json до чтения
+body; затем действуют4096B (manual send65536B), шестизначная проверка
+Content-Length и предварительное чтение всего body с timeout3s.
+Поэтому raw image получает415 независимо от достижения4096B. Также существующий
+CORSMiddleware допускает только GET/POST/PATCH: без PUT браузерный preflight
+новой загрузки не пройдёт. Это транспортная зависимость принятого private
+owner upload, а не новая продуктовая функция или изменение auth architecture.
+
+Границы разрешённой поправки:
+
+1. Streaming branch применяется только к PUT с полным canonical route
+   `/api/v1/workspaces/{w}/businesses/{b}/portfolio/assets/{a}/versions/{v}/uploads/{u}/content`.
+   Все UUID и согласованность raw/decoded path проверяются; соседний путь,
+   другой method, suffix/trailing slash и encoded alias не получают это исключение.
+   Старые auth/JSON/manual-send paths сохраняют свои лимиты и deadlines.
+2. Host/Origin/header/rate и no-store/nosniff остаются в общем boundary.
+   До первого чтения upload body endpoint обязан проверить session cookie,
+   CSRF, текущий OWNER и server-issued intent со всеми Workspace/Business/
+   asset/version/upload связями и сроком. Route match сам доступа не даёт.
+   Затем отпустить DB transaction; body/storage HTTP не удерживают DB lock.
+   Перед finalize/apply вновь проверить действующие полномочия и intent.
+3. Только JPEG/PNG/WebP и identity encoding. Отдельно проверяются допустимая
+   объявленная длина и суммарные фактические bytes≤10MiB; старый six-digit guard
+   нельзя оставить блокирующим разрешённый upload или расширить глобально.
+   Duplicate/malformed/mismatched Content-Length, overflow без Content-Length,
+   invalid encoding, disconnect и slow chunks имеют bounded terminal outcome.
+   Общий receive deadline15s не сбрасывается на каждом chunk; запрос не
+   буферизуется дважды. MIME не заменяет прежний full-decode validator.
+4. В существующем CORS разрешить PUT с прежними exact origins, credentials и
+   headers; без wildcard, нового public route или отдельного CORS механизма.
+   Предварительный OPTIONS не читает image body и не выдаёт upload authority.
+   Обычный запрос по-прежнему проходит cookie/CSRF/OWNER/intent guards.
+5. В source admission добавить только этот дополнительный production path
+   для текущей M5.2C ветки/assignment/continuation, без глобального allowlist.
+   Новые проверки размещаются в уже разрешённых `tests/test_m5_portfolio*.py`
+   и существующем M5.2C browser scope; остальные auth файлы не открываются.
+
+До общего PR/CI показать целевые проверки: canonical PUT с настоящим PNG>4096B
+доходит до правильного handler; неправильные authority/CSRF/OWNER/intent дают
+отказ до body receive; exact/overflow/mismatched lengths, chunked input,
+timeout/disconnect и неканонические пути не обходят ограничения.
+Отдельно сохранить старые auth4096/manual-send65536 и Host/Origin/rate/cookie/CSRF
+регрессии. Browser evidence должно включать allowed-origin OPTIONS→PUT и
+отказ чужому origin, затем actual owner API/PG/private S3 upload/finalize.
+Незавершённый/поздний PUT сохраняет прежний cleanup/tombstone контракт.
+
+Заявленные C4 для вне-Git поправки76 UNIT PASS, mypy/Ruff — авторский отчёт:
+C0 этот патч не получил и его76 проверок не повторял. Он не подменяет проверку
+закоммиченного кандидата и сценария браузера. После целевых проверок — один
+штатный full CI кандидата, без отдельного docs-only PR.
+Новых paid/provider/VM/client-data допусков нет; M5.2C остаётся единственной
+IN_PROGRESS задачей. C4 может продолжить SQL/основную реализацию и upload fix.
 
 ### Миграция и разрешённые paths
 
@@ -206,6 +258,9 @@ C2 перед SQL проверяет текущий head и отсутствие
 - `backend/src/asm/knowledge/{models,errors,validation,repository,service,http,embeddings}.py`;
   `backend/src/asm/configuration/{models,errors,validation,repository,service,http}.py`
   — только publication/rollback composition и повторное использование поиска.
+- `backend/src/asm/auth/http.py` — только canonical portfolio PUT streaming
+  и необходимый CORS PUT по принятому выше решению C0; остальные auth paths,
+  лимиты и security guards сохраняются.
 - `backend/src/asm/foundation.py`, `backend/src/asm/tenancy/database.py`,
   `backend/src/asm/messaging/{database,worker,results,errors}.py` —
   wiring/versioned guarded path; `contracts/openapi.json`;
