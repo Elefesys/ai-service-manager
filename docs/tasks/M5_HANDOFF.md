@@ -255,6 +255,8 @@ C2 перед SQL проверяет текущий head и отсутствие
 - `backend/src/asm/ai/{knowledge,contracts,context,agent,database,fake,gateway,runtime,runtime_contracts,runtime_settings,provider_runtime,settings,polza}.py`;
   `backend/src/asm/files/{models,database,service,storage,validation}.py` —
   ограниченный reuse/новые permits, старые inbound guards не ослаблять.
+  `backend/src/asm/files/config.py` — только отдельный operator-owned presign
+  endpoint по решению C0 о checkpoint ниже; без нового storage backend.
 - `backend/src/asm/knowledge/{models,errors,validation,repository,service,http,embeddings}.py`;
   `backend/src/asm/configuration/{models,errors,validation,repository,service,http}.py`
   — только publication/rollback composition и повторное использование поиска.
@@ -267,7 +269,10 @@ C2 перед SQL проверяет текущий head и отсутствие
   `migrations/versions/0021_vision_portfolio.py`.
 - UI: `frontend/src/{PortfolioPanel.tsx,PortfolioPanel.test.tsx,portfolio-api.ts,portfolio-api.test.ts,portfolio-fixtures.test-helper.ts}`;
   `frontend/src/{ConfigurationPanel.tsx,ConfigurationPanel.test.tsx,configuration-api.ts,configuration-api.test.ts,configuration-fixtures.test-helper.ts,App.tsx,App.test.tsx,style.css}`;
-  `frontend/e2e/{portfolio.spec.ts,configuration.spec.ts}`.
+  `frontend/e2e/{portfolio.spec.ts,configuration.spec.ts}`;
+  `frontend/src/{MessagingPanel.tsx,MessagingPanel.test.tsx}` — только привязка
+  ReferencePortfolio к существующему selected conversation и её регрессии
+  по решению C0 ниже; без переноса владения selection/control.
 - Новые `tests/test_m5_vision*.py`, `tests/test_m5_portfolio*.py`,
   `tests/m5_portfolio_fixtures.py`, `tests/fixtures/m5_portfolio/`;
   существующие `tests/test_m5_configuration*.py`, `tests/test_m5_knowledge*.py`
@@ -289,6 +294,10 @@ C2 перед SQL проверяет текущий head и отсутствие
   `tests/test_m2_4_browser_fixture.py`, `scripts/prepare_telegram_egress.py`,
   `scripts/test_telegram_egress.sh`, `tests/test_telegram_egress_migration.py`.
   Это не разрешение менять Telegram/native behavior или исторические expected.
+- `compose.browser.yaml`, `scripts/check_browser_compose.py`,
+  `tests/test_browser_compose.py` — только согласованная topology внутреннего
+  S3 endpoint и browser presign endpoint, с exact guards/negative checks.
+  CI workflows, image pins и остальные deploy/compose paths не открываются.
 - `docs/tasks/M5_HANDOFF.md`: короткий согласованный контракт/возврат в этом
   CURRENT. AGENTS, README, TASK_REGISTER, IMPL-005 из C0 assignment сохранить.
 
@@ -344,27 +353,97 @@ C0 review → отдельное owner merge → post-merge CI. ВМ, real provi
 новый ключ и реальные клиентские данные не разрешены. C6 HOLD; старые
 UNKNOWN/holds, receiver ACK/fence и полный live HUMAN/Resume сохраняются отдельно.
 
-**C4 checkpoint, 2026-11-15 — IN_PROGRESS, до PR/CI.** Реализованы private owner
-upload/review/composite publish, pixel Vision и отдельный v5 runtime с одним
-QUERY для KB+Portfolio. 0021:9 таблиц,55 helpers+private verifier,25 runtime
-capabilities,12 ограниченных replacements; дополнительный replacement меняет
-только current native-policy prerequisite0020→0021 с exact0020 restore.
-Actual PG:38 runtime сценариев,18 owner API и11 SQL сценариев прошли;
-fresh install/exact0020 reverse/populated0020→0021/старый receipt replay — PASS.
-Current/source-admission unit669 PASS, backend mypy107 files PASS;
-frontend485 PASS и3 controlled browser journeys PASS (route fixtures).
+### Решение C0 — checkpoint и завершение M5.2C / 2026-11-15
 
-Два gates остаются OPEN. Selected conversation хранится внутри
-`frontend/src/MessagingPanel.tsx`, отсутствующего в write-set. Подготовлен
-неприменённый узкий render-slot patch, App/App.test остаются в разрешённых
-paths; isolated App27+Messaging35 PASS. Нужен допуск ровно одного указанного
-production path, без нового selector/auto MODEL/изменения control guards.
-Actual private S3/browser приёмка пока NOT_RUN: pinned MinIO завершается
-`netlinkrib: operation not permitted` до запуска listener. Девять отдельных
-actual-S3 API проверок подготовлены без skip/fake fallback. Требуется решение
-C0 о доступной TEST-среде либо переносе этого gate в штатный CI; controlled
-storage/browser не выдаются за S3 evidence. Общий PR/CI и merge не запускались.
+**ACCEPTED FOR IMPLEMENTATION; задача остаётся IN_PROGRESS.**
+Checkpoint сохранён: `93174249527c055f3a975ba097a8646b2d14f450`,
+tree `bad38d145fcf368f5b98c9f609e872722d418258`.
+Это exact implementation continuation base; новый C0 docs commit поверх него
+также сохранить в ancestry. Ветка прежняя: `c4/m5-2c-vision-portfolio-r1`.
+Application main остаётся `70804866f6838f77c12bd281febae47887559d75`;
+assignment031af2b и принятое upload-boundary решение a34834e сохраняются.
 
+C4 сообщил: actual PG38 runtime +18 owner API +11 SQL PASS; fresh/reverse/
+populated0020→0021 и старые receipts PASS; unit669, mypy107 files, frontend485,
+3 controlled browser journeys PASS. Это авторский checkpoint, не независимая
+приёмка C0. Вне-Git render-slot patch и его App27+Messaging35 также не приняты
+как evidence закоммиченного кандидата. Actual private S3/browser — NOT_RUN;
+локальный MinIO, по отчёту C4, остановился с `netlinkrib: operation not permitted`.
+PR, full CI и merge на этом checkpoint не запускались.
+
+**1. Selected conversation — дополнительный write-set принят.**
+Разрешены `frontend/src/MessagingPanel.tsx` и его `MessagingPanel.test.tsx`.
+Существующий MessagingPanel остаётся владельцем selection; узкий optional
+render slot передаёт App доверенный selected row: Business/Client/Conversation
+в текущем Workspace, read refresh и доступность новых действий. Использовать
+уже подготовленный ReferencePortfolio. Отдельный selector, ввод UUID и
+глобально выбранный Business вместо selected.business_id не допускаются.
+Session/workspace/OWNER loss, смена conversation и поздние ответы очищают или
+отсекают прежние сведения; mount/selection/refresh выполняют только GET.
+Новые analysis/matches запускаются явной кнопкой, только при текущем AI context,
+без HUMAN, pending control/reconciliation/manual intent и известных blockers.
+UNKNOWN не повторяется автоматически. Server guards остаются окончательной
+проверкой; UI не выводит разрешение из текста/наличия изображения.
+Целевые App/Messaging/ReferencePortfolio проверки: exact context binding,
+переключение двух диалогов/Workspace, stale response, OWNER loss/HUMAN/pending,
+ноль POST при mount/refresh и сохранение manual-send/control UNKNOWN semantics.
+
+**2. Найден обязательный transport fix для actual browser S3.**
+В checkpoint `compose.browser.yaml` задаёт API `ASM_STORAGE_ENDPOINT=
+http://127.0.0.1:9000`: он подходит для signed URL браузеру, но server PUT/
+HEAD/GET обращаются к loopback самого API container. S3ObjectStorage использует
+один этот endpoint для I/O и presign. Перенос теста в CI сам эту зависимость
+не исправляет; простой переход на `http://storage:9000` сломает прежние
+browser signed GET. C0 принимает узкое разделение адресов:
+`ASM_STORAGE_ENDPOINT` — server I/O; optional `ASM_STORAGE_PRESIGN_ENDPOINT`
+— только локальное формирование signed GET, по умолчанию тот же endpoint.
+Оба задаёт оператор, оба проходят прежний origin validator; одинаковые
+bucket/region/explicit credentials, без runtime URL input/discovery/fallback.
+Подпись создаётся для конечного browser origin; готовый подписанный URL
+нельзя переписывать. Presign не делает network I/O. TTL60, private bucket,
+authorization, no-store, transaction-free I/O и отсутствие SDK retries сохраняются.
+Browser TEST: I/O `http://storage:9000`, presign `http://127.0.0.1:9000`.
+Дополнительно разрешены files/config.py, compose.browser.yaml,
+scripts/check_browser_compose.py и tests/test_browser_compose.py в указанной
+границе; files/storage.py и media/storage tests уже входят в write-set.
+Проверить fallback к прежней конфигурации, invalid origin, отсутствие presign
+network calls и прежний signed inbound image browser flow. Exact topology
+checker обновить вместе с отрицательными тестами; security checks не убирать.
+Это transport dependency accepted private storage (Spec17.5/19.4, ADR-115),
+без изменения архитектурного доступа к файлам или новой инфраструктуры.
+
+**3. Actual S3/browser — выполнение в первом штатном CI разрешено.**
+C0 сверил existing foundation-core: checks зависит от storage-test-init и
+получает private storage-test/asm-private-test; generic integration selection
+не исключает tests/test_m5_portfolio_storage_postgres.py. Все9 подготовленных
+actual-S3 проверок должны попасть в collection и завершиться PASS без skip.
+Existing browser job также поднимает PostgreSQL/API/private MinIO.
+Локальный NOT_RUN допустим до PR именно для этих environment-dependent gates;
+это уточняет прежнее требование показать actual S3/browser до общего CI.
+Не менять image pins/workflows, не расширять глобальные allowlists, не
+повторять неизменённый локальный запуск MinIO ради дополнительного подтверждения.
+
+До PR закончить UI wiring/transport fix и целевые доступные проверки.
+В portfolio.spec.ts добавить actual browser→API→PG→S3 journey: синтетический
+PNG>4096B, upload/finalize/private preview, owner review/reload/revoke;
+без route.fulfill для проверяемых API/S3 операций. Показать настоящий
+allowed-origin OPTIONS→PUT, отказ чужому origin и сохранение прежнего
+inbound signed GET. Default DISABLED даёт0 provider HTTP; не включать paid
+route ради browser fixture. Nonempty index/composite publish/semantic flow
+доказываются отдельно actual PG/S3 с controlled provider и browser UI cases;
+явно различать эти evidence, не называть подставленные HTTP ответы actual E2E.
+Проверки actual S3/browser остаются OPEN до успешного CI этого кандидата;
+9 S3 API tests не заменяют unmocked browser journey.
+
+Обновить только M5.2C source admission для новых разрешённых paths и этой
+continuation; прежние migration/source/security gates не ослаблять.
+Затем открыть один Draft PR в main и выполнить первый штатный full CI final
+candidate. При падении отделить code defect от runner/storage startup failure;
+не менять expected, не подменять S3 fake и не повторять зелёные неизменённые
+прогоны. Вернуть один результат: PR, final head/tree, команды/CI, PASS/NOT_RUN
+по actual PG/S3/browser и оставшиеся findings. C0 review и отдельное разрешение
+владельца на merge обязательны. Новых provider/VM/client-data допусков нет;
+C6 HOLD, M5.2D не начинать. Следующий исполнитель — C4 в той же ветке.
 
 ## 1. Проверяемый результат всего этапа
 
