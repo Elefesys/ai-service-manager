@@ -2679,3 +2679,237 @@ def test_m5_portfolio_preserves_runtime_inventory_cleanup_and_budget(
     assert summary["expected_cases"] == summary["collected_cases"] == 160
     assert summary["groups_visited"] == len(h["cleaned"]) == 8
     assert summary["sql_test_budget_seconds"] == 900
+
+
+def prepare_m5_foundation_budget_event(
+    r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False, wrong_parent=False
+):
+    """Real Git 45-minute base, C0 assignment, exact CI fix and merge event."""
+    f = r["f"]
+    workflow = f.root / ".github/workflows/ci.yml"
+    current_workflow = workflow.read_text()
+    current = "  foundation:\n    needs: [foundation-durable]\n    runs-on: ubuntu-24.04\n    timeout-minutes: 60"
+    assert current_workflow.count(current) == 1
+    workflow.write_text(current_workflow.replace(current, current.replace(": 60", ": 45")))
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed reviewed application with foundation45")
+    r["source"] = f.git("rev-parse", "HEAD")
+    monkeypatch.setattr(carrier, "M5_FOUNDATION_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_FOUNDATION_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    if wrong_parent:
+        f.git("commit", "--allow-empty", "-qm", "unapproved assignment parent")
+    for relative in sorted(carrier.M5_FOUNDATION_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# constructed C0 foundation budget assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed foundation budget assignment")
+    monkeypatch.setattr(carrier, "M5_FOUNDATION_ASSIGNMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(carrier, "M5_FOUNDATION_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    for relative in sorted(
+        (carrier.M5_FOUNDATION_PATHS - carrier.M5_FOUNDATION_C0_DOCS)
+        | ({extra} if extra else set())
+    ):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path == workflow:
+            path.write_text(current_workflow)
+        else:
+            path.write_text((path.read_text() if path.exists() else "") + "\n# bounded CI fix\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed foundation60 and narrow admission")
+    return capability_checkout(
+        r,
+        monkeypatch,
+        route,
+        f.git("rev-parse", "HEAD"),
+        branch=branch or carrier.M5_FOUNDATION_BRANCH,
+        wrong_base=wrong_base,
+    )
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage", [None, "base", "base_tree", "branch", "paths", "tree", "attempt"]
+)
+def test_m5_foundation_budget_admission_export_and_persisted_binding(
+    r11_event, monkeypatch, route, damage
+):
+    r = r11_event
+    merged = prepare_m5_foundation_budget_event(r, monkeypatch, route)
+    r["run"]()
+    assert len(r["boundary"]) == 1 and not list((r["root"] / "private").iterdir())
+    bound = r["boundary"][0]
+    assert bound["mode"] == "runtime" and bound["sql_test_budget_seconds"] == 900
+    admission = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert (admission["source"], admission["base"], admission["base_tree"]) == (
+        merged,
+        carrier.M5_FOUNDATION_BASE,
+        carrier.M5_FOUNDATION_TREE,
+    )
+    assert set(admission["paths"]) == carrier.M5_FOUNDATION_PATHS
+    actual_run = subprocess.run
+
+    class BeforeResources(Exception):
+        pass
+
+    def archive_boundary(args, *positional, **keywords):
+        assert args[0] == "git", "resource or credential access before source export"
+        if args[1] == "archive":
+            raise BeforeResources
+        return actual_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(subprocess, "run", archive_boundary)
+    with pytest.raises(BeforeResources):
+        r["real_run_admitted"](
+            bound["root"],
+            bound["event"],
+            bound["manifest"],
+            bound["mode"],
+            sql_test_budget_seconds=900,
+        )
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert proof["branch"] == carrier.M5_FOUNDATION_BRANCH
+    assert proof["paths"] == admission["paths"]
+    for name, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": proof["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + name, value)
+    if damage:
+        proof[damage] = {
+            "base": "f" * 40,
+            "base_tree": "f" * 40,
+            "branch": carrier.M5_PORTFOLIO_BRANCH,
+            "paths": ["backend/src/asm/foundation.py"],
+            "tree": "f" * 40,
+            "attempt": 2,
+        }[damage]
+        carrier.write(path, proof)
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    else:
+        assert carrier.source_tree_from_evidence(path) == admission["tree"]
+
+
+@pytest.mark.parametrize("damage", ["branch", "base"])
+def test_m5_foundation_budget_wrong_pr_identity_refused(r11_event, monkeypatch, damage):
+    r = r11_event
+    prepare_m5_foundation_budget_event(
+        r,
+        monkeypatch,
+        "same-repository-pr-merge",
+        wrong_base=damage == "base",
+        branch="c4/unapproved" if damage == "branch" else None,
+    )
+    with pytest.raises(
+        carrier.Refusal,
+        match="^"
+        + {
+            "branch": "POLZA_RUNTIME_EVENT_BRANCH",
+            "base": "FOUNDATION_BUDGET_EVENT_BASE",
+        }[damage]
+        + "$",
+    ):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "base_tree",
+        "base_ancestry",
+        "assignment_tree",
+        "assignment_ancestry",
+        "assignment_parent",
+        "application",
+        "workflow",
+    ],
+)
+def test_m5_foundation_budget_pin_and_adjacent_path_refusals(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    prepare_m5_foundation_budget_event(
+        r,
+        monkeypatch,
+        route,
+        wrong_parent=damage == "assignment_parent",
+        extra={
+            "application": "backend/src/asm/foundation.py",
+            "workflow": ".github/workflows/m4-runtime-db.yml",
+        }.get(damage),
+    )
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_FOUNDATION_TREE", "f" * 40)
+    elif damage == "base_ancestry":
+        tree = r["f"].git("rev-parse", "HEAD^{tree}")
+        unrelated = r["f"].git("commit-tree", tree, "-m", "unrelated same-tree base")
+        monkeypatch.setattr(carrier, "M5_FOUNDATION_BASE", unrelated)
+        monkeypatch.setattr(carrier, "M5_FOUNDATION_TREE", tree)
+    elif damage == "assignment_tree":
+        monkeypatch.setattr(carrier, "M5_FOUNDATION_ASSIGNMENT_TREE", "f" * 40)
+    elif damage == "assignment_ancestry":
+        tree = r["f"].git("rev-parse", "HEAD^{tree}")
+        unrelated = r["f"].git("commit-tree", tree, "-m", "unrelated same-tree assignment")
+        monkeypatch.setattr(carrier, "M5_FOUNDATION_ASSIGNMENT", unrelated)
+        monkeypatch.setattr(carrier, "M5_FOUNDATION_ASSIGNMENT_TREE", tree)
+    reason = {
+        "base_tree": "BASE_TREE",
+        "base_ancestry": (
+            "FOUNDATION_BUDGET_EVENT_BASE"
+            if route == "same-repository-pr-merge"
+            else "FOUNDATION_BUDGET_ASSIGNMENT_PARENT"
+        ),
+        "assignment_tree": "FOUNDATION_BUDGET_ASSIGNMENT_TREE",
+        "assignment_ancestry": "INSPECTION_FAILED",
+        "assignment_parent": "FOUNDATION_BUDGET_ASSIGNMENT_PARENT",
+        "application": "POLZA_RUNTIME_WRITE_SET",
+        "workflow": "POLZA_RUNTIME_WRITE_SET",
+    }[damage]
+    with pytest.raises(carrier.Refusal, match="^" + reason + "$"):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("document", sorted(carrier.M5_FOUNDATION_C0_DOCS))
+@pytest.mark.parametrize("drift", ["content", "mode", "type"])
+def test_m5_foundation_budget_assignment_docs_remain_immutable(
+    r11_event, monkeypatch, route, document, drift
+):
+    r = r11_event
+    prepare_m5_foundation_budget_event(r, monkeypatch, route)
+    f, path = r["f"], r["f"].root / document
+    if drift == "content":
+        path.write_text(path.read_text() + "# unapproved\n")
+    elif drift == "mode":
+        path.chmod(0o755)
+    else:
+        path.unlink()
+        path.symlink_to("untrusted-target")
+    f.git("add", document)
+    f.git("commit", "-qm", "unapproved C0 document drift")
+    capability_checkout(
+        r, monkeypatch, route, f.git("rev-parse", "HEAD"), branch=carrier.M5_FOUNDATION_BRANCH
+    )
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m5_foundation_budget_keeps_existing_runtime_inventory_and_sql_cap(
+    aggregate_driver, monkeypatch, route
+):
+    h = aggregate_driver
+    prepare_m5_foundation_budget_event(h["r"], monkeypatch, route)
+    h["r"]["run"]()
+    summary = json.loads((h["r"]["root"] / "evidence/summary.json").read_text())
+    assert summary["result"] == "PASS"
+    assert summary["expected_cases"] == summary["collected_cases"] == 160
+    assert summary["groups_visited"] == len(h["cleaned"]) == 8
+    assert summary["sql_test_budget_seconds"] == 900
