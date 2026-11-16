@@ -1,16 +1,18 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Business, Session } from './api';
 import { ActiveProjection, Bundle, CommandBody, ConfigurationError, DraftState, FAQ, Operation, Preview, Rule, Service, ValidationIssue, configurationApi, validateCommand, KnowledgeState, KnowledgeOperation, KnowledgeBody, KnowledgeSource, SourceInput, SourceRevision, knowledgeApi, validateKnowledgeCommand } from './configuration-api';
+import { PortfolioPanel } from './PortfolioPanel';
+import { OwnerState, PublishPortfolio, portfolioApi } from './portfolio-api';
 
 type Props = { session: Session | null; workspace: string; business: Business | null; recover: () => void; expired: () => void; accessDenied?: () => void };
-type Intent = {scope:string;actor:string;key:string;phase:'sending'|'uncertain'|'confirmed'} & ({kind:'configuration';operation:Operation;body:CommandBody}|{kind:'knowledge';operation:KnowledgeOperation;body:KnowledgeBody;source?:string});
-type View = { scope: string; session: Session | null; draft: DraftState | null; active: ActiveProjection | null; preview: Preview | null; knowledge: KnowledgeState | null; busy: boolean; error: string; notice: string; denied: boolean };
+type Intent = {scope:string;actor:string;key:string;phase:'sending'|'uncertain'|'confirmed'} & ({kind:'configuration';operation:Operation;body:CommandBody}|{kind:'knowledge';operation:KnowledgeOperation;body:KnowledgeBody;source?:string}|{kind:'portfolio';operation:'PORTFOLIO_PUBLISH';body:PublishPortfolio});
+type View = { scope: string; session: Session | null; draft: DraftState | null; active: ActiveProjection | null; preview: Preview | null; knowledge: KnowledgeState | null; portfolio: OwnerState | null; busy: boolean; error: string; notice: string; denied: boolean };
 type Release = { id: string; version: string; activation: string };
-const blank = (scope: string, session: Session | null): View => ({ scope, session, draft: null, active: null, preview: null, knowledge: null, busy: true, error: '', notice: '', denied: false });
+const blank = (scope: string, session: Session | null): View => ({ scope, session, draft: null, active: null, preview: null, knowledge: null, portfolio:null, busy: true, error: '', notice: '', denied: false });
 const initialBundle = (): Bundle => ({ schema_version: 1, communication_style: 'NEUTRAL', services: [], rules: [], faqs: [] });
 const newId = (prefix: string) => `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 const newService = (): Service => ({ id: newId('service'), name: '', description: '', active: true, intake_fields: [], price: { mode: 'OWNER_QUOTE', amount_minor: null, formula_note: null }, duration: { mode: 'OWNER_DEFINED', minutes: null, rule_note: null }, deposit: { mode: 'NONE', amount_minor: null, percent: null } });
-const errors: Record<string, string> = { CSRF_REJECTED: 'Защита сессии изменилась. Проверьте сессию перед новой командой.', ORIGIN_DENIED: 'Сервер отклонил источник запроса.', STALE_STATE: 'Конфликт версии. Загрузите актуальное состояние и проверьте свой черновик перед новым сохранением.', IDEMPOTENCY_KEY_CONFLICT: 'Конфликт ключа команды. Проверьте актуальное состояние перед новой командой.', VALIDATION_FAILED: 'Публикация отклонена: в черновике есть ошибки. Обновите предпросмотр.', VERSION_EXHAUSTED: 'Достигнут предел версии. Новая команда недоступна.', KNOWLEDGE_BUILD_REQUIRED: 'К настройкам подключён набор источников. Выберите его и опубликуйте настройки совместно с ним.', ROLLBACK_NOT_ALLOWED: 'Этот откат недопустим: удалённые или изменённые сведения нельзя восстановить старой публикацией.', BODY_TOO_LARGE: 'Набор слишком большой. Сократите описания, FAQ или число элементов.', INVALID_INPUT: 'Проверьте значения и ссылки в форме.', INVALID_REQUEST: 'Проверьте значения в форме.', RATE_LIMITED: 'Слишком много запросов. Повторите позже.' };
+const errors: Record<string, string> = { PORTFOLIO_BUILD_REQUIRED:'К настройкам подключено портфолио. Опубликуйте настройки, источники и работы совместно в разделе портфолио.', CSRF_REJECTED: 'Защита сессии изменилась. Проверьте сессию перед новой командой.', ORIGIN_DENIED: 'Сервер отклонил источник запроса.', STALE_STATE: 'Конфликт версии. Загрузите актуальное состояние и проверьте свой черновик перед новым сохранением.', IDEMPOTENCY_KEY_CONFLICT: 'Конфликт ключа команды. Проверьте актуальное состояние перед новой командой.', VALIDATION_FAILED: 'Публикация отклонена: в черновике есть ошибки. Обновите предпросмотр.', VERSION_EXHAUSTED: 'Достигнут предел версии. Новая команда недоступна.', KNOWLEDGE_BUILD_REQUIRED: 'К настройкам подключён набор источников. Выберите его и опубликуйте настройки совместно с ним.', ROLLBACK_NOT_ALLOWED: 'Этот откат недопустим: удалённые или изменённые сведения нельзя восстановить старой публикацией.', BODY_TOO_LARGE: 'Набор слишком большой. Сократите описания, FAQ или число элементов.', INVALID_INPUT: 'Проверьте значения и ссылки в форме.', INVALID_REQUEST: 'Проверьте значения в форме.', RATE_LIMITED: 'Слишком много запросов. Повторите позже.' };
 const errorText = (e: unknown) => e instanceof ConfigurationError && errors[e.code] ? errors[e.code] : 'Не удалось получить подтверждение сервера.';
 
 export function ConfigurationPanel({ session, workspace, business, recover, expired, accessDenied }: Props) {
@@ -22,6 +24,7 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
   const [form, setForm] = useState<Bundle>(initialBundle), [rollback, setRollback] = useState('');
   const [showSources,setShowSources]=useState(false),[sourceEdit,setSourceEdit]=useState(''),[sourceForm,setSourceForm]=useState<SourceInput>(sourceInput);
   const [buildChoice,setBuildChoice]=useState(''),[knowledgeRollback,setKnowledgeRollback]=useState(''),[deleteSource,setDeleteSource]=useState('');
+  const [portfolioBusy,setPortfolioBusy]=useState(false);
   const [, redraw] = useState(0);
   const generation = useRef(0), mounted = useRef(true), controllers = useRef(new Set<AbortController>());
   // Command intent survives a session recheck; it is never placed in browser storage.
@@ -31,7 +34,7 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
   const attached = !!pending && pending.actor === session?.user_account_id;
   const loaded = visible && !!view.draft && !!view.active && !view.denied;
   const dirty = loaded && JSON.stringify(form) !== JSON.stringify(view.draft!.bundle ?? initialBundle());
-  const locked = !loaded || view.busy || attached;
+  const locked = !loaded || view.busy || attached || portfolioBusy;
   const knownReleases = (releases.current.get(scope) ?? []).filter(r => r.id !== view.active?.release_id);
   const knowledgeLoaded=loaded&&!!view.knowledge&&view.knowledge.activation_version===view.active!.activation_version&&view.knowledge.release_id===view.active!.release_id;
   const editingSource=knowledgeLoaded?view.knowledge!.sources.find(s=>s.source_id===sourceEdit):undefined;
@@ -44,6 +47,9 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
   const publishedEligible=knowledgeLoaded&&view.knowledge!.rollback_targets.some(t=>t.release_id===view.knowledge!.release_id&&t.build_id===view.knowledge!.active_build_id&&t.eligible);
   const readyBuilds=knowledgeLoaded?view.knowledge!.builds.filter(b=>b.state==='READY'&&(b.revision_ids.length===revisionIds.length&&b.revision_ids.every(id=>revisionIds.includes(id))||b.build_id===view.knowledge!.active_build_id&&publishedEligible)):[];
   const selectedBuild=readyBuilds.find(b=>b.build_id===buildChoice)??readyBuilds.find(b=>b.build_id===view.knowledge?.active_build_id)??readyBuilds[0];
+  const portfolioLoaded=knowledgeLoaded&&!!view.portfolio&&view.portfolio.activation_version===view.active!.activation_version&&view.portfolio.active_release_id===view.active!.release_id&&view.portfolio.active_knowledge_build_id===view.knowledge!.active_build_id;
+  const portfolioLinked=portfolioLoaded&&view.portfolio!.active_portfolio_build_id!==null;
+  const activePortfolioBuild=portfolioLoaded?view.portfolio!.builds.find(b=>b.build_id===view.portfolio!.active_portfolio_build_id&&b.state==='READY'&&b.eligible):undefined;
   const owns = (owner: number, principal: Session, context: string, c: AbortController) => mounted.current && !c.signal.aborted && generation.current === owner && current.current.session === principal && current.current.scope === context;
   function remember(context: string, active: ActiveProjection) {
     if (!active.release_id || !active.source_draft_version) return;
@@ -64,20 +70,21 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
     controllers.current.forEach(c => c.abort()); controllers.current.clear(); controllers.current.add(c);
     setView(v => v.scope === context.scope && v.session === principal ? { ...v, busy: true, error: '' } : blank(context.scope, principal));
     try {
-      const [draft, active, preview, knowledge] = await Promise.all([configurationApi.draft(context.workspace, context.business, c.signal), configurationApi.active(context.workspace, context.business, c.signal), configurationApi.preview(context.workspace, context.business, c.signal),knowledgeApi.state(context.workspace,context.business,c.signal)]);
+      const [draft, active, preview, knowledge, portfolio] = await Promise.all([configurationApi.draft(context.workspace, context.business, c.signal), configurationApi.active(context.workspace, context.business, c.signal), configurationApi.preview(context.workspace, context.business, c.signal),knowledgeApi.state(context.workspace,context.business,c.signal),portfolioApi.state(context.workspace,context.business,c.signal)]);
       if (!owns(owner, principal, context.scope, c)) return;
-      if (preview.state.draft_version !== draft.draft_version || preview.state.activation_version !== draft.activation_version || active.activation_version !== draft.activation_version || JSON.stringify(preview.state.bundle) !== JSON.stringify(draft.bundle)||knowledge.activation_version!==active.activation_version||knowledge.release_id!==active.release_id) throw new ConfigurationError(409, 'STALE_STATE');
+      if (preview.state.draft_version !== draft.draft_version || preview.state.activation_version !== draft.activation_version || active.activation_version !== draft.activation_version || JSON.stringify(preview.state.bundle) !== JSON.stringify(draft.bundle)||knowledge.activation_version!==active.activation_version||knowledge.release_id!==active.release_id||portfolio.activation_version!==active.activation_version||portfolio.active_release_id!==active.release_id||portfolio.draft_version!==draft.draft_version||portfolio.active_knowledge_build_id!==knowledge.active_build_id) throw new ConfigurationError(409, 'STALE_STATE');
       remember(context.scope, active); if (!preserve) {setForm(structuredClone(draft.bundle ?? initialBundle()));setSourceForm(sourceInput());setSourceEdit('');setDeleteSource('');}
       if (confirmed) intents.current.delete(context.scope);
-      setView({ scope: context.scope, session: principal, draft, active, preview, knowledge, busy: false, error: '', notice: confirmed ? 'Команда подтверждена. Текущее состояние получено.' : '', denied: false });
-    } catch (e) { if(owns(owner,principal,context.scope,c))setView(v=>({...v,knowledge:null}));failure(e, owner, principal, context.scope, c); }
+      setView({ scope: context.scope, session: principal, draft, active, preview, knowledge, portfolio, busy: false, error: '', notice: confirmed ? 'Команда подтверждена. Текущее состояние получено.' : '', denied: false });
+      return true;
+    } catch (e) { if(owns(owner,principal,context.scope,c))setView(v=>({...v,knowledge:null,portfolio:null}));failure(e, owner, principal, context.scope, c);return false; }
     finally { controllers.current.delete(c); }
   }
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; controllers.current.forEach(c => c.abort()); }; }, []);
   useEffect(() => {
     generation.current++; controllers.current.forEach(c => c.abort()); controllers.current.clear();
     for (const intent of intents.current.values()) if (intent.phase === 'sending') intent.phase = 'uncertain';
-    setView(blank(scope, session)); setForm(initialBundle()); setRollback('');setShowSources(false);setSourceEdit('');setSourceForm(sourceInput());setBuildChoice('');setKnowledgeRollback('');setDeleteSource(''); if (permitted) void load();
+    setView(blank(scope, session)); setPortfolioBusy(false); setForm(initialBundle()); setRollback('');setShowSources(false);setSourceEdit('');setSourceForm(sourceInput());setBuildChoice('');setKnowledgeRollback('');setDeleteSource(''); if (permitted) void load();
     return () => { generation.current++; controllers.current.forEach(c => c.abort()); controllers.current.clear(); };
   }, [scope, session]);
   async function send(intent: Intent) {
@@ -86,7 +93,10 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
     const principal = context.session, owner = generation.current, c = new AbortController(); controllers.current.add(c);
     intent.phase = 'sending'; redraw(n => n + 1); setView(v => ({ ...v, error: '', notice: '' }));
     try {
-      if(intent.kind==='knowledge'){
+      if(intent.kind==='portfolio'){
+        await portfolioApi.command(context.workspace,context.business,intent.operation,intent.body,intent.key,principal.csrf_token,undefined,c.signal);
+        if(!owns(owner,principal,intent.scope,c)){intent.phase='uncertain';return;}
+      }else if(intent.kind==='knowledge'){
         const result=await knowledgeApi.command(context.workspace,context.business,intent.operation,intent.body,intent.key,principal.csrf_token,intent.source,c.signal);
         if(!owns(owner,principal,intent.scope,c)){intent.phase='uncertain';return;}
         if(result.result.build_id)setBuildChoice(result.result.build_id);
@@ -101,6 +111,7 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
       if (e instanceof ConfigurationError && [403,404,409,413,415,422,429].includes(e.status)) {
         intents.current.delete(intent.scope); redraw(n => n + 1); failure(e, owner, principal, intent.scope, c);
         if (e.code === 'STALE_STATE') setView(v => ({ ...v, preview: null }));
+        if(e.code==='PORTFOLIO_BUILD_REQUIRED')setView(v=>({...v,portfolio:null}));
         if(e.code==='KNOWLEDGE_BUILD_REQUIRED'){setShowSources(true);setView(v=>({...v,knowledge:null}));}
       } else {
         intent.phase = 'uncertain'; redraw(n => n + 1);
@@ -114,9 +125,9 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
     let body: CommandBody;
     if (operation === 'EDIT') body = { expected_draft_version: view.draft.draft_version, bundle: structuredClone(form) };
     else if (operation === 'PUBLISH') {
-      if (dirty || !knowledgeLoaded || view.knowledge!.active_build_id!==null || !view.preview?.validation.valid || view.preview.state.draft_version !== view.draft.draft_version) return;
+      if (dirty || !knowledgeLoaded || !portfolioLoaded || view.knowledge!.active_build_id!==null || portfolioLinked || !view.preview?.validation.valid || view.preview.state.draft_version !== view.draft.draft_version) return;
       body = { expected_draft_version: view.draft.draft_version, expected_activation_version: view.active.activation_version };
-    } else { if (!knownReleases.some(r => r.id === rollback)) return; body = { expected_activation_version: view.active.activation_version, release_id: rollback }; }
+    } else { if (!portfolioLoaded || portfolioLinked || !knownReleases.some(r => r.id === rollback)) return; body = { expected_activation_version: view.active.activation_version, release_id: rollback }; }
     try { validateCommand(operation, body); } catch (e) { setView(v => ({ ...v, error: e instanceof ConfigurationError && e.code === 'INVALID_RESPONSE' ? 'Заполните обязательные поля и проверьте допустимые размеры.' : errorText(e) })); return; }
     const intent: Intent = { kind:'configuration', scope, actor: session.user_account_id, operation, body, key: crypto.randomUUID(), phase: 'uncertain' };
     if (intents.current.size >= 8) { setView(v => ({ ...v, error: 'Сначала уточните результат предыдущих команд в других бизнесах.' })); return; }
@@ -124,6 +135,14 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
   }
   function startKnowledge(operation:KnowledgeOperation,source?:KnowledgeSource){
     if(sourceLocked||!session||!view.knowledge||!view.draft||intents.current.has(scope)||sourceDirty&&operation!=='KNOWLEDGE_SAVE')return;
+    if(operation==='KNOWLEDGE_PUBLISH'&&portfolioLinked){
+      if(dirty||!selectedBuild||!activePortfolioBuild||!view.preview?.validation.valid)return;
+      const body:PublishPortfolio={schema_version:1,expected_draft_version:view.draft.draft_version,expected_activation_version:view.knowledge.activation_version,knowledge_build_id:selectedBuild.build_id,expected_knowledge_build_version:selectedBuild.build_version,portfolio_build_id:activePortfolioBuild.build_id,expected_portfolio_build_version:activePortfolioBuild.version};
+      const intent:Intent={kind:'portfolio',scope,actor:session.user_account_id,operation:'PORTFOLIO_PUBLISH',body,key:crypto.randomUUID(),phase:'uncertain'};
+      intents.current.set(scope,intent);void send(intent);return;
+    }
+    if((operation==='KNOWLEDGE_PUBLISH'||operation==='KNOWLEDGE_ROLLBACK')&&!portfolioLoaded)return;
+    if(operation==='KNOWLEDGE_ROLLBACK'&&portfolioLinked)return;
     let body:KnowledgeBody;
     if(operation==='KNOWLEDGE_SAVE'){
       body={schema_version:1,source_id:editingSource?.source_id??null,expected_source_version:editingSource?.source_version??'0',...structuredClone(sourceForm)};
@@ -174,7 +193,7 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
         <h4>Структурированные правила</h4><p>Эти правила имеют приоритет над поясняющими FAQ.</p>{form.rules.map((r,i)=><fieldset key={i} className="configuration-card"><legend>Правило {i+1}</legend><ServiceChoice label={`Услуга правила ${i+1}`} value={r.service_id} services={form.services} change={service_id=>ruleAt(i,{service_id})}/><label>Тип правила {i+1}<Choice value={r.kind} values={{MIN_AGE:'Минимальный возраст',OWNER_HANDOFF:'Решение владельца'}} change={kind=>ruleAt(i,{kind,value:kind==='OWNER_HANDOFF'?false:18})}/></label>{r.kind==='OWNER_HANDOFF'?<label><input type="checkbox" checked={r.value===true} onChange={e=>ruleAt(i,{value:e.target.checked})}/>Нужно решение владельца по правилу {i+1}</label>:<NullableNumber label={`Значение правила ${i+1}`} value={typeof r.value==='number'?r.value:null} change={value=>ruleAt(i,{value:value??0})}/>}<button type="button" className="danger" onClick={()=>change({rules:form.rules.filter((_,j)=>i!==j)})}>Удалить правило {i+1}</button></fieldset>)}<button type="button" className="secondary" disabled={form.rules.length>=12} onClick={()=>change({rules:[...form.rules,{id:newId('rule'),service_id:null,kind:'MIN_AGE',value:18}]})}>Добавить правило</button>
         <h4>Подтверждённые FAQ</h4>{form.faqs.map((f,i)=><fieldset key={i} className="configuration-card"><legend>FAQ {i+1}</legend><ServiceChoice label={`Услуга FAQ ${i+1}`} value={f.service_id} services={form.services} change={service_id=>faqAt(i,{service_id})}/><label>Вопрос FAQ {i+1}<input required maxLength={200} value={f.question} onChange={e=>faqAt(i,{question:e.target.value})}/></label><label>Ответ FAQ {i+1}<textarea required maxLength={500} rows={3} value={f.answer} onChange={e=>faqAt(i,{answer:e.target.value})}/></label><label>Источник FAQ {i+1}<input maxLength={120} value={f.source} onChange={e=>faqAt(i,{source:e.target.value})}/></label><label><input type="checkbox" checked={f.confirmed} onChange={e=>faqAt(i,{confirmed:e.target.checked})}/>Владелец подтвердил FAQ {i+1}</label><fieldset><legend>Связанные правила FAQ {i+1}</legend>{[...form.rules.map(r=>r.id),...f.rule_ids.filter(id=>!form.rules.some(r=>r.id===id))].map(id=><label key={id}><input type="checkbox" checked={f.rule_ids.includes(id)} disabled={!f.rule_ids.includes(id)&&f.rule_ids.length>=6} onChange={e=>faqAt(i,{rule_ids:e.target.checked?[...f.rule_ids,id]:f.rule_ids.filter(x=>x!==id)})}/>{ruleLabel(form.rules.find(r=>r.id===id),form)}</label>)}</fieldset><button type="button" className="danger" onClick={()=>change({faqs:form.faqs.filter((_,j)=>i!==j)})}>Удалить FAQ {i+1}</button></fieldset>)}<button type="button" className="secondary" disabled={form.faqs.length>=12} onClick={()=>change({faqs:[...form.faqs,{id:newId('faq'),service_id:null,question:'',answer:'',source:'',confirmed:false,rule_ids:[]}]})}>Добавить FAQ</button><button type="submit" disabled={!dirty}>Сохранить черновик</button>
       </fieldset></form>
-      <section aria-label="Предпросмотр публикации"><h3>Предпросмотр</h3><p>Детерминированная проверка сохранённого черновика. Вызовы AI и отправка клиенту не выполняются.</p><button className="secondary" disabled={locked||dirty} onClick={()=>void load()}>Проверить и показать предпросмотр</button>{dirty&&<p>Сначала сохраните изменения черновика.</p>}{view.preview&&<><ul className="configuration-issues">{view.preview.validation.issues.map((issue,i)=><li key={i} className={issue.severity==='ERROR'?'error':'muted'}>{issue.severity==='ERROR'?'ERROR — ошибка':'WARNING — предупреждение'}: {issueLabel(issue,view.preview!.state.bundle)}</li>)}</ul><p>{view.preview.validation.valid?'Ошибок публикации нет.':'Публикация заблокирована ошибками.'}</p>{view.preview.state.bundle&&<details><summary>Сведения сохранённого черновика</summary><BundleView bundle={view.preview.state.bundle}/></details>}</>}<p>Для совместной публикации настроек и поиска используйте готовый набор в разделе источников.</p>{knowledgeLoaded&&view.knowledge!.active_build_id&&<><p>{publishedBuild?.revision_ids.length===0?'Настройки опубликованы без источников. Сохраните этот пустой набор либо выберите другой для новой публикации.':'У настроек есть опубликованный набор источников. Сохраните его либо явно выберите другой для новой публикации.'}</p><button className="secondary" disabled={locked} onClick={openSources}>Выбрать набор для публикации</button></>}<button disabled={locked||dirty||!knowledgeLoaded||!view.preview?.validation.valid||view.knowledge!.active_build_id!==null} onClick={()=>start('PUBLISH')}>Опубликовать черновик</button></section>
+      <section aria-label="Предпросмотр публикации"><h3>Предпросмотр</h3><p>Детерминированная проверка сохранённого черновика. Вызовы AI и отправка клиенту не выполняются.</p><button className="secondary" disabled={locked||dirty} onClick={()=>void load()}>Проверить и показать предпросмотр</button>{dirty&&<p>Сначала сохраните изменения черновика.</p>}{view.preview&&<><ul className="configuration-issues">{view.preview.validation.issues.map((issue,i)=><li key={i} className={issue.severity==='ERROR'?'error':'muted'}>{issue.severity==='ERROR'?'ERROR — ошибка':'WARNING — предупреждение'}: {issueLabel(issue,view.preview!.state.bundle)}</li>)}</ul><p>{view.preview.validation.valid?'Ошибок публикации нет.':'Публикация заблокирована ошибками.'}</p>{view.preview.state.bundle&&<details><summary>Сведения сохранённого черновика</summary><BundleView bundle={view.preview.state.bundle}/></details>}</>}<p>Для совместной публикации настроек и поиска используйте готовый набор в разделе источников.</p>{knowledgeLoaded&&view.knowledge!.active_build_id&&<><p>{publishedBuild?.revision_ids.length===0?'Настройки опубликованы без источников. Сохраните этот пустой набор либо выберите другой для новой публикации.':'У настроек есть опубликованный набор источников. Сохраните его либо явно выберите другой для новой публикации.'}</p><button className="secondary" disabled={locked} onClick={openSources}>Выбрать набор для публикации</button></>}{portfolioLinked&&<p>Настройки связаны с портфолио, включая пустой набор. Публикуйте их совместно с выбранными работами и источниками в разделе портфолио ниже.</p>}<button disabled={locked||dirty||!knowledgeLoaded||!portfolioLoaded||portfolioLinked||!view.preview?.validation.valid||view.knowledge!.active_build_id!==null} onClick={()=>start('PUBLISH')}>Опубликовать черновик</button></section>
       <section aria-label="Откат публикации"><h3>Откат</h3><p>Можно выбрать прежнюю публикацию, просмотренную в этой сессии страницы. Сервер проверит допустимость; активация всегда будет новой.</p><label>Предыдущая публикация<select value={rollback} disabled={locked||knownReleases.length===0} onChange={e=>setRollback(e.target.value)}><option value="">Выберите публикацию</option>{knownReleases.map(r=><option key={r.id} value={r.id}>Из черновика {r.version} · активация {r.activation}</option>)}</select></label><button className="secondary" disabled={locked||!knownReleases.some(r=>r.id===rollback)} onClick={()=>start('ROLLBACK')}>Откатить публикацию</button></section>
     </>}
 
@@ -226,14 +245,15 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
           <label>Готовый набор источников<select disabled={sourceLocked||readyBuilds.length===0} value={selectedBuild?.build_id??''} onChange={e=>setBuildChoice(e.target.value)}><option value="">Нет готового набора</option>{readyBuilds.map((b,i)=><option key={b.build_id} value={b.build_id}>{b.revision_ids.length===0?'Без источников · пустой набор':`${b.build_id===view.knowledge!.active_build_id?'Опубликованный набор':`Набор ${i+1}`} · фрагментов ${b.chunk_count}`}</option>)}</select></label>
           <p>Публикация включает сохранённый черновик настроек и готовый набор источников.</p>
           {(dirty||sourceDirty)&&<p>Сначала сохраните изменения настроек и текста.</p>}
-          <button disabled={sourceLocked||sourceDirty||dirty||!view.preview?.validation.valid||!selectedBuild} onClick={()=>startKnowledge('KNOWLEDGE_PUBLISH')}>{selectedBuild?.revision_ids.length===0?'Опубликовать настройки без источников':'Опубликовать источники'}</button>
+          <button disabled={sourceLocked||sourceDirty||dirty||!portfolioLoaded||portfolioLinked&&!activePortfolioBuild||!view.preview?.validation.valid||!selectedBuild} onClick={()=>startKnowledge('KNOWLEDGE_PUBLISH')}>{selectedBuild?.revision_ids.length===0?'Опубликовать настройки без источников':'Опубликовать источники'}</button>
         </section>
         <section aria-label="Откат источников"><h4>Предыдущая публикация с источниками</h4>
           <label>Набор для отката<select disabled={sourceLocked||sourceDirty} value={knowledgeRollback} onChange={e=>setKnowledgeRollback(e.target.value)}><option value="">Выберите публикацию</option>{view.knowledge!.rollback_targets.filter(t=>t.release_id!==view.knowledge!.release_id).map((t,i)=><option key={t.release_id} value={t.release_id} disabled={!t.eligible}>Публикация {i+1}{t.eligible?'':' · недоступна'}</option>)}</select></label>
-          <button className="secondary" disabled={sourceLocked||sourceDirty||dirty||!view.knowledge!.rollback_targets.some(t=>t.release_id===knowledgeRollback&&t.eligible)} onClick={()=>startKnowledge('KNOWLEDGE_ROLLBACK')}>Вернуть публикацию источников</button>
+          <button className="secondary" disabled={sourceLocked||sourceDirty||dirty||!portfolioLoaded||portfolioLinked||!view.knowledge!.rollback_targets.some(t=>t.release_id===knowledgeRollback&&t.eligible)} onClick={()=>startKnowledge('KNOWLEDGE_ROLLBACK')}>Вернуть публикацию источников</button>
         </section>
       </>}
     </section>}
+    <PortfolioPanel session={session} workspace={workspace} business={business} data={visible?view.portfolio:null} draft={visible?view.draft:null} knowledge={visible?view.knowledge:null} valid={!!view.preview?.validation.valid} configurationDirty={dirty||sourceDirty} locked={!visible||view.busy||attached||view.denied} reload={()=>load(dirty||sourceDirty)} busyChanged={setPortfolioBusy} recover={recover} expired={expired} accessDenied={accessDenied}/>
     {visible&&view.notice&&<p role="status">{view.notice}</p>}{attached&&pending&&<div className="notice" aria-live="polite">{pending.phase==='sending'?<p>Выполняем команду. Повторный submit заблокирован.</p>:pending.phase==='confirmed'?<><p>Команда подтверждена. Нужно повторить только чтение состояния.</p><button onClick={()=>void load(false,true)}>Повторить чтение настроек</button></>:<><p>Результат команды неизвестен. Повтор использует исходные ключ и содержимое.</p><button onClick={recover}>Проверить сессию для команды</button><button onClick={()=>void send(pending)}>Повторить исходную команду</button></>}</div>}
   </section>;
 }

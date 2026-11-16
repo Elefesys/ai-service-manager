@@ -118,7 +118,8 @@ def validate_storage(services: dict[str, object], api: dict[str, object]) -> Non
         ):
             reject("BROWSER_COMPOSE_STORAGE_ENVIRONMENT_INVALID")
     if (
-        api.get("ASM_STORAGE_ENDPOINT") != "http://127.0.0.1:9000"
+        api.get("ASM_STORAGE_ENDPOINT") != "http://storage:9000"
+        or api.get("ASM_STORAGE_PRESIGN_ENDPOINT") != "http://127.0.0.1:9000"
         or runtime.get("ASM_STORAGE_ENDPOINT") != "http://storage:9000"
         or initializer_env.get("STORAGE_HOST") != "storage"
         or initializer_env.get("STORAGE_BUCKET") != "asm-private-test"

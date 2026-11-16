@@ -471,34 +471,42 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     old = catalog.source_catalog(catalog.ROOT, "0013")
     middle = catalog.source_catalog(catalog.ROOT, "0014")
     rights = catalog.source_catalog(catalog.ROOT, "0017")
-    current = catalog.source_catalog(catalog.ROOT, "0020")
+    previous = catalog.source_catalog(catalog.ROOT, "0020")
+    current = catalog.source_catalog(catalog.ROOT, "0021")
     assert (
         len(old["functions"]),
         len(middle["functions"]),
         len(rights["functions"]),
+        len(previous["functions"]),
         len(current["functions"]),
     ) == (
         167,
         175,
         194,
         233,
+        289,
     )
     assert (
         len(old["columns"]),
         len(middle["columns"]),
         len(rights["columns"]),
+        len(previous["columns"]),
         len(current["columns"]),
-    ) == (45, 47, 49, 59)
-    body = current["functions"]["platform.knowledge_search_schema_profile()"]["body"]
+    ) == (45, 47, 49, 59, 68)
+    body = current["functions"]["platform.portfolio_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 232,
-        "tables": 59,
+        "other_functions": 288,
+        "tables": 68,
         "result": "PASS",
     }
     assert (
         current["functions"]["platform.human_context_schema_profile()"]
         == old["functions"]["platform.human_context_schema_profile()"]
+    )
+    assert (
+        current["functions"]["platform.knowledge_search_schema_profile()"]
+        == previous["functions"]["platform.knowledge_search_schema_profile()"]
     )
 
 

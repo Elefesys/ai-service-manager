@@ -8,8 +8,10 @@ vi.mock('./MessagingPanel',()=>({MessagingPanel:()=>null}));
 vi.mock('./EscalationsPanel',()=>({EscalationsPanel:()=>null}));
 import { ActiveProjection, Bundle, ConfigurationError, DraftState, configurationApi, KnowledgeState, KnowledgeCommand, knowledgeApi, normalizeSource } from './configuration-api';
 import { active, bundle, business, businessId, command, deferred, draft, preview, releaseId, session, workspace, knowledgeSource, knowledgeState, knowledgeCommand, readyBuild, sourceId, revisionId, buildId, emptyReadyBuild, emptyBuildId } from './configuration-fixtures.test-helper';
+import { portfolioApi } from './portfolio-api';
+import { ownerState, photo, confirmedItem, portfolioBuild, portfolioBuildId, portfolioCommand } from './portfolio-fixtures.test-helper';
 let state:DraftState,current:ActiveProjection;
-beforeEach(()=>{state=draft();current=active();vi.spyOn(knowledgeApi,'state').mockImplementation(async(w,b)=>structuredClone({...knowledgeState(),workspace_id:w,business_id:b,activation_version:current.activation_version,release_id:current.release_id}));vi.spyOn(configurationApi,'draft').mockImplementation(async()=>structuredClone(state));vi.spyOn(configurationApi,'active').mockImplementation(async()=>structuredClone(current));vi.spyOn(configurationApi,'preview').mockImplementation(async()=>preview(structuredClone(state)));vi.spyOn(configurationApi,'command').mockImplementation(async(_w,_b,op,body)=>{
+beforeEach(()=>{state=draft();current=active();vi.spyOn(portfolioApi,'state').mockImplementation(async(w,b)=>{const kb=await vi.mocked(knowledgeApi.state).mock.results.at(-1)?.value;return {...ownerState(),workspace_id:w,business_id:b,draft_version:state.draft_version,activation_version:current.activation_version,active_release_id:current.release_id,active_knowledge_build_id:kb?.active_build_id??null};});vi.spyOn(knowledgeApi,'state').mockImplementation(async(w,b)=>structuredClone({...knowledgeState(),workspace_id:w,business_id:b,activation_version:current.activation_version,release_id:current.release_id}));vi.spyOn(configurationApi,'draft').mockImplementation(async()=>structuredClone(state));vi.spyOn(configurationApi,'active').mockImplementation(async()=>structuredClone(current));vi.spyOn(configurationApi,'preview').mockImplementation(async()=>preview(structuredClone(state)));vi.spyOn(configurationApi,'command').mockImplementation(async(_w,_b,op,body)=>{
   if(op==='EDIT'&&'bundle'in body)state={...state,draft_version:String(BigInt(state.draft_version)+1n),bundle:structuredClone(body.bundle)};
   else{const id=op==='ROLLBACK'&&'release_id'in body?body.release_id:releaseId;state={...state,activation_version:String(BigInt(state.activation_version)+1n),release_id:id};current=active(structuredClone(state.bundle!),state.activation_version,id,state.draft_version);}
   return command(op,state.draft_version,state.activation_version,state.release_id);
@@ -198,4 +200,30 @@ describe('confirmed source owner flow',()=>{
     expect(configurationApi.command).toHaveBeenCalledTimes(1);expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
   });
 
+});
+
+describe('composite settings and portfolio publication',()=>{
+  beforeEach(()=>{vi.spyOn(knowledgeApi,'command');});
+  it.each([false,true])('preserves knowledge and portfolio links after settings edit/reload (EMPTY=%s)',async empty=>{
+    current=active(bundle(),'1',releaseId);state=draft(bundle(),'1','1',releaseId);
+    const kb={...knowledgeState(),active_build_id:buildId,builds:[emptyReadyBuild(),readyBuild()],rollback_targets:[{release_id:releaseId,build_id:buildId,eligible:true,reason_code:null} as const]};
+    kb.builds=kb.builds.filter(b=>b.build_id===buildId); // the linked KB has its actual READY version3
+    const port={...ownerState(),assets:empty?[]:[photo()],items:empty?[]:[confirmedItem()],builds:[portfolioBuild(empty)],active_portfolio_build_id:portfolioBuildId,active_knowledge_build_id:buildId};
+    vi.mocked(knowledgeApi.state).mockImplementation(async()=>({...kb,activation_version:current.activation_version,release_id:current.release_id}));
+    vi.mocked(portfolioApi.state).mockImplementation(async()=>({...port,draft_version:state.draft_version,activation_version:current.activation_version,active_release_id:current.release_id}));
+    vi.spyOn(portfolioApi,'command').mockImplementation(async(_w,_b,op)=>{const activation=String(BigInt(current.activation_version)+1n);state={...state,activation_version:activation};current={...current,activation_version:activation,bundle:structuredClone(state.bundle)};return portfolioCommand(op,{release_id:current.release_id,activation_version:activation});});
+    const v=setup();await editFAQ('Новые сведения с сохранением материалов.');
+    actionPortfolio();await waitFor(()=>expect(portfolioApi.command).toHaveBeenCalledTimes(1));await waitFor(()=>expect(screen.getByRole('button',{name:'Опубликовать настройки и портфолио'})).toBeEnabled());
+    const body=vi.mocked(portfolioApi.command).mock.calls[0][3];expect(body).toEqual({schema_version:1,expected_draft_version:'2',expected_activation_version:'1',knowledge_build_id:buildId,expected_knowledge_build_version:'3',portfolio_build_id:portfolioBuildId,expected_portfolio_build_version:empty?'1':'3'});
+    expect(vi.mocked(configurationApi.command).mock.calls.map(c=>c[2])).toEqual(['EDIT']);expect(knowledgeApi.command).not.toHaveBeenCalled();
+    v.unmount();setup();await ready();expect(screen.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();expect(screen.getByLabelText('Готовый набор работ')).toHaveValue(portfolioBuildId);expect(screen.getByLabelText('Набор источников для совместной публикации')).toHaveValue(buildId);
+  });
+  it('publishes selected knowledge through composite API when an EMPTY portfolio is linked',async()=>{
+    current=active(bundle(),'1',releaseId);state=draft(bundle(),'1','1',releaseId);
+    const kb={...knowledgeState(),active_build_id:emptyBuildId,builds:[emptyReadyBuild()],rollback_targets:[{release_id:releaseId,build_id:emptyBuildId,eligible:true,reason_code:null} as const]};
+    vi.mocked(knowledgeApi.state).mockImplementation(async()=>({...kb,activation_version:current.activation_version,release_id:current.release_id}));
+    vi.mocked(portfolioApi.state).mockImplementation(async()=>({...ownerState(),builds:[portfolioBuild(true)],active_portfolio_build_id:portfolioBuildId,active_knowledge_build_id:emptyBuildId,draft_version:state.draft_version,activation_version:current.activation_version,active_release_id:current.release_id}));
+    vi.spyOn(portfolioApi,'command').mockImplementation(async(_w,_b,op)=>portfolioCommand(op));setup();await ready();fireEvent.click(screen.getByRole('button',{name:'Посмотреть источники'}));await screen.findByLabelText('Текст источника');fireEvent.click(screen.getByRole('button',{name:'Опубликовать настройки без источников'}));await waitFor(()=>expect(portfolioApi.command).toHaveBeenCalledTimes(1));expect(vi.mocked(portfolioApi.command).mock.calls[0][3]).toMatchObject({knowledge_build_id:emptyBuildId,expected_knowledge_build_version:'1',portfolio_build_id:portfolioBuildId,expected_portfolio_build_version:'1'});expect(knowledgeApi.command).not.toHaveBeenCalled();
+  });
+  function actionPortfolio(){fireEvent.click(screen.getByRole('button',{name:'Опубликовать настройки и портфолио'}));}
 });

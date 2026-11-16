@@ -90,3 +90,20 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .knowledge-source-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: .8rem; border-radius: .5rem; background: #f4f6f9; max-height: 20rem; overflow-y: auto; }
 
 .knowledge-sources h4, .knowledge-sources p { overflow-wrap: anywhere; }
+
+.portfolio, .portfolio-reference { min-width: 0; overflow-wrap: anywhere; }
+.portfolio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+.portfolio-card { min-width: 0; border: 1px solid #d8dee8; border-radius: 10px; background: #f8faff; padding: 1rem; }
+.portfolio-card h4 { margin-top: 0; }
+.portfolio-card > button { margin: .4rem .4rem .4rem 0; }
+.portfolio-image { display: block; max-width: 100%; max-height: 360px; object-fit: contain; margin: 1rem auto; border-radius: 8px; }
+.portfolio-editor, .portfolio-confirm { padding: 1rem; border: 1px solid #cbd6f2; border-radius: 10px; margin-top: 1rem; }
+.portfolio label, .portfolio-reference label { display: block; margin: .6rem 0; }
+.portfolio input:not([type=checkbox]), .portfolio textarea, .portfolio select { display: block; width: 100%; max-width: 100%; padding: .65rem; font: inherit; }
+.portfolio input[type=checkbox] { width: auto; margin-right: .5rem; }
+.portfolio .portfolio-analysis { border-left: 3px solid #b8c9f1; padding-left: .8rem; margin: 1rem 0; }
+.portfolio-analysis h5 { margin-bottom: .4rem; font-size: 1rem; }
+.portfolio-reference { margin: 1rem 0; padding: 1rem; border: 1px solid #d8dee8; border-radius: 10px; }
+.portfolio-matches { padding-left: 1.5rem; }
+.portfolio-matches > li { border-bottom: 1px solid #d8dee8; padding-block: .7rem; }
+@media (max-width: 720px) { .portfolio-grid { grid-template-columns: minmax(0, 1fr); } .portfolio-reference .billing-heading { flex-direction: column; } .portfolio .control-actions > button { flex: 1 1 100%; } }

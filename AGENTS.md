@@ -39,9 +39,15 @@ M5.2A/PR48 — INTEGRATED / VERIFIED: code/CI LOCAL/TEST, capability
 ASSISTED_SYNTHETIC. Accepted main8eeeede1, post-merge CI43600856660 —
 итог12/12 SUCCESS; первый Docker service setup failure устранён повтором одной
 job на том же SHA, остальные результаты attempt1 сохранены.
-Единственная текущая выдача — C4-M5.2B-KNOWLEDGE-SEARCH-R1, ведущий C4 с C1/C2:
-подтверждённые источники/build и keyword/exact-vector поиск в защищённом ответе.
-Полный base/write-set и порядок source admission — в CURRENT M5_HANDOFF.
+M5.2B/PR49 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST: accepted main
+`70804866f6838f77c12bd281febae47887559d75`, tree `a6ee68b5` совпадает с принятым
+кандидатом `3a82973c`; post-merge CI43693059853 — 12/12 SUCCESS, attempt1.
+Единственная текущая выдача — C4-M5.2C-VISION-PORTFOLIO-R1, ведущий C4;
+C1/C2/C5 участвуют последовательно. Результат: анализ доступного private фото,
+owner upload/review/publish работ и подбор подтверждённых MY_WORK для мастера.
+Отправка portfolio photo остаётся M5.2D, сейчас не выдана. Полный base/write-set
+и порядок source admission — в CURRENT M5_HANDOFF. Assignment docs-only;
+C4 открывает один PR после реализации и проверки узкого M5.2C admission.
 C6 HOLD; operator работа закончена. Новые paid/VM вызовы и ключ не требуются.
 Original UNKNOWN/diagnostic receipts, holds и real-client/data restrictions
 сохраняются; ручная приёмка evidence не переписывает результат старого probe.
@@ -56,9 +62,9 @@ OnboardingAgent, массовый импорт чатов, генерацию и
 отдельная ограниченная задача; текущий sendMessage его не реализует.
 
 C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
-Current migration head0019; applied0001–0019 immutable. Для M5.2B C0 выделяет
-только0020/down_revision0019; C2 до SQL подтверждает актуальность слота и контракт.
-Новые номера не резервировать цепочкой; фактическая схема остаётся0019 до реализации.
+Current migration head 0020; applied 0001–0020 immutable. Для M5.2C C0 выделяет
+только 0021/down_revision 0020; C2 до SQL подтверждает актуальность слота и контракт.
+Новые номера не резервировать цепочкой; фактическая схема остаётся 0020 до реализации.
 Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
 При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
 не размножать длинные receipts между документами.

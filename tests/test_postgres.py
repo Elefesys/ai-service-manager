@@ -152,6 +152,14 @@ async def test_real_postgres_capabilities_and_roles(database):
             "messaging_jobs",
             "outbox_events",
             "plan_entitlements",
+            "portfolio_ai_sessions",
+            "portfolio_asset_versions",
+            "portfolio_assets",
+            "portfolio_build_items",
+            "portfolio_builds",
+            "portfolio_items",
+            "portfolio_release_builds",
+            "portfolio_revisions",
             "saas_plan_revisions",
             "saas_plans",
             "telegram_connection_state",
@@ -160,12 +168,13 @@ async def test_real_postgres_capabilities_and_roles(database):
             "turn_consumer_receipts",
             "turn_guard_receipts",
             "user_accounts",
+            "vision_analyses",
             "workspace_billing_accounts",
             "workspace_memberships",
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M5.1A material tables are allowed"
+        ], "Only the accepted M0 through M5.2C material tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

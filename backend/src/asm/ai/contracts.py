@@ -77,7 +77,11 @@ class _GatewayConfig(DTO):
     revision: Identifier
     route: Route
     prompt_revision: Literal[
-        "conversation_v1", "conversation_v2", "conversation_v3", "conversation_v4"
+        "conversation_v1",
+        "conversation_v2",
+        "conversation_v3",
+        "conversation_v4",
+        "conversation_v5",
     ]
     schema_revision: Literal["conversation_result_v1"]
     limits: Limits
@@ -101,10 +105,34 @@ class SearchGatewayConfig(_GatewayConfig):
     prompt_revision: Literal["conversation_v4"]
 
 
-AnyGatewayConfig = GatewayConfig | KnowledgeGatewayConfig | SearchGatewayConfig
+class PortfolioGatewayConfig(_GatewayConfig):
+    """Explicit finite v5; legacy DTOs remain closed."""
+
+    prompt_revision: Literal["conversation_v5"]
+
+    @model_validator(mode="after")
+    def finite_synthetic_scope(self) -> Self:
+        if (
+            self.route.execution != "FAKE"
+            or self.route.adapter != "fake"
+            or self.route.endpoint != "https://fake.invalid/v1"
+            or self.route.eligibility != "EVAL_ONLY"
+            or self.limits.currency != "RUB"
+            or self.limits.model_calls > 2
+            or self.limits.read_executions > 1
+        ):
+            raise ValueError("PORTFOLIO_RUNTIME_CONFIG_INVALID")
+        return self
+
+
+AnyGatewayConfig = (
+    GatewayConfig | KnowledgeGatewayConfig | SearchGatewayConfig | PortfolioGatewayConfig
+)
 
 
 def validate_gateway_config(value: object) -> AnyGatewayConfig:
+    if isinstance(value, PortfolioGatewayConfig):
+        return PortfolioGatewayConfig.model_validate(value)
     if isinstance(value, SearchGatewayConfig):
         return SearchGatewayConfig.model_validate(value)
     if isinstance(value, KnowledgeGatewayConfig):

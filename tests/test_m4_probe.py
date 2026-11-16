@@ -4503,16 +4503,89 @@ async def test_gpt_remainder_early_and_late_stops_preserve_prior_and_new_unknown
     assert "PRIVATE_TRANSPORT" not in json.dumps(events)
 
 
+class GptRemainderDeadlineObserver:
+    """Observe real timeout contexts in one module; asyncio itself stays unchanged."""
+
+    def __init__(self):
+        self.contexts = []
+        self.seconds = []
+
+    def __getattr__(self, name):
+        return getattr(asyncio, name)
+
+    def timeout(self, seconds):
+        context = asyncio.timeout(seconds)
+        self.contexts.append(context)
+        self.seconds.append(seconds)
+        return context
+
+
 @pytest.mark.parametrize("where", ["catalog", "post", "history", "case"])
-async def test_gpt_remainder_deadline_stops_and_keeps_earlier_settlement(monkeypatch, where):
+@pytest.mark.parametrize("delay_before_phase", [0.0, 0.12])
+async def test_gpt_remainder_deadline_stops_and_keeps_earlier_settlement(
+    monkeypatch, where, delay_before_phase
+):
+    from asm.ai import gateway as gateway_module
+
+    # Reproduce the old wrong-phase cancellation with the original80ms setting.
+    # This is an exact negative observation, not an alternate accepted result.
+    if where == "post" and delay_before_phase:
+        legacy = ControlledGptRemainder()
+        legacy_trace = []
+
+        async def delayed_catalog(request):
+            if request.url.path.endswith("/models"):
+                legacy_trace.extend(["catalog", "delay_before_target"])
+                try:
+                    await asyncio.sleep(delay_before_phase)
+                except asyncio.CancelledError:
+                    legacy_trace.append("cancel_before_target")
+                    raise
+            return legacy.handler(request)
+
+        with monkeypatch.context() as old:
+            old.setattr(probe, "DURATION", 0.08)
+            watchdog = asyncio.timeout(5)
+            async with watchdog:
+                before, _ = await controlled_gpt_remainder(legacy, handler=delayed_catalog)
+            assert not watchdog.expired()
+        assert legacy_trace == ["catalog", "delay_before_target", "cancel_before_target"]
+        assert before["new_stage"]["known_call_count"] == 0
+        assert before["new_stage"]["unknown_call_count"] == 0
+        assert not legacy.posts
+        print("M5_DEADLINE_LEGACY_REPRO=" + json.dumps(legacy_trace))
+
     mock = ControlledGptRemainder()
+    trace, settled = [], []
+    global_timeouts, case_timeouts = GptRemainderDeadlineObserver(), GptRemainderDeadlineObserver()
+    monkeypatch.setattr(probe, "asyncio", global_timeouts)
+    monkeypatch.setattr(gateway_module, "asyncio", case_timeouts)
+    original_record = probe.Ledger.record
+
+    def record(ledger, value):
+        original_record(ledger, value)
+        if value["event"] == "case" and not value["failures"]:
+            assert not settled and value["calls"][0]["cost"]["status"] == "CONFIRMED"
+            settled.append(value)
+            trace.append("settled:1")
+
+    monkeypatch.setattr(probe.Ledger, "record", record)
+    armed = None
 
     async def handler(request):
+        nonlocal armed
         is_post = request.method == "POST"
         phase = len(mock.posts) + int(is_post)
+        catalog_request = request.url.path.endswith("/models")
+        trace.append(
+            "catalog" if catalog_request else f"post:{phase}" if is_post else f"history:{phase}"
+        )
+        if catalog_request and delay_before_phase:
+            trace.append("delay_before_target")
+            await asyncio.sleep(delay_before_phase)
         if (
             where == "catalog"
-            and request.url.path.endswith("/models")
+            and catalog_request
             or where in ("post", "case")
             and is_post
             and phase == 2
@@ -4522,16 +4595,67 @@ async def test_gpt_remainder_deadline_stops_and_keeps_earlier_settlement(monkeyp
         ):
             if is_post:
                 mock.handler(request)
-            await asyncio.sleep(1)
+            assert armed is None
+            assert len(settled) == (0 if where == "catalog" else 1)
+            scope = "case" if where == "case" else "global"
+            armed = (case_timeouts if where == "case" else global_timeouts).contexts[-1]
+            assert not armed.expired() and armed.when() > asyncio.get_running_loop().time()
+            # Reschedule the existing real timeout only after reaching its target.
+            # Separate module observers keep global and Gateway case scopes distinct.
+            trace.append("arm:" + scope)
+            armed.reschedule(asyncio.get_running_loop().time() + 0.08)
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                trace.append("cancel:" + scope)
+                raise
             pytest.fail("deadline did not cancel")
+        assert not is_post or phase <= 2
         return mock.handler(request)
 
-    monkeypatch.setattr(probe, "CASE_SECONDS" if where == "case" else "DURATION", 0.08)
-    summary, _ = await controlled_gpt_remainder(mock, handler=handler)
+    watchdog = asyncio.timeout(5)
+    async with watchdog:
+        summary, events = await controlled_gpt_remainder(mock, handler=handler)
+    assert not watchdog.expired() and armed is not None and armed.expired()
+    assert len(global_timeouts.contexts) == 1 and global_timeouts.seconds[0] > 5
+    assert global_timeouts.contexts[0].expired() is (where != "case")
+    assert sum(context.expired() for context in case_timeouts.contexts) == int(where == "case")
+    assert trace[-1] == ("cancel:case" if where == "case" else "cancel:global")
+    if where != "catalog":
+        assert trace.index("settled:1") < trace.index(
+            "arm:case" if where == "case" else "arm:global"
+        )
+        assert Decimal(settled[0]["calls"][0]["cost"]["amount"]) == Decimal("0.001")
     assert summary["status"] == "FAILED_OR_INCOMPLETE"
     assert summary["new_stage"]["known_call_count"] == (0 if where == "catalog" else 1)
     assert summary["new_stage"]["unknown_call_count"] == (0 if where == "catalog" else 1)
     assert len(mock.posts) == (0 if where == "catalog" else 2)
+    unknown = 0 if where == "catalog" else 1
+    assert summary["shared_total"]["model_post_reservations"] == 44 + len(mock.posts)
+    assert (
+        Decimal(summary["shared_total"]["confirmed_cost_rub"])
+        == Decimal("0.23889134") + Decimal("0.001") * unknown
+    )
+    assert (
+        Decimal(summary["shared_total"]["unknown_reserved_rub"])
+        == Decimal("7.585505548") + Decimal("0.285184000") * unknown
+    )
+    assert summary["shared_total"]["old_unknown_reserve_released"] is False
+    print(
+        "M5_DEADLINE_PHASE="
+        + json.dumps(
+            {
+                "where": where,
+                "pre_delay": delay_before_phase,
+                "trace": trace,
+                "known": summary["new_stage"]["known_call_count"],
+                "unknown": unknown,
+                "posts": len(mock.posts),
+                "global_expired": global_timeouts.contexts[0].expired(),
+                "case_expired": where == "case",
+            }
+        )
+    )
 
 
 @pytest.mark.parametrize(

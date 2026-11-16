@@ -9739,6 +9739,21 @@ def test_revision_qualified_inventory_rejects_names_not_only_counts(revision, da
         e.schema_inventory(revision, names)
 
 
+@pytest.mark.parametrize("damage", ["missing", "extra", "same-count", "wrong-revision"])
+def test_current0021_inventory_keeps_exact68_and_rejects_every_new_table_omission(damage):
+    names = set(e.SCHEMA_TABLES["0021"])
+    added = names - e.SCHEMA_TABLES["0020"]
+    assert len(names) == 68 and len(added) == 9
+    e.schema_inventory("0021", names)
+    for table in sorted(added):
+        changed = names - {table} if damage in {"missing", "same-count"} else names.copy()
+        if damage in {"extra", "same-count"}:
+            changed.add("platform.unapproved_portfolio_table")
+        revision = "0020" if damage == "wrong-revision" else "0021"
+        with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_DATABASE_TABLES"):
+            e.schema_inventory(revision, changed)
+
+
 def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     coordinator = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
     shell = (e.ROOT / "scripts/test_telegram_egress.sh").read_text()

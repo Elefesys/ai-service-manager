@@ -77,3 +77,44 @@ class ReadManifest(Result):
     file_id: UUID
     storage_key: str = Field(repr=False)
     manifest: ImageManifest
+
+
+class OwnerUploadPermit(Result):
+    """Separate committed owner capability; it cannot impersonate an inbound Job."""
+
+    workspace_id: UUID
+    business_id: UUID
+    asset_id: UUID
+    version_id: UUID
+    upload_id: UUID
+    ticket: UUID = Field(repr=False)
+    storage_key: str = Field(repr=False)
+    manifest: ImageManifest
+    operation_deadline: datetime
+
+
+class OwnerCleanupPermit(Result):
+    """Only a claimed ABANDONED version, never an accepted READY version."""
+
+    workspace_id: UUID
+    business_id: UUID
+    asset_id: UUID
+    version_id: UUID
+    upload_id: UUID
+    storage_key: str = Field(repr=False)
+    claim_token: UUID = Field(repr=False)
+    lease_until: datetime
+
+
+class OwnerDeletePermit(Result):
+    """Fresh explicit OWNER purge of an already logically deleted accepted asset."""
+
+    workspace_id: UUID
+    business_id: UUID
+    asset_id: UUID
+    version_id: UUID
+    upload_id: UUID
+    ticket: UUID = Field(repr=False)
+    storage_key: str = Field(repr=False)
+    operation: Literal["OWNER_ACCEPTED_DELETE"]
+    purge_deadline: datetime

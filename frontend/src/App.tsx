@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, Business, Session } from './api';
 import { BillingPanel } from './BillingPanel';
 import { ConfigurationPanel } from './ConfigurationPanel';
+import { ReferencePortfolio } from './PortfolioPanel';
 import { MessagingPanel } from './MessagingPanel';
 import { EscalationsPanel } from './EscalationsPanel';
 import { EscalationContext } from './escalation-api';
@@ -171,7 +172,7 @@ function Console() {
     <ConfigurationPanel session={ownerSession} workspace={workspace} business={selected} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
     <BillingPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
     <EscalationsPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} accepted={setOwnerDecision} />
-    <MessagingPanel session={ownerSession} workspace={workspace} ownerDecision={ownerDecision} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
+    <MessagingPanel portfolio={(context,canAnalyse,refresh)=><ReferencePortfolio session={ownerSession} workspace={workspace} context={context} canAnalyse={canAnalyse} refresh={refresh} recover={()=>void checkSession(true)} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner}/>} session={ownerSession} workspace={workspace} ownerDecision={ownerDecision} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
   </Shell>;
 }
 

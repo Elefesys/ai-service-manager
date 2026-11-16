@@ -104,4 +104,4 @@ else:
     raise SystemExit("Browser stack readiness failed")
 print("BROWSER_STACK_READINESS: PASS")
 PY
-ASM_BROWSER_FIXTURE_FILE="$tmp/fixture.json" ASM_BROWSER_MESSAGING_FILE="$tmp/messaging.json" ASM_BROWSER_COUNTER_DIR="$counter_dir" ASM_BROWSER_ENV_FILE="$tmp/private/test.env" ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" step browser-tests 600 npm --prefix frontend run test:e2e
+ASM_BROWSER_FIXTURE_FILE="$tmp/fixture.json" ASM_BROWSER_MESSAGING_FILE="$tmp/messaging.json" ASM_BROWSER_COUNTER_DIR="$counter_dir" ASM_BROWSER_ENV_FILE="$tmp/private/test.env" ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" step browser-tests 900 npm --prefix frontend run test:e2e

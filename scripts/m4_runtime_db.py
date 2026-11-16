@@ -339,6 +339,142 @@ M5_SEARCH_PATHS = M5_SEARCH_C0_DOCS | {
     "tests/test_tenancy_postgres.py",
 }
 
+# C0's single M5.2C assignment and approved upload continuation. No later M5 scope.
+M5_PORTFOLIO_BASE = "70804866f6838f77c12bd281febae47887559d75"
+M5_PORTFOLIO_TREE = "a6ee68b5a6b0cd2091b4cecc89614bada4db2585"
+M5_PORTFOLIO_ASSIGNMENT = "031af2b091d40800c103d182d135f0677e4fca53"
+M5_PORTFOLIO_ASSIGNMENT_TREE = "e439d994f60c30e0fc1a56326a79eb26bb1eb0b6"
+M5_PORTFOLIO_CONTRACT = "9bd32fbd2bb7bb27a0dca84334bd3e2d0039a567"
+M5_PORTFOLIO_CONTRACT_TREE = "c9de945f45669183094ba48489c93ecfa837e3f4"
+M5_PORTFOLIO_CONTINUATION = "a34834e004320de7257e7c9f98dcb4ac178b6c66"
+M5_PORTFOLIO_CONTINUATION_TREE = "ec72c51acece599264e8a9048047e4d4f661eaa6"
+M5_PORTFOLIO_CHECKPOINT = "93174249527c055f3a975ba097a8646b2d14f450"
+M5_PORTFOLIO_CHECKPOINT_TREE = "bad38d145fcf368f5b98c9f609e872722d418258"
+M5_PORTFOLIO_FINISH_ASSIGNMENT = "114a027be3417998360bb939690b55f5815bdaf1"
+M5_PORTFOLIO_FINISH_ASSIGNMENT_TREE = "2107bd20f2929fd931befb9d38850a3d6a0dfbab"
+M5_PORTFOLIO_REVIEW_BASE = "da3007ae464d505f2d7c98b57f0f88836709d87d"
+M5_PORTFOLIO_REVIEW_BASE_TREE = "cc433bed24cab28e641ddb72c2f09431bcf32f26"
+M5_PORTFOLIO_CI_FIX_ASSIGNMENT = "cecb92c5edd073f9b9d924c01d391d07f5373436"
+M5_PORTFOLIO_CI_FIX_ASSIGNMENT_TREE = "8f4668dacb0e39e281f79341a9a52b1e197069ad"
+M5_PORTFOLIO_UNIT_REVIEW_BASE = "4ddf6b0650480cf0ac935bb5b141ce5a399d5311"
+M5_PORTFOLIO_UNIT_REVIEW_BASE_TREE = "b039985cf19f2ef8c5b49664febd648cdeba7dbf"
+M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT = "f7ef6215ef7121984aa7b8fc4293b7496b85ed3b"
+M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT_TREE = "8a4c9e885f4c70193c9269bbc2d8305bd594d2e8"
+M5_PORTFOLIO_CORE_REVIEW_BASE = "30127f143349645fa1c75d00cf34a4bd3b5e6d03"
+M5_PORTFOLIO_CORE_REVIEW_BASE_TREE = "edf04c471782439a78391ce2c7065b99b1dff470"
+M5_PORTFOLIO_CORE_FIX_ASSIGNMENT = "5ac931f65264b8cc7b4a77c1fff034814891ee66"
+M5_PORTFOLIO_CORE_FIX_ASSIGNMENT_TREE = "d4dab0dc4db1f5ac86a0253b3986b4c2391bf63d"
+M5_PORTFOLIO_BRANCH = "c4/m5-2c-vision-portfolio-r1"
+M5_PORTFOLIO_C0_DOCS = {
+    "AGENTS.md",
+    "README.md",
+    "docs/TASK_REGISTER.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+}
+M5_PORTFOLIO_PATHS = M5_PORTFOLIO_C0_DOCS | {
+    "backend/src/asm/ai/agent.py",
+    "backend/src/asm/ai/contracts.py",
+    "backend/src/asm/ai/database.py",
+    "backend/src/asm/ai/gateway.py",
+    "backend/src/asm/ai/portfolio.py",
+    "backend/src/asm/ai/prompts/conversation_v5.txt",
+    "backend/src/asm/ai/prompts/vision_v1.txt",
+    "backend/src/asm/ai/runtime.py",
+    "backend/src/asm/ai/runtime_contracts.py",
+    "backend/src/asm/ai/runtime_settings.py",
+    "backend/src/asm/ai/schemas/vision_result_v1.json",
+    "backend/src/asm/ai/vision.py",
+    "backend/src/asm/ai/vision_contracts.py",
+    "backend/src/asm/auth/http.py",
+    "backend/src/asm/configuration/errors.py",
+    "backend/src/asm/files/models.py",
+    "backend/src/asm/files/storage.py",
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/knowledge/errors.py",
+    "backend/src/asm/messaging/database.py",
+    "backend/src/asm/messaging/worker.py",
+    "backend/src/asm/portfolio/__init__.py",
+    "backend/src/asm/portfolio/errors.py",
+    "backend/src/asm/portfolio/http.py",
+    "backend/src/asm/portfolio/models.py",
+    "backend/src/asm/portfolio/repository.py",
+    "backend/src/asm/portfolio/service.py",
+    "backend/src/asm/portfolio/storage.py",
+    "backend/src/asm/portfolio/validation.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "docs/tasks/M5_HANDOFF.md",
+    "frontend/e2e/portfolio.spec.ts",
+    "frontend/src/ConfigurationPanel.test.tsx",
+    "frontend/src/ConfigurationPanel.tsx",
+    "frontend/src/PortfolioPanel.test.tsx",
+    "frontend/src/PortfolioPanel.tsx",
+    "frontend/src/configuration-api.test.ts",
+    "frontend/src/configuration-api.ts",
+    "frontend/src/portfolio-api.test.ts",
+    "frontend/src/portfolio-api.ts",
+    "frontend/src/portfolio-fixtures.test-helper.ts",
+    "frontend/src/style.css",
+    "migrations/versions/0021_vision_portfolio.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "scripts/test_browser.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_portfolio_api_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m1_3_http_contract.py",
+    "tests/test_m4_probe.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_telegram_egress_migration.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_m5_portfolio_auth_boundary.py",
+    "tests/test_m5_portfolio_context.py",
+    "tests/test_m5_portfolio_migrations.py",
+    "tests/test_m5_portfolio_postgres.py",
+    "tests/test_m5_portfolio_runtime.py",
+    "tests/test_m5_portfolio_runtime_postgres.py",
+    "tests/test_m5_portfolio_storage_postgres.py",
+    "tests/test_m5_portfolio_unit.py",
+    "tests/test_m5_vision_pixels.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_tenancy_postgres.py",
+    "backend/src/asm/files/config.py",
+    "compose.browser.yaml",
+    "scripts/check_browser_compose.py",
+    "tests/test_browser_compose.py",
+    "tests/test_m2_2_media.py",
+    "frontend/src/App.tsx",
+    "frontend/src/App.test.tsx",
+    "frontend/src/MessagingPanel.tsx",
+    "frontend/src/MessagingPanel.test.tsx",
+}
+
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -488,10 +624,13 @@ def source_tree_from_evidence(path=None):
     planning = value["branch"] == M5_PLAN_BRANCH
     configuration = value["branch"] == M5_CONFIGURATION_BRANCH
     knowledge = value["branch"] == M5_KNOWLEDGE_BRANCH
+    portfolio = value["branch"] == M5_PORTFOLIO_BRANCH
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M5_SEARCH_BASE, M5_SEARCH_TREE)
+        (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
+        if portfolio
+        else (M5_SEARCH_BASE, M5_SEARCH_TREE)
         if search
         else (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
         if capability
@@ -542,6 +681,8 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
+            or portfolio
+            and value["event"] in {"pull_request", "push"}
         )
         and type(value["attempt"]) is int
         and value["attempt"] == 1
@@ -561,7 +702,9 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if search:
+    if portfolio:
+        require(set(paths) <= M5_PORTFOLIO_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif search:
         require(set(paths) <= M5_SEARCH_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif capability:
         require(set(paths) <= M5_CAPABILITY_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -998,6 +1141,20 @@ def root_path():
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
 
 
+def portfolio_event(event):
+    if event.get("head_ref") == M5_PORTFOLIO_BRANCH:
+        return True
+    if event["ref"] != "refs/heads/main":
+        return False
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", M5_PORTFOLIO_ASSIGNMENT, "HEAD"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    require(result.returncode in (0, 1, 128), "PORTFOLIO_ASSIGNMENT_ANCESTRY")
+    return result.returncode == 0
+
+
 def search_event(event):
     if event.get("head_ref") == M5_SEARCH_BRANCH:
         return True
@@ -1062,10 +1219,13 @@ def admit_source(evidence):
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    search = search_event(event)
-    capability = not search and capability_event(event)
-    knowledge = not (search or capability) and knowledge_event(event)
-    configuration = not (search or capability or knowledge) and configuration_event(event)
+    portfolio = portfolio_event(event)
+    search = not portfolio and search_event(event)
+    capability = not (portfolio or search) and capability_event(event)
+    knowledge = not (portfolio or search or capability) and knowledge_event(event)
+    configuration = not (portfolio or search or capability or knowledge) and configuration_event(
+        event
+    )
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH
@@ -1073,11 +1233,14 @@ def admit_source(evidence):
         or configuration
         or knowledge
         or capability
-        or search,
+        or search
+        or portfolio,
         "POLZA_RUNTIME_EVENT_BRANCH",
     )
     base, base_tree = (
-        (M5_SEARCH_BASE, M5_SEARCH_TREE)
+        (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
+        if portfolio
+        else (M5_SEARCH_BASE, M5_SEARCH_TREE)
         if search
         else (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
         if capability
@@ -1091,6 +1254,94 @@ def admit_source(evidence):
     )
     if configuration and event["event"] == "pull_request":
         require(event["base_sha"] == base, "CONFIGURATION_EVENT_BASE")
+    if portfolio:
+        if event["event"] == "pull_request":
+            require(event["base_sha"] == base, "PORTFOLIO_EVENT_BASE")
+        for name, revision, tree in (
+            ("ASSIGNMENT", M5_PORTFOLIO_ASSIGNMENT, M5_PORTFOLIO_ASSIGNMENT_TREE),
+            ("CONTRACT", M5_PORTFOLIO_CONTRACT, M5_PORTFOLIO_CONTRACT_TREE),
+            ("CONTINUATION", M5_PORTFOLIO_CONTINUATION, M5_PORTFOLIO_CONTINUATION_TREE),
+            ("CHECKPOINT", M5_PORTFOLIO_CHECKPOINT, M5_PORTFOLIO_CHECKPOINT_TREE),
+            (
+                "FINISH_ASSIGNMENT",
+                M5_PORTFOLIO_FINISH_ASSIGNMENT,
+                M5_PORTFOLIO_FINISH_ASSIGNMENT_TREE,
+            ),
+            ("REVIEW_BASE", M5_PORTFOLIO_REVIEW_BASE, M5_PORTFOLIO_REVIEW_BASE_TREE),
+            (
+                "CI_FIX_ASSIGNMENT",
+                M5_PORTFOLIO_CI_FIX_ASSIGNMENT,
+                M5_PORTFOLIO_CI_FIX_ASSIGNMENT_TREE,
+            ),
+            ("UNIT_REVIEW_BASE", M5_PORTFOLIO_UNIT_REVIEW_BASE, M5_PORTFOLIO_UNIT_REVIEW_BASE_TREE),
+            (
+                "UNIT_FIX_ASSIGNMENT",
+                M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT,
+                M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT_TREE,
+            ),
+            ("CORE_REVIEW_BASE", M5_PORTFOLIO_CORE_REVIEW_BASE, M5_PORTFOLIO_CORE_REVIEW_BASE_TREE),
+            (
+                "CORE_FIX_ASSIGNMENT",
+                M5_PORTFOLIO_CORE_FIX_ASSIGNMENT,
+                M5_PORTFOLIO_CORE_FIX_ASSIGNMENT_TREE,
+            ),
+        ):
+            require(
+                capture(["git", "rev-parse", revision + "^{tree}"]) == tree,
+                "PORTFOLIO_" + name + "_TREE",
+            )
+            require(
+                capture(["git", "merge-base", revision, "HEAD"]) == revision,
+                "PORTFOLIO_" + name + "_ANCESTRY",
+            )
+        require(
+            capture(["git", "merge-base", M5_PORTFOLIO_ASSIGNMENT, M5_PORTFOLIO_CONTRACT])
+            == M5_PORTFOLIO_ASSIGNMENT,
+            "PORTFOLIO_CONTRACT_ASSIGNMENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_CONTINUATION + "^"]) == M5_PORTFOLIO_CONTRACT,
+            "PORTFOLIO_CONTINUATION_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_CHECKPOINT + "^"])
+            == M5_PORTFOLIO_CONTINUATION,
+            "PORTFOLIO_CHECKPOINT_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_FINISH_ASSIGNMENT + "^"])
+            == M5_PORTFOLIO_CHECKPOINT,
+            "PORTFOLIO_FINISH_ASSIGNMENT_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_CI_FIX_ASSIGNMENT + "^"])
+            == M5_PORTFOLIO_REVIEW_BASE,
+            "PORTFOLIO_CI_FIX_ASSIGNMENT_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT + "^"])
+            == M5_PORTFOLIO_UNIT_REVIEW_BASE,
+            "PORTFOLIO_UNIT_FIX_ASSIGNMENT_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_CORE_FIX_ASSIGNMENT + "^"])
+            == M5_PORTFOLIO_CORE_REVIEW_BASE,
+            "PORTFOLIO_CORE_FIX_ASSIGNMENT_PARENT",
+        )
+        require(
+            not capture(
+                [
+                    "git",
+                    "diff",
+                    "--name-only",
+                    M5_PORTFOLIO_ASSIGNMENT,
+                    "HEAD",
+                    "--",
+                    *sorted(M5_PORTFOLIO_C0_DOCS),
+                ]
+            ),
+            "PORTFOLIO_C0_DOCS_IMMUTABLE",
+        )
     if search:
         if event["event"] == "pull_request":
             require(event["base_sha"] == base, "SEARCH_EVENT_BASE")
@@ -1225,7 +1476,9 @@ def admit_source(evidence):
         "tests/test_native_context_db_runner.py",
         "tests/test_m2_3_schema_postgres.py",
     }
-    if search:
+    if portfolio:
+        allowed = M5_PORTFOLIO_PATHS
+    elif search:
         allowed = M5_SEARCH_PATHS
     elif capability:
         allowed = M5_CAPABILITY_PATHS
@@ -1259,7 +1512,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.knowledge_search_schema_profile()"
+        "platform.portfolio_schema_profile()"
+        if revision == "0021"
+        else "platform.knowledge_search_schema_profile()"
         if revision == "0020"
         else "platform.published_knowledge_schema_profile()"
         if revision == "0019"
@@ -1333,12 +1588,12 @@ def stock_catalog():
         ):
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
-        require(revision in {"0013", "0017", "0018", "0019", "0020"}, "CATALOG_REVISION")
+        require(revision in {"0013", "0017", "0018", "0019", "0020", "0021"}, "CATALOG_REVISION")
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision in {"0017", "0018", "0019", "0020"}:
+        if revision in {"0017", "0018", "0019", "0020", "0021"}:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -1385,7 +1640,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.knowledge_search_schema_profile()"
+            "platform.portfolio_schema_profile()"
+            if revision == "0021"
+            else "platform.knowledge_search_schema_profile()"
             if revision == "0020"
             else "platform.published_knowledge_schema_profile()"
             if revision == "0019"
@@ -1408,7 +1665,7 @@ async def readiness():
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
-        write(evidence_path() / "readiness.json", {"revision": "0020", "runtime_check": "PASS"})
+        write(evidence_path() / "readiness.json", {"revision": "0021", "runtime_check": "PASS"})
     finally:
         await runtime.close()
 
@@ -1784,7 +2041,12 @@ def run(root):
     sql_test_budget_seconds = (
         900
         if mode == "runtime"
-        and (search_event(event) or capability_event(event) or knowledge_event(event))
+        and (
+            portfolio_event(event)
+            or search_event(event)
+            or capability_event(event)
+            or knowledge_event(event)
+        )
         else 600
     )
     run_admitted(root, event, manifest, mode, sql_test_budget_seconds=sql_test_budget_seconds)
@@ -1804,19 +2066,24 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    search = search_event(event)
-    capability = not search and capability_event(event)
-    knowledge = not (search or capability) and knowledge_event(event)
-    configuration = not (search or capability or knowledge) and configuration_event(event)
+    portfolio = portfolio_event(event)
+    search = not portfolio and search_event(event)
+    capability = not (portfolio or search) and capability_event(event)
+    knowledge = not (portfolio or search or capability) and knowledge_event(event)
+    configuration = not (portfolio or search or capability or knowledge) and configuration_event(
+        event
+    )
     require(
         sql_test_budget_seconds == 600
         or sql_test_budget_seconds == 900
         and mode == "runtime"
-        and (search or knowledge or capability),
+        and (portfolio or search or knowledge or capability),
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M5_SEARCH_BASE, M5_SEARCH_TREE)
+        (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
+        if portfolio
+        else (M5_SEARCH_BASE, M5_SEARCH_TREE)
         if search
         else (M5_CAPABILITY_BASE, M5_CAPABILITY_TREE)
         if capability
@@ -1843,6 +2110,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M5_PORTFOLIO_BRANCH
+            if portfolio
             else M5_SEARCH_BRANCH
             if search
             else M5_CAPABILITY_BRANCH
@@ -2013,10 +2282,10 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
             if module == "preflight":
-                sql_phase(group, "schema-0020", checks(group, "alembic", "upgrade", "0020"), 120)
+                sql_phase(group, "schema-0021", checks(group, "alembic", "upgrade", "0021"), 120)
                 sql_phase(
                     group,
-                    "catalog-0020",
+                    "catalog-0021",
                     checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
                     60,
                 )

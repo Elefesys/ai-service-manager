@@ -22,11 +22,13 @@ from asm.messaging.results import (
     TerminalRejection,
     TurnJobClaim,
 )
+from asm.portfolio.errors import PortfolioError
 
 if TYPE_CHECKING:
     from asm.ai.provider_runtime import ProviderRuntime
-    from asm.ai.runtime import SyntheticRuntime
+    from asm.ai.runtime import PortfolioSyntheticRuntime, SyntheticRuntime
     from asm.files.transfer import CleanupSweep, FetchTransfer
+    from asm.portfolio.storage import PortfolioCleanupSweep
     from asm.telegram.client import TelegramClient
 
 
@@ -39,7 +41,7 @@ class Worker:
         deadline: float = 10,
         files: "FetchTransfer | None" = None,
         telegram: "TelegramClient | None" = None,
-        ai: "SyntheticRuntime | ProviderRuntime | None" = None,
+        ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime | None" = None,
     ) -> None:
         if not 0 < deadline < 30:
             raise MessagingError(Code.INVALID_INPUT)
@@ -329,8 +331,9 @@ async def run(
     *,
     files: "FetchTransfer | None" = None,
     cleanup: "CleanupSweep | None" = None,
+    portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | ProviderRuntime | None" = None,
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     if role == "worker" and ai is not None:
         async with asyncio.TaskGroup() as group:
@@ -343,19 +346,29 @@ async def run(
                     stop,
                     files=files,
                     cleanup=cleanup,
+                    portfolio_cleanup=portfolio_cleanup,
                     telegram=telegram,
                     ai=ai,
                 )
             )
         return
-    await _run(role, database, adapter, stop, files=files, cleanup=cleanup, telegram=telegram)
+    await _run(
+        role,
+        database,
+        adapter,
+        stop,
+        files=files,
+        cleanup=cleanup,
+        portfolio_cleanup=portfolio_cleanup,
+        telegram=telegram,
+    )
 
 
 async def _run_ai(
     database: MessagingDatabase,
     adapter: ControlledAdapter,
     stop: asyncio.Event,
-    ai: "SyntheticRuntime | ProviderRuntime",
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime",
 ) -> None:
     worker = Worker(database, adapter, ai=ai)
     while not stop.is_set():
@@ -381,8 +394,9 @@ async def _run(
     *,
     files: "FetchTransfer | None" = None,
     cleanup: "CleanupSweep | None" = None,
+    portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | ProviderRuntime | None" = None,
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     worker = Worker(database, adapter, files=files, telegram=telegram, ai=ai)
     while not stop.is_set():
@@ -393,7 +407,9 @@ async def _run(
                 worked = bool(await database.recover_expired())
                 if cleanup is not None:
                     worked = await cleanup.run_once() or worked
-        except (SQLAlchemyError, MessagingError):
+                if portfolio_cleanup is not None:
+                    worked = await portfolio_cleanup.run_once() or worked
+        except (SQLAlchemyError, MessagingError, PortfolioError):
             # Diagnostics contain no exception text, keys, provider data or IDs.
             print(json.dumps({"component": role, "event": "iteration_unavailable"}), flush=True)
             worked = False

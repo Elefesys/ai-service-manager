@@ -71,7 +71,12 @@ class ModelGateway:
     """
 
     def __init__(
-        self, config: AnyGatewayConfig, request: GatewayRequest, adapter: ModelAdapter
+        self,
+        config: AnyGatewayConfig,
+        request: GatewayRequest,
+        adapter: ModelAdapter,
+        *,
+        initial_budget: Budget | None = None,
     ) -> None:
         self._config = validate_gateway_config(config)
         self._request = GatewayRequest.model_validate(request)
@@ -87,6 +92,18 @@ class ModelGateway:
             cost_reserved=Decimal(0),
             currency=config.limits.currency,
         )
+        if initial_budget is not None:
+            initial = Budget.model_validate(initial_budget)
+            if (
+                self._config.prompt_revision != "conversation_v5"
+                or initial.calls_used
+                or initial.reads_reserved
+                or initial.tokens_reserved
+                or initial.currency != config.limits.currency
+                or initial.cost_reserved > config.limits.cost_budget
+            ):
+                raise ValueError("INITIAL_BUDGET_INVALID")
+            self._budget = initial
         self._pending: tuple[ToolCall, ...] = ()
         self._exchanges: tuple[ToolExchange, ...] = ()
         self._seen: set[str] = set()
