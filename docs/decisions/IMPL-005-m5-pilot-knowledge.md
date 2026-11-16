@@ -5,10 +5,13 @@
 По поручению владельца C0 принял ограниченный scope M5 и явно перечисленные
 ниже изменения порядка реализации исходных ADR. Остальные архитектурные
 инварианты сохраняются. M5.1A/PR #46 и M5.1B/PR #47 интегрированы и проверены
-в synthetic LOCAL/TEST. M5.2A/PR48 также INTEGRATED / VERIFIED:
+в synthetic LOCAL/TEST. M5.2A/PR #48 также INTEGRATED / VERIFIED:
 accepted main8eeeede1, post-merge CI43600856660 — итог12/12 SUCCESS после
 обоснованного повтора одной Docker setup job. Functional capability принят
-в ASSISTED_SYNTHETIC scope. Активна только M5.2B по CURRENT HANDOFF.
+в ASSISTED_SYNTHETIC scope. M5.2B/PR #49 — INTEGRATED / VERIFIED в LOCAL/TEST.
+M5.2C/PR #50 слит; post-merge verification пока BLOCKED по foundation CI budget.
+C0 принял узкий CI fix 45→60 минут; контракт приложения и scope M5 не меняются.
+Актуальная задача и статус — только в CURRENT реестра/передачи по ссылкам ниже.
 Operator циклы C6 закончены.
 Текущее уточнение embedding usage ниже — ACCEPTED C0; client-data/paid/VM
 допуск не расширен. Решение IMPL-005 остаётся ACCEPTED / LOCKED.
