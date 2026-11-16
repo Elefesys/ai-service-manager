@@ -10,6 +10,75 @@ ACCEPTED / LOCKED C0.
 C2 помогает с SQL/миграцией, C4 — с typed model selection, C5 — с Inbox,
 последовательно в одной ветке. C6 HOLD; M5.3 пока не выдаётся.
 
+### Уточнение C0 — сохранить checkpoint и дополнить write-set / 2026-11-16
+
+**Та же задача C3-M5.2D-PORTFOLIO-PHOTO-R1; IN_PROGRESS.**
+Application base `8d98593bc739666176968c5d76b9c01a2a711686` и исходный
+assignment `63bb7147ec899eda1a538388aff18a01fc054e57` сохраняются.
+
+На момент проверки C0 ветка `c3/m5-2d-portfolio-photo-r1` всё ещё указывает
+на assignment 63bb7147; implementation commits и PR в ней не опубликованы.
+В доступном контексте C3 нет ссылки на обещанный patch. Сообщённые C3
+302 functions/69 tables и успешные локальные migration checks пока не
+сопоставлены C0 с исходниками/журналами; это не новая приёмка VERIFIED.
+Данный C0 receipt — отдельный docs-only commit; рабочая ветка C3 им не
+перемещается, чтобы не затронуть её неопубликованные изменения.
+
+**Первое действие C3 — сохранить текущую работу, до новых долгих проверок.**
+
+1. Продолжить в прежнем рабочем окружении. Проверить status/diff и локальный
+   HEAD; не reset/clean/reclone поверх незакоммиченных файлов.
+   Если прежняя команда ещё выполняется, выяснить её session/process и
+   остановить только собственный зависший процесс; не чистить общий Docker/БД.
+2. Зафиксировать все относящиеся к задаче tracked и новые source files
+   в checkpoint текущей ветки, с честным состоянием **WIP / UNVERIFIED**.
+   До публикации проверить состав: без secrets/.env, caches, DB contents и
+   временных логов. Тесты могут быть неполными; сохранение не требует PASS.
+   Если GitHub недоступен — сохранить полный binary diff вместе с необходимыми
+   untracked source files в доступный пользователю архив и вернуть его ссылку.
+3. Разрешён **один восстановительный checkpoint push** в
+   `c3/m5-2d-portfolio-photo-r1`, без PR, CI dispatch/rerun и merge в main.
+   Это явное исключение из порядка «первый push только готового кандидата»;
+   задача и критерии финальной готовности не меняются.
+   Не переписывать уже опубликованный head. До продолжения вывести пользователю
+   точные checkpoint SHA/tree, compare link от assignment 63bb7147,
+   changed paths и короткий список PASS/FAILED/NOT_RUN.
+   Цель ближайшего возврата — дать C0 проверяемый diff и сохранить работу.
+4. Отдельно показать конкретный diff `tests/test_postgres.py` и текущие
+   findings по verifier 0021/native context/text-only session.
+   Последние исправления остаются в новой 0022; applied 0001–0021 не менять.
+   Не объявлять неисследованные photo/recovery сценарии прошедшими.
+
+**C0-SCOPE-M5.2D-01 — ACCEPTED FOR IMPLEMENTATION.**
+Пропуск `tests/test_postgres.py` в исходном write-set исправлен.
+C0 прочитал exact файл assignment 63bb7147: в
+`test_real_postgres_capabilities_and_roles` (assert на строке 108)
+стоит строгий список 68 таблиц и сообщение «M0 through M5.2C».
+Разрешён только такой ограниченный delta:
+
+- добавить в существующий упорядоченный expected list точное имя одной
+  новой delivery-intent таблицы, действительно объявленной в 0022;
+  исходные 68 имён сохраняются; имя не выдумывать по пересказу;
+- актуализировать пояснение границы до M5.2D;
+- сохранить строгое `tables == [...]`, SQL query/order, все role/RLS/no-DDL,
+  no-context/cross-workspace, rollback/pool и shutdown проверки.
+  Не заменять список subset/count/динамическим expected из проверяемой БД,
+  не исключать новую таблицу из query и не добавлять skip/xfail.
+
+В существующем разрешённом M5.2D source admission добавить только этот path
+к конечному write-set новой задачи; исторические task routes не расширять.
+Остальные files и ограничения исходного поручения не меняются.
+Это допуск к конкретной форме исправления, не приёмка ещё не показанного diff.
+
+После сохранения checkpoint интегрировать это docs amendment без потери
+локального кода/контракта/журналов: исходный assignment и данный C0 commit
+сохранить в ancestry, 4 protected C0 docs не изменять.
+При необходимости совместить изменения handoff вручную, сохранив оба
+содержательных блока. Final source admission закрепляет этот scope amendment
+по exact SHA/tree/parent; основной base/assignment остаются прежними.
+Далее продолжать исходную задачу и целевые проверки; нового разрешения
+на уже перечисленные работы не требуется.
+
 ### Результат для пользователя
 
 Клиент получает одну опубликованную и разрешённую владельцем работу бизнеса
@@ -216,6 +285,8 @@ Architecture Spec §3 tenant/client isolation, §4.1–4.6, §5.12.1,
   При необходимости отдельного сценария —
   `frontend/e2e/portfolio-delivery.spec.ts`.
   PortfolioPanel/App и остальная owner Console — без перепроектирования.
+- `tests/test_postgres.py` — только C0-SCOPE-M5.2D-01 выше: exact inventory
+  новой intent таблицы и пояснение, без изменения role/RLS/DDL assertions.
 - Новые tests:
   `tests/test_m5_portfolio_delivery.py`,
   `tests/test_m5_portfolio_delivery_transport.py`,
