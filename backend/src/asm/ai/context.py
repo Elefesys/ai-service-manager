@@ -25,10 +25,11 @@ from asm.conversations.guards import (
     GuardedTurnSnapshotV2,
     parse_guarded_snapshot,
 )
-from asm.conversations.material import MessageCurrent
+from asm.conversations.material import MessageCurrent, MessageCurrentV2
 from asm.conversations.turns import (
     TurnSnapshotV2,
     TurnSnapshotV3,
+    TurnSnapshotV4,
     parse_snapshot,
 )
 
@@ -162,7 +163,7 @@ class PreparedContext(DTO):
 
 
 def _visible(
-    current: MessageCurrent,
+    current: MessageCurrent | MessageCurrentV2,
     *,
     source: Literal["CURRENT_TURN", "RECENT_HISTORY"],
     at: datetime,
@@ -181,7 +182,11 @@ def _visible(
         content_type=current.content_type,
         text=current.text,
         changed=current.changed,
-        image_availability=current.image_availability,
+        # A portfolio output is history, not a currently readable inbound image.
+        # The caption/photo fact survives; no pixels or new image permit is claimed.
+        image_availability="HIDDEN"
+        if isinstance(current, MessageCurrentV2)
+        else current.image_availability,
         delivery_status=delivery,
     )
 
@@ -212,7 +217,9 @@ class ContextBuilder:
             snapshot = (
                 parse_guarded_snapshot(value) if "consumer" in value else parse_snapshot(value)
             )
-            if not isinstance(snapshot, (TurnSnapshotV2, TurnSnapshotV3, GuardedTurnSnapshotV2)):
+            if not isinstance(
+                snapshot, (TurnSnapshotV2, TurnSnapshotV3, TurnSnapshotV4, GuardedTurnSnapshotV2)
+            ):
                 raise ContextFailure("UNSUPPORTED_SNAPSHOT")
             # Keep V2 top-level coercions from manufacturing revision equality.
             for name in ("turn_revision", "context_version", "control_generation"):
@@ -246,7 +253,7 @@ class ContextBuilder:
                     if getattr(snapshot, name) != getattr(binding, name):
                         raise ContextFailure("CONTEXT_MISMATCH")
             native = None
-            if isinstance(snapshot, TurnSnapshotV3):
+            if isinstance(snapshot, (TurnSnapshotV3, TurnSnapshotV4)):
                 h = snapshot.human_context
                 native = NativeFence(
                     revision_id=UUID(h.revision_id),
@@ -270,7 +277,7 @@ class ContextBuilder:
                 for m in members
             )
             recent: list[VisibleMessage] = []
-            if isinstance(snapshot, TurnSnapshotV3):
+            if isinstance(snapshot, (TurnSnapshotV3, TurnSnapshotV4)):
                 ids = {str(m.message_id) for m in members}
                 for m in snapshot.recent_messages:
                     if m.message_id in ids:

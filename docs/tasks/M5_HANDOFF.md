@@ -180,6 +180,88 @@ Architecture Spec §3 tenant/client isolation, §4.1–4.6, §5.12.1,
    Старые provider receipts/UNKNOWN/holds, receiver ACK/fence и live
    HUMAN/Resume ограничения сохраняются. Live smoke — отдельная будущая выдача.
 
+### C3 — контракт до SQL / 2026-11-16
+
+Проверено на assignment `63bb7147ec899eda1a538388aff18a01fc054e57`:
+`alembic heads` = `0021`; слот `0022_portfolio_delivery.py` свободен,
+predecessor `0021`. Четыре assignment docs и applied migrations неизменны.
+
+- `conversation_v6` / `conversation_result_v2`: закрытая новая конфигурация
+  FAKE/EVAL_ONLY. Прежние reply/handoff/no_reply формы сохранены; новая форма
+  `{kind:"portfolio_photo", selection:{item_id,revision_id,asset_version_id,
+  source_sha256}, caption}`. Caption plain text 1–1024 code points, непустой.
+  Selection содержит только четыре точных поля, не адрес/URL/file_id/tenant.
+- Новые context/read revisions (`conversation_context_v5`,
+  `conversation_read_v5`) показывают sendable subset JPEG/PNG. Один fresh READ
+  заверяет SHA256 фактически показанного урезанного context и точные refs.
+  Внутренний `DELIVERY_READ` сохраняет это attestation после обычного READ,
+  без дополнительного model/tool call. COMMIT photo требует это сохранённое
+  attestation и exact выбранный ref; отсутствие — отказ, без text fallback.
+- Неизменяемое намерение связывает run/conversation, source item/revision,
+  asset version/hash, caption и fingerprint с настоящими Message/Outbox/Job.
+  Один `SEND_AI_PHOTO` использует существующий kernel, finish/replay/reclaim.
+- `portfolio_delivery_read(job,claim)` выдаёт узкий private media-read permit
+  на exact intent/asset version с manifest и storage key только доверенному
+  worker. S3 GET и validator проходят вне DB-транзакции. Финальный
+  `portfolio_delivery_begin` после I/O повторяет currentness, guards и fresh
+  rights в общей точке admission и закрепляет DISPATCHING. Ни read permit,
+  ни runtime receipt не является send permit.
+- До dispatch неподдерживаемые/revoked/stale bytes дают terminal unavailable;
+  после возможного эффекта UNKNOWN/no-resend. Только доказанно NOT_SENT
+  использует прежние bounded retries. Echo принадлежит исходящему Message.
+- Owner Inbox получает отдельный исходящий portfolio reference и caption;
+  preview только существующим авторизованным owner asset-version read.
+  Смена scope/session отзывает старый preview. Новая exact 0022 catalog/source
+  admission добавляется отдельно от прежних закрытых profiles.
+
+### C3 — реализация и ограниченный возврат / 2026-11-16
+
+**C3: IMPLEMENTED / BLOCKED_SCOPE.** Интеграционное решение остаётся у C0.
+Реализован один synthetic `portfolio_photo`: fresh READ показанного контекста →
+неизменяемое намерение → private S3 read/validator вне транзакции → повторный
+serialized admission → один counted photo effect → owner Inbox/preview.
+Отдельные v6/result_v2/read_v5 и snapshot_v4/current_v2 сохраняют закрытые старые
+формы. Новый private PHOTO session lock не даёт прав старого Vision профиля.
+Только точный `P2001 / AI_STALE` в новом boolean currentness helper означает
+`false`; остальные ошибки пробрасываются. UNKNOWN сохраняется без resend.
+
+- `0022`: 303 функции, 69 таблиц, 1023 колонки; 30 узких replacements,
+  14 новых функций. Полный independent source/installed catalog, types,
+  security/ACL и columns совпали. Full pin
+  `5e4191f74a2eba509085072acc5d4fc62366207d4b434a33a770d504273a2bc7`,
+  verifier body
+  `499d3b25887b3dd50f0a2f8f7e7b324d8cca226a270a3dd99e5506e376733bf0`.
+  Nonfunction pin
+  `6890bd1d959ef3e6c05c0ca8f7e203586035e3a2f46c4e343e4e64dbf38bf210`.
+- LOCAL: **4635 unit + 161 subtests PASS**, 531 frontend tests PASS;
+  Ruff, format, mypy (109 files), OpenAPI, typecheck/build PASS.
+  В unit входят 50 новых model/delivery tests, 30 exact MockTransport wire
+  cases JPEG/PNG и 15 migration tests. Integration не подменялась unit.
+- **25 новых actual PostgreSQL cases PASS** на PG18.6/pgvector0.8.6:
+  один photo либо text, guards до/после S3, source/hash/READ refusal,
+  ACK loss, cancel, restart/reclaim, retry только NOT_SENT, UNKNOWN/no-resend,
+  следующий text turn, два клиента, private runtime authority, used downgrade,
+  fresh Telegram rights и собственный echo. Real Telegram/model egress отсутствует.
+- Actual private S3 case PASS с отдельным LOCAL Garage2.5.0: исходные bytes/hash,
+  авторизованный preview, anonymous refusal. Штатный pinned MinIO не запускается
+  здесь из-за запрета netlink; Compose/images/dependencies не изменены.
+  Дополнительно actual owner HTTP upload/confirm/publish → finite runtime
+  `SENT`/`UNKNOWN` → preview/hash → revoke/unavailable PASS на fresh PG/S3.
+- Playwright desktop+narrow **NOT_RUN**: Chromium завершился до открытия
+  страницы (`socket(): EPERM`). Два сценария собраны; owner API не подменялся
+  HTTP routes. Native HTTP результат не является browser/Actions evidence.
+
+**Точный scope blocker перед PR/full CI:**
+`tests/test_postgres.py::test_real_postgres_capabilities_and_roles` падает на
+новой `portfolio_delivery_intents`: его current inventory ещё содержит 68
+таблиц M5.2C. Этот файл отсутствует в конечном write-set выше и не изменён.
+Нужен допуск C0 ровно на добавление строки `"portfolio_delivery_intents",`
+после `"portfolio_builds",` и строки `"tests/test_postgres.py",` в
+`scripts/m4_runtime_db.py::M5_DELIVERY_PATHS`. Меньший diff проверен через
+`git apply --check`, не применён. Остальные пути автоматически не открыты.
+После решения C0 — новая source admission и один полный кандидат/Draft PR/CI;
+текущий возврат не присваивает INTEGRATED/VERIFIED и не выдаёт LOCAL за Actions.
+
 ### Разрешённый write-set
 
 Это верхняя граница scope, не требование менять каждый перечисленный файл.

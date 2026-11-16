@@ -92,6 +92,7 @@ class JobClaim(Result):
         "SEND_MANUAL_TEXT",
         "SEND_GUARDED_TEXT",
         "SEND_AI_TEXT",
+        "SEND_AI_PHOTO",
         "FETCH_IMAGE",
         "PROCESS_TURN",
         "ESCALATION_TIMER",

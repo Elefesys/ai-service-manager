@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal, Self
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
@@ -125,12 +126,42 @@ class PortfolioGatewayConfig(_GatewayConfig):
         return self
 
 
+class PortfolioDeliveryGatewayConfig(DTO):
+    """Explicit v6 selection proposal; no historical config gains send authority."""
+
+    revision: Identifier
+    route: Route
+    prompt_revision: Literal["conversation_v6"]
+    schema_revision: Literal["conversation_result_v2"]
+    limits: Limits
+
+    @model_validator(mode="after")
+    def finite_synthetic_scope(self) -> Self:
+        if (
+            self.route.execution != "FAKE"
+            or self.route.adapter != "fake"
+            or self.route.endpoint != "https://fake.invalid/v1"
+            or self.route.eligibility != "EVAL_ONLY"
+            or self.limits.currency != "RUB"
+            or self.limits.model_calls > 2
+            or self.limits.read_executions > 1
+        ):
+            raise ValueError("PORTFOLIO_DELIVERY_CONFIG_INVALID")
+        return self
+
+
 AnyGatewayConfig = (
-    GatewayConfig | KnowledgeGatewayConfig | SearchGatewayConfig | PortfolioGatewayConfig
+    GatewayConfig
+    | KnowledgeGatewayConfig
+    | SearchGatewayConfig
+    | PortfolioGatewayConfig
+    | PortfolioDeliveryGatewayConfig
 )
 
 
 def validate_gateway_config(value: object) -> AnyGatewayConfig:
+    if isinstance(value, PortfolioDeliveryGatewayConfig):
+        return PortfolioDeliveryGatewayConfig.model_validate(value)
     if isinstance(value, PortfolioGatewayConfig):
         return PortfolioGatewayConfig.model_validate(value)
     if isinstance(value, SearchGatewayConfig):
@@ -207,6 +238,43 @@ class NoReply(DTO):
 
 ConversationResult = Reply | Handoff | NoReply
 CONVERSATION_RESULT: TypeAdapter[ConversationResult] = TypeAdapter(ConversationResult)
+
+
+class PortfolioPhotoSelection(DTO):
+    """Only a source identity; never destination, storage access, or a permit."""
+
+    item_id: UUID
+    revision_id: UUID
+    asset_version_id: UUID
+    source_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+class PortfolioPhoto(DTO):
+    kind: Literal["portfolio_photo"]
+    selection: PortfolioPhotoSelection
+    caption: Annotated[str, Field(min_length=1, max_length=1024, pattern=r"\S")] = Field(repr=False)
+
+    @model_validator(mode="after")
+    def scalar_caption(self) -> Self:
+        if "\0" in self.caption:
+            raise ValueError("PORTFOLIO_CAPTION_INVALID")
+        self.caption.encode("utf-8", errors="strict")
+        return self
+
+
+ConversationResultV2 = Reply | Handoff | NoReply | PortfolioPhoto
+CONVERSATION_RESULT_V2: TypeAdapter[ConversationResultV2] = TypeAdapter(ConversationResultV2)
+AnyConversationResult = ConversationResult | ConversationResultV2
+
+
+def validate_conversation_result(config: AnyGatewayConfig, value: object) -> AnyConversationResult:
+    if isinstance(config, PortfolioDeliveryGatewayConfig):
+        if isinstance(value, dict):
+            return CONVERSATION_RESULT_V2.validate_json(
+                json.dumps(value, ensure_ascii=False, allow_nan=False)
+            )
+        return CONVERSATION_RESULT_V2.validate_python(value)
+    return CONVERSATION_RESULT.validate_python(value)
 
 
 class ToolCall(DTO):
@@ -349,9 +417,9 @@ ErrorCode = Literal[
 ]
 
 
-class GatewayResult(DTO):
+class _GatewayResult[Candidate](DTO):
     kind: Literal["FINAL", "TOOLS", "REFUSAL", "ERROR"]
-    result: ConversationResult | None = Field(default=None, repr=False)
+    result: Candidate | None = Field(default=None, repr=False)
     tool_calls: tuple[ToolCall, ...] = Field(default=(), max_length=4, repr=False)
     error: ErrorCode | None = None
     budget: Budget
@@ -371,6 +439,17 @@ class GatewayResult(DTO):
         if not valid:
             raise ValueError("Inconsistent gateway result")
         return self
+
+
+class GatewayResult(_GatewayResult[ConversationResult]):
+    """Historical result remains closed to v1 reply/handoff/no_reply."""
+
+
+class PortfolioDeliveryGatewayResult(_GatewayResult[ConversationResultV2]):
+    """New v2 wire result; a photo is still only an untrusted proposal."""
+
+
+AnyGatewayResult = GatewayResult | PortfolioDeliveryGatewayResult
 
 
 def strict_json(raw: str) -> Any:

@@ -7,11 +7,12 @@ import { api } from './api';
 import { controlApi, ControlReceipt } from './conversation-control-api';
 import { HumanContextError, HumanContextState, ReconcileReceipt, humanContextApi } from './human-context-api';
 import { controlState, controlReceipt } from './messaging-fixtures.test-helper';
+import { PortfolioError, portfolioApi } from './portfolio-api';
 import { MessagingPanel } from './MessagingPanel';
 import { billingApi, BillingError } from './billing-api';
 import { billing } from './billing-fixtures.test-helper';
 import { MessagingError, Message, ReadGrant, SendReceipt, messagingApi } from './messaging-api';
-import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, receipt, session, when, ws } from './messaging-fixtures.test-helper';
+import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, portfolioPhoto, receipt, session, when, ws } from './messaging-fixtures.test-helper';
 
 beforeEach(() => {
   // Retained pre-native scenarios use the accepted legacy OFF_UNUSED projection.
@@ -22,6 +23,9 @@ beforeEach(() => {
   vi.spyOn(escalationApi,'list').mockResolvedValue({items:[],next_cursor:null,observed_at:'2030-01-01T00:00:00.000000Z'});
   vi.spyOn(controlApi,'read').mockImplementation(async context=>controlState(context));
   vi.spyOn(controlApi,'command').mockImplementation(async(context,operation,body)=>controlReceipt(operation,body,context));
+  vi.spyOn(portfolioApi,'preview').mockResolvedValue(new Blob(['synthetic'],{type:'image/png'}));
+  Object.defineProperty(URL,'createObjectURL',{configurable:true,writable:true,value:vi.fn(()=> 'blob:synthetic-owner-preview')});
+  Object.defineProperty(URL,'revokeObjectURL',{configurable:true,writable:true,value:vi.fn()});
   vi.spyOn(messagingApi,'connections').mockResolvedValue(page(connection()));
   vi.spyOn(messagingApi,'conversations').mockResolvedValue(page(conversation()));
   vi.spyOn(messagingApi,'messages').mockResolvedValue(page(message()));
@@ -290,5 +294,42 @@ describe('optional selected conversation portfolio slot',()=>{
   });
   it('drops the old slot immediately on Workspace/OWNER loss and ignores stale history completions',async()=>{
     const late=deferred<ReturnType<typeof page<Message>>>();vi.mocked(messagingApi.messages).mockReturnValueOnce(late.promise);const v=slotView();await screen.findByTestId('selected-portfolio');const otherWorkspace=id(91),otherConversation={...conversation(23),business_id:id(55)};vi.mocked(messagingApi.conversations).mockResolvedValue(page(otherConversation));v.rerender(<MessagingPanel {...v.props} workspace={otherWorkspace} session={{...session(),memberships:[{workspace_id:otherWorkspace,role:'OWNER',permissions:[]}]}}/>);expect(screen.queryByText(`${conversation().business_id}:${conversation().client_id}:${conversationId}`)).toBeNull();await waitFor(()=>expect(v.portfolio.mock.calls.at(-1)?.[0]?.conversation_id).toBe(otherConversation.conversation_id));await act(async()=>late.resolve(page(message(99,'Old private history'))));expect(screen.queryByText('Old private history')).toBeNull();v.rerender(<MessagingPanel {...v.props} session={{...session(),memberships:[{workspace_id:ws,role:'ADMIN',permissions:[]}]}}/>);expect(screen.queryByTestId('selected-portfolio')).toBeNull();expect(messagingApi.send).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('true outbound portfolio-photo and owner preview',()=>{
+  const previewButton=()=>screen.getByRole('button',{name:'Посмотреть фото из портфолио'});
+  const previewImage=()=>screen.queryByRole('img',{name:'Работа из портфолио в исходящем сообщении'});
+  it('renders all real delivery states, source and exact caption without a photo composer or automatic reads',async()=>{
+    const rows=(['PENDING','DISPATCHING','SENT','FAILED','UNKNOWN'] as const).map((status,i)=>portfolioPhoto(status,60+i));vi.mocked(messagingApi.messages).mockResolvedValue(page<Message>(...rows,message(),photo()));setup();await ready();
+    for(const m of rows){const card=screen.getByTestId(`message-${m.message_id}`);expect(card).toHaveTextContent('Исходящее');expect(card.querySelector('.message-text')?.textContent).toBe(m.text);expect(card).toHaveTextContent('Фото из портфолио');}
+    for(const text of ['В очереди','Отправка начата','Канал принял','Отправка отклонена','Результат неизвестен — повтора нет'])expect(screen.getAllByText(new RegExp(text)).length).toBeGreaterThan(0);
+    expect(portfolioApi.preview).not.toHaveBeenCalled();expect(messagingApi.grant).not.toHaveBeenCalled();expect(messagingApi.send).not.toHaveBeenCalled();expect(screen.getByLabelText('Ручной текстовый ответ')).toBeEnabled();expect(screen.queryByRole('button',{name:/повторить фото|отправить фото|retry/i})).toBeNull();
+  });
+  it('uses only the selected conversation Business owner asset/version API, retains UNKNOWN and revokes a replaced or broken preview',async()=>{
+    const m=portfolioPhoto('UNKNOWN');vi.mocked(messagingApi.messages).mockResolvedValue(page(m));setup();await ready();fireEvent.click(previewButton());await screen.findByRole('img');expect(portfolioApi.preview).toHaveBeenCalledWith(ws,conversation().business_id,{asset:m.portfolio.asset_id,version:m.portfolio.asset_version_id},expect.any(AbortSignal));expect(previewImage()).toHaveAttribute('src','blob:synthetic-owner-preview');expect(messagingApi.grant).not.toHaveBeenCalled();expect(screen.getByText(/Результат неизвестен — повтора нет/)).toBeVisible();
+    fireEvent.click(previewButton());await screen.findByRole('img');expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:synthetic-owner-preview');fireEvent.error(previewImage()!);expect(previewImage()).toBeNull();expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);expect(messagingApi.send).not.toHaveBeenCalled();
+  });
+  it.each(['PORTFOLIO_UNAVAILABLE','DELETED','ORDER_UNCERTAIN','UNSUPPORTED_CONTENT'])('suppresses preview when current source becomes %s and never reuses its URL',async kind=>{
+    const m=portfolioPhoto();vi.mocked(messagingApi.messages).mockResolvedValueOnce(page(m));setup();await ready();fireEvent.click(previewButton());await screen.findByRole('img');
+    const next=kind==='PORTFOLIO_UNAVAILABLE'?{...m,current:{...m.current,image_availability:'PORTFOLIO_UNAVAILABLE' as const}}:{...m,version:'2',current:{schema_version:2 as const,state:kind as 'DELETED'|'ORDER_UNCERTAIN'|'UNSUPPORTED_CONTENT',content_type:null,text:null,image_availability:'HIDDEN' as const,changed:true}};
+    vi.mocked(messagingApi.messages).mockResolvedValue(page(next));fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));await ready();expect(previewImage()).toBeNull();expect(screen.queryByRole('button',{name:'Посмотреть фото из портфолио'})).toBeNull();expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:synthetic-owner-preview');expect(portfolioApi.preview).toHaveBeenCalledTimes(1);
+  });
+  it.each(['workspace','conversation','session','owner','unmount'])('revokes the object URL on %s transition',async kind=>{
+    vi.mocked(messagingApi.messages).mockResolvedValue(page(portfolioPhoto()));vi.mocked(messagingApi.conversations).mockResolvedValue(page(conversation(),conversation(10)));const v=setup();await ready();fireEvent.click(previewButton());await screen.findByRole('img');
+    await act(async()=>{if(kind==='workspace')v.rerender(<MessagingPanel {...v.props} workspace={id(90)} session={{...session(),memberships:[{workspace_id:id(90),role:'OWNER',permissions:[]}]}}/>);else if(kind==='conversation')fireEvent.click(screen.getByTestId(`conversation-${id(10)}`));else if(kind==='session')newSession(v);else if(kind==='owner')v.rerender(<MessagingPanel {...v.props} session={{...session(),memberships:[{workspace_id:ws,role:'ADMIN',permissions:[]}]}}/>);else v.unmount();});
+    expect(previewImage()).toBeNull();expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:synthetic-owner-preview');
+  });
+  it.each(['workspace','conversation','session','unavailable'])('aborts and ignores stale async owner bytes after %s, with no ObjectURL allocation',async kind=>{
+    const pending=deferred<Blob>();vi.mocked(portfolioApi.preview).mockReturnValueOnce(pending.promise);vi.mocked(messagingApi.messages).mockResolvedValue(page(portfolioPhoto()));vi.mocked(messagingApi.conversations).mockResolvedValue(page(conversation(),conversation(10)));const v=setup();await ready();fireEvent.click(previewButton());const signal=vi.mocked(portfolioApi.preview).mock.calls[0][3]!;
+    if(kind==='workspace')v.rerender(<MessagingPanel {...v.props} session={null} workspace=""/>);else if(kind==='session')newSession(v);else if(kind==='conversation')fireEvent.click(screen.getByTestId(`conversation-${id(10)}`));else{const m=portfolioPhoto();vi.mocked(messagingApi.messages).mockResolvedValue(page({...m,current:{...m.current,image_availability:'PORTFOLIO_UNAVAILABLE'}}));fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));}
+    expect(signal.aborted).toBe(true);await act(async()=>pending.resolve(new Blob(['late'],{type:'image/png'})));expect(previewImage()).toBeNull();expect(URL.createObjectURL).not.toHaveBeenCalled();expect(v.props.expired).not.toHaveBeenCalled();
+  });
+  it.each([401,403,409,404])('clears earlier bytes before an owner preview %s and handles the current authorization',async status=>{
+    vi.mocked(messagingApi.messages).mockResolvedValue(page(portfolioPhoto()));const v=setup();await ready();fireEvent.click(previewButton());await screen.findByRole('img');vi.mocked(portfolioApi.preview).mockRejectedValue(new PortfolioError(status,status===401?'SESSION_REQUIRED':status===403?'ACCESS_DENIED':status===409?'SOURCE_STALE':'NOT_FOUND'));fireEvent.click(previewButton());await waitFor(()=>expect(portfolioApi.preview).toHaveBeenCalledTimes(2));expect(previewImage()).toBeNull();expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:synthetic-owner-preview');if(status===401)expect(v.props.expired).toHaveBeenCalledTimes(1);else if(status===403)await screen.findByText('Нет доступа к переписке');else await screen.findByText(/Источник портфолио недоступен. Обновите сообщения/);expect(messagingApi.send).not.toHaveBeenCalled();
+  });
+  it.each([401,403,409])('ignores a late owner preview %s after a new session without expiring or denying it',async status=>{
+    const pending=deferred<Blob>();vi.mocked(portfolioApi.preview).mockReturnValueOnce(pending.promise);vi.mocked(messagingApi.messages).mockResolvedValue(page(portfolioPhoto()));const v=setup();await ready();fireEvent.click(previewButton());await act(async()=>newSession(v));await ready();await act(async()=>pending.reject(new PortfolioError(status,status===401?'SESSION_REQUIRED':status===403?'ACCESS_DENIED':'SOURCE_STALE')));expect(previewImage()).toBeNull();expect(URL.createObjectURL).not.toHaveBeenCalled();expect(v.props.expired).not.toHaveBeenCalled();expect(v.props.recover).not.toHaveBeenCalled();expect(screen.queryByText('Нет доступа к переписке')).toBeNull();expect(screen.getByLabelText('Ручной текстовый ответ')).toBeEnabled();
   });
 });

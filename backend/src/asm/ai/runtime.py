@@ -11,7 +11,7 @@ from asm.ai.database import AIDatabase, runtime_config
 from asm.ai.fake import FakeAdapter
 from asm.ai.gateway import ModelAdapter
 from asm.ai.runtime_contracts import RuntimeStop
-from asm.ai.runtime_settings import PortfolioRuntimeSettings
+from asm.ai.runtime_settings import PortfolioDeliveryRuntimeSettings, PortfolioRuntimeSettings
 from asm.knowledge.embeddings import EmbeddingClient
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
@@ -147,6 +147,53 @@ class PortfolioSyntheticRuntime(RuntimeExecution):
             delivery=True,
             embeddings=embeddings,
             portfolio_session_id=self.settings.session_id,
+        )
+        self.model, self.telegram = model, telegram
+
+    async def enqueue(self, claim: JobClaim) -> None:
+        self.settings.current()
+        try:
+            await self.database.messaging.enqueue_ai(claim)
+        except SQLAlchemyError:
+            await self.database.messaging.enqueue_ai(claim)
+
+    def new_adapter(self) -> ModelAdapter:
+        self.settings.current()
+        adapter = self.model()
+        if not isinstance(adapter, FakeAdapter):
+            raise MessagingError(Code.NOT_ALLOWED)
+        return adapter
+
+
+class PortfolioDeliverySyntheticRuntime(RuntimeExecution):
+    """Explicit new TEST admission. One guarded photo effect; no key or real chat adapter."""
+
+    def __init__(
+        self,
+        database: MessagingDatabase,
+        settings: PortfolioDeliveryRuntimeSettings,
+        model: Callable[[], FakeAdapter],
+        *,
+        environment: str,
+        telegram: TelegramClient | None = None,
+        embeddings: EmbeddingClient | None = None,
+    ):
+        self.settings = PortfolioDeliveryRuntimeSettings.model_validate(settings)
+        self.settings.current()
+        if (
+            environment != "TEST"
+            or telegram is not None
+            and (type(telegram) is not TelegramClient or not telegram.synthetic_ai)
+        ):
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.config = self.settings.config
+        self.database = AIDatabase(
+            database,
+            environment=environment,
+            delivery=True,
+            embeddings=embeddings,
+            portfolio_session_id=self.settings.session_id,
+            portfolio_delivery=True,
         )
         self.model, self.telegram = model, telegram
 

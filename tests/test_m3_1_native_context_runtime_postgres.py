@@ -46,8 +46,8 @@ async def native_runtime(native, request):
     if request.node.name.startswith("test_native_host"):
         from test_m3_1_native_context_postgres import migrate
 
-        await migrate("upgrade", "0021")
-        native.schema_revision = "0021"
+        await migrate("upgrade", "0022")
+        native.schema_revision = "0022"
     native.kernel = MessagingDatabase(native.runtime.engine, environment="TEST")
     return native
 
@@ -1172,7 +1172,7 @@ async def native_host_request(h, *, operation="ENABLE", key="host-enable", expec
             },
             "source_profile": {
                 "source_tree": tree,
-                "schema_revision": "0021",
+                "schema_revision": "0022",
                 "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
                 "drain_confirmed": True,
             },
@@ -1286,7 +1286,9 @@ async def test_native_host_policy_catalog_drift_refuses_without_new_authority(na
         transaction = await connection.begin()
         try:
             await connection.execute(
-                text("ALTER FUNCTION platform.portfolio_schema_profile() RESET search_path")
+                text(
+                    "ALTER FUNCTION platform.portfolio_delivery_schema_profile() RESET search_path"
+                )
             )
             with pytest.raises(ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
                 await native_catalog_profile(connection, runner, source)

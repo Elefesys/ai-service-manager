@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessagingError, exactManualText, messagingApi, parseConnection, parseConversation, parseMessage, parseMessagingError, parsePage, parseReadGrant, parseReceipt } from './messaging-api';
-import { connection, conversation, conversationId, delivery, id, message, ok, outbound, page, photo, receipt, when, ws } from './messaging-fixtures.test-helper';
+import { connection, conversation, conversationId, delivery, id, message, ok, outbound, page, photo, portfolioPhoto, receipt, when, ws } from './messaging-fixtures.test-helper';
 afterEach(() => vi.unstubAllGlobals());
 describe('accepted M2 strict DTOs', () => {
   it('retains six digits, decimal strings and exact nullable fields', () => {
@@ -84,5 +84,29 @@ describe('M3 current material contract',()=>{
     for(const bad of [undefined,null,{...current,schema_version:true},{...current,schema_version:2},{...current,text:''},{...current,image_availability:'ORIGINAL_READY'},{...current,provider_id:'private'},{...current,changed:1}])expect(()=>parseMessage({...value,current:bad})).toThrow();
     expect(()=>parseMessage({...message(),current:{...message().current,text:'different'}})).toThrow();
     expect(()=>parseMessage({...value,version:'1'})).toThrow();
+  });
+});
+
+
+describe('M5.2D closed outbound portfolio-photo projection',()=>{
+  it.each(['PENDING','DISPATCHING','SENT','FAILED','UNKNOWN'] as const)('accepts %s independently of source availability',status=>{
+    const m=portfolioPhoto(status);expect(parseMessage(m)).toEqual(m);
+    expect(parseMessage({...m,current:{...m.current,image_availability:'PORTFOLIO_UNAVAILABLE'}})).toEqual({...m,current:{...m.current,image_availability:'PORTFOLIO_UNAVAILABLE'}});
+  });
+  it('keeps both legacy unions closed while separating the owner asset from an inbound FileObject',()=>{
+    const m=portfolioPhoto();
+    for(const bad of [{...m,portfolio:undefined},{...m,extra:1},{...m,file:photo().file},{...m,direction:'INBOUND'},{...m,delivery:null},{...m,current:{...m.current,schema_version:1}},{...m,current:{...m.current,image_availability:'ORIGINAL_READY'}},{...m,portfolio:{...m.portfolio,url:'https://private.invalid'}},{...m,portfolio:{...m.portfolio,schema_version:2}},{...m,portfolio:{...m.portfolio,asset_id:'invalid'}},{...m,portfolio:{...m.portfolio,source_sha256:'A'.repeat(64)}},{...message(),portfolio:m.portfolio},{...photo(),current:m.current}])expect(()=>parseMessage(bad)).toThrow(MessagingError);
+    const missing={...m.portfolio} as Partial<typeof m.portfolio>;delete missing.asset_version_id;expect(()=>parseMessage({...m,portfolio:missing})).toThrow();
+  });
+  it('enforces exact bounded scalar captions and current visibility/version relations',()=>{
+    const m=portfolioPhoto();
+    for(const text of ['  e\u0301\n🙂  ','🙂'.repeat(1024),'\ufeff'])expect(parseMessage({...m,text,current:{...m.current,text}}).text).toBe(text);
+    for(const text of ['', ' \u0085\u001c', 'x\0', '\ud800','🙂'.repeat(1025)])expect(()=>parseMessage({...m,text,current:{...m.current,text}})).toThrow();
+    for(const state of ['DELETED','ORDER_UNCERTAIN','UNSUPPORTED_CONTENT'] as const){
+      const hidden={...m,version:'2',current:{schema_version:2,state,content_type:null,text:null,image_availability:'HIDDEN',changed:true}};expect(parseMessage(hidden)).toEqual(hidden);
+      expect(()=>parseMessage({...hidden,current:{...hidden.current,text:m.text}})).toThrow();
+      expect(()=>parseMessage({...hidden,current:{...hidden.current,changed:false}})).toThrow();
+    }
+    for(const bad of [{...m,version:'2'},{...m,current:{...m.current,text:'different'}},{...m,current:{...m.current,content_type:'TEXT'}},{...m,current:{...m.current,state:'DELETED'}},{...m,current:{...m.current,extra:true}},{...m,delivery:{...m.delivery,status:'UNKNOWN',error_code:null}}])expect(()=>parseMessage(bad)).toThrow();
   });
 });

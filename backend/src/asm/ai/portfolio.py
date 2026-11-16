@@ -3,13 +3,13 @@
 import hashlib
 import json
 import unicodedata
-from typing import Annotated, Any, Literal, Protocol, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
 
 from asm.ai.agent import (
-    AgentOutcome,
+    AnyAgentOutcome,
     AuthorityDecision,
     Boundary,
     ContextRead,
@@ -26,9 +26,9 @@ from asm.ai.context import (
 )
 from asm.ai.contracts import (
     DTO,
+    AnyConversationResult,
     AnyGatewayConfig,
     Budget,
-    ConversationResult,
     Handoff,
     Message,
     ReadTool,
@@ -49,6 +49,9 @@ from asm.ai.knowledge import (
 from asm.ai.vision_contracts import PREPROCESS_PROFILE, VISION_PROFILE, VisionResult
 from asm.billing.validation import LimitDecimal
 from asm.configuration.models import ActiveProjection
+
+if TYPE_CHECKING:
+    from asm.ai.portfolio_delivery import PreparedPortfolioDeliveryContext
 
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 
@@ -594,7 +597,9 @@ class PortfolioConversationAgent(ConversationAgent):
             initial_budget=initial_budget,
         )
 
-    def _project(self, snapshot: object, binding: ContextBinding) -> PreparedPortfolioContext:
+    def _project(
+        self, snapshot: object, binding: ContextBinding
+    ) -> "PreparedPortfolioContext | PreparedPortfolioDeliveryContext":
         return self.portfolio_builder.build(
             snapshot,
             binding,
@@ -628,8 +633,8 @@ class PortfolioConversationAgent(ConversationAgent):
         ).model_dump_json()
 
     def _outcome(
-        self, *, reason: StopCode | None = None, candidate: ConversationResult | None = None
-    ) -> AgentOutcome:
+        self, *, reason: StopCode | None = None, candidate: AnyConversationResult | None = None
+    ) -> AnyAgentOutcome:
         if candidate is not None and self.search.status == "CONFLICT":
             candidate = Handoff(
                 kind="handoff",

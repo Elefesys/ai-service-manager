@@ -35,13 +35,18 @@ if TYPE_CHECKING:
     from asm.ai.contracts import AnyGatewayConfig
     from asm.ai.fake import FakeAdapter
     from asm.ai.runtime import SyntheticRuntime
-    from asm.ai.runtime_settings import PortfolioRuntimeSettings, RuntimeSettings
+    from asm.ai.runtime_settings import (
+        PortfolioDeliveryRuntimeSettings,
+        PortfolioRuntimeSettings,
+        RuntimeSettings,
+    )
     from asm.ai.vision import VisionClient
     from asm.files.storage import ObjectStorage
     from asm.knowledge.embeddings import EmbeddingClient
     from asm.messaging.adapter import ControlledAdapter
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.worker import Worker
+    from asm.portfolio.delivery import PrivatePhotoStorage
     from asm.portfolio.storage import PortfolioStorage
     from asm.telegram.client import TelegramClient
 
@@ -49,9 +54,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0021"
-NATIVE_CONTEXT_PROFILE_SHA256 = "da169523db6ecaf26b566e52c7457fbb8785ff0921fefe71d24f006fc9ec87aa"
-NATIVE_PROFILE_BODY_SHA256 = "df2ab97e8fe09ead37d2dd16f70526f4f47073eaed3314686ceb319e7773d06b"
+DATABASE_SCHEMA_REVISION = "0022"
+NATIVE_CONTEXT_PROFILE_SHA256 = "5e4191f74a2eba509085072acc5d4fc62366207d4b434a33a770d504273a2bc7"
+NATIVE_PROFILE_BODY_SHA256 = "499d3b25887b3dd50f0a2f8f7e7b324d8cca226a270a3dd99e5506e376733bf0"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -88,7 +93,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.portfolio_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.portfolio_delivery_schema_profile()')
             """)
             )
         )
@@ -397,19 +402,28 @@ def create_worker(
     ai_telegram: "TelegramClient | None" = None,
     ai_embeddings: "EmbeddingClient | None" = None,
     portfolio_settings: "PortfolioRuntimeSettings | None" = None,
+    portfolio_delivery_settings: "PortfolioDeliveryRuntimeSettings | None" = None,
+    portfolio_storage: "PrivatePhotoStorage | None" = None,
     provider_settings: "RuntimeSettings | None" = None,
     provider_key_file: Path | None = None,
     provider_transport: "AsyncBaseTransport | None" = None,
 ) -> "Worker":
     """Explicit synthetic application entry. Default composition has AI disabled."""
     from asm.ai.provider_runtime import ProviderRuntime
-    from asm.ai.runtime import PortfolioSyntheticRuntime, SyntheticRuntime
+    from asm.ai.runtime import (
+        PortfolioDeliverySyntheticRuntime,
+        PortfolioSyntheticRuntime,
+        SyntheticRuntime,
+    )
     from asm.messaging.errors import Code, MessagingError
     from asm.messaging.worker import Worker
+    from asm.portfolio.delivery import PortfolioDelivery
 
     if provider_settings is not None:
         if (
             portfolio_settings is not None
+            or portfolio_delivery_settings is not None
+            or portfolio_storage is not None
             or ai_embeddings is not None
             or ai_config is not None
             or model is not None
@@ -431,6 +445,29 @@ def create_worker(
             ),
         )
     if provider_key_file is not None or provider_transport is not None:
+        raise MessagingError(Code.INVALID_INPUT)
+    if portfolio_delivery_settings is not None:
+        if (
+            portfolio_settings is not None
+            or ai_config is not None
+            or model is None
+            or portfolio_storage is None
+        ):
+            raise MessagingError(Code.INVALID_INPUT)
+        return Worker(
+            database,
+            adapter,
+            ai=PortfolioDeliverySyntheticRuntime(
+                database,
+                portfolio_delivery_settings,
+                model,
+                environment=environment,
+                telegram=ai_telegram,
+                embeddings=ai_embeddings,
+            ),
+            portfolio_delivery=PortfolioDelivery(database, portfolio_storage),
+        )
+    if portfolio_storage is not None:
         raise MessagingError(Code.INVALID_INPUT)
     if portfolio_settings is not None:
         if ai_config is not None or model is None:

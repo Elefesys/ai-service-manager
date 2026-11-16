@@ -6,7 +6,7 @@ from pydantic import Field, field_validator, model_validator
 
 from asm.billing.models import CommonCode, StrictModel
 from asm.billing.validation import CanonicalUUID, PositiveDecimal, Timestamp
-from asm.conversations.material import MessageCurrent
+from asm.conversations.material import MessageCurrent, MessageCurrentV2
 from asm.messaging.errors import MessagingError
 from asm.messaging.models import manual_text
 
@@ -173,6 +173,62 @@ class MessageResponse(StrictModel):
         return self
 
 
+class PortfolioMessageSource(StrictModel):
+    schema_version: Literal[1]
+    item_id: CanonicalUUID
+    revision_id: CanonicalUUID
+    asset_id: CanonicalUUID
+    asset_version_id: CanonicalUUID
+    source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def exact_schema(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Invalid portfolio source version")
+        return value
+
+
+class PortfolioMessageResponse(StrictModel):
+    """True outgoing source; historical inbound file DTO is still closed."""
+
+    message_id: CanonicalUUID
+    conversation_id: CanonicalUUID
+    direction: Literal["OUTBOUND"]
+    content_type: Literal["PORTFOLIO_PHOTO"]
+    text: str = Field(min_length=1, max_length=1024, repr=False)
+    occurred_at: Timestamp
+    created_at: Timestamp
+    version: PositiveDecimal
+    file: None
+    delivery: DeliveryResponse
+    current: MessageCurrentV2
+    portfolio: PortfolioMessageSource
+
+    @field_validator("text")
+    @classmethod
+    def caption(cls, value: str) -> str:
+        # This projection never creates an intent. Use the same wire bounds.
+        from asm.portfolio.delivery import photo_caption
+
+        try:
+            return photo_caption(value)
+        except MessagingError:
+            raise ValueError("Invalid portfolio caption") from None
+
+    @model_validator(mode="after")
+    def relations(self) -> Self:
+        if self.current.changed != (int(self.version) > 1) or (
+            not self.current.changed
+            and (self.current.state != "VISIBLE" or self.current.text != self.text)
+        ):
+            raise ValueError("Invalid outgoing portfolio material")
+        return self
+
+
+OwnerMessageResponse = MessageResponse | PortfolioMessageResponse
+
+
 class SendResponse(StrictModel):
     workspace_id: CanonicalUUID
     receipt_id: CanonicalUUID
@@ -197,7 +253,7 @@ class ConversationsPage(StrictModel):
 
 
 class MessagesPage(StrictModel):
-    items: list[MessageResponse] = Field(max_length=100)
+    items: list[OwnerMessageResponse] = Field(max_length=100)
     next_cursor: str | None = Field(max_length=1024)
 
 

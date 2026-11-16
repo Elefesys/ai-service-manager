@@ -3,14 +3,17 @@ import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
 import { EscalationContext } from './escalation-api';
 import { ConversationControl, ControlIntent } from './ConversationControl';
-import { Connection, Conversation, Message, MessagingError, Page, ReadGrant, SendBody, SendReceipt, exactManualText, messagingApi, currentImageEligible } from './messaging-api';
+import { Connection, Conversation, Message, MessagingError, Page, PortfolioMessage, ReadGrant, SendBody, SendReceipt, exactManualText, messagingApi, currentImageEligible, currentPortfolioEligible } from './messaging-api';
+import { PortfolioError, portfolioApi } from './portfolio-api';
 
 type Intent = { readonly actor: string; readonly workspace: string; readonly conversation: string; readonly body: SendBody; readonly key: string; phase: 'sending' | 'uncertain' | 'confirmed' | 'conflict'; ambiguous: boolean; failedSession: Session; receipt?: SendReceipt };
 type Collection<T> = { items: T[] | null; cursor: string | null; busy: boolean; error: string };
 type ImageView = { message: string; version: string; busy: boolean; grant: ReadGrant | null; error: string };
-type View = { generation: number; connections: Collection<Connection>; conversations: Collection<Conversation>; messages: Collection<Message>; selected: string; draft: string; notice: string; denied: boolean; image: ImageView | null; receipt: SendReceipt | null };
+type PortfolioImageView = { message: string; source: string; busy: boolean; url: string | null; error: string };
+type View = { generation: number; connections: Collection<Connection>; conversations: Collection<Conversation>; messages: Collection<Message>; selected: string; draft: string; notice: string; denied: boolean; image: ImageView | null; portfolioImage: PortfolioImageView | null; receipt: SendReceipt | null };
 const empty = <T,>(): Collection<T> => ({ items: null, cursor: null, busy: false, error: '' });
-const blank = (generation: number): View => ({ generation, connections: empty(), conversations: empty(), messages: empty(), selected: '', draft: '', notice: '', denied: false, image: null, receipt: null });
+const blank = (generation: number): View => ({ generation, connections: empty(), conversations: empty(), messages: empty(), selected: '', draft: '', notice: '', denied: false, image: null, portfolioImage: null, receipt: null });
+const portfolioSource = (m: PortfolioMessage) => [m.version,m.portfolio.item_id,m.portfolio.revision_id,m.portfolio.asset_id,m.portfolio.asset_version_id,m.portfolio.source_sha256].join(':');
 const connectionState: Record<Connection['state'], string> = { AVAILABLE: 'Доступно по наблюдению', DISABLED: 'Подключение отключено', RIGHTS_MISSING: 'Недостаточно прав', UNVERIFIED: 'Требует проверки', UNAVAILABLE: 'Последняя проверка не удалась' };
 const deliveryState: Record<NonNullable<Message['delivery']>['status'], string> = { PENDING: 'В очереди', DISPATCHING: 'Отправка начата', SENT: 'Канал принял', FAILED: 'Отправка отклонена', UNKNOWN: 'Результат неизвестен — повтора нет' };
 const failure = (e: unknown) => e instanceof MessagingError && e.code === 'BILLING_STATE_UNAVAILABLE' ? `Состояние подписки недоступно: ${e.stateReason}.` : e instanceof MessagingError && e.code === 'RATE_LIMITED' ? 'Слишком много запросов. Повторите позже.' : e instanceof MessagingError && e.code === 'INVALID_REQUEST' ? 'Страница недоступна. Обновите список с начала.' : 'Не удалось получить данные. Повторите чтение.';
@@ -45,7 +48,8 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   const [, redraw] = useState(0);
   const alive = useRef(true), denied = useRef(-1);
   const controllers = useRef(new Set<AbortController>());
-  const sequence = useRef({ connections: 0, conversations: 0, messages: 0, image: 0 });
+  const portfolioObjectUrl = useRef<string | null>(null), portfolioRequest = useRef<AbortController | null>(null);
+  const sequence = useRef({ connections: 0, conversations: 0, messages: 0, image: 0, portfolioImage: 0 });
   const reading = useRef({ connections: false, conversations: false, messages: false });
   const current = () => alive.current && scope.current.generation === generation && scope.current.owner && denied.current !== generation;
   const inConversation = (id: string, epoch: number) => current() && selection.current.id === id && selection.current.epoch === epoch;
@@ -57,8 +61,15 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   function interruptSend() {
     if (intent.current?.phase === 'sending') { intent.current.phase = 'uncertain'; intent.current.ambiguous = true; changed(); }
   }
+  function clearPortfolioImage(render = true) {
+    sequence.current.portfolioImage++;
+    portfolioRequest.current?.abort(); portfolioRequest.current = null;
+    if (portfolioObjectUrl.current !== null) { URL.revokeObjectURL(portfolioObjectUrl.current); portfolioObjectUrl.current = null; }
+    if (render) update({ portfolioImage: null });
+  }
   function authorization(e: unknown): boolean {
     if (!(e instanceof MessagingError)) return false;
+    if ([401,403].includes(e.status)) { clearPortfolioImage(); sequence.current.image++; update({ image: null }); }
     if (e.status === 401 && e.code === 'SESSION_REQUIRED') { interruptSend(); expired(); return true; }
     if (e.status === 403 && e.code === 'CSRF_REJECTED') { interruptSend(); recover(); return true; }
     if (e.status === 403) {
@@ -102,7 +113,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
     const confirmed = intent.current?.phase === 'confirmed' ? intent.current : null;
     const epoch = selection.current.epoch, seq = ++sequence.current.messages, c = controller();
     reading.current.messages = true;
-    if (cursor === null) { sequence.current.image++; update({ image: null }); }
+    if (cursor === null) { sequence.current.image++; clearPortfolioImage(); update({ image: null }); }
     setView(v => ({ ...v, messages: { ...(cursor === null ? empty<Message>() : v.messages), busy: true, error: '' } }));
     try {
       const page = await messagingApi.messages(workspace, id, cursor, c.signal);
@@ -122,6 +133,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   function choose(id: string) {
     if (!current() || selection.current.id === id) return;
     interruptSend();
+    clearPortfolioImage();
     selection.current = { id, epoch: selection.current.epoch + 1 };
     sequence.current.messages++; sequence.current.image++; reading.current.messages = false;
     update({ selected: id, messages: empty(), image: null, draft: '', notice: '', receipt: null });
@@ -132,7 +144,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
     setView(blank(generation));
     reading.current = { connections: false, conversations: false, messages: false };
     if (owner) { void list('connections'); void list('conversations'); }
-    return () => { alive.current = false; controllers.current.forEach(c => c.abort()); controllers.current.clear(); };
+    return () => { alive.current = false; clearPortfolioImage(false); controllers.current.forEach(c => c.abort()); controllers.current.clear(); };
   }, [generation]);
 
   async function send(p: Intent) {
@@ -195,6 +207,31 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       if (!authorization(e)) update({ image: { message: message.message_id, version: message.version, busy: false, grant: null, error: 'Изображение недоступно. Можно запросить доступ снова.' } });
     } finally { controllers.current.delete(c); }
   }
+  async function openPortfolioImage(message: PortfolioMessage) {
+    const selected = view.conversations.items?.find(c => c.conversation_id === selection.current.id);
+    if (!session || !current() || !selected || !currentPortfolioEligible(message)) return;
+    clearPortfolioImage();
+    const id = selection.current.id, epoch = selection.current.epoch, seq = sequence.current.portfolioImage, source = portfolioSource(message), c = controller();
+    portfolioRequest.current = c;
+    const eligible = () => inConversation(id, epoch) && seq === sequence.current.portfolioImage && messagesState.current?.some(m => currentPortfolioEligible(m) && m.message_id === message.message_id && portfolioSource(m) === source);
+    update({ portfolioImage: { message: message.message_id, source, busy: true, url: null, error: '' } });
+    try {
+      const blob = await portfolioApi.preview(workspace, selected.business_id, { asset: message.portfolio.asset_id, version: message.portfolio.asset_version_id }, c.signal);
+      if (!eligible()) return;
+      const url = URL.createObjectURL(blob);
+      portfolioObjectUrl.current = url;
+      update({ portfolioImage: { message: message.message_id, source, busy: false, url, error: '' } });
+    } catch (e) {
+      if (!eligible()) return;
+      if (e instanceof PortfolioError && authorization(new MessagingError(e.status, e.code))) return;
+      clearPortfolioImage(false);
+      update({ portfolioImage: { message: message.message_id, source, busy: false, url: null, error: 'Источник портфолио недоступен. Обновите сообщения перед новым чтением.' } });
+    } finally { controllers.current.delete(c); if (portfolioRequest.current === c) portfolioRequest.current = null; }
+  }
+  useEffect(() => {
+    const image = view.portfolioImage;
+    if (image && !view.messages.items?.some(m => currentPortfolioEligible(m) && m.message_id === image.message && portfolioSource(m) === image.source)) clearPortfolioImage();
+  }, [view.messages.items, generation]);
   const grant = view.image?.grant;
   useEffect(() => {
     if (!grant) return;
@@ -209,10 +246,10 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   const selected = view.conversations.items?.find(c => c.conversation_id === view.selected);
   return <HumanContextPanel session={owner && !view.denied ? session : null} context={selected ? {workspace,conversation:selected.conversation_id,client:selected.client_id}:null}
     intent={humanIntent} blocked={()=>!!intent.current||!!controlIntent.current} refresh={nativeRefresh} accepted={()=>{refreshControl(n=>n+1);void history();}}
-    recover={()=>{interruptSend();recover();}} expired={()=>{interruptSend();expired();}} accessDenied={()=>{authorization(new MessagingError(403,'ACCESS_DENIED'));}}>
+    recover={()=>{clearPortfolioImage();interruptSend();recover();}} expired={()=>{clearPortfolioImage();interruptSend();expired();}} accessDenied={()=>{authorization(new MessagingError(403,'ACCESS_DENIED'));}}>
     {(humanContext,contextPending,humanState)=><ConversationControl humanState={humanState} contextChanged={()=>setNativeRefresh(n=>n+1)} session={owner && !view.denied ? session : null} context={selected ? { workspace, conversation: selected.conversation_id, client: selected.client_id } : null}
     intent={controlIntent} manualPending={() => !!intent.current||!!humanIntent.current} refresh={controlRefresh} accepted={() => {setNativeRefresh(n=>n+1);void history();}}
-    recover={() => { interruptSend(); recover(); }} expired={() => { interruptSend(); expired(); }} accessDenied={() => { authorization(new MessagingError(403,'ACCESS_DENIED')); }}>
+    recover={() => { clearPortfolioImage(); interruptSend(); recover(); }} expired={() => { clearPortfolioImage(); interruptSend(); expired(); }} accessDenied={() => { authorization(new MessagingError(403,'ACCESS_DENIED')); }}>
     {(control, controlPending) => <>
     {detached && <section className="panel alert" aria-label="Незавершённый ответ"><p role="status">В прежнем контексте осталось намерение ответа. Оно не переносится и не отправляется в этом контексте.</p><button onClick={discard}>Завершить ответ без повтора</button></section>}
     {owner && (view.denied ? <section className="panel alert" role="alert"><h2>Нет доступа к переписке</h2><p>История и изображения скрыты.</p><button onClick={recover}>Проверить доступ к переписке</button></section> : <section className="panel messaging" aria-label="Переписка">
@@ -248,6 +285,16 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
           {m.current.image_availability === 'MEDIA_REPLACED_UNAVAILABLE' && <p>Фото заменено, новое изображение недоступно.</p>}
           {m.current.image_availability === 'ORIGINAL_NOT_FETCHED' && <p>Исходное фото не было загружено.</p>}
           {m.delivery && <p className="delivery" role="status">{deliveryState[m.delivery.status]}{m.delivery.error_code && ` · ${m.delivery.error_code}`}</p>}
+          {m.content_type === 'PORTFOLIO_PHOTO' && <div className="message-image portfolio-message-image">
+            <p className="muted">Фото из портфолио · работа <span className="mono">{m.portfolio.item_id.slice(0,8)}</span> · редакция <span className="mono">{m.portfolio.revision_id.slice(0,8)}</span></p>
+            {m.current.image_availability === 'PORTFOLIO_UNAVAILABLE' && <p>Источник портфолио недоступен.</p>}
+            {currentPortfolioEligible(m) && <button className="secondary" disabled={view.portfolioImage?.message === m.message_id && view.portfolioImage.busy} onClick={() => void openPortfolioImage(m)}>Посмотреть фото из портфолио</button>}
+            {currentPortfolioEligible(m) && view.portfolioImage?.message === m.message_id && view.portfolioImage.source === portfolioSource(m) && <>
+              {view.portfolioImage.busy && <p role="status">Проверяем доступ к источнику портфолио…</p>}
+              {view.portfolioImage.error && <p role="alert">{view.portfolioImage.error}</p>}
+              {view.portfolioImage.url && <img src={view.portfolioImage.url} alt="Работа из портфолио в исходящем сообщении" referrerPolicy="no-referrer" onError={() => { if (current() && portfolioObjectUrl.current === view.portfolioImage?.url) { clearPortfolioImage(false); update({ portfolioImage: {message:m.message_id,source:portfolioSource(m),busy:false,url:null,error:'Источник портфолио не загрузился. Обновите сообщения перед новым чтением.'} }); } }} />}
+            </>}
+          </div>}
           {m.file && m.current.state === 'VISIBLE' && m.current.content_type === 'PHOTO' && m.current.image_availability.startsWith('ORIGINAL_') && <div className="message-image">
             {m.file.status === 'PENDING' && <p>Изображение загружается.</p>}
             {m.file.status === 'FAILED' && <p>Изображение недоступно · {m.file.error_code}</p>}
