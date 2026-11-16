@@ -481,6 +481,9 @@ M5_DELIVERY_ASSIGNMENT = "63bb7147ec899eda1a538388aff18a01fc054e57"
 M5_DELIVERY_ASSIGNMENT_TREE = "9de6138d28298cb2ece968fee472e5bca78994d5"
 M5_DELIVERY_SCOPE_AMENDMENT = "37a92eece23452ac8d8715efa078db34d9cc10ff"
 M5_DELIVERY_SCOPE_AMENDMENT_TREE = "130f9466bea8e0e15feb537b5b1e6f817cc883ef"
+M5_DELIVERY_SCOPE_AMENDMENT_02 = "55a6f09cacecc85490e79d096b48a433932fd746"
+M5_DELIVERY_SCOPE_AMENDMENT_02_TREE = "c00bb1334704be2e88031f38d926b01ab720d153"
+M5_DELIVERY_SCOPE_AMENDMENT_02_PARENT = "b4871ef1ad5a46ae7244397727f30629957470bb"
 M5_DELIVERY_BRANCH = "c3/m5-2d-portfolio-photo-r1"
 M5_DELIVERY_C0_DOCS = {
     "docs/TASK_REGISTER.md",
@@ -595,6 +598,7 @@ M5_DELIVERY_PATHS = {
     "tests/test_m5_portfolio_runtime.py",
     "tests/test_native_context_db_runner.py",
     "tests/test_postgres.py",
+    "tests/test_m1_3_c0_acceptance.py",
     "tests/test_telegram_egress.py",
     "tests/test_telegram_egress_migration.py",
     "tests/test_telegram_egress_postgres.py",
@@ -740,6 +744,14 @@ def delivery_scope_amendment():
     }
 
 
+def delivery_scope_amendment_02():
+    return {
+        "sha": M5_DELIVERY_SCOPE_AMENDMENT_02,
+        "tree": M5_DELIVERY_SCOPE_AMENDMENT_02_TREE,
+        "parent": M5_DELIVERY_SCOPE_AMENDMENT_02_PARENT,
+    }
+
+
 def source_tree_from_evidence(path=None):
     """Bind the DB-only fixture to this executor's checked source, without Git in the image."""
 
@@ -778,12 +790,18 @@ def source_tree_from_evidence(path=None):
     delivery = value.get("branch") == M5_DELIVERY_BRANCH
     if delivery:
         keys.add("scope_amendment")
+        keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
     if delivery:
         require(
             type(value["scope_amendment"]) is dict
             and value["scope_amendment"] == delivery_scope_amendment(),
             "SOURCE_IDENTITY_SCOPE_AMENDMENT",
+        )
+        require(
+            type(value["scope_amendment_02"]) is dict
+            and value["scope_amendment_02"] == delivery_scope_amendment_02(),
+            "SOURCE_IDENTITY_SCOPE_AMENDMENT_02",
         )
     foundation_budget = value["branch"] == M5_FOUNDATION_BRANCH
     planning = value["branch"] == M5_PLAN_BRANCH
@@ -1521,6 +1539,36 @@ def admit_source(evidence):
             "DELIVERY_SCOPE_AMENDMENT_PATHS",
         )
         require(
+            capture(["git", "rev-parse", M5_DELIVERY_SCOPE_AMENDMENT_02 + "^{tree}"])
+            == M5_DELIVERY_SCOPE_AMENDMENT_02_TREE,
+            "DELIVERY_SCOPE_AMENDMENT_02_TREE",
+        )
+        require(
+            capture(
+                ["git", "rev-list", "--parents", "-n", "1", M5_DELIVERY_SCOPE_AMENDMENT_02]
+            ).split()
+            == [M5_DELIVERY_SCOPE_AMENDMENT_02, M5_DELIVERY_SCOPE_AMENDMENT_02_PARENT],
+            "DELIVERY_SCOPE_AMENDMENT_02_PARENT",
+        )
+        require(
+            capture(["git", "merge-base", M5_DELIVERY_SCOPE_AMENDMENT_02, "HEAD"])
+            == M5_DELIVERY_SCOPE_AMENDMENT_02,
+            "DELIVERY_SCOPE_AMENDMENT_02_ANCESTRY",
+        )
+        require(
+            capture(
+                [
+                    "git",
+                    "diff",
+                    "--name-only",
+                    M5_DELIVERY_SCOPE_AMENDMENT_02_PARENT,
+                    M5_DELIVERY_SCOPE_AMENDMENT_02,
+                ]
+            ).splitlines()
+            == ["docs/tasks/M5_HANDOFF.md"],
+            "DELIVERY_SCOPE_AMENDMENT_02_PATHS",
+        )
+        require(
             not capture(
                 [
                     "git",
@@ -1820,6 +1868,7 @@ def admit_source(evidence):
     }
     if delivery:
         admission["scope_amendment"] = delivery_scope_amendment()
+        admission["scope_amendment_02"] = delivery_scope_amendment_02()
     write(evidence / "source-admission.json", admission)
     return event, manifest
 
@@ -2471,6 +2520,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     }
     if delivery:
         source["scope_amendment"] = delivery_scope_amendment()
+        source["scope_amendment_02"] = delivery_scope_amendment_02()
     write(root / "evidence/source.json", source)
     write(root / "evidence/event.json", event)
     write(root / "evidence/source-manifest.json", manifest)

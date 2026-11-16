@@ -418,39 +418,32 @@ Runtime current0022 preflight в первом Actions независимо по�
 foundation-durable primary/cleanup0. В обоих artifacts все449 Git blobs/bytes/
 modes совпали с candidate tree; runtime source-admission содержит exact C0
 amendment и producer/consumer proof.
-Два разрешённых исправления сохранены публичным reviewable commit (ссылка в
-описании PR), без перемещения PR head и повторного full CI с известным блокером.
-LOCAL evidence и checkpoint не присваивают INTEGRATED/VERIFIED и не являются
-Actions execution.
+Repair `b4871ef1ad5a46ae7244397727f30629957470bb` и оба C0 receipts
+сохранены в ancestry. Исходный первый CI остаётся FAILURE; новый кандидат
+продолжает тот же Draft PR52. LOCAL evidence не является Actions execution
+и не присваивает INTEGRATED/VERIFIED.
 
-**Исходный запрос C3 C0-SCOPE-M5.2D-02 — принят решением C0 выше.** Оставшаяся общая причина пяти
-foundation failures: `tests/test_m1_3_c0_acceptance.py` перечисляет в одном
-transactional TRUNCATE старые parent tables без новой
-`platform.portfolio_delivery_intents`; PostgreSQL выдаёт `0A000` / FK на
-`portfolio_asset_versions` ещё до проверки initializer. Этот path отсутствует
-в текущем M5.2D write-set. FK/guards и исторические сценарии ради PASS не меняются.
+**C0-SCOPE-M5.2D-02 применён.** В существующий TRUNCATE tuple после
+`"platform.portfolio_release_builds",` добавлена только
+`"platform.portfolio_delivery_intents",`; остальные AST nodes совпали с
+принятым source55a6f09. Сохранены отсутствие CASCADE, transaction/finally
+rollback, все5 parametrizations, initializer assertions и полный69-table/catalog
+snapshot. **Весь actual repository module:12 PG PASS**, 6.84s, на отдельном fresh
+PG18.6/pgvector0.8.6/0022; собственный кластер остановлен. Прежний proposal-copy
+результат12 PASS/6.09s остаётся только историческим LOCAL evidence.
 
-Предлагаемый весь test delta — одна строка внутри существующего tuple:
-
-```diff
-                             "platform.portfolio_release_builds",
-+                            "platform.portfolio_delivery_intents",
-                             "platform.ai_runs",
-```
-
-По принятому C0 receipt требуется добавить **только**
-`tests/test_m1_3_c0_acceptance.py` к `M5_DELIVERY_PATHS` и закрепить новый допуск
-в exact source proof. Старые routes, TRUNCATE без CASCADE, общий transaction,
-initializer assertions и полный69-table/catalog snapshot до/после rollback
-сохраняются. Patch proposal SHA256
-`5ccf623b101db20f19f709cf27ff5d8963cc42084ce508db36ef6c532787316e` включает
-только эту строку и одну запись нового task write-set; он не применён к repo.
-Отдельная LOCAL proposal copy всего модуля на fresh PG18.6/pgvector0.8.6/0022:
-**12 PASS**, 6.09s, включая все5 ранее скрытых initializer cases, без skip/xfail;
-собственный кластер остановлен. Это проверка предложенного diff, не CI execution.
-Исходный file SHA256
-`bb0ff0e888eca8ed9b756d7109c722b7f54cc3e305a9f2e4c251db582f292bae`
-и содержимое нового source admission до решения C0 не менялись.
+Новый task write-set получил ровно один path `tests/test_m1_3_c0_acceptance.py`.
+Scope01 proof сохранён как `scope_amendment`; дополнительный закрытый
+`scope_amendment_02` пинит SHA `55a6f09cacecc85490e79d096b48a433932fd746`,
+tree `c00bb1334704be2e88031f38d926b01ab720d153`, sole parent
+`b4871ef1ad5a46ae7244397727f30629957470bb`. Host проверяет также ancestry и
+единственный docs/tasks/M5_HANDOFF.md delta от repair. Producer и consumer
+сохраняют оба допуска; missing/tampered/swapped receipts отклоняются.
+Все582 runner checks PASS (150.35s): оба producer/consumer receipts,
+missing/tampered/swapped proof, tree/parent/ancestry/docs-only refusal до
+resources/credentials, а также прежние task routes. Exact финальный head/tree,
+clean Git PR/main admission и новый CI — в описании PR52; protected C0 docs,
+historical migrations и budgets неизменны.
 
 ### Разрешённый write-set
 
