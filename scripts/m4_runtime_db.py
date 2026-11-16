@@ -475,6 +475,26 @@ M5_PORTFOLIO_PATHS = M5_PORTFOLIO_C0_DOCS | {
     "frontend/src/MessagingPanel.test.tsx",
 }
 
+M5_FOUNDATION_BASE = "84ad8e4c954005801f115aa8e6c0c6f7edef40db"
+M5_FOUNDATION_TREE = "bf8992e20260e56f8d84884fc65fa3febcafc053"
+M5_FOUNDATION_ASSIGNMENT = "eb64476e9c399eaefe8d6eaf3889098c04e949dd"
+M5_FOUNDATION_ASSIGNMENT_TREE = "d2c67aa516bcbbd353ad2eea9d15b0f7eb83b4cf"
+M5_FOUNDATION_BRANCH = "c4/m5-2c-foundation-budget-r1"
+M5_FOUNDATION_C0_DOCS = {
+    "AGENTS.md",
+    "README.md",
+    "docs/TASK_REGISTER.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+}
+M5_FOUNDATION_PATHS = M5_FOUNDATION_C0_DOCS | {
+    "docs/tasks/M5_HANDOFF.md",
+    ".github/workflows/ci.yml",
+    "scripts/native_context_db_catalog.py",
+    "tests/test_native_context_db_runner.py",
+    "scripts/m4_runtime_db.py",
+    "tests/test_m4_runtime_db_runner.py",
+}
+
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -621,6 +641,7 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict and set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    foundation_budget = value["branch"] == M5_FOUNDATION_BRANCH
     planning = value["branch"] == M5_PLAN_BRANCH
     configuration = value["branch"] == M5_CONFIGURATION_BRANCH
     knowledge = value["branch"] == M5_KNOWLEDGE_BRANCH
@@ -628,7 +649,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
+        (M5_FOUNDATION_BASE, M5_FOUNDATION_TREE)
+        if foundation_budget
+        else (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
         if portfolio
         else (M5_SEARCH_BASE, M5_SEARCH_TREE)
         if search
@@ -681,6 +704,8 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
+            or foundation_budget
+            and value["event"] in {"pull_request", "push"}
             or portfolio
             and value["event"] in {"pull_request", "push"}
         )
@@ -702,7 +727,9 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if portfolio:
+    if foundation_budget:
+        require(set(paths) <= M5_FOUNDATION_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif portfolio:
         require(set(paths) <= M5_PORTFOLIO_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif search:
         require(set(paths) <= M5_SEARCH_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -1141,6 +1168,25 @@ def root_path():
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
 
 
+def foundation_budget_event(event):
+    if event.get("head_ref") == M5_FOUNDATION_BRANCH:
+        return True
+    if event["ref"] != "refs/heads/main":
+        return False
+    # Either known anchor selects this route; a damaged other anchor must not
+    # fall back to historical main admission before its exact checks.
+    for revision in (M5_FOUNDATION_BASE, M5_FOUNDATION_ASSIGNMENT):
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", revision, "HEAD"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        require(result.returncode in (0, 1, 128), "FOUNDATION_BUDGET_SOURCE_ANCESTRY")
+        if result.returncode == 0:
+            return True
+    return False
+
+
 def portfolio_event(event):
     if event.get("head_ref") == M5_PORTFOLIO_BRANCH:
         return True
@@ -1219,17 +1265,21 @@ def admit_source(evidence):
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    portfolio = portfolio_event(event)
-    search = not portfolio and search_event(event)
-    capability = not (portfolio or search) and capability_event(event)
-    knowledge = not (portfolio or search or capability) and knowledge_event(event)
-    configuration = not (portfolio or search or capability or knowledge) and configuration_event(
+    foundation_budget = foundation_budget_event(event)
+    portfolio = not foundation_budget and portfolio_event(event)
+    search = not (foundation_budget or portfolio) and search_event(event)
+    capability = not (foundation_budget or portfolio or search) and capability_event(event)
+    knowledge = not (foundation_budget or portfolio or search or capability) and knowledge_event(
         event
     )
+    configuration = not (
+        foundation_budget or portfolio or search or capability or knowledge
+    ) and configuration_event(event)
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH
         or planning
+        or foundation_budget
         or configuration
         or knowledge
         or capability
@@ -1238,7 +1288,9 @@ def admit_source(evidence):
         "POLZA_RUNTIME_EVENT_BRANCH",
     )
     base, base_tree = (
-        (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
+        (M5_FOUNDATION_BASE, M5_FOUNDATION_TREE)
+        if foundation_budget
+        else (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
         if portfolio
         else (M5_SEARCH_BASE, M5_SEARCH_TREE)
         if search
@@ -1252,6 +1304,37 @@ def admit_source(evidence):
         if planning
         else (BASE, BASE_TREE)
     )
+    if foundation_budget:
+        if event["event"] == "pull_request":
+            require(event["base_sha"] == base, "FOUNDATION_BUDGET_EVENT_BASE")
+        require(
+            capture(["git", "rev-parse", M5_FOUNDATION_ASSIGNMENT + "^{tree}"])
+            == M5_FOUNDATION_ASSIGNMENT_TREE,
+            "FOUNDATION_BUDGET_ASSIGNMENT_TREE",
+        )
+        require(
+            capture(["git", "merge-base", M5_FOUNDATION_ASSIGNMENT, "HEAD"])
+            == M5_FOUNDATION_ASSIGNMENT,
+            "FOUNDATION_BUDGET_ASSIGNMENT_ANCESTRY",
+        )
+        require(
+            capture(["git", "rev-parse", M5_FOUNDATION_ASSIGNMENT + "^"]) == M5_FOUNDATION_BASE,
+            "FOUNDATION_BUDGET_ASSIGNMENT_PARENT",
+        )
+        require(
+            not capture(
+                [
+                    "git",
+                    "diff",
+                    "--name-only",
+                    M5_FOUNDATION_ASSIGNMENT,
+                    "HEAD",
+                    "--",
+                    *sorted(M5_FOUNDATION_C0_DOCS),
+                ]
+            ),
+            "FOUNDATION_BUDGET_C0_DOCS_IMMUTABLE",
+        )
     if configuration and event["event"] == "pull_request":
         require(event["base_sha"] == base, "CONFIGURATION_EVENT_BASE")
     if portfolio:
@@ -1476,7 +1559,9 @@ def admit_source(evidence):
         "tests/test_native_context_db_runner.py",
         "tests/test_m2_3_schema_postgres.py",
     }
-    if portfolio:
+    if foundation_budget:
+        allowed = M5_FOUNDATION_PATHS
+    elif portfolio:
         allowed = M5_PORTFOLIO_PATHS
     elif search:
         allowed = M5_SEARCH_PATHS
@@ -2042,7 +2127,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            portfolio_event(event)
+            foundation_budget_event(event)
+            or portfolio_event(event)
             or search_event(event)
             or capability_event(event)
             or knowledge_event(event)
@@ -2066,22 +2152,27 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    portfolio = portfolio_event(event)
-    search = not portfolio and search_event(event)
-    capability = not (portfolio or search) and capability_event(event)
-    knowledge = not (portfolio or search or capability) and knowledge_event(event)
-    configuration = not (portfolio or search or capability or knowledge) and configuration_event(
+    foundation_budget = foundation_budget_event(event)
+    portfolio = not foundation_budget and portfolio_event(event)
+    search = not (foundation_budget or portfolio) and search_event(event)
+    capability = not (foundation_budget or portfolio or search) and capability_event(event)
+    knowledge = not (foundation_budget or portfolio or search or capability) and knowledge_event(
         event
     )
+    configuration = not (
+        foundation_budget or portfolio or search or capability or knowledge
+    ) and configuration_event(event)
     require(
         sql_test_budget_seconds == 600
         or sql_test_budget_seconds == 900
         and mode == "runtime"
-        and (portfolio or search or knowledge or capability),
+        and (foundation_budget or portfolio or search or knowledge or capability),
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
+        (M5_FOUNDATION_BASE, M5_FOUNDATION_TREE)
+        if foundation_budget
+        else (M5_PORTFOLIO_BASE, M5_PORTFOLIO_TREE)
         if portfolio
         else (M5_SEARCH_BASE, M5_SEARCH_TREE)
         if search
@@ -2110,6 +2201,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M5_FOUNDATION_BRANCH
+            if foundation_budget
             else M5_PORTFOLIO_BRANCH
             if portfolio
             else M5_SEARCH_BRANCH
