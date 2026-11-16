@@ -240,6 +240,49 @@ UNKNOWN/NOT_PROVEN/holds, receiver ACK/fence и полный live HUMAN/Resume
   Polza/Vision/embedding transports и остальные paths закрыты.
   Foundation 60 min, browser 900s, runtime SQL 900s и прежние 600s сохраняются.
 
+### Контракт C1 до SQL — 2026-11-16
+
+Checkout assignment `c0b0800341ff6cf7b6d79a5012696f47ea717f64`, tree
+`45c858d34d4098384b5f9e393af48e40e80b568e`, sole parent exact application base;
+initial diff содержит только пять выданных docs. Подтверждён свободный слот
+**0023/down_revision 0022**; predecessors неизменны.
+
+- Tattoo v1 связывается с published service id и точным набором field ids
+  `idea/placement/approximate_size/style/references`; последний optional.
+  Кнопка применяет template только к draft, публикация остаётся явной.
+- `conversation_v7/conversation_result_v3`: закрытые candidate facts с field,
+  value, client-stated/observed, source message/material digest, exact quote,
+  optional exact analysis id/hash; один reply/handoff/no_reply/photo result.
+  Сервер проверяет scope/source/currentness и выбирает missing/conflict/handoff;
+  owner-confirmed устанавливает только отдельная owner CAS-команда.
+- Projection pin: Workspace/Business/Client/Conversation, service/release и
+  activation, template revision, control generation и current context version.
+  Cache facts повторно фильтруются по current material/analysis на каждом read
+  и runtime boundary. Изменённые/удалённые источники не восстанавливаются.
+- Новые таблицы: `platform.intake_state` (одна bounded projection разговора),
+  `platform.duration_cases` (owner-only cases с version/confirmation actor),
+  `platform.intake_receipts` (owner idempotency/audit snapshots),
+  `platform.intake_escalation_links` (typed escalation/conversation + summary pin).
+  Typed composite Workspace/Business/Client/Conversation, actor и exact asset
+  version FK; FORCE RLS, runtime получает только узкие function capabilities.
+- Owner API: current summary, field correct/confirm, create/edit/confirm/revoke
+  DurationCase и bounded confirmed-case search. Session/CSRF/key/version;
+  ACCESS_DENIED/NOT_FOUND/INVALID_INPUT/STALE_STATE/IDEMPOTENCY_KEY_CONFLICT/
+  UNAVAILABLE. Confirmation привязано к конкретному полю/источнику/версии.
+- DurationCase: description, optional business asset/version, dimensions,
+  placement/style/detail/fill/provider, working/occupied minutes, отдельные
+  setup/stencil/break/cleanup и treatment, sessions и explanation. Null unknown;
+  никакой оценки, усреднения или включения времени/notes в client context.
+- Action Center сохраняет legacy storage/control/replay, а новая закрытая
+  owner projection добавляет проверенные summary/source links и один вопрос.
+  Stale link запрещает resolve; free-text resolve не подтверждает intake fields.
+  Все AI writes и delivery используют текущие claim/native/control guards;
+  v7 требует отдельный finite synthetic TEST profile, default OFF.
+
+Checkpoint C1: контракт, первая связная реализация, 0023 upgrade/unused
+downgrade/reupgrade и 19 targeted unit PASS. Полная готовность **UNVERIFIED**;
+owner/runtime/browser/CI проверки продолжаются. PR и ручной CI ещё не создавались.
+
 ### Критерии готовности и возврат
 
 1. Targeted unit/schema tests и actual PostgreSQL на используемых операциях:

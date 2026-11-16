@@ -28,6 +28,7 @@ from asm.portfolio.errors import PortfolioError
 if TYPE_CHECKING:
     from asm.ai.provider_runtime import ProviderRuntime
     from asm.ai.runtime import (
+        IntakeSyntheticRuntime,
         PortfolioDeliverySyntheticRuntime,
         PortfolioSyntheticRuntime,
         SyntheticRuntime,
@@ -46,7 +47,7 @@ class Worker:
         deadline: float = 10,
         files: "FetchTransfer | None" = None,
         telegram: "TelegramClient | None" = None,
-        ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime | None" = None,
+        ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | IntakeSyntheticRuntime | ProviderRuntime | None" = None,
         portfolio_delivery: PortfolioDelivery | None = None,
     ) -> None:
         if not 0 < deadline < 30:
@@ -402,7 +403,7 @@ async def run(
     cleanup: "CleanupSweep | None" = None,
     portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime | None" = None,
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | IntakeSyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     if role == "worker" and ai is not None:
         async with asyncio.TaskGroup() as group:
@@ -437,7 +438,7 @@ async def _run_ai(
     database: MessagingDatabase,
     adapter: ControlledAdapter,
     stop: asyncio.Event,
-    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime",
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | IntakeSyntheticRuntime | ProviderRuntime",
 ) -> None:
     worker = Worker(database, adapter, ai=ai)
     while not stop.is_set():
@@ -465,7 +466,7 @@ async def _run(
     cleanup: "CleanupSweep | None" = None,
     portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime | None" = None,
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | IntakeSyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     worker = Worker(database, adapter, files=files, telegram=telegram, ai=ai)
     while not stop.is_set():

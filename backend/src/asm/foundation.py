@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from asm.ai.fake import FakeAdapter
     from asm.ai.runtime import SyntheticRuntime
     from asm.ai.runtime_settings import (
+        IntakeRuntimeSettings,
         PortfolioDeliveryRuntimeSettings,
         PortfolioRuntimeSettings,
         RuntimeSettings,
@@ -54,9 +55,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0022"
-NATIVE_CONTEXT_PROFILE_SHA256 = "5e4191f74a2eba509085072acc5d4fc62366207d4b434a33a770d504273a2bc7"
-NATIVE_PROFILE_BODY_SHA256 = "499d3b25887b3dd50f0a2f8f7e7b324d8cca226a270a3dd99e5506e376733bf0"
+DATABASE_SCHEMA_REVISION = "0023"
+NATIVE_CONTEXT_PROFILE_SHA256 = "3839fe9d8439635e2cbedf83c52b3020ae66a8e1194954736a701f0ced3872e2"
+NATIVE_PROFILE_BODY_SHA256 = "aa03bf5e007bdaff4d337fee80936c7bb58b2655883df0fcf1f787c9f39157bd"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -93,7 +94,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.portfolio_delivery_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.intake_schema_profile()')
             """)
             )
         )
@@ -287,6 +288,7 @@ def create_app(
     from asm.conversations.native_context_http import install_native_context
     from asm.files.config import StorageSettings
     from asm.files.storage import S3ObjectStorage
+    from asm.intake.http import install_intake
     from asm.knowledge.http import install_knowledge
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.http import install_messaging
@@ -368,6 +370,7 @@ def create_app(
     install_auth(app, auth, config)
     install_billing(app, auth, config)
     install_configuration(app, auth, config)
+    install_intake(app, auth, config)
     install_knowledge(app, auth, config, embeddings=knowledge_embeddings)
     app.state.portfolio_service = portfolio
     install_portfolio(app, portfolio, config)
@@ -403,6 +406,7 @@ def create_worker(
     ai_embeddings: "EmbeddingClient | None" = None,
     portfolio_settings: "PortfolioRuntimeSettings | None" = None,
     portfolio_delivery_settings: "PortfolioDeliveryRuntimeSettings | None" = None,
+    intake_settings: "IntakeRuntimeSettings | None" = None,
     portfolio_storage: "PrivatePhotoStorage | None" = None,
     provider_settings: "RuntimeSettings | None" = None,
     provider_key_file: Path | None = None,
@@ -411,6 +415,7 @@ def create_worker(
     """Explicit synthetic application entry. Default composition has AI disabled."""
     from asm.ai.provider_runtime import ProviderRuntime
     from asm.ai.runtime import (
+        IntakeSyntheticRuntime,
         PortfolioDeliverySyntheticRuntime,
         PortfolioSyntheticRuntime,
         SyntheticRuntime,
@@ -423,6 +428,7 @@ def create_worker(
         if (
             portfolio_settings is not None
             or portfolio_delivery_settings is not None
+            or intake_settings is not None
             or portfolio_storage is not None
             or ai_embeddings is not None
             or ai_config is not None
@@ -446,6 +452,28 @@ def create_worker(
         )
     if provider_key_file is not None or provider_transport is not None:
         raise MessagingError(Code.INVALID_INPUT)
+    if intake_settings is not None:
+        if (
+            portfolio_settings is not None
+            or portfolio_delivery_settings is not None
+            or ai_config is not None
+            or model is None
+            or portfolio_storage is None
+        ):
+            raise MessagingError(Code.INVALID_INPUT)
+        return Worker(
+            database,
+            adapter,
+            ai=IntakeSyntheticRuntime(
+                database,
+                intake_settings,
+                model,
+                environment=environment,
+                telegram=ai_telegram,
+                embeddings=ai_embeddings,
+            ),
+            portfolio_delivery=PortfolioDelivery(database, portfolio_storage),
+        )
     if portfolio_delivery_settings is not None:
         if (
             portfolio_settings is not None

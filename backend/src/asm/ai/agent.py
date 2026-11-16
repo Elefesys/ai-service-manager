@@ -32,10 +32,12 @@ from asm.ai.contracts import (
     Budget,
     ConversationResult,
     ConversationResultV2,
+    ConversationResultV3,
     Cost,
     ErrorCode,
     GatewayRequest,
     Handoff,
+    IntakeGatewayConfig,
     PortfolioDeliveryGatewayConfig,
     ReadTool,
     ToolResult,
@@ -150,7 +152,11 @@ class PortfolioDeliveryAgentOutcome(_AgentOutcome[ConversationResultV2]):
     """Explicit v6 candidate, still without send authority."""
 
 
-AnyAgentOutcome = AgentOutcome | PortfolioDeliveryAgentOutcome
+class IntakeAgentOutcome(_AgentOutcome[ConversationResultV3]):
+    """Server-checked candidate, still without mutation authority."""
+
+
+AnyAgentOutcome = AgentOutcome | PortfolioDeliveryAgentOutcome | IntakeAgentOutcome
 
 
 class AuthorityFailure(Exception):
@@ -206,7 +212,9 @@ class ConversationAgent:
             )
         )
         model = (
-            PortfolioDeliveryAgentOutcome
+            IntakeAgentOutcome
+            if isinstance(self.config, IntakeGatewayConfig)
+            else PortfolioDeliveryAgentOutcome
             if isinstance(self.config, PortfolioDeliveryGatewayConfig)
             else AgentOutcome
         )

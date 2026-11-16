@@ -14,6 +14,7 @@ from asm.ai.contracts import (
     DTO,
     AnyGatewayConfig,
     GatewayConfig,
+    IntakeGatewayConfig,
     KnowledgeGatewayConfig,
     Limits,
     Money,
@@ -199,3 +200,34 @@ class PortfolioDeliveryRuntimeSettings(DTO):
     def current(self) -> None:
         if not 0 < (self.expires_at - datetime.now(UTC)).total_seconds() <= 900:
             raise ValueError("PORTFOLIO_SESSION_EXPIRED")
+
+
+class IntakeRuntimeSettings(DTO):
+    """New synthetic photo-profile anchor; previous image/text sessions stay closed."""
+
+    session_id: UUID
+    workspace_id: UUID
+    business_id: UUID
+    client_id: UUID
+    conversation_id: UUID
+    data_profile: Literal["SYNTHETIC_INTAKE_V1"]
+    expires_at: datetime
+    max_calls: int = Field(ge=1, le=4)
+    max_cost: Money
+    config: IntakeGatewayConfig
+
+    @model_validator(mode="after")
+    def finite(self) -> Self:
+        if (
+            self.expires_at.tzinfo is None
+            or self.expires_at.utcoffset() is None
+            or not Decimal(0) < self.max_cost <= Decimal(10)
+            or self.config.limits.cost_budget > self.max_cost
+            or self.config.limits.model_calls > self.max_calls
+        ):
+            raise ValueError("INTAKE_ADMISSION_INVALID")
+        return self
+
+    def current(self) -> None:
+        if not 0 < (self.expires_at - datetime.now(UTC)).total_seconds() <= 900:
+            raise ValueError("INTAKE_SESSION_EXPIRED")

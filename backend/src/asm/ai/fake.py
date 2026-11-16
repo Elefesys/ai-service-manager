@@ -66,7 +66,11 @@ class FakeAdapter:
             token_limits=True,
             deadline=True,
             bounded_output=True,
-            schema_revisions=("conversation_result_v1", "conversation_result_v2"),
+            schema_revisions=(
+                "conversation_result_v1",
+                "conversation_result_v2",
+                "conversation_result_v3",
+            ),
             max_input_tokens=131072,
             max_output_tokens=8192,
         )
@@ -124,4 +128,18 @@ class FakeAdapter:
             output = '"' + "x" * 40000 + '"'
         if scenario == "unknown_cost":
             usage, cost = Usage(), Cost()
+        if request.config.prompt_revision == "conversation_v7" and scenario not in {
+            "invalid",
+            "oversize",
+        }:
+            import json
+
+            value = json.loads(output)
+            value["intake"] = {
+                "service_id": None,
+                "category": "FAQ_ONLY",
+                "switch_request": False,
+                "facts": [],
+            }
+            output = json.dumps(value, ensure_ascii=False)
         return AdapterResponse(kind="OUTPUT", output_json=output, usage=usage, cost=cost)

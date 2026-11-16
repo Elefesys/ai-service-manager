@@ -107,3 +107,8 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .portfolio-matches { padding-left: 1.5rem; }
 .portfolio-matches > li { border-bottom: 1px solid #d8dee8; padding-block: .7rem; }
 @media (max-width: 720px) { .portfolio-grid { grid-template-columns: minmax(0, 1fr); } .portfolio-reference .billing-heading { flex-direction: column; } .portfolio .control-actions > button { flex: 1 1 100%; } }
+
+.intake-card { border:1px solid var(--border, #d9dce1); border-radius:12px; padding:1rem; margin:1rem 0; }
+.intake-card article, .duration-cases article { padding:.75rem 0; border-bottom:1px solid #d9dce1; overflow-wrap:anywhere; }
+.case-measurements { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.75rem; }
+.intake-card input, .duration-cases input, .duration-cases select { max-width:100%; min-width:0; }

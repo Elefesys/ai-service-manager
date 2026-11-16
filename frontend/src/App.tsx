@@ -2,6 +2,8 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, Business, Session } from './api';
 import { BillingPanel } from './BillingPanel';
 import { ConfigurationPanel } from './ConfigurationPanel';
+import { IntakePanel } from './IntakePanel';
+import { DurationCasesPanel } from './DurationCasesPanel';
 import { ReferencePortfolio } from './PortfolioPanel';
 import { MessagingPanel } from './MessagingPanel';
 import { EscalationsPanel } from './EscalationsPanel';
@@ -172,7 +174,8 @@ function Console() {
     <ConfigurationPanel session={ownerSession} workspace={workspace} business={selected} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
     <BillingPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
     <EscalationsPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} accepted={setOwnerDecision} />
-    <MessagingPanel portfolio={(context,canAnalyse,refresh)=><ReferencePortfolio session={ownerSession} workspace={workspace} context={context} canAnalyse={canAnalyse} refresh={refresh} recover={()=>void checkSession(true)} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner}/>} session={ownerSession} workspace={workspace} ownerDecision={ownerDecision} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
+    <DurationCasesPanel session={ownerSession} scope={selected?{workspace,business:selected.id}:null} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} />
+    <MessagingPanel portfolio={(context,canAnalyse,refresh)=><><IntakePanel session={ownerSession} scope={context?{workspace,business:context.business_id,conversation:context.conversation_id,client:context.client_id}:null} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} /><ReferencePortfolio session={ownerSession} workspace={workspace} context={context} canAnalyse={canAnalyse} refresh={refresh} recover={()=>void checkSession(true)} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner}/></>} session={ownerSession} workspace={workspace} ownerDecision={ownerDecision} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
   </Shell>;
 }
 

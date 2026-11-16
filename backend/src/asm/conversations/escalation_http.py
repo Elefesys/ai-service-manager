@@ -12,13 +12,13 @@ from asm.auth.http import mutation_token, required_cookie
 from asm.auth.service import AuthService
 from asm.billing.validation import KEY_PATTERN, CanonicalUUID, decode_cursor
 from asm.conversations.escalation_http_models import (
+    AnyEscalationView,
     EscalationCancelRequest,
     EscalationCommandResponse,
     EscalationCursor,
     EscalationErrorResponse,
     EscalationPage,
     EscalationResolveRequest,
-    EscalationView,
     Operation,
     StatusFilter,
 )
@@ -115,10 +115,10 @@ def install_escalations(app: FastAPI, auth: AuthService, settings: AuthSettings)
             required_cookie(request, settings), UUID(workspace_id), limit, status, cursor
         )
 
-    @router.get("/{workspace_id}/escalations/{escalation_id}", response_model=EscalationView)
+    @router.get("/{workspace_id}/escalations/{escalation_id}", response_model=AnyEscalationView)
     async def read(
         request: Request, workspace_id: CanonicalUUID, escalation_id: CanonicalUUID
-    ) -> EscalationView:
+    ) -> AnyEscalationView:
         no_query(request)
         return await service.read(
             required_cookie(request, settings), UUID(workspace_id), UUID(escalation_id)

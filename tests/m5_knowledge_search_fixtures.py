@@ -411,7 +411,7 @@ async def search_pg(seeded, tmp_path):
         kernel=MessagingDatabase(runtime.engine, environment="TEST"),
         adapter=ControlledAdapter(environment="TEST", ledger=tmp_path / "search-effects.jsonl"),
         source_tree=test_tree(),
-        schema_revision="0022",
+        schema_revision="0023",
     )
     try:
         async with migrator.begin() as c:

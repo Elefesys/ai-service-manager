@@ -590,7 +590,7 @@ async def native_catalog_profile(
         runner.compare_roles(roles, memberships, owned)
         stage = "CATALOG_DECLARED_PROFILE"
         declared = (
-            await connection.execute(text("SELECT platform.portfolio_delivery_schema_profile()"))
+            await connection.execute(text("SELECT platform.intake_schema_profile()"))
         ).scalar_one()
         if (
             declared != {"schema_revision": "0022", "valid": True, "profile_sha256": digest}

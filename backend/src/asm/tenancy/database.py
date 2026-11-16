@@ -139,6 +139,38 @@ class TenantUnitOfWork:
             self._failed = True
             raise
 
+    async def intake_owner(
+        self,
+        business: UUID,
+        conversation: UUID | None,
+        operation: str,
+        key: str,
+        body: dict[str, object],
+    ) -> Any:
+        from asm.intake.errors import database_error
+        from asm.messaging.database import physical_transaction
+
+        self._assert_active()
+        try:
+            await physical_transaction(self._connection)
+            return (
+                await self._connection.execute(
+                    text(
+                        "SELECT platform.intake_owner(:business,:conversation,:operation,:key,CAST(:body AS jsonb))"
+                    ),
+                    {
+                        "business": business,
+                        "conversation": conversation,
+                        "operation": operation,
+                        "key": key,
+                        "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+                    },
+                )
+            ).scalar_one()
+        except DBAPIError as error:
+            self._failed = True
+            raise database_error(error) from None
+
     async def configuration_owner_read(self, business: UUID) -> Any:
         return await self._configuration_execute(
             "SELECT platform.configuration_owner_read(:business)", {"business": business}
