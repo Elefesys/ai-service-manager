@@ -22,8 +22,9 @@ from asm.ai.portfolio_delivery import (
     PortfolioDeliveryConversationAgent,
     PreparedPortfolioDeliveryContext,
 )
-from asm.intake.models import Fact, IntakeProjection, SourceMessage
+from asm.intake.models import CandidateSet, Fact, IntakeProjection, SourceMessage
 from asm.intake.projection import COMPLETE_TEXT, reduce_candidates
+from asm.intake.templates import template_revision
 
 
 class ClientIntakeView(DTO):
@@ -91,11 +92,49 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                 reason, candidate = "INVALID_OUTPUT", None
             else:
                 try:
+                    proposed = candidate.intake
+                    service = (
+                        next(
+                            (
+                                s
+                                for s in self.active.bundle.services
+                                if s.active and s.id == proposed.service_id
+                            ),
+                            None,
+                        )
+                        if self.active.bundle
+                        else None
+                    )
+                    if proposed.service_id is not None and service is None:
+                        raise ValueError("Service is not published")
+                    if self.search.status == "CONFLICT" or (
+                        service is None and proposed.category == "NEW_TATTOO"
+                    ):
+                        proposed = CandidateSet(
+                            service_id=proposed.service_id,
+                            category="OTHER_COMPLEX",
+                            switch_request=proposed.switch_request,
+                            facts=(),
+                        )
+                    if proposed.facts and (service is None or not template_revision(service)):
+                        # Unbound fields cannot be persisted under an arbitrary old service.
+                        proposed = proposed.model_copy(update={"facts": ()})
+                    candidate = candidate.model_copy(update={"intake": proposed})
+                    if any(
+                        f.status == "observed"
+                        and (
+                            f.source.message_id != str(self.media_pin.message_id)
+                            or f.source.analysis_id != str(self.media_pin.analysis_id)
+                            or f.source.analysis_sha256 != self.media_pin.analysis_sha256
+                        )
+                        for f in candidate.intake.facts
+                    ):
+                        raise ValueError("Observation source does not match current analysis")
                     _, state, question = reduce_candidates(
                         self.intake, candidate.intake, self.active
                     )
                     body = candidate.model_dump(mode="json")
-                    if state == "OWNER_HANDOFF":
+                    if state == "OWNER_HANDOFF" and candidate.intake.category != "FAQ_ONLY":
                         body = {
                             "kind": "handoff",
                             "text": None,

@@ -2978,7 +2978,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0022"),
+            source_catalog(ROOT, "0023"),
         )
 
     def persist_partition(self, work):
@@ -3162,7 +3162,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0022"
+            and source["expected_revision"] == "0023"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

@@ -283,6 +283,33 @@ Checkpoint C1: контракт, первая связная реализаци�
 downgrade/reupgrade и 19 targeted unit PASS. Полная готовность **UNVERIFIED**;
 owner/runtime/browser/CI проверки продолжаются. PR и ручной CI ещё не создавались.
 
+### Возврат C1 — BLOCKED_SCOPE / LOCAL evidence, без приёмки C0
+
+Реализованы закрытая v7/v3 synthetic ветвь, source-backed intake, owner CAS,
+новая Action Center projection, owner-only DurationCase, UI и migration 0023.
+0001–0022 и четыре C0 docs после assignment неизменны. Ни live, ни paid запусков.
+
+- Actual PG18: fresh upgrade 0001→0023, unused downgrade/reupgrade, used refusal;
+  45 combined tests PASS (включая M1 initializer cases), 15 прежних photo/guard/
+  UNKNOWN cases PASS с controlled bytes, без утверждения actual S3.
+- Независимый catalog: 318 functions / 73 tables / 1060 columns, profile valid.
+  Full SHA256 `8ad79d23fbd456904c785e672d6dd0860064cd0a39064b9472b96b795e85102f`.
+- Frontend 541 PASS, TypeScript/mypy/ruff PASS; 28 targeted intake/schema unit,
+  69 source-admission/count cases и 430 current foundation cases PASS.
+- Полный local unit: 4747 PASS + 161 subtests, 10 FAIL. Девять current-journal
+  failures исправлены и перепроверены в 430 PASS; остался endpoint inventory ниже.
+- Finite input/real owner HTTP/worker journey PASS, 1 call/1 effect для clarify,
+  1 call/0 effects для handoff. Chromium desktop/narrow не стартовал: socket EPERM;
+  настоящий browser PASS не заявлен. Journey добавлен для штатного browser CI.
+- **Нужен один дополнительный path `tests/test_auth_contract.py`:** добавить ровно
+  шесть новых intake endpoints в существующую equality-проверку. Frozen auth.v1,
+  guards и OpenAPI equality сохраняются. Готовый diff: +10 строк, проба diff PASS;
+  сам закрытый файл не изменялся. Не заменять inventory фильтром/skip/extra=allow.
+
+Ветка остаётся на единственном UNVERIFIED checkpoint; финальная реализация
+подготовлена отдельным review commit без продвижения ref. Draft PR и полный CI
+ожидают узкого C0 scope amendment. Статус не READY/VERIFIED; M5.3B/M6 не начинались.
+
 ### Критерии готовности и возврат
 
 1. Targeted unit/schema tests и actual PostgreSQL на используемых операциях:

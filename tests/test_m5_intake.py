@@ -111,3 +111,20 @@ def test_observation_remains_unconfirmed_and_unscaled_image_cannot_establish_siz
     bad = observed.model_copy(update={"field": "approximate_size", "value": "8 см"})
     with pytest.raises(ValueError):
         reduce_candidates(projection(), value.model_copy(update={"facts": (bad,)}), active())
+
+
+def test_repeated_candidate_cannot_remove_owner_confirmation_or_clear_conflict():
+    facts, _, _ = reduce_candidates(projection(), candidates(), active())
+    confirmed = facts[0].model_copy(update={"status": "owner-confirmed", "confirmed_by": OWNER})
+    current = projection().model_copy(update={"service_id": "consultation", "facts": [confirmed]})
+    repeated, _, _ = reduce_candidates(current, candidates(), active())
+    assert repeated == [confirmed]
+    conflict = confirmed.model_copy(update={"conflict": True})
+    current = current.model_copy(update={"facts": [conflict]})
+    repeated, state, _ = reduce_candidates(current, candidates(), active())
+    assert repeated == [conflict] and state == "CLARIFY"
+
+
+def test_facts_without_published_service_are_schema_rejected():
+    with pytest.raises(ValidationError):
+        candidates(service_id=None)

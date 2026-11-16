@@ -29,6 +29,6 @@ class IntakeError(Exception):
 
 def database_error(error: DBAPIError) -> IntakeError:
     primary = getattr(getattr(error.orig, "diag", None), "message_primary", None)
-    if getattr(error.orig, "sqlstate", "") == "P3001" and primary in set(IntakeCode):
+    if getattr(error.orig, "sqlstate", "") in {"P3001", "P2801"} and primary in set(IntakeCode):
         return IntakeError(IntakeCode(primary))
     return IntakeError(IntakeCode.UNAVAILABLE)

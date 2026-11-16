@@ -62,6 +62,10 @@ def reduce_candidates(
         ):
             raise ValueError("Unscaled image cannot establish dimensions or placement")
         old = facts.get(candidate.field)
+        if old is not None and old.value == candidate.value and old.source == candidate.source:
+            # Repeating evidence cannot remove the owner's confirmation or
+            # resolve an already recorded conflict.
+            continue
         if old is not None and old.value != candidate.value and not candidate.explicit_correction:
             facts[candidate.field] = old.model_copy(update={"conflict": True})
         else:

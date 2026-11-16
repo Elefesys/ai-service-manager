@@ -157,6 +157,10 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                     + ",".join(
                         (
                             *TABLES,
+                            "platform.intake_escalation_links",
+                            "platform.intake_receipts",
+                            "platform.duration_cases",
+                            "platform.intake_state",
                             "platform.ai_deliveries",
                             "platform.ai_provider_calls",
                             "platform.ai_provider_sessions",

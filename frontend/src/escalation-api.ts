@@ -21,7 +21,7 @@ export type LegacyEscalationView = {
   closure: { reason: ClosureReason; actor_user_account_id: string | null; completed_at: string } | null;
   context_hold: ContextHold | null; can_resolve: boolean; can_cancel: boolean;
 };
-export type IntakeEscalationView = Omit<LegacyEscalationView,'policy'|'question'> & {policy:'PRELIMINARY_INTAKE_OWNER_V1';question:string;summary:Intake|null;summary_current:boolean};
+export type IntakeEscalationView = Omit<LegacyEscalationView,'policy'|'question'|'validity'> & {policy:'PRELIMINARY_INTAKE_OWNER_V1';question:string;summary:Intake|null;summary_current:boolean;validity:LegacyEscalationView['validity']|'SOURCE_CHANGED'};
 export type EscalationView = LegacyEscalationView | IntakeEscalationView;
 export type EscalationPage = { items: EscalationView[]; next_cursor: string | null; observed_at: string };
 export type EscalationReceipt = { outcome: 'ACCEPTED' | 'REPLAY'; result: {
@@ -79,9 +79,10 @@ export function parseEscalation(value:unknown,workspace:string,expected?:Partial
  if(typeof value==='object'&&value!==null&&'policy' in value&&value.policy==='PRELIMINARY_INTAKE_OWNER_V1'){
   const raw=value as Record<string,unknown>,{summary,summary_current,...rest}=raw;
   if(typeof summary_current!=='boolean'||typeof rest.question!=='string'||!rest.question.trim()||[...rest.question].length>300||(summary!==null)!==summary_current||(!summary_current&&rest.can_resolve))invalid();
-  const legacy=parseLegacyEscalation({...rest,policy:'LOCAL_TEST_OWNER_WAIT_V1',question:'CONTROLLED ESCALATION TEST: требуется решение владельца.'},workspace,expected);
+  const sourceChanged=rest.validity==='SOURCE_CHANGED';if(sourceChanged&&(summary_current||rest.waiting!==null))invalid();
+  const legacy=parseLegacyEscalation({...rest,...(sourceChanged?{validity:'CURRENT',waiting:'WAITING_FOR_HUMAN'}:{}),policy:'LOCAL_TEST_OWNER_WAIT_V1',question:'CONTROLLED ESCALATION TEST: требуется решение владельца.'},workspace,expected);
   const checked=summary===null?null:parseIntake(summary,{workspace,business:String((summary as Record<string,unknown>).business_id),conversation:legacy.conversation_id,client:legacy.client_id});
-  return {...legacy,policy:'PRELIMINARY_INTAKE_OWNER_V1',question:rest.question as string,summary:checked,summary_current:summary_current as boolean};
+  return {...legacy,...(sourceChanged?{validity:'SOURCE_CHANGED' as const,waiting:null}:{}),policy:'PRELIMINARY_INTAKE_OWNER_V1',question:rest.question as string,summary:checked,summary_current:summary_current as boolean};
  }
  return parseLegacyEscalation(value,workspace,expected);
 }

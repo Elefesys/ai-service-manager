@@ -216,7 +216,7 @@ class PreparedPortfolioDeliveryRun(_PreparedRun):
 
 
 class PreparedIntakeRun(_PreparedRun):
-    """One explicit image-profile run; no older config/DTO gains image authority."""
+    """One explicit synthetic intake run, scoped independently of older DTOs."""
 
     config: IntakeGatewayConfig = Field(repr=False)
     knowledge_pin: KnowledgePin = Field(repr=False)
@@ -234,6 +234,17 @@ class PreparedIntakeRun(_PreparedRun):
 
     @model_validator(mode="after")
     def pinned_scope(self) -> Self:
+        if (
+            self.intake.workspace_id != str(self.binding.workspace_id)
+            or self.intake.business_id != str(self.binding.business_id)
+            or self.intake.conversation_id != str(self.binding.conversation_id)
+            or self.intake.client_id != str(self.binding.client_id)
+            or self.intake.release_id != self.active_projection.release_id
+            or self.intake.activation_version != self.active_projection.activation_version
+            or self.intake.control_generation != str(self.binding.control_generation)
+            or self.intake.context_version != str(self.binding.context_version)
+        ):
+            raise ValueError("INTAKE_SCOPE_MISMATCH")
         active, pin, search, portfolio = (
             self.active_projection,
             self.knowledge_pin,

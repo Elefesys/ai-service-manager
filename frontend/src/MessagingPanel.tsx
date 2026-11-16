@@ -275,7 +275,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {ownerDecision?.workspace===workspace&&ownerDecision.conversation===selected?.conversation_id&&ownerDecision.client===selected.client_id&&<p role="status" className="notice">По этому диалогу сохранено внутреннее решение владельца. Обновите сообщения и режим перед следующим действием; решение не является отправкой клиенту.</p>}
         {view.messages.busy && <p role="status">Загружаем сообщения…</p>}{view.messages.error && <p role="alert">{view.messages.error}</p>}
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}
-        <ol className="message-list">{view.messages.items?.map(m => <li key={m.message_id} data-testid={`message-${m.message_id}`}><article>
+        <ol className="message-list">{view.messages.items?.map(m => <li key={m.message_id} id={`message-${m.message_id}`} data-testid={`message-${m.message_id}`}><article>
           <strong>{m.direction === 'INBOUND' ? 'Входящее' : 'Исходящее'}</strong><time dateTime={m.occurred_at}>{m.occurred_at}</time>
           {m.current.changed && <p className="muted">Изменено</p>}
           {m.current.state === 'DELETED' && <p>Сообщение удалено.</p>}

@@ -19,6 +19,183 @@ import traceback
 from pathlib import Path
 from uuid import UUID
 
+# C0's exact M5.3A assignment; historical task routes remain unchanged.
+M5_INTAKE_BASE = "220606193208a1ef082732e4dfcdf1f2ffbea857"
+M5_INTAKE_TREE = "d15f9a75346ab881449010745cbe0216081b78cf"
+M5_INTAKE_ASSIGNMENT = "c0b0800341ff6cf7b6d79a5012696f47ea717f64"
+M5_INTAKE_ASSIGNMENT_TREE = "45c858d34d4098384b5f9e393af48e40e80b568e"
+M5_INTAKE_BRANCH = "c1/m5-3a-intake-duration-r1"
+M5_INTAKE_C0_DOCS = {
+    "AGENTS.md",
+    "README.md",
+    "docs/TASK_REGISTER.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+}
+M5_INTAKE_PATHS = {
+    "AGENTS.md",
+    "README.md",
+    "backend/src/asm/ai/agent.py",
+    "backend/src/asm/ai/context.py",
+    "backend/src/asm/ai/contracts.py",
+    "backend/src/asm/ai/database.py",
+    "backend/src/asm/ai/fake.py",
+    "backend/src/asm/ai/gateway.py",
+    "backend/src/asm/ai/intake.py",
+    "backend/src/asm/ai/knowledge.py",
+    "backend/src/asm/ai/portfolio.py",
+    "backend/src/asm/ai/portfolio_delivery.py",
+    "backend/src/asm/ai/prompts/conversation_v7.txt",
+    "backend/src/asm/ai/provider_runtime.py",
+    "backend/src/asm/ai/runtime.py",
+    "backend/src/asm/ai/runtime_contracts.py",
+    "backend/src/asm/ai/runtime_settings.py",
+    "backend/src/asm/ai/schemas/conversation_result_v3.json",
+    "backend/src/asm/ai/settings.py",
+    "backend/src/asm/billing/models.py",
+    "backend/src/asm/configuration/errors.py",
+    "backend/src/asm/configuration/http.py",
+    "backend/src/asm/configuration/models.py",
+    "backend/src/asm/configuration/permissions.py",
+    "backend/src/asm/configuration/repository.py",
+    "backend/src/asm/configuration/service.py",
+    "backend/src/asm/configuration/validation.py",
+    "backend/src/asm/conversations/escalation_http.py",
+    "backend/src/asm/conversations/escalation_http_models.py",
+    "backend/src/asm/conversations/escalations.py",
+    "backend/src/asm/conversations/guards.py",
+    "backend/src/asm/conversations/http_models.py",
+    "backend/src/asm/conversations/material.py",
+    "backend/src/asm/conversations/turns.py",
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/intake/__init__.py",
+    "backend/src/asm/intake/duration_cases.py",
+    "backend/src/asm/intake/errors.py",
+    "backend/src/asm/intake/http.py",
+    "backend/src/asm/intake/models.py",
+    "backend/src/asm/intake/projection.py",
+    "backend/src/asm/intake/repository.py",
+    "backend/src/asm/intake/service.py",
+    "backend/src/asm/intake/templates.py",
+    "backend/src/asm/intake/validation.py",
+    "backend/src/asm/messaging/database.py",
+    "backend/src/asm/messaging/errors.py",
+    "backend/src/asm/messaging/http.py",
+    "backend/src/asm/messaging/http_models.py",
+    "backend/src/asm/messaging/http_service.py",
+    "backend/src/asm/messaging/models.py",
+    "backend/src/asm/messaging/results.py",
+    "backend/src/asm/messaging/worker.py",
+    "backend/src/asm/portfolio/errors.py",
+    "backend/src/asm/portfolio/http.py",
+    "backend/src/asm/portfolio/models.py",
+    "backend/src/asm/portfolio/repository.py",
+    "backend/src/asm/portfolio/service.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "docs/TASK_REGISTER.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+    "docs/tasks/M5_HANDOFF.md",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/e2e/messaging.spec.ts",
+    "frontend/e2e/portfolio-delivery.spec.ts",
+    "frontend/e2e/portfolio.spec.ts",
+    "frontend/src/App.test.tsx",
+    "frontend/src/App.tsx",
+    "frontend/src/ConfigurationPanel.test.tsx",
+    "frontend/src/ConfigurationPanel.tsx",
+    "frontend/src/DurationCasesPanel.test.tsx",
+    "frontend/src/DurationCasesPanel.tsx",
+    "frontend/src/EscalationsPanel.test.tsx",
+    "frontend/src/EscalationsPanel.tsx",
+    "frontend/src/IntakePanel.test.tsx",
+    "frontend/src/IntakePanel.tsx",
+    "frontend/src/MessagingPanel.test.tsx",
+    "frontend/src/MessagingPanel.tsx",
+    "frontend/src/PortfolioPanel.test.tsx",
+    "frontend/src/PortfolioPanel.tsx",
+    "frontend/src/configuration-api.test.ts",
+    "frontend/src/configuration-api.ts",
+    "frontend/src/configuration-fixtures.test-helper.ts",
+    "frontend/src/escalation-api.test.ts",
+    "frontend/src/escalation-api.ts",
+    "frontend/src/escalation-fixtures.test-helper.ts",
+    "frontend/src/intake-api.test.ts",
+    "frontend/src/intake-api.ts",
+    "frontend/src/intake-fixtures.test-helper.ts",
+    "frontend/src/messaging-api.test.ts",
+    "frontend/src/messaging-api.ts",
+    "frontend/src/messaging-fixtures.test-helper.ts",
+    "frontend/src/portfolio-api.test.ts",
+    "frontend/src/portfolio-api.ts",
+    "frontend/src/portfolio-fixtures.test-helper.ts",
+    "frontend/src/style.css",
+    "migrations/versions/0023_intake_duration.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/fixtures/businesses.v1.json",
+    "tests/generic_pg_schema.py",
+    "tests/m5_configuration_fixtures.py",
+    "tests/m5_intake_fixtures.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_delivery_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations.py",
+    "tests/test_m3_2_escalations_api_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m3_2_escalations_postgres.py",
+    "tests/test_m4_agent.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_gateway.py",
+    "tests/test_m4_gateway_failures.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_database.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration.py",
+    "tests/test_m5_configuration_api_postgres.py",
+    "tests/test_m5_configuration_migrations.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_duration_cases.py",
+    "tests/test_m5_duration_cases_postgres.py",
+    "tests/test_m5_intake.py",
+    "tests/test_m5_intake_api_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_postgres.py",
+    "tests/test_m5_intake_runtime.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_auth_boundary.py",
+    "tests/test_m5_portfolio_context.py",
+    "tests/test_m5_portfolio_delivery.py",
+    "tests/test_m5_portfolio_delivery_migrations.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m5_portfolio_migrations.py",
+    "tests/test_m5_portfolio_runtime.py",
+    "tests/test_m5_portfolio_runtime_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_migration.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
+
 BASE = "6851b8f1c12b50cf0051353f29a41cf89c94a280"
 BASE_TREE = "ffed6f5c7560d080baa672d50850c56eba4060ba"
 BRANCH = "c3/m4-precommit-rights-r1"
@@ -787,11 +964,19 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    intake = value.get("branch") == M5_INTAKE_BRANCH
     delivery = value.get("branch") == M5_DELIVERY_BRANCH
+    if intake:
+        keys.add("intake_assignment")
     if delivery:
         keys.add("scope_amendment")
         keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    if intake:
+        require(
+            value["intake_assignment"] == intake_assignment_proof(),
+            "SOURCE_IDENTITY_INTAKE_ASSIGNMENT",
+        )
     if delivery:
         require(
             type(value["scope_amendment"]) is dict
@@ -811,7 +996,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
+        (M5_INTAKE_BASE, M5_INTAKE_TREE)
+        if intake
+        else (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
         if delivery
         else (M5_FOUNDATION_BASE, M5_FOUNDATION_TREE)
         if foundation_budget
@@ -868,6 +1055,8 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
+            or intake
+            and value["event"] in {"pull_request", "push"}
             or delivery
             and value["event"] in {"pull_request", "push"}
             or foundation_budget
@@ -893,7 +1082,9 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if delivery:
+    if intake:
+        require(set(paths) <= M5_INTAKE_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif delivery:
         require(set(paths) <= M5_DELIVERY_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif foundation_budget:
         require(set(paths) <= M5_FOUNDATION_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -1336,6 +1527,98 @@ def root_path():
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
 
 
+def intake_assignment_proof():
+    return {
+        "sha": M5_INTAKE_ASSIGNMENT,
+        "tree": M5_INTAKE_ASSIGNMENT_TREE,
+        "parent": M5_INTAKE_BASE,
+        "paths": sorted(M5_INTAKE_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}),
+    }
+
+
+def intake_event(event):
+    if event.get("head_ref") == M5_INTAKE_BRANCH:
+        return True
+    if event["ref"] != "refs/heads/main":
+        return False
+    # A damaged assignment cannot silently fall back through an older main route.
+    for revision in (M5_INTAKE_BASE, M5_INTAKE_ASSIGNMENT):
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", revision, "HEAD"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        require(result.returncode in (0, 1, 128), "INTAKE_SOURCE_ANCESTRY")
+        if result.returncode == 0:
+            return True
+    return False
+
+
+def admit_intake_source(event, manifest, evidence):
+    require(event["attempt"] == "1", "RUN_ATTEMPT")
+    require(event["event"] in {"pull_request", "push"}, "INTAKE_EVENT")
+    if event["event"] == "pull_request":
+        require(event["base_sha"] == M5_INTAKE_BASE, "INTAKE_EVENT_BASE")
+    else:
+        require(event["ref"] == "refs/heads/main", "INTAKE_MAIN_ONLY")
+    require(
+        capture(["git", "rev-parse", M5_INTAKE_BASE + "^{tree}"]) == M5_INTAKE_TREE,
+        "INTAKE_BASE_TREE",
+    )
+    require(
+        capture(["git", "rev-parse", M5_INTAKE_ASSIGNMENT + "^{tree}"])
+        == M5_INTAKE_ASSIGNMENT_TREE,
+        "INTAKE_ASSIGNMENT_TREE",
+    )
+    require(
+        capture(["git", "rev-list", "--parents", "-n", "1", M5_INTAKE_ASSIGNMENT]).split()
+        == [M5_INTAKE_ASSIGNMENT, M5_INTAKE_BASE],
+        "INTAKE_ASSIGNMENT_PARENT",
+    )
+    require(
+        capture(["git", "merge-base", M5_INTAKE_ASSIGNMENT, "HEAD"]) == M5_INTAKE_ASSIGNMENT,
+        "INTAKE_ASSIGNMENT_ANCESTRY",
+    )
+    require(
+        capture(["git", "diff", "--name-only", M5_INTAKE_BASE, M5_INTAKE_ASSIGNMENT]).splitlines()
+        == intake_assignment_proof()["paths"],
+        "INTAKE_ASSIGNMENT_PATHS",
+    )
+    require(
+        not capture(
+            [
+                "git",
+                "diff",
+                "--name-only",
+                M5_INTAKE_ASSIGNMENT,
+                "HEAD",
+                "--",
+                *sorted(M5_INTAKE_C0_DOCS),
+            ]
+        ),
+        "INTAKE_C0_DOCS_IMMUTABLE",
+    )
+    paths = capture(["git", "diff", "--name-only", M5_INTAKE_BASE, "HEAD"]).splitlines()
+    require(bool(paths) and set(paths) <= M5_INTAKE_PATHS, "INTAKE_WRITE_SET")
+    require(
+        not capture(["git", "status", "--porcelain", "--untracked-files=all"]),
+        "INTAKE_CLEAN_SOURCE",
+    )
+    write(
+        evidence / "source-admission.json",
+        {
+            "base": M5_INTAKE_BASE,
+            "base_tree": M5_INTAKE_TREE,
+            "source": event["head"],
+            "tree": event["tree"],
+            "paths": paths,
+            "result": "PASS",
+            "intake_assignment": intake_assignment_proof(),
+        },
+    )
+    return event, manifest
+
+
 def delivery_event(event):
     if event.get("head_ref") == M5_DELIVERY_BRANCH:
         return True
@@ -1450,20 +1733,23 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    if intake_event(event):
+        return admit_intake_source(event, manifest, evidence)
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    delivery = delivery_event(event)
-    foundation_budget = not delivery and foundation_budget_event(event)
-    portfolio = not (delivery or foundation_budget) and portfolio_event(event)
-    search = not (delivery or foundation_budget or portfolio) and search_event(event)
-    capability = not (delivery or foundation_budget or portfolio or search) and capability_event(
-        event
-    )
+    intake = intake_event(event)
+    delivery = not intake and delivery_event(event)
+    foundation_budget = not (intake or delivery) and foundation_budget_event(event)
+    portfolio = not (intake or delivery or foundation_budget) and portfolio_event(event)
+    search = not (intake or delivery or foundation_budget or portfolio) and search_event(event)
+    capability = not (
+        intake or delivery or foundation_budget or portfolio or search
+    ) and capability_event(event)
     knowledge = not (
-        delivery or foundation_budget or portfolio or search or capability
+        intake or delivery or foundation_budget or portfolio or search or capability
     ) and knowledge_event(event)
     configuration = not (
-        delivery or foundation_budget or portfolio or search or capability or knowledge
+        intake or delivery or foundation_budget or portfolio or search or capability or knowledge
     ) and configuration_event(event)
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
@@ -1479,7 +1765,9 @@ def admit_source(evidence):
         "POLZA_RUNTIME_EVENT_BRANCH",
     )
     base, base_tree = (
-        (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
+        (M5_INTAKE_BASE, M5_INTAKE_TREE)
+        if intake
+        else (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
         if delivery
         else (M5_FOUNDATION_BASE, M5_FOUNDATION_TREE)
         if foundation_budget
@@ -1878,7 +2166,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.portfolio_delivery_schema_profile()"
+        "platform.intake_schema_profile()"
+        if revision == "0023"
+        else "platform.portfolio_delivery_schema_profile()"
         if revision == "0022"
         else "platform.portfolio_schema_profile()"
         if revision == "0021"
@@ -1898,6 +2188,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0022":
+        profile_pin = "5e4191f74a2eba509085072acc5d4fc62366207d4b434a33a770d504273a2bc7"
+        body_pin = "499d3b25887b3dd50f0a2f8f7e7b324d8cca226a270a3dd99e5506e376733bf0"
     if revision == "0019":
         profile_pin = "e2bfd685188e1b67430de02c03eb3cef3af8f13de74e13d641032085b3b23c36"
         body_pin = "93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5"
@@ -1957,13 +2250,14 @@ def stock_catalog():
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
         require(
-            revision in {"0013", "0017", "0018", "0019", "0020", "0021", "0022"}, "CATALOG_REVISION"
+            revision in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023"},
+            "CATALOG_REVISION",
         )
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision in {"0017", "0018", "0019", "0020", "0021", "0022"}:
+        if revision in {"0017", "0018", "0019", "0020", "0021", "0022", "0023"}:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -2010,7 +2304,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.portfolio_delivery_schema_profile()"
+            "platform.intake_schema_profile()"
+            if revision == "0023"
+            else "platform.portfolio_delivery_schema_profile()"
             if revision == "0022"
             else "platform.portfolio_schema_profile()"
             if revision == "0021"
@@ -2419,7 +2715,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            delivery_event(event)
+            intake_event(event)
+            or delivery_event(event)
             or foundation_budget_event(event)
             or portfolio_event(event)
             or search_event(event)
@@ -2445,28 +2742,39 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    delivery = delivery_event(event)
-    foundation_budget = not delivery and foundation_budget_event(event)
-    portfolio = not (delivery or foundation_budget) and portfolio_event(event)
-    search = not (delivery or foundation_budget or portfolio) and search_event(event)
-    capability = not (delivery or foundation_budget or portfolio or search) and capability_event(
-        event
-    )
+    intake = intake_event(event)
+    delivery = not intake and delivery_event(event)
+    foundation_budget = not (intake or delivery) and foundation_budget_event(event)
+    portfolio = not (intake or delivery or foundation_budget) and portfolio_event(event)
+    search = not (intake or delivery or foundation_budget or portfolio) and search_event(event)
+    capability = not (
+        intake or delivery or foundation_budget or portfolio or search
+    ) and capability_event(event)
     knowledge = not (
-        delivery or foundation_budget or portfolio or search or capability
+        intake or delivery or foundation_budget or portfolio or search or capability
     ) and knowledge_event(event)
     configuration = not (
-        delivery or foundation_budget or portfolio or search or capability or knowledge
+        intake or delivery or foundation_budget or portfolio or search or capability or knowledge
     ) and configuration_event(event)
     require(
         sql_test_budget_seconds == 600
         or sql_test_budget_seconds == 900
         and mode == "runtime"
-        and (delivery or foundation_budget or portfolio or search or knowledge or capability),
+        and (
+            intake
+            or delivery
+            or foundation_budget
+            or portfolio
+            or search
+            or knowledge
+            or capability
+        ),
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
+        (M5_INTAKE_BASE, M5_INTAKE_TREE)
+        if intake
+        else (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
         if delivery
         else (M5_FOUNDATION_BASE, M5_FOUNDATION_TREE)
         if foundation_budget
@@ -2499,6 +2807,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M5_INTAKE_BRANCH
+            if intake
             else M5_DELIVERY_BRANCH
             if delivery
             else M5_FOUNDATION_BRANCH
@@ -2518,6 +2828,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if intake:
+        source["intake_assignment"] = intake_assignment_proof()
     if delivery:
         source["scope_amendment"] = delivery_scope_amendment()
         source["scope_amendment_02"] = delivery_scope_amendment_02()
@@ -2678,7 +2990,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
             if module == "preflight":
-                current_revision = "0022" if delivery else "0021"
+                current_revision = "0023" if intake else "0022" if delivery else "0021"
                 sql_phase(
                     group,
                     "schema-" + current_revision,

@@ -49,6 +49,8 @@ class CandidateSet(ConfigurationModel):
             raise ValueError("Duplicate intake field")
         if self.category in ("FAQ_ONLY", "AMBIGUOUS") and self.facts:
             raise ValueError("Unresolved request cannot merge facts")
+        if self.service_id is None and self.facts:
+            raise ValueError("Facts require a published service")
         return self
 
 

@@ -4607,7 +4607,8 @@
               "CONTEXT_CHANGED",
               "ASSIGNEE_REVOKED",
               "EXPIRED",
-              "TERMINAL"
+              "TERMINAL",
+              "SOURCE_CHANGED"
             ],
             "title": "Validity",
             "type": "string"

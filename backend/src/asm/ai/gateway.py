@@ -330,6 +330,14 @@ class ModelGateway:
                 self._config, strict_json(response.output_json or "")
             )
             self._closed = True
+            if isinstance(self._config, IntakeGatewayConfig):
+                return IntakeGatewayResult(
+                    kind="FINAL",
+                    result=CONVERSATION_RESULT_V3.validate_python(result),
+                    budget=self._budget,
+                    usage=usage,
+                    cost=cost,
+                )
             if isinstance(self._config, PortfolioDeliveryGatewayConfig):
                 return PortfolioDeliveryGatewayResult(
                     kind="FINAL", result=result, budget=self._budget, usage=usage, cost=cost

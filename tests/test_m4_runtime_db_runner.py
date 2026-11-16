@@ -788,6 +788,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0020", "knowledge_search_schema_profile"),
         ("0021", "portfolio_schema_profile"),
         ("0022", "portfolio_delivery_schema_profile"),
+        ("0023", "intake_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -827,6 +828,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0020", "knowledge_search_schema_profile", 233, 232),
         ("0021", "portfolio_schema_profile", 289, 288),
         ("0022", "portfolio_delivery_schema_profile", 303, 302),
+        ("0023", "intake_schema_profile", 318, 317),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -836,7 +838,7 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
     predicate = {
         "functions": f"(SELECT count(*) FROM functions)={functions}",
         "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
-        "tables": f"(SELECT count(*) FROM tables)={69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
+        "tables": f"(SELECT count(*) FROM tables)={73 if revision == '0023' else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
     }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
@@ -862,8 +864,8 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
     profile_name = (
-        "platform.portfolio_delivery_schema_profile()"
-        if DATABASE_SCHEMA_REVISION == "0022"
+        "platform.intake_schema_profile()"
+        if DATABASE_SCHEMA_REVISION == "0023"
         else "platform.portfolio_schema_profile()"
     )
     if not body_matches:
@@ -3198,3 +3200,156 @@ def test_delivery_assignment_docs_are_immutable_after_assignment(r11_event, monk
     with pytest.raises(carrier.Refusal, match="DELIVERY_C0_DOCS_IMMUTABLE"):
         r["run"]()
     assert not r["boundary"]
+
+
+def prepare_m5_intake_event(r, monkeypatch, route, *, damage=None):
+    """Local constructed Git metadata exercises both sides of the source proof."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_INTAKE_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_INTAKE_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
+    if damage == "parent":
+        f.git("commit", "--allow-empty", "-qm", "unexpected pre-assignment commit")
+    for relative in sorted(carrier.M5_INTAKE_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# exact C0 intake assignment\n")
+    if damage == "assignment_application":
+        path = f.root / "backend/src/asm/ai/fake.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# forbidden assignment application change\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed intake assignment")
+    assignment = f.git("rev-parse", "HEAD")
+    monkeypatch.setattr(carrier, "M5_INTAKE_ASSIGNMENT", assignment)
+    monkeypatch.setattr(carrier, "M5_INTAKE_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    if damage == "missing_assignment":
+        f.git("checkout", "--detach", r["source"])
+    for relative in sorted(carrier.M5_INTAKE_PATHS - carrier.M5_INTAKE_C0_DOCS):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text((path.read_text() if path.exists() else "") + "\n# finite intake delta\n")
+    if damage == "adjacent":
+        path = f.root / "tests/test_auth_contract.py"
+        path.write_text("# scope omission cannot be silently widened\n")
+    if damage == "protected":
+        (f.root / "AGENTS.md").write_text("# forbidden rewrite\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed intake candidate")
+    return capability_checkout(
+        r, monkeypatch, route, f.git("rev-parse", "HEAD"), branch=carrier.M5_INTAKE_BRANCH
+    )
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "proof_sha",
+        "proof_tree",
+        "proof_parent",
+        "proof_paths",
+        "proof_extra",
+        "proof_type",
+        "proof_missing",
+        "base",
+        "branch",
+        "paths",
+        "tree",
+        "attempt",
+    ],
+)
+def test_intake_producer_consumer_proof_and_route_priority(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    merged = prepare_m5_intake_event(r, monkeypatch, route)
+    monkeypatch.setattr(carrier, "foundation_budget_event", lambda _: True)
+    r["run"]()
+    assert len(r["boundary"]) == 1
+    bound = r["boundary"][0]
+    assert bound["mode"] == "runtime" and bound["sql_test_budget_seconds"] == 900
+    admission = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert admission["base"] == carrier.M5_INTAKE_BASE
+    assert set(admission["paths"]) == carrier.M5_INTAKE_PATHS
+    assert admission["intake_assignment"] == carrier.intake_assignment_proof()
+    real_run = subprocess.run
+
+    class BeforeArchive(Exception):
+        pass
+
+    def before_archive(args, *positional, **keywords):
+        assert args[0] == "git", "credentials/resources accessed before source export"
+        if args[1] == "archive":
+            raise BeforeArchive
+        return real_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(subprocess, "run", before_archive)
+    with pytest.raises(BeforeArchive):
+        r["real_run_admitted"](
+            bound["root"],
+            bound["event"],
+            bound["manifest"],
+            bound["mode"],
+            sql_test_budget_seconds=900,
+        )
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    for name, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": proof["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + name, value)
+    if damage:
+        if damage.startswith("proof_"):
+            key = damage.removeprefix("proof_")
+            if key == "missing":
+                del proof["intake_assignment"]
+            elif key == "type":
+                proof["intake_assignment"] = "not-a-proof"
+            else:
+                proof["intake_assignment"][key] = (
+                    [] if key == "paths" else True if key == "extra" else "f" * 40
+                )
+        else:
+            proof[damage] = {
+                "base": "f" * 40,
+                "branch": carrier.M5_DELIVERY_BRANCH,
+                "paths": ["tests/test_auth_contract.py"],
+                "tree": "f" * 40,
+                "attempt": 2,
+            }[damage]
+        carrier.write(path, proof)
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    else:
+        assert carrier.source_tree_from_evidence(path) == proof["tree"]
+    assert not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "base_tree",
+        "assignment_tree",
+        "parent",
+        "assignment_application",
+        "missing_assignment",
+        "adjacent",
+        "protected",
+        "dirty",
+    ],
+)
+def test_intake_source_damage_refused_before_resources(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    prepare_m5_intake_event(r, monkeypatch, route, damage=damage)
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_INTAKE_TREE", "f" * 40)
+    elif damage == "assignment_tree":
+        monkeypatch.setattr(carrier, "M5_INTAKE_ASSIGNMENT_TREE", "f" * 40)
+    elif damage == "dirty":
+        (r["f"].root / "untracked.py").write_text("# dirty source\n")
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())

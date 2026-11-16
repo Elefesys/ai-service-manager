@@ -56,8 +56,8 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
 DATABASE_SCHEMA_REVISION = "0023"
-NATIVE_CONTEXT_PROFILE_SHA256 = "3839fe9d8439635e2cbedf83c52b3020ae66a8e1194954736a701f0ced3872e2"
-NATIVE_PROFILE_BODY_SHA256 = "aa03bf5e007bdaff4d337fee80936c7bb58b2655883df0fcf1f787c9f39157bd"
+NATIVE_CONTEXT_PROFILE_SHA256 = "8ad79d23fbd456904c785e672d6dd0860064cd0a39064b9472b96b795e85102f"
+NATIVE_PROFILE_BODY_SHA256 = "cc8f5aaf7a63dcaf14c7a7097e6a89a3b0adbd6893c740942d1fe0952bcabd0e"
 
 
 def schema_failure(stage: str, error: Exception) -> None:

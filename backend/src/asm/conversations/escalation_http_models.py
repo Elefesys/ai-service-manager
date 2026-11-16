@@ -176,7 +176,13 @@ class IntakeEscalationView(StrictModel):
     bound_context: EscalationBoundContext
     current_context: EscalationCurrentContext
     validity: Literal[
-        "CURRENT", "CONTROL_CHANGED", "CONTEXT_CHANGED", "ASSIGNEE_REVOKED", "EXPIRED", "TERMINAL"
+        "CURRENT",
+        "CONTROL_CHANGED",
+        "CONTEXT_CHANGED",
+        "ASSIGNEE_REVOKED",
+        "EXPIRED",
+        "TERMINAL",
+        "SOURCE_CHANGED",
     ]
     waiting: Literal["WAITING_FOR_HUMAN"] | None
     created_at: Timestamp
@@ -215,7 +221,7 @@ class IntakeEscalationView(StrictModel):
                 self.can_cancel
                 and (
                     not pending
-                    or self.validity not in ("CURRENT", "ASSIGNEE_REVOKED")
+                    or self.validity not in ("CURRENT", "ASSIGNEE_REVOKED", "SOURCE_CHANGED")
                     or self.observed_at >= self.expires_at
                 )
             )

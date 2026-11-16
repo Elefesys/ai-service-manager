@@ -190,7 +190,7 @@ async def ingress_projection(h, p, bot):
     # Frozen predecessor lanes still exercise their original writer directly.
     if (
         revision
-        in {"0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022"}
+        in {"0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023"}
         and "codec" not in p
     ):
         p = v2_fixture(p, bot)
