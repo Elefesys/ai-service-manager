@@ -2,40 +2,42 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.2C INTEGRATED / verification BLOCKED; CI fix IN_PROGRESS / 2026-11-16
+## CURRENT — M5.2C INTEGRATED / VERIFIED; M5.2D IN_PROGRESS / 2026-11-16
 
-PR #50 слит владельцем. Фактический main:
-`84ad8e4c954005801f115aa8e6c0c6f7edef40db`, tree `bf8992e20260e56f8d84884fc65fa3febcafc053`.
-Merge parents 7080486 + da2a6e6; tree совпадает с принятым C0 кандидатом.
-[Review C0](https://github.com/Elefesys/ai-service-manager/blob/c132213302daeeaa4f9309d6352841fe99d6da8e/docs/tasks/M5_HANDOFF.md#L803)
-и PR CI43791099844/12 SUCCESS остаются действительными в synthetic LOCAL/TEST.
+PR #51 слит владельцем. Accepted main:
+`8d98593bc739666176968c5d76b9c01a2a711686`, tree
+`a14ed9b69e3529ac060bc015b9a24dcea515ef9b`.
+Tree совпадает с reviewed head 4745766; merge parents 84ad8e4 + 4745766.
+[Post-merge CI43818223732](https://github.com/Elefesys/ai-service-manager/actions/runs/43818223732)
+— **12/12 SUCCESS, attempt 1**, без повторов.
+C0 сверил actual Git/source 438 и core/runtime evidence:
+4499 unit + 161 subtests, 1016 generic PG, все 14 backend phases,
+primary/cleanup 0; runtime 160/160 и 8 cleanups PASS. Foundation 37m36s.
+Подробности и ZIP hashes — в CURRENT M5_HANDOFF.
 
-[Post-merge CI43800096544](https://github.com/Elefesys/ai-service-manager/actions/runs/43800096544):
-attempt 1, 11 SUCCESS / foundation CANCELLED по общему лимиту 45 минут.
-4443 unit/161 subtests PASS; 966 из 1016 generic PG полностью PASS,
-один case прерван после setup, 49 не начаты. 9 actual S3 и 38 v5 PG PASS.
-Поздние foundation phases и cleanup не подтверждены. C0 сверил artifact,
-все 438 исходных файлов и complete per-case records достигнутого набора.
-Полный M5.2C VERIFIED после merge пока не заявляется.
+**M5.2C/PR50 и CI fix/PR51 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST.**
+[Review реализации](https://github.com/Elefesys/ai-service-manager/blob/c132213302daeeaa4f9309d6352841fe99d6da8e/docs/tasks/M5_HANDOFF.md#L803)
+и [review CI fix](https://github.com/Elefesys/ai-service-manager/blob/e027855477bbe8a2428d7c95ce45bc216fa24e5c/docs/tasks/M5_HANDOFF.md#L142)
+сохранены. Старый CI43800096544 остаётся CANCELLED.
+M5.1A–M5.2B сохраняют прежнюю приёмку; M5.2A functional capability —
+ASSISTED_SYNTHETIC. Общий live VERIFIED не заявляется.
 
-**Единственная активная задача — C4-M5.2C-FOUNDATION-BUDGET-R1, ведущий C4.**
-Новая ветка `c4/m5-2c-foundation-budget-r1`, exact base выше.
-Решение C0: только foundation timeout 45→60 минут, точный workflow hash и
-ограниченный source admission; application/schema/generic PG inventory неизменны.
-Scope/проверки — [CURRENT M5_HANDOFF](tasks/M5_HANDOFF.md).
-C4 готовит один новый небольшой PR; PR #50 повторно не открывать.
-Старый run и отдельные зелёные jobs не перезапускать.
+**Единственная активная задача — C3-M5.2D-PORTFOLIO-PHOTO-R1, ведущий C3.**
+Ветка `c3/m5-2d-portfolio-photo-r1`, application base — полный SHA выше.
+C2/C4/C5 помогают последовательно; C6 HOLD. Один PR: одна опубликованная
+разрешённая работа с caption через guarded delivery; состояние видно в Inbox.
+Scope, exact paths, migration 0022←0021, v6/result_v2, JPEG/PNG subset и checks —
+[CURRENT M5_HANDOFF](tasks/M5_HANDOFF.md). Applied 0001–0021 immutable.
+C0 выдаёт docs-only assignment; C3 начинает от него с сохранением ancestry.
 
-M5.1A/PR46, M5.1B/PR47, M5.2A/PR48, M5.2B/PR49 остаются
-INTEGRATED / VERIFIED в прежних границах. IMPL-005 ACCEPTED / LOCKED.
-M5.2D/M5.3 не выданы; C6 HOLD. Новых paid/VM/client-data допусков нет;
-default DISABLED и exact MockTransport/EVAL_ONLY сохранены.
-Original UNKNOWN/NOT_PROVEN receipts, confirmed 0.50229415 RUB / holds 11.75 RUB,
-receiver ACK/fence и полный live HUMAN/Resume не изменяются.
+Default Vision/embedding DISABLED и synthetic FAKE/EVAL_ONLY сохраняются.
+Новых paid/VM/real Telegram/client-data допусков нет. Исходные UNKNOWN/
+NOT_PROVEN receipts, confirmed 0.50229415 RUB / holds 11.75 RUB, receiver
+ACK/fence и полный live HUMAN/Resume остаются в прежних границах.
+IMPL-005 ACCEPTED / LOCKED; M5.3 не выдана.
 
-Следующее действие — передать C4 закреплённую выдачу CI fix.
-После C0 review и отдельного owner merge нового PR требуется успешный
-post-merge CI; затем C0 закрывает M5.2C и выдаёт только M5.2D ведущему C3.
+Следующее действие — передать C3 закреплённое поручение M5.2D.
+Затем C0 review, отдельное owner merge и штатный post-merge CI.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 
