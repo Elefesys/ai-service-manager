@@ -10,6 +10,75 @@ ACCEPTED / LOCKED C0.
 C2 помогает с SQL/миграцией, C4 — с typed model selection, C5 — с Inbox,
 последовательно в одной ветке. C6 HOLD; M5.3 пока не выдаётся.
 
+### Уточнение C0 — сохранить checkpoint и дополнить write-set / 2026-11-16
+
+**Та же задача C3-M5.2D-PORTFOLIO-PHOTO-R1; IN_PROGRESS.**
+Application base `8d98593bc739666176968c5d76b9c01a2a711686` и исходный
+assignment `63bb7147ec899eda1a538388aff18a01fc054e57` сохраняются.
+
+На момент проверки C0 ветка `c3/m5-2d-portfolio-photo-r1` всё ещё указывает
+на assignment 63bb7147; implementation commits и PR в ней не опубликованы.
+В доступном контексте C3 нет ссылки на обещанный patch. Сообщённые C3
+302 functions/69 tables и успешные локальные migration checks пока не
+сопоставлены C0 с исходниками/журналами; это не новая приёмка VERIFIED.
+Данный C0 receipt — отдельный docs-only commit; рабочая ветка C3 им не
+перемещается, чтобы не затронуть её неопубликованные изменения.
+
+**Первое действие C3 — сохранить текущую работу, до новых долгих проверок.**
+
+1. Продолжить в прежнем рабочем окружении. Проверить status/diff и локальный
+   HEAD; не reset/clean/reclone поверх незакоммиченных файлов.
+   Если прежняя команда ещё выполняется, выяснить её session/process и
+   остановить только собственный зависший процесс; не чистить общий Docker/БД.
+2. Зафиксировать все относящиеся к задаче tracked и новые source files
+   в checkpoint текущей ветки, с честным состоянием **WIP / UNVERIFIED**.
+   До публикации проверить состав: без secrets/.env, caches, DB contents и
+   временных логов. Тесты могут быть неполными; сохранение не требует PASS.
+   Если GitHub недоступен — сохранить полный binary diff вместе с необходимыми
+   untracked source files в доступный пользователю архив и вернуть его ссылку.
+3. Разрешён **один восстановительный checkpoint push** в
+   `c3/m5-2d-portfolio-photo-r1`, без PR, CI dispatch/rerun и merge в main.
+   Это явное исключение из порядка «первый push только готового кандидата»;
+   задача и критерии финальной готовности не меняются.
+   Не переписывать уже опубликованный head. До продолжения вывести пользователю
+   точные checkpoint SHA/tree, compare link от assignment 63bb7147,
+   changed paths и короткий список PASS/FAILED/NOT_RUN.
+   Цель ближайшего возврата — дать C0 проверяемый diff и сохранить работу.
+4. Отдельно показать конкретный diff `tests/test_postgres.py` и текущие
+   findings по verifier 0021/native context/text-only session.
+   Последние исправления остаются в новой 0022; applied 0001–0021 не менять.
+   Не объявлять неисследованные photo/recovery сценарии прошедшими.
+
+**C0-SCOPE-M5.2D-01 — ACCEPTED FOR IMPLEMENTATION.**
+Пропуск `tests/test_postgres.py` в исходном write-set исправлен.
+C0 прочитал exact файл assignment 63bb7147: в
+`test_real_postgres_capabilities_and_roles` (assert на строке 108)
+стоит строгий список 68 таблиц и сообщение «M0 through M5.2C».
+Разрешён только такой ограниченный delta:
+
+- добавить в существующий упорядоченный expected list точное имя одной
+  новой delivery-intent таблицы, действительно объявленной в 0022;
+  исходные 68 имён сохраняются; имя не выдумывать по пересказу;
+- актуализировать пояснение границы до M5.2D;
+- сохранить строгое `tables == [...]`, SQL query/order, все role/RLS/no-DDL,
+  no-context/cross-workspace, rollback/pool и shutdown проверки.
+  Не заменять список subset/count/динамическим expected из проверяемой БД,
+  не исключать новую таблицу из query и не добавлять skip/xfail.
+
+В существующем разрешённом M5.2D source admission добавить только этот path
+к конечному write-set новой задачи; исторические task routes не расширять.
+Остальные files и ограничения исходного поручения не меняются.
+Это допуск к конкретной форме исправления, не приёмка ещё не показанного diff.
+
+После сохранения checkpoint интегрировать это docs amendment без потери
+локального кода/контракта/журналов: исходный assignment и данный C0 commit
+сохранить в ancestry, 4 protected C0 docs не изменять.
+При необходимости совместить изменения handoff вручную, сохранив оба
+содержательных блока. Final source admission закрепляет этот scope amendment
+по exact SHA/tree/parent; основной base/assignment остаются прежними.
+Далее продолжать исходную задачу и целевые проверки; нового разрешения
+на уже перечисленные работы не требуется.
+
 ### Результат для пользователя
 
 Клиент получает одну опубликованную и разрешённую владельцем работу бизнеса
@@ -216,7 +285,10 @@ predecessor `0021`. Четыре assignment docs и applied migrations неиз�
 
 ### C3 — реализация и ограниченный возврат / 2026-11-16
 
-**C3: IMPLEMENTED / BLOCKED_SCOPE.** Интеграционное решение остаётся у C0.
+**C3: IN_PROGRESS; checkpoint WIP / UNVERIFIED для C0/CI.**
+Интеграционное решение остаётся у C0. Checkpoint
+[`08524298`](https://github.com/Elefesys/ai-service-manager/commit/0852429849a41e95df637c6b7bffdaeb089f5084)
+опубликован в рабочую ветку восстановительным push до новых долгих проверок.
 Реализован один synthetic `portfolio_photo`: fresh READ показанного контекста →
 неизменяемое намерение → private S3 read/validator вне транзакции → повторный
 serialized admission → один counted photo effect → owner Inbox/preview.
@@ -233,7 +305,7 @@ serialized admission → один counted photo effect → owner Inbox/preview.
   `499d3b25887b3dd50f0a2f8f7e7b324d8cca226a270a3dd99e5506e376733bf0`.
   Nonfunction pin
   `6890bd1d959ef3e6c05c0ca8f7e203586035e3a2f46c4e343e4e64dbf38bf210`.
-- LOCAL: **4635 unit + 161 subtests PASS**, 531 frontend tests PASS;
+- Checkpoint08524298 LOCAL: **4635 unit + 161 subtests PASS**, 531 frontend tests PASS;
   Ruff, format, mypy (109 files), OpenAPI, typecheck/build PASS.
   В unit входят 50 новых model/delivery tests, 30 exact MockTransport wire
   cases JPEG/PNG и 15 migration tests. Integration не подменялась unit.
@@ -251,16 +323,35 @@ serialized admission → один counted photo effect → owner Inbox/preview.
   страницы (`socket(): EPERM`). Два сценария собраны; owner API не подменялся
   HTTP routes. Native HTTP результат не является browser/Actions evidence.
 
-**Точный scope blocker перед PR/full CI:**
-`tests/test_postgres.py::test_real_postgres_capabilities_and_roles` падает на
-новой `portfolio_delivery_intents`: его current inventory ещё содержит 68
-таблиц M5.2C. Этот файл отсутствует в конечном write-set выше и не изменён.
-Нужен допуск C0 ровно на добавление строки `"portfolio_delivery_intents",`
-после `"portfolio_builds",` и строки `"tests/test_postgres.py",` в
-`scripts/m4_runtime_db.py::M5_DELIVERY_PATHS`. Меньший diff проверен через
-`git apply --check`, не применён. Остальные пути автоматически не открыты.
-После решения C0 — новая source admission и один полный кандидат/Draft PR/CI;
-текущий возврат не присваивает INTEGRATED/VERIFIED и не выдаёт LOCAL за Actions.
+**C0-SCOPE-M5.2D-01 применён после checkpoint.** Исходный inventory failure
+сохранён в LOCAL evidence checkpoint. В `tests/test_postgres.py` добавлена ровно
+`"portfolio_delivery_intents",` после `"portfolio_builds",`; пояснение стало
+M5.2D. Остальные 68 имён, строгий `tables == [...]`, SQL/order и все role/RLS/
+no-DDL проверки сохранены. Весь модуль на actual PG: **7 PASS**.
+Только новая M5.2D route получила этот path. Host admission и закрытый
+producer/consumer proof пинят amendment
+`37a92eece23452ac8d8715efa078db34d9cc10ff`, tree
+`130f9466bea8e0e15feb537b5b1e6f817cc883ef`, единственный parent — исходный
+assignment63bb7147; base и assignment не заменены. Оба C0 commits в ancestry,
+четыре protected docs неизменны.
+Новая source binding и прежние runner routes: **944 tests + 130 subtests PASS**;
+отсутствующий/подменённый amendment отклоняется до resources/credentials.
+Runtime/native inventories и исходные budgets900/600 сохранены.
+
+**Findings verifier/native context/text-only sessions:**
+
+- Current native policy в 0022 проверяет revision0022 и
+  `portfolio_delivery_schema_profile()`; остальные guards исходной команды
+  побайтово сохранены. Исторический verifier0021 не меняется.
+- `ai_provider_session` в 0022 меняет только current verifier. Старые
+  text-only profiles и conversation_v2/v3 остаются закрытыми; PHOTO profile
+  не допускается. Отдельные actual PG ENABLE/replay/DISABLE прошли локально.
+- Новый private PHOTO session lock сохраняет исходные usage/budget/lease
+  guards; старый Vision lock не расширен. Actual PG проверил отказ обоих
+  перекрёстных профилей и отсутствие runtime EXECUTE у private helper.
+
+Далее — готовый кандидат/Draft PR и штатный полный CI. LOCAL evidence и
+checkpoint не присваивают INTEGRATED/VERIFIED и не являются Actions execution.
 
 ### Разрешённый write-set
 
@@ -298,6 +389,8 @@ serialized admission → один counted photo effect → owner Inbox/preview.
   При необходимости отдельного сценария —
   `frontend/e2e/portfolio-delivery.spec.ts`.
   PortfolioPanel/App и остальная owner Console — без перепроектирования.
+- `tests/test_postgres.py` — только C0-SCOPE-M5.2D-01 выше: exact inventory
+  новой intent таблицы и пояснение, без изменения role/RLS/DDL assertions.
 - Новые tests:
   `tests/test_m5_portfolio_delivery.py`,
   `tests/test_m5_portfolio_delivery_transport.py`,

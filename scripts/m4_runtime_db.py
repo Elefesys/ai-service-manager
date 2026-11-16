@@ -479,6 +479,8 @@ M5_DELIVERY_BASE = "8d98593bc739666176968c5d76b9c01a2a711686"
 M5_DELIVERY_TREE = "a14ed9b69e3529ac060bc015b9a24dcea515ef9b"
 M5_DELIVERY_ASSIGNMENT = "63bb7147ec899eda1a538388aff18a01fc054e57"
 M5_DELIVERY_ASSIGNMENT_TREE = "9de6138d28298cb2ece968fee472e5bca78994d5"
+M5_DELIVERY_SCOPE_AMENDMENT = "37a92eece23452ac8d8715efa078db34d9cc10ff"
+M5_DELIVERY_SCOPE_AMENDMENT_TREE = "130f9466bea8e0e15feb537b5b1e6f817cc883ef"
 M5_DELIVERY_BRANCH = "c3/m5-2d-portfolio-photo-r1"
 M5_DELIVERY_C0_DOCS = {
     "docs/TASK_REGISTER.md",
@@ -592,6 +594,7 @@ M5_DELIVERY_PATHS = {
     "tests/test_m5_portfolio_migrations.py",
     "tests/test_m5_portfolio_runtime.py",
     "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
     "tests/test_telegram_egress.py",
     "tests/test_telegram_egress_migration.py",
     "tests/test_telegram_egress_postgres.py",
@@ -729,6 +732,14 @@ def evidence_path():
     return Path(os.environ.get("ASM_M4_EVIDENCE", "/evidence"))
 
 
+def delivery_scope_amendment():
+    return {
+        "sha": M5_DELIVERY_SCOPE_AMENDMENT,
+        "tree": M5_DELIVERY_SCOPE_AMENDMENT_TREE,
+        "parent": M5_DELIVERY_ASSIGNMENT,
+    }
+
+
 def source_tree_from_evidence(path=None):
     """Bind the DB-only fixture to this executor's checked source, without Git in the image."""
 
@@ -763,8 +774,17 @@ def source_tree_from_evidence(path=None):
         "pins",
         "uv_lock_sha256",
     }
-    require(type(value) is dict and set(value) == keys, "SOURCE_IDENTITY_SHAPE")
-    delivery = value["branch"] == M5_DELIVERY_BRANCH
+    require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    delivery = value.get("branch") == M5_DELIVERY_BRANCH
+    if delivery:
+        keys.add("scope_amendment")
+    require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    if delivery:
+        require(
+            type(value["scope_amendment"]) is dict
+            and value["scope_amendment"] == delivery_scope_amendment(),
+            "SOURCE_IDENTITY_SCOPE_AMENDMENT",
+        )
     foundation_budget = value["branch"] == M5_FOUNDATION_BRANCH
     planning = value["branch"] == M5_PLAN_BRANCH
     configuration = value["branch"] == M5_CONFIGURATION_BRANCH
@@ -1477,6 +1497,30 @@ def admit_source(evidence):
             "DELIVERY_ASSIGNMENT_PARENT",
         )
         require(
+            capture(["git", "rev-parse", M5_DELIVERY_SCOPE_AMENDMENT + "^{tree}"])
+            == M5_DELIVERY_SCOPE_AMENDMENT_TREE,
+            "DELIVERY_SCOPE_AMENDMENT_TREE",
+        )
+        require(
+            capture(
+                ["git", "rev-list", "--parents", "-n", "1", M5_DELIVERY_SCOPE_AMENDMENT]
+            ).split()
+            == [M5_DELIVERY_SCOPE_AMENDMENT, M5_DELIVERY_ASSIGNMENT],
+            "DELIVERY_SCOPE_AMENDMENT_PARENT",
+        )
+        require(
+            capture(["git", "merge-base", M5_DELIVERY_SCOPE_AMENDMENT, "HEAD"])
+            == M5_DELIVERY_SCOPE_AMENDMENT,
+            "DELIVERY_SCOPE_AMENDMENT_ANCESTRY",
+        )
+        require(
+            capture(
+                ["git", "diff", "--name-only", M5_DELIVERY_ASSIGNMENT, M5_DELIVERY_SCOPE_AMENDMENT]
+            ).splitlines()
+            == ["docs/tasks/M5_HANDOFF.md"],
+            "DELIVERY_SCOPE_AMENDMENT_PATHS",
+        )
+        require(
             not capture(
                 [
                     "git",
@@ -1766,17 +1810,17 @@ def admit_source(evidence):
         allowed = allowed | M5_PLAN_PATHS
     paths = capture(["git", "diff", "--name-only", base, "HEAD"]).splitlines()
     require(bool(paths) and set(paths) <= allowed, "POLZA_RUNTIME_WRITE_SET")
-    write(
-        evidence / "source-admission.json",
-        {
-            "base": base,
-            "base_tree": base_tree,
-            "source": event["head"],
-            "tree": event["tree"],
-            "paths": paths,
-            "result": "PASS",
-        },
-    )
+    admission = {
+        "base": base,
+        "base_tree": base_tree,
+        "source": event["head"],
+        "tree": event["tree"],
+        "paths": paths,
+        "result": "PASS",
+    }
+    if delivery:
+        admission["scope_amendment"] = delivery_scope_amendment()
+    write(evidence / "source-admission.json", admission)
     return event, manifest
 
 
@@ -2425,6 +2469,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if delivery:
+        source["scope_amendment"] = delivery_scope_amendment()
     write(root / "evidence/source.json", source)
     write(root / "evidence/event.json", event)
     write(root / "evidence/source-manifest.json", manifest)

@@ -2926,7 +2926,17 @@ def test_m5_foundation_budget_keeps_existing_runtime_inventory_and_sql_cap(
     assert summary["sql_test_budget_seconds"] == 900
 
 
-def prepare_m5_delivery_event(r, monkeypatch, route, *, extra=None, wrong_parent=False):
+def prepare_m5_delivery_event(
+    r,
+    monkeypatch,
+    route,
+    *,
+    extra=None,
+    wrong_parent=False,
+    wrong_amendment_parent=False,
+    missing_amendment=False,
+    application_amendment=False,
+):
     """Constructed local Git/event metadata, never an Actions execution claim."""
     f = r["f"]
     monkeypatch.setattr(carrier, "M5_DELIVERY_BASE", r["source"])
@@ -2941,6 +2951,25 @@ def prepare_m5_delivery_event(r, monkeypatch, route, *, extra=None, wrong_parent
     f.git("commit", "-qm", "constructed photo assignment")
     monkeypatch.setattr(carrier, "M5_DELIVERY_ASSIGNMENT", f.git("rev-parse", "HEAD"))
     monkeypatch.setattr(carrier, "M5_DELIVERY_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    if wrong_amendment_parent:
+        f.git("commit", "--allow-empty", "-qm", "constructed unapproved amendment parent")
+    handoff = f.root / "docs/tasks/M5_HANDOFF.md"
+    handoff.write_text(handoff.read_text() + "\n# C0 exact inventory scope amendment\n")
+    if application_amendment:
+        application = f.root / "backend/src/asm/ai/fake.py"
+        application.parent.mkdir(parents=True, exist_ok=True)
+        application.write_text(
+            (application.read_text() if application.exists() else "")
+            + "\n# unapproved amendment code\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed C0 scope amendment")
+    monkeypatch.setattr(carrier, "M5_DELIVERY_SCOPE_AMENDMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(
+        carrier, "M5_DELIVERY_SCOPE_AMENDMENT_TREE", f.git("rev-parse", "HEAD^{tree}")
+    )
+    if missing_amendment:
+        f.git("checkout", "--detach", carrier.M5_DELIVERY_ASSIGNMENT)
     for relative in sorted(
         (carrier.M5_DELIVERY_PATHS - carrier.M5_DELIVERY_C0_DOCS) | ({extra} if extra else set())
     ):
@@ -2957,7 +2986,23 @@ def prepare_m5_delivery_event(r, monkeypatch, route, *, extra=None, wrong_parent
 
 
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
-@pytest.mark.parametrize("damage", [None, "base", "branch", "paths", "tree", "attempt"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "base",
+        "branch",
+        "paths",
+        "tree",
+        "attempt",
+        "scope_sha",
+        "scope_tree",
+        "scope_parent",
+        "scope_missing",
+        "scope_extra",
+        "scope_type",
+    ],
+)
 def test_delivery_exact_source_producer_consumer_and_main_selector_priority(
     r11_event, monkeypatch, route, damage
 ):
@@ -2972,6 +3017,7 @@ def test_delivery_exact_source_producer_consumer_and_main_selector_priority(
     admission = json.loads((r["root"] / "evidence/source-admission.json").read_text())
     assert admission["base"] == carrier.M5_DELIVERY_BASE
     assert set(admission["paths"]) == carrier.M5_DELIVERY_PATHS
+    assert admission["scope_amendment"] == carrier.delivery_scope_amendment()
     real_run = subprocess.run
 
     class BeforeResources(Exception):
@@ -2995,6 +3041,7 @@ def test_delivery_exact_source_producer_consumer_and_main_selector_priority(
     path = r["root"] / "evidence/source.json"
     proof = json.loads(path.read_text())
     assert proof["branch"] == carrier.M5_DELIVERY_BRANCH
+    assert proof["scope_amendment"] == carrier.delivery_scope_amendment()
     for name, value in {
         "SOURCE_SHA": merged,
         "SOURCE_TREE": proof["tree"],
@@ -3003,13 +3050,22 @@ def test_delivery_exact_source_producer_consumer_and_main_selector_priority(
     }.items():
         monkeypatch.setenv("ASM_M4_" + name, value)
     if damage:
-        proof[damage] = {
-            "base": "f" * 40,
-            "branch": carrier.M5_FOUNDATION_BRANCH,
-            "paths": ["backend/src/asm/ai/polza.py"],
-            "tree": "f" * 40,
-            "attempt": 2,
-        }[damage]
+        if damage in {"scope_sha", "scope_tree", "scope_parent"}:
+            proof["scope_amendment"][damage.removeprefix("scope_")] = "f" * 40
+        elif damage == "scope_missing":
+            del proof["scope_amendment"]
+        elif damage == "scope_extra":
+            proof["scope_amendment"]["unapproved"] = True
+        elif damage == "scope_type":
+            proof["scope_amendment"] = "unapproved"
+        else:
+            proof[damage] = {
+                "base": "f" * 40,
+                "branch": carrier.M5_FOUNDATION_BRANCH,
+                "paths": ["backend/src/asm/ai/polza.py"],
+                "tree": "f" * 40,
+                "attempt": 2,
+            }[damage]
         carrier.write(path, proof)
         with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
             carrier.source_tree_from_evidence(path)
@@ -3019,7 +3075,19 @@ def test_delivery_exact_source_producer_consumer_and_main_selector_priority(
 
 
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
-@pytest.mark.parametrize("damage", ["base_tree", "assignment_tree", "parent", "adjacent"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "base_tree",
+        "assignment_tree",
+        "parent",
+        "adjacent",
+        "amendment_tree",
+        "amendment_parent",
+        "amendment_ancestry",
+        "amendment_application",
+    ],
+)
 def test_delivery_source_damage_refuses_before_resources(r11_event, monkeypatch, route, damage):
     r = r11_event
     prepare_m5_delivery_event(
@@ -3028,11 +3096,16 @@ def test_delivery_source_damage_refuses_before_resources(r11_event, monkeypatch,
         route,
         extra="backend/src/asm/ai/polza.py" if damage == "adjacent" else None,
         wrong_parent=damage == "parent",
+        wrong_amendment_parent=damage == "amendment_parent",
+        missing_amendment=damage == "amendment_ancestry",
+        application_amendment=damage == "amendment_application",
     )
     if damage == "base_tree":
         monkeypatch.setattr(carrier, "M5_DELIVERY_TREE", "f" * 40)
     elif damage == "assignment_tree":
         monkeypatch.setattr(carrier, "M5_DELIVERY_ASSIGNMENT_TREE", "f" * 40)
+    elif damage == "amendment_tree":
+        monkeypatch.setattr(carrier, "M5_DELIVERY_SCOPE_AMENDMENT_TREE", "f" * 40)
     with pytest.raises((carrier.Refusal, catalog.Refusal)):
         r["run"]()
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
