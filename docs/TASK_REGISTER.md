@@ -2,41 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.2C INTEGRATED / VERIFIED; M5.2D IN_PROGRESS / 2026-11-16
+## CURRENT — M5.2D INTEGRATED / VERIFIED; M5.3A IN_PROGRESS / 2026-11-16
 
-PR #51 слит владельцем. Accepted main:
-`8d98593bc739666176968c5d76b9c01a2a711686`, tree
-`a14ed9b69e3529ac060bc015b9a24dcea515ef9b`.
-Tree совпадает с reviewed head 4745766; merge parents 84ad8e4 + 4745766.
-[Post-merge CI43818223732](https://github.com/Elefesys/ai-service-manager/actions/runs/43818223732)
-— **12/12 SUCCESS, attempt 1**, без повторов.
-C0 сверил actual Git/source 438 и core/runtime evidence:
-4499 unit + 161 subtests, 1016 generic PG, все 14 backend phases,
-primary/cleanup 0; runtime 160/160 и 8 cleanups PASS. Foundation 37m36s.
-Подробности и ZIP hashes — в CURRENT M5_HANDOFF.
+PR #52 слит владельцем. Accepted main:
+`220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
+`d15f9a75346ab881449010745cbe0216081b78cf`, совпадает с reviewed candidate
+`3cb99509796262112a563e5665d6cabb44fbfc99`.
+[Post-merge CI43894664260](https://github.com/Elefesys/ai-service-manager/actions/runs/43894664260)
+— **12/12 SUCCESS, attempt 1**. Source/449 blobs и core/runtime evidence
+проверены C0: 4680 unit + 161 subtests, 1041 generic PG, все 14 backend phases,
+primary/cleanup 0; runtime 160/160 и 8 cleanups PASS. Подробности в M5_HANDOFF.
+[C0 review M5.2D](https://github.com/Elefesys/ai-service-manager/blob/afb7b1b6f126446c8ac7162bd7f42a8603ff624f/docs/tasks/M5_HANDOFF.md#L13)
+сохранён. Старый CI43866508414 остаётся FAILURE.
 
-**M5.2C/PR50 и CI fix/PR51 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST.**
-[Review реализации](https://github.com/Elefesys/ai-service-manager/blob/c132213302daeeaa4f9309d6352841fe99d6da8e/docs/tasks/M5_HANDOFF.md#L803)
-и [review CI fix](https://github.com/Elefesys/ai-service-manager/blob/e027855477bbe8a2428d7c95ce45bc216fa24e5c/docs/tasks/M5_HANDOFF.md#L142)
-сохранены. Старый CI43800096544 остаётся CANCELLED.
-M5.1A–M5.2B сохраняют прежнюю приёмку; M5.2A functional capability —
-ASSISTED_SYNTHETIC. Общий live VERIFIED не заявляется.
+**M5.1A–M5.2D — INTEGRATED / VERIFIED в synthetic LOCAL/TEST** с прежними
+ограничениями; M5.2A functional capability — ASSISTED_SYNTHETIC.
+Новая реальная отправка фото и общий live VERIFIED не заявлены.
 
-**Единственная активная задача — C3-M5.2D-PORTFOLIO-PHOTO-R1, ведущий C3.**
-Ветка `c3/m5-2d-portfolio-photo-r1`, application base — полный SHA выше.
-C2/C4/C5 помогают последовательно; C6 HOLD. Один PR: одна опубликованная
-разрешённая работа с caption через guarded delivery; состояние видно в Inbox.
-Scope, exact paths, migration 0022←0021, v6/result_v2, JPEG/PNG subset и checks —
-[CURRENT M5_HANDOFF](tasks/M5_HANDOFF.md). Applied 0001–0021 immutable.
-C0 выдаёт docs-only assignment; C3 начинает от него с сохранением ancestry.
+**Единственная активная задача — C1-M5.3A-INTAKE-DURATION-R1, ведущий C1.**
+Ветка `c1/m5-3a-intake-duration-r1`, application base — полный SHA выше.
+C2/C4/C5 помогают последовательно; C3 консультирует по guards; C6 HOLD.
+Результат: исправляемая предварительная сводка запроса с источниками,
+один актуальный owner handoff и подтверждённые DurationCase только для мастера.
+Scope, finite paths, migration 0023←0022, новые closed contracts и checks —
+[CURRENT M5_HANDOFF](tasks/M5_HANDOFF.md). Applied 0001–0022 immutable.
+C0 выдаёт docs-only assignment; C1 сохраняет ancestry и начинает от него.
 
-Default Vision/embedding DISABLED и synthetic FAKE/EVAL_ONLY сохраняются.
-Новых paid/VM/real Telegram/client-data допусков нет. Исходные UNKNOWN/
-NOT_PROVEN receipts, confirmed 0.50229415 RUB / holds 11.75 RUB, receiver
-ACK/fence и полный live HUMAN/Resume остаются в прежних границах.
-IMPL-005 ACCEPTED / LOCKED; M5.3 не выдана.
+IMPL-005 ACCEPTED / LOCKED. Цена/подтверждённая длительность/Quote/запись/
+платежи не входят. Default Vision/embedding DISABLED, FAKE/EVAL_ONLY,
+UNKNOWN/NOT_PROVEN receipts, confirmed 0.50229415 RUB / holds 11.75 RUB,
+receiver ACK/fence и полный live HUMAN/Resume сохраняются. Новых paid/VM/
+real Telegram/client-data допусков нет. M5.3B/M6 не выданы.
 
-Следующее действие — передать C3 закреплённое поручение M5.2D.
+Следующее действие — передать C1 закреплённое поручение M5.3A.
 Затем C0 review, отдельное owner merge и штатный post-merge CI.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12

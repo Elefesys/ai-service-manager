@@ -11,7 +11,16 @@ accepted main8eeeede1, post-merge CI43600856660 — итог12/12 SUCCESS пос
 в ASSISTED_SYNTHETIC scope. M5.2B/PR #49 — INTEGRATED / VERIFIED в LOCAL/TEST.
 M5.2C/PR #50 и foundation CI fix/PR #51 — INTEGRATED / VERIFIED в synthetic
 LOCAL/TEST. Main 8d98593b/tree a14ed9b6, post-merge CI43818223732 — 12/12 SUCCESS,
-attempt 1. Единственная активная задача — M5.2D, ведущий C3; M5.3 не выдана.
+attempt 1. M5.2D/PR #52 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST:
+accepted main `220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
+`d15f9a75346ab881449010745cbe0216081b78cf`, post-merge CI43894664260 —
+12/12 SUCCESS, attempt 1. Единственная активная задача — M5.3A, ведущий C1;
+M5.3B/M6 не выданы. Scope решения не расширен: предварительная intake
+projection с provenance и deterministic transitions, без M6 request/assessment;
+подтверждённые DurationCase доступны только мастеру, без клиентского обещания
+времени и без автоматического обучения. Текущие closed test-only Action Center
+DTO требуют узкой новой projection для intake, сохраняя legacy contracts;
+конкретное разрешение и write-set — в CURRENT M5_HANDOFF.
 Актуальная задача и статус — только в CURRENT реестра/передачи по ссылкам ниже.
 Operator циклы C6 закончены.
 Текущее уточнение embedding usage ниже — ACCEPTED C0; client-data/paid/VM
@@ -188,7 +197,7 @@ M5.2B выдан от фактического accepted main8eeeede1; его cod
 
 ## Уточнение C0 — ограниченная photo delivery M5.2D / 2026-11-16
 
-**ACCEPTED FOR IMPLEMENTATION в ранее принятом scope M5.2D.**
+**ACCEPTED / LOCKED; реализация PR #52 INTEGRATED / VERIFIED в synthetic LOCAL/TEST.**
 Новый `conversation_v6`/`conversation_result_v2` только предлагает один
 Portfolio ref с caption. Сервер сверяет фактически показанный fresh READ,
 MY_WORK/confirmation/show_permission, active release/build, asset version/hash
@@ -197,8 +206,9 @@ MY_WORK/confirmation/show_permission, active release/build, asset version/hash
 новая очередь и ручной media composer не вводятся.
 
 Первый поддерживаемый исходящий набор — JPEG/PNG, без перекодирования, URL/
-file_id input и альбомов; точные bytes/dimensions/caption caps в CURRENT
-M5_HANDOFF согласованы с Telegram sendPhoto и текущим более строгим decoder.
+file_id input и альбомов; точные bytes/dimensions/caption caps в
+[закреплённой выдаче M5.2D](https://github.com/Elefesys/ai-service-manager/blob/63bb7147ec899eda1a538388aff18a01fc054e57/docs/tasks/M5_HANDOFF.md)
+согласованы с Telegram sendPhoto и текущим более строгим decoder.
 Private media читается по узкому permit до final dispatch admission, затем
 проверяется актуальность. Public S3 не появляется. После возможного эффекта
 UNKNOWN/no-resend сохраняется; уже начатую отправку нельзя обещать отозвать.
@@ -216,8 +226,8 @@ UNKNOWN/no-resend сохраняется; уже начатую отправку
   наблюдённые usage/cost приняты выше; text-only M4 и этот synthetic PASS
   не разрешают новый live расход или client data. До отдельного допуска —
   fake/contract/local работа.
-- Физическая схема и миграции, endpoints и read DTO для первого среза — C1/C2,
-  далее ограниченные дополнения. Не фиксировать заранее число таблиц/маршрутов.
+- Физическая схема и миграции, endpoints и read DTO текущего среза — C1/C2
+  в рамках его CURRENT; далее только ограниченные дополнения. Не фиксировать заранее число таблиц/маршрутов.
 - Разрешённые данные настоящего мастера и включение реального бизнеса — перед
   live onboarding; его прайс/портфолио не являются условием начала разработки.
 
