@@ -2407,6 +2407,7 @@ def prepare_m5_portfolio_event(
     wrong_finish_parent=False,
     wrong_ci_fix_parent=False,
     wrong_unit_fix_parent=False,
+    wrong_core_fix_parent=False,
 ):
     """Construct real Git assignment, contract, C0 upload continuation and candidate."""
     f = r["f"]
@@ -2428,6 +2429,8 @@ def prepare_m5_portfolio_event(
         "CI_FIX_ASSIGNMENT",
         "UNIT_REVIEW_BASE",
         "UNIT_FIX_ASSIGNMENT",
+        "CORE_REVIEW_BASE",
+        "CORE_FIX_ASSIGNMENT",
     ):
         if label != "ASSIGNMENT":
             handoff = f.root / "docs/tasks/M5_HANDOFF.md"
@@ -2449,6 +2452,8 @@ def prepare_m5_portfolio_event(
             and label == "REVIEW_BASE"
             or wrong_unit_fix_parent
             and label == "UNIT_REVIEW_BASE"
+            or wrong_core_fix_parent
+            and label == "CORE_REVIEW_BASE"
         ):
             f.git("commit", "--allow-empty", "-qm", "unapproved intermediate parent")
     for relative in sorted(
@@ -2582,6 +2587,11 @@ def test_m5_portfolio_protected_assignment_files_refused_before_resources(
         "unit_review_base_ancestry",
         "unit_fix_assignment_ancestry",
         "unit_fix_assignment_parent",
+        "core_review_base_tree",
+        "core_fix_assignment_tree",
+        "core_review_base_ancestry",
+        "core_fix_assignment_ancestry",
+        "core_fix_assignment_parent",
     ],
 )
 def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
@@ -2597,6 +2607,7 @@ def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
         wrong_finish_parent=damage == "finish_assignment_parent",
         wrong_ci_fix_parent=damage == "ci_fix_assignment_parent",
         wrong_unit_fix_parent=damage == "unit_fix_assignment_parent",
+        wrong_core_fix_parent=damage == "core_fix_assignment_parent",
     )
     if damage == "base_tree":
         monkeypatch.setattr(carrier, "M5_PORTFOLIO_TREE", "f" * 40)
@@ -2626,6 +2637,8 @@ def test_m5_portfolio_pin_and_ancestry_failures_refuse_before_resources(
         "future_migration",
         "adjacent_telegram",
         "production_probe",
+        "adjacent_configuration",
+        "playwright_config",
     ],
 )
 def test_m5_portfolio_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damage):
@@ -2645,6 +2658,8 @@ def test_m5_portfolio_refuses_adjacent_scope_on_pr(r11_event, monkeypatch, damag
             "future_migration": "migrations/versions/0022_future.py",
             "adjacent_telegram": "tests/test_m2_3_wire_postgres.py",
             "production_probe": "backend/src/asm/ai/probe.py",
+            "adjacent_configuration": "tests/test_m5_configuration_api_postgres.py",
+            "playwright_config": "frontend/playwright.config.ts",
         }.get(damage),
     )
     with pytest.raises((carrier.Refusal, catalog.Refusal)):

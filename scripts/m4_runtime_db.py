@@ -360,6 +360,10 @@ M5_PORTFOLIO_UNIT_REVIEW_BASE = "4ddf6b0650480cf0ac935bb5b141ce5a399d5311"
 M5_PORTFOLIO_UNIT_REVIEW_BASE_TREE = "b039985cf19f2ef8c5b49664febd648cdeba7dbf"
 M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT = "f7ef6215ef7121984aa7b8fc4293b7496b85ed3b"
 M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT_TREE = "8a4c9e885f4c70193c9269bbc2d8305bd594d2e8"
+M5_PORTFOLIO_CORE_REVIEW_BASE = "30127f143349645fa1c75d00cf34a4bd3b5e6d03"
+M5_PORTFOLIO_CORE_REVIEW_BASE_TREE = "edf04c471782439a78391ce2c7065b99b1dff470"
+M5_PORTFOLIO_CORE_FIX_ASSIGNMENT = "5ac931f65264b8cc7b4a77c1fff034814891ee66"
+M5_PORTFOLIO_CORE_FIX_ASSIGNMENT_TREE = "d4dab0dc4db1f5ac86a0253b3986b4c2391bf63d"
 M5_PORTFOLIO_BRANCH = "c4/m5-2c-vision-portfolio-r1"
 M5_PORTFOLIO_C0_DOCS = {
     "AGENTS.md",
@@ -418,6 +422,7 @@ M5_PORTFOLIO_PATHS = M5_PORTFOLIO_C0_DOCS | {
     "scripts/native_context_db_catalog.py",
     "scripts/prepare_telegram_egress.py",
     "scripts/test_telegram_egress.sh",
+    "scripts/test_browser.sh",
     "tests/generic_pg_schema.py",
     "tests/m5_knowledge_search_fixtures.py",
     "tests/m5_portfolio_fixtures.py",
@@ -438,6 +443,7 @@ M5_PORTFOLIO_PATHS = M5_PORTFOLIO_C0_DOCS | {
     "tests/test_m4_runtime_migrations.py",
     "tests/test_m4_schema_postgres.py",
     "tests/test_m5_portfolio_api_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
     "tests/test_m5_knowledge_runtime_postgres.py",
     "tests/test_m1_3_http_contract.py",
     "tests/test_m4_probe.py",
@@ -1273,6 +1279,12 @@ def admit_source(evidence):
                 M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT,
                 M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT_TREE,
             ),
+            ("CORE_REVIEW_BASE", M5_PORTFOLIO_CORE_REVIEW_BASE, M5_PORTFOLIO_CORE_REVIEW_BASE_TREE),
+            (
+                "CORE_FIX_ASSIGNMENT",
+                M5_PORTFOLIO_CORE_FIX_ASSIGNMENT,
+                M5_PORTFOLIO_CORE_FIX_ASSIGNMENT_TREE,
+            ),
         ):
             require(
                 capture(["git", "rev-parse", revision + "^{tree}"]) == tree,
@@ -1310,6 +1322,11 @@ def admit_source(evidence):
             capture(["git", "rev-parse", M5_PORTFOLIO_UNIT_FIX_ASSIGNMENT + "^"])
             == M5_PORTFOLIO_UNIT_REVIEW_BASE,
             "PORTFOLIO_UNIT_FIX_ASSIGNMENT_PARENT",
+        )
+        require(
+            capture(["git", "rev-parse", M5_PORTFOLIO_CORE_FIX_ASSIGNMENT + "^"])
+            == M5_PORTFOLIO_CORE_REVIEW_BASE,
+            "PORTFOLIO_CORE_FIX_ASSIGNMENT_PARENT",
         )
         require(
             not capture(
