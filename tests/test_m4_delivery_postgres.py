@@ -47,8 +47,8 @@ async def delivery(pg):
         yield pg
     finally:
         await current.close()
-        await migrate("upgrade", "0021")
-        pg.schema_revision = "0021"
+        await migrate("upgrade", "0022")
+        pg.schema_revision = "0022"
 
 
 async def source_turn(h, *, native=False, workspace=A, telegram=False, message_text=None):
@@ -63,7 +63,7 @@ async def source_turn(h, *, native=False, workspace=A, telegram=False, message_t
     elif not native:
         scope["external_connection_id"] = "conn-a2"
     if message_text is not None:
-        scope["text"] = message_text
+        scope["value" if telegram else "text"] = message_text
     preparation("INGRESS", workspace_id=workspace)
     _, _, cid = await incoming(h, number, **scope)
     if native:
@@ -138,7 +138,7 @@ async def source_turn(h, *, native=False, workspace=A, telegram=False, message_t
 def application(h, script=("reply",), *, adapter=None, telegram=None, fake=None, cfg=None):
     cfg = cfg or config()
     if (
-        getattr(h, "schema_revision", None) in {"0019", "0020", "0021"}
+        getattr(h, "schema_revision", None) in {"0019", "0020", "0021", "0022"}
         and cfg.prompt_revision == "conversation_v2"
     ):
         cfg = KnowledgeGatewayConfig.model_validate(

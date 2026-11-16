@@ -11,6 +11,7 @@ from uuid import uuid4
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind, SendOutcome, identifier
 from asm.messaging.results import SendPermit
+from asm.portfolio.delivery import PortfolioPhotoSendPermit, check_photo_payload
 
 _VERIFIED = object()
 Barrier = Callable[[str], Awaitable[None]]
@@ -44,6 +45,7 @@ class ControlledAdapter:
         self.barrier = barrier
         self.calls = 0
         self.effects = 0
+        self.photo_payloads: list[tuple[str, str]] = []
 
     def source(self, bot_identity: str) -> TrustedSource:
         return TrustedSource("CONTROLLED", identifier(bot_identity), _VERIFIED)
@@ -67,6 +69,18 @@ class ControlledAdapter:
                 os.close(fd)
 
     async def send(self, permit: SendPermit) -> SendOutcome:
+        if isinstance(permit, PortfolioPhotoSendPermit):
+            return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
+        return await self._send(permit)
+
+    async def send_photo(self, permit: PortfolioPhotoSendPermit, content: bytes) -> SendOutcome:
+        check_photo_payload(permit, content)
+        if permit.provider != "CONTROLLED":
+            return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
+        self.photo_payloads.append((permit.source_sha256, permit.text))
+        return await self._send(permit)
+
+    async def _send(self, permit: SendPermit) -> SendOutcome:
         self.calls += 1
         self._record("CALL")
         await self.checkpoint("before_effect")

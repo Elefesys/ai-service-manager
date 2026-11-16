@@ -42,15 +42,19 @@ job на том же SHA, остальные результаты attempt1 со�
 M5.2B/PR49 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST: accepted main
 `70804866f6838f77c12bd281febae47887559d75`, tree `a6ee68b5` совпадает с принятым
 кандидатом `3a82973c`; post-merge CI43693059853 — 12/12 SUCCESS, attempt1.
-M5.2C/PR50 слит на main `84ad8e4c954005801f115aa8e6c0c6f7edef40db`,
-tree `bf8992e20260e56f8d84884fc65fa3febcafc053` совпадает с reviewed candidate.
-Post-merge CI43800096544: 11 SUCCESS / foundation CANCELLED по общему
-лимиту 45 минут; verification пока BLOCKED. Единственная текущая выдача —
-C4-M5.2C-FOUNDATION-BUDGET-R1: узкое увеличение foundation cap 45→60 минут,
-exact CI-input pin и admission. Application/schema неизменны; один новый PR.
-Exact base/write-set/доказательства — в CURRENT M5_HANDOFF.
-C6 HOLD; operator работа закончена. M5.2D и M5.3 пока не выданы.
-Новые paid/VM вызовы и ключ не требуются.
+M5.2C/PR50 и foundation CI fix/PR51 — INTEGRATED / VERIFIED в synthetic
+LOCAL/TEST. Accepted main `8d98593bc739666176968c5d76b9c01a2a711686`,
+tree `a14ed9b69e3529ac060bc015b9a24dcea515ef9b` совпадает с reviewed candidate.
+Post-merge CI43818223732 — 12/12 SUCCESS, attempt 1; прежний timeout
+CI43800096544 остаётся в истории CANCELLED.
+Единственная текущая выдача — C3-M5.2D-PORTFOLIO-PHOTO-R1, ведущий C3;
+C2/C4/C5 участвуют последовательно. Результат: одна разрешённая работа
+с caption клиенту через существующий guarded delivery и её статус в Inbox.
+Только synthetic LOCAL/TEST, новая v6/result_v2 и ограниченный JPEG/PNG;
+реальные отправки/paid/VM/client data не разрешены. Подробности и finite
+write-set — в CURRENT M5_HANDOFF. C0 assignment docs-only; один PR после
+готовности реализации и нового source admission.
+C6 HOLD; M5.3 пока не выдана. Новые operator циклы не нужны.
 Original UNKNOWN/diagnostic receipts, holds и real-client/data restrictions
 сохраняются; ручная приёмка evidence не переписывает результат старого probe.
 
@@ -65,7 +69,8 @@ OnboardingAgent, массовый импорт чатов, генерацию и
 
 C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
 Current migration head 0021; applied 0001–0021 immutable.
-Текущий CI fix не изменяет схему и не резервирует новый migration slot.
+Для M5.2D выделена только 0022/down_revision 0021; C3/C2 до SQL подтверждают
+актуальность слота. До реализации фактический head остаётся 0021.
 Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
 При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
 не размножать длинные receipts между документами.

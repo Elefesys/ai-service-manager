@@ -176,6 +176,7 @@ class WorkerUnitOfWork:
             "PREPARE",
             "AUTHORIZE",
             "READ",
+            "DELIVERY_READ",
             "RESERVE",
             "COMPLETE",
             "COMMIT",

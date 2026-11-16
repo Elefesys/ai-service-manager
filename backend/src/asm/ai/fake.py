@@ -66,7 +66,7 @@ class FakeAdapter:
             token_limits=True,
             deadline=True,
             bounded_output=True,
-            schema_revisions=("conversation_result_v1",),
+            schema_revisions=("conversation_result_v1", "conversation_result_v2"),
             max_input_tokens=131072,
             max_output_tokens=8192,
         )

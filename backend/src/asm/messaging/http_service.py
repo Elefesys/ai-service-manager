@@ -23,6 +23,7 @@ from asm.messaging.http_models import (
     MessageResponse,
     MessagesCursor,
     MessagesPage,
+    PortfolioMessageResponse,
 )
 from asm.messaging.models import command_key, identifier, manual_text, text_fingerprint
 from asm.messaging.policy import Permission, require
@@ -245,7 +246,10 @@ class OwnerAPIRepository:
     def next_cursor(
         self,
         endpoint: Literal["CHANNEL_CONNECTIONS", "CONVERSATIONS", "MESSAGES"],
-        item: ConnectionResponse | ConversationResponse | MessageResponse,
+        item: ConnectionResponse
+        | ConversationResponse
+        | MessageResponse
+        | PortfolioMessageResponse,
         conversation: UUID | None = None,
     ) -> str:
         if isinstance(item, ConnectionResponse):
@@ -293,7 +297,14 @@ class OwnerAPIRepository:
         rows = await self.unit.messaging_messages_page(
             conversation, limit + 1, *self.anchor(cursor)
         )
-        items = [MessageResponse.model_validate(wire_dates(row)) for row in rows[:limit]]
+        items = [
+            (
+                PortfolioMessageResponse
+                if row["content_type"] == "PORTFOLIO_PHOTO"
+                else MessageResponse
+            ).model_validate(wire_dates(row))
+            for row in rows[:limit]
+        ]
         return MessagesPage(
             items=items,
             next_cursor=self.next_cursor("MESSAGES", items[-1], conversation)

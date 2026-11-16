@@ -312,6 +312,48 @@ class MessageCurrent(StrictModel):
         return self
 
 
+class MessageCurrentV2(StrictModel):
+    """Portfolio output projection; schema1 remains exclusively its old domain."""
+
+    schema_version: Literal[2]
+    state: Literal["VISIBLE", "DELETED", "ORDER_UNCERTAIN", "UNSUPPORTED_CONTENT"]
+    content_type: Literal["PHOTO"] | None
+    text: str | None = Field(max_length=1024, repr=False)
+    image_availability: Literal["PORTFOLIO_AVAILABLE", "PORTFOLIO_UNAVAILABLE", "HIDDEN"]
+    changed: bool
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def version(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Invalid portfolio current version")
+        return value
+
+    @field_validator("text")
+    @classmethod
+    def bounded(cls, value: str | None) -> str | None:
+        return TextContent.bounded(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def shape(self) -> Self:
+        if self.state == "VISIBLE":
+            valid = (
+                self.content_type == "PHOTO"
+                and bool(self.text and self.text.strip())
+                and self.image_availability in {"PORTFOLIO_AVAILABLE", "PORTFOLIO_UNAVAILABLE"}
+            )
+        else:
+            valid = (
+                self.content_type is None
+                and self.text is None
+                and self.image_availability == "HIDDEN"
+                and self.changed
+            )
+        if not valid:
+            raise ValueError("Invalid portfolio current shape")
+        return self
+
+
 class TargetResult(StrictModel):
     ordinal: int = Field(ge=1, le=100)
     code: Literal[

@@ -170,6 +170,7 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                             "platform.portfolio_builds",
                             "platform.portfolio_build_items",
                             "platform.portfolio_release_builds",
+                            "platform.portfolio_delivery_intents",
                             "platform.ai_runs",
                             "platform.telegram_provenance",
                             "platform.message_material_targets",

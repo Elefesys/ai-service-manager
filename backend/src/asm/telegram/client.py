@@ -23,6 +23,7 @@ from asm.files.models import FetchPermit
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind, SendOutcome, identifier
 from asm.messaging.results import AISendPermit, SendPermit
+from asm.portfolio.delivery import PortfolioPhotoSendPermit, check_photo_payload
 from asm.telegram.config import TelegramSettings
 from asm.telegram.normalization import connection_fields, numeric_id, object_value, strict_json
 
@@ -326,6 +327,8 @@ class TelegramClient:
             raise TelegramError(Code.INVALID_INPUT)
 
     async def send(self, permit: SendPermit) -> SendOutcome:
+        if isinstance(permit, PortfolioPhotoSendPermit):
+            return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
         if isinstance(permit, AISendPermit) and permit.provider_session_id is not None:
             admitted = self.provider_runtime
             if admitted is None or (
@@ -390,6 +393,123 @@ class TelegramClient:
         except MessagingError:
             pass
         return SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT)
+
+    async def _request_photo(
+        self, permit: PortfolioPhotoSendPermit, content: bytes
+    ) -> tuple[int, dict[str, Any]]:
+        extension = "jpg" if permit.manifest.mime_type == "image/jpeg" else "png"
+        try:
+            async with (
+                asyncio.timeout(10),
+                self._http.stream(
+                    "POST",
+                    self._url("sendPhoto"),
+                    data={
+                        "business_connection_id": permit.external_connection_id,
+                        "chat_id": permit.chat_id,
+                        "caption": permit.text,
+                    },
+                    files={"photo": ("portfolio." + extension, content, permit.manifest.mime_type)},
+                ) as response,
+            ):
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise TelegramError(Code.INVALID_INPUT)
+                body = bytearray()
+                async for chunk in response.aiter_bytes(chunk_size=65536):
+                    body.extend(chunk)
+                    if len(body) > 65536:
+                        raise TelegramError(Code.INVALID_INPUT)
+                return response.status_code, strict_json(bytes(body), 65536)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout):
+            raise TelegramError(Code.DEPENDENCY_UNAVAILABLE, definitely_unsent=True) from None
+        except (TimeoutError, httpx.TimeoutException):
+            raise TelegramError(Code.DEPENDENCY_TIMEOUT) from None
+        except httpx.HTTPError:
+            raise TelegramError(Code.DEPENDENCY_UNAVAILABLE) from None
+        except MessagingError:
+            raise TelegramError(Code.INVALID_INPUT) from None
+
+    async def send_photo(self, permit: PortfolioPhotoSendPermit, content: bytes) -> SendOutcome:
+        # No previous live/text session can opt into photo authority. The exact
+        # injected MockTransport and TEST environment are the complete wire scope.
+        if (
+            type(permit) is not PortfolioPhotoSendPermit
+            or not self.synthetic_ai
+            or self.provider_runtime is not None
+            or permit.provider_session_id is not None
+            or permit.provider != "TELEGRAM"
+            or permit.bot_identity != self.settings.bot_id
+        ):
+            return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
+        try:
+            check_photo_payload(permit, content)
+        except MessagingError:
+            return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.INVALID_INPUT)
+        try:
+            status, response = await self._request_photo(permit, content)
+            if status == 200 and response.get("ok") is True:
+                result = object_value(response.get("result"))
+                chat = object_value(result.get("chat"))
+                message_id = numeric_id(result.get("message_id"))
+                photos = result.get("photo")
+                if (
+                    result.get("business_connection_id") == permit.external_connection_id
+                    and numeric_id(chat.get("id")) == permit.chat_id
+                    and chat.get("type") == "private"
+                    and type(result.get("date")) is int
+                    and result["date"] > 0
+                    and result.get("caption") == permit.text
+                    and "text" not in result
+                    and isinstance(photos, list)
+                    and 1 <= len(photos) <= 10
+                    and all(self._photo_size(value) for value in photos)
+                ):
+                    return SendOutcome(OutcomeKind.SUCCESS, message_id)
+            if (
+                response.get("ok") is False
+                and type(response.get("error_code")) is int
+                and response["error_code"] == status
+                and isinstance(response.get("description"), str)
+            ):
+                if status in {400, 401, 403}:
+                    return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
+                if status == 429:
+                    params = response.get("parameters")
+                    delay = params.get("retry_after") if isinstance(params, dict) else None
+                    if type(delay) is int and 1 <= delay <= 86400:
+                        return SendOutcome(
+                            OutcomeKind.NOT_SENT_RETRYABLE,
+                            error_code=Code.DEPENDENCY_UNAVAILABLE,
+                            retry_after_seconds=delay,
+                        )
+                    return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
+        except TelegramError as error:
+            if error.definitely_unsent:
+                return SendOutcome(OutcomeKind.NOT_SENT_RETRYABLE, error_code=error.code)
+        except MessagingError:
+            pass
+        return SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT)
+
+    @staticmethod
+    def _photo_size(value: object) -> bool:
+        if not isinstance(value, dict):
+            return False
+        try:
+            identifier(value.get("file_id"), image=True)
+            identifier(value.get("file_unique_id"), image=True)
+        except MessagingError:
+            return False
+        return (
+            type(value.get("width")) is int
+            and type(value.get("height")) is int
+            and 0 < value["width"] <= 10000
+            and 0 < value["height"] <= 10000
+            and (
+                "file_size" not in value
+                or type(value["file_size"]) is int
+                and value["file_size"] > 0
+            )
+        )
 
     async def open_image(self, permit: FetchPermit) -> AsyncIterator[bytes]:
         if permit.provider != "TELEGRAM" or permit.bot_identity != self.settings.bot_id:

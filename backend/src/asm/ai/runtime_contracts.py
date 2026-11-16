@@ -12,10 +12,13 @@ from asm.ai.contracts import (
     AnyGatewayConfig,
     Budget,
     ConversationResult,
+    ConversationResultV2,
     Cost,
     GatewayConfig,
     KnowledgeGatewayConfig,
+    PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
+    PortfolioPhotoSelection,
     SearchGatewayConfig,
     Usage,
 )
@@ -152,6 +155,63 @@ class PreparedPortfolioRun(_PreparedRun):
         return self
 
 
+class PreparedPortfolioDeliveryRun(_PreparedRun):
+    """One explicit image-profile run; no older config/DTO gains image authority."""
+
+    config: PortfolioDeliveryGatewayConfig = Field(repr=False)
+    knowledge_pin: KnowledgePin = Field(repr=False)
+    active_projection: ActiveProjection = Field(repr=False)
+    search_pin: SearchPin = Field(repr=False)
+    search_refs: SearchRefs | None = Field(repr=False)
+    portfolio_pin: PortfolioPin = Field(repr=False)
+    media_pin: MediaPin = Field(repr=False)
+    portfolio_refs: PortfolioRefs | None = Field(repr=False)
+    portfolio_session_id: UUID = Field(repr=False)
+    search_query: str = Field(repr=False, max_length=1024)
+    vision_analysis: RawVisionObservation | None = Field(repr=False)
+
+    @model_validator(mode="after")
+    def pinned_scope(self) -> Self:
+        active, pin, search, portfolio = (
+            self.active_projection,
+            self.knowledge_pin,
+            self.search_pin,
+            self.portfolio_pin,
+        )
+        if (
+            self.binding.business_id != pin.business_id
+            or str(self.binding.workspace_id) != active.workspace_id
+            or str(pin.business_id) != active.business_id
+            or (str(pin.release_id) if pin.release_id else None) != active.release_id
+            or pin.activation_version != active.activation_version
+            or (search.business_id, search.release_id, search.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or (portfolio.business_id, portfolio.release_id, portfolio.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or not self.media_pin.scope(self.binding)
+            or self.search_refs is not None
+            and self.search_refs.profile_id != search.profile_id
+            or self.portfolio_refs is not None
+            and self.portfolio_refs.profile_id != portfolio.profile_id
+            or len(self.search_query.encode("utf-8")) > 1024
+        ):
+            raise ValueError("PORTFOLIO_SCOPE_MISMATCH")
+        if self.vision_analysis is None:
+            if self.media_pin.analysis_id is not None:
+                raise ValueError("VISION_SOURCE_MISMATCH")
+        elif (
+            self.vision_analysis.analysis_id,
+            self.vision_analysis.analysis_sha256,
+            self.vision_analysis.source_sha256,
+        ) != (
+            self.media_pin.analysis_id,
+            self.media_pin.analysis_sha256,
+            self.media_pin.source_sha256,
+        ):
+            raise ValueError("VISION_SOURCE_MISMATCH")
+        return self
+
+
 class PortfolioQueryData(DTO):
     knowledge: SearchProjection = Field(repr=False)
     portfolio: PortfolioProjection = Field(repr=False)
@@ -173,6 +233,25 @@ class PortfolioQueryData(DTO):
         ):
             raise ValueError("PORTFOLIO_QUERY_MISMATCH")
         return self
+
+
+class PortfolioDeliveryQueryData(PortfolioQueryData):
+    delivery_eligible: tuple[PortfolioPhotoSelection, ...] = Field(max_length=3)
+
+    @model_validator(mode="after")
+    def eligible_subset(self) -> Self:
+        from asm.ai.portfolio_delivery import selection
+
+        if len({v.item_id for v in self.delivery_eligible}) != len(self.delivery_eligible) or any(
+            value not in tuple(selection(v) for v in self.portfolio.matches)
+            for value in self.delivery_eligible
+        ):
+            raise ValueError("PORTFOLIO_DELIVERY_SOURCE_INVALID")
+        return self
+
+
+AnyPortfolioQueryData = PortfolioQueryData | PortfolioDeliveryQueryData
+AnyPortfolioRun = PreparedPortfolioRun | PreparedPortfolioDeliveryRun
 
 
 class QueryReservation(DTO):
@@ -253,17 +332,21 @@ class PortfolioQueryReservation(DTO):
         return self
 
 
-AnyPreparedRun = PreparedRun | PreparedKnowledgeRun | PreparedSearchRun | PreparedPortfolioRun
+AnyPreparedRun = PreparedRun | PreparedKnowledgeRun | PreparedSearchRun | AnyPortfolioRun
 
 
-class RuntimeReceipt(DTO):
+class _RuntimeReceipt[Candidate](DTO):
     run_id: UUID
     job_id: UUID
     turn_id: UUID
     turn_revision: int = Field(gt=0)
     selected_at: datetime
-    result: ConversationResult = Field(repr=False)
+    result: Candidate = Field(repr=False)
     send_permit: Literal[False] = False
+
+
+class RuntimeReceipt(_RuntimeReceipt[ConversationResult]):
+    """Historical v1 result and replay DTO remain closed."""
 
 
 class KnowledgeRuntimeReceipt(RuntimeReceipt):
@@ -304,6 +387,33 @@ class PortfolioRuntimeReceipt(SearchRuntimeReceipt):
         ):
             raise ValueError("PORTFOLIO_SCOPE_MISMATCH")
         return self
+
+
+class PortfolioDeliveryRuntimeReceipt(_RuntimeReceipt[ConversationResultV2]):
+    knowledge_pin: KnowledgePin = Field(repr=False)
+    search_pin: SearchPin = Field(repr=False)
+    search_refs: SearchRefs = Field(repr=False)
+    portfolio_pin: PortfolioPin = Field(repr=False)
+    media_pin: MediaPin = Field(repr=False)
+    portfolio_refs: PortfolioRefs = Field(repr=False)
+
+    @model_validator(mode="after")
+    def scope(self) -> Self:
+        pin, search, portfolio = self.knowledge_pin, self.search_pin, self.portfolio_pin
+        if (
+            (search.business_id, search.release_id, search.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or (portfolio.business_id, portfolio.release_id, portfolio.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or self.search_refs.profile_id != search.profile_id
+            or self.portfolio_refs.profile_id != portfolio.profile_id
+            or self.media_pin.business_id != pin.business_id
+        ):
+            raise ValueError("PORTFOLIO_SCOPE_MISMATCH")
+        return self
+
+
+AnyRuntimeReceipt = RuntimeReceipt | PortfolioDeliveryRuntimeReceipt
 
 
 class CallCompletion(DTO):

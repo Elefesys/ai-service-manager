@@ -3,7 +3,7 @@
 import hashlib
 import json
 from datetime import datetime
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, ClassVar, Literal, Self
 from uuid import UUID
 
 from pydantic import BeforeValidator, Field, TypeAdapter, field_validator, model_validator
@@ -16,7 +16,7 @@ from asm.billing.validation import (
     PositiveDecimal,
     Timestamp,
 )
-from asm.conversations.material import MessageCurrent
+from asm.conversations.material import MessageCurrent, MessageCurrentV2
 from asm.conversations.native_context_http_models import HumanContextRevision
 from asm.messaging.http_models import DeliveryResponse
 from asm.messaging.results import Result
@@ -139,12 +139,12 @@ def _native_integer(value: object) -> None:
         raise ValueError("Invalid snapshot integer")
 
 
-def validate_native_snapshot(value: object) -> object:
+def validate_native_snapshot(value: object, expected_version: Literal[3, 4] = 3) -> object:
     """Reject re-signed type coercions before the retained private DTO parser."""
     if (
         type(value) is not dict
         or type(value.get("schema_version")) is not int
-        or value["schema_version"] != 3
+        or value["schema_version"] != expected_version
     ):
         raise ValueError("Invalid V3 snapshot")
     for field in ("workspace_id", "connection_id", "turn_id", "resume_receipt_id", "job_id"):
@@ -244,14 +244,31 @@ class RecentMessage(StrictModel):
         return self
 
 
-class TurnSnapshotV3(TurnSnapshot):
-    schema_version: Literal[3]
+class PortfolioRecentMessage(StrictModel):
+    message_id: CanonicalUUID
+    version: PositiveDecimal
+    direction: Literal["OUTBOUND"]
+    origin: Literal["OWNER_MANUAL", "CONTROLLED_AUTOMATION", "LEGACY_UNATTRIBUTED"]
+    created_at: Timestamp
+    current: MessageCurrentV2
+    delivery: DeliveryResponse
+    file: None
+
+    @model_validator(mode="after")
+    def identity(self) -> Self:
+        if self.current.changed != (int(self.version) > 1):
+            raise ValueError("Invalid portfolio history version")
+        return self
+
+
+class _NativeTurnSnapshot(TurnSnapshot):
+    native_schema_version: ClassVar[Literal[3, 4]] = 3
     members: tuple[TurnMemberV2, ...] = Field(min_length=1, max_length=64)
     human_context: HumanContextRevision
     context_policy_epoch: PositiveDecimal
     human_observation_epoch: LimitDecimal
     resume_receipt_id: UUID
-    recent_messages: tuple[RecentMessage, ...] = Field(max_length=16)
+    recent_messages: tuple[RecentMessage | PortfolioRecentMessage, ...] = Field(max_length=16)
     history_truncated: bool = Field(strict=True)
     coverage_status: Literal["OWNER_TEXT", "CANONICAL_COMPLETE"]
     context_coverage: Literal["OWNER_ASSERTED_TEXT_ONLY"]
@@ -262,7 +279,7 @@ class TurnSnapshotV3(TurnSnapshot):
     @model_validator(mode="before")
     @classmethod
     def raw_contract(cls, value: Any) -> Any:
-        return validate_native_snapshot(value)
+        return validate_native_snapshot(value, cls.native_schema_version)
 
     @model_validator(mode="after")
     def context(self) -> Self:
@@ -319,8 +336,28 @@ class TurnSnapshotV3(TurnSnapshot):
         return self
 
 
+class TurnSnapshotV3(_NativeTurnSnapshot):
+    schema_version: Literal[3]
+    recent_messages: tuple[RecentMessage, ...] = Field(max_length=16)
+
+
+class TurnSnapshotV4(_NativeTurnSnapshot):
+    """Explicit history revision; no inbound portfolio/file authority is added."""
+
+    schema_version: Literal[4]
+    native_schema_version: ClassVar[Literal[3, 4]] = 4
+
+    @model_validator(mode="after")
+    def portfolio_history(self) -> Self:
+        if not any(isinstance(value, PortfolioRecentMessage) for value in self.recent_messages):
+            raise ValueError("Portfolio snapshot requires portfolio output history")
+        return self
+
+
 def parse_snapshot(value: object) -> TurnSnapshot:
     if isinstance(value, dict) and "schema_version" in value:
+        if type(value["schema_version"]) is int and value["schema_version"] == 4:
+            return TurnSnapshotV4.model_validate(value)
         version = snapshot_version(value["schema_version"])
         return (TurnSnapshotV3 if version == 3 else TurnSnapshotV2).model_validate(value)
     return TurnSnapshot.model_validate(value)

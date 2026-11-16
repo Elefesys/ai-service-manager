@@ -735,7 +735,7 @@ async def test_native_policy_carrier_uses_catalog_binding_and_actual_capability_
         human_context_policy="ON",
         human_context_policy_epoch=1,
     )
-    profile = dict(schema_revision="0021", valid=True, profile_sha256="b" * 64)
+    profile = dict(schema_revision="0022", valid=True, profile_sha256="b" * 64)
     db = SimpleNamespace(
         execute=AsyncMock(
             side_effect=[
@@ -763,7 +763,7 @@ async def test_native_policy_carrier_uses_catalog_binding_and_actual_capability_
     }
     assert json.loads(params["profile"]) == {
         "source_tree": "a" * 40,
-        "schema_revision": "0021",
+        "schema_revision": "0022",
         "profile_sha256": "b" * 64,
         "drain_confirmed": True,
     }
@@ -787,7 +787,7 @@ async def test_native_policy_rejects_bad_catalog_before_capability(harness, patc
                 SimpleNamespace(mappings=lambda: SimpleNamespace(one=lambda: {})),
                 SimpleNamespace(
                     scalar_one=lambda: (
-                        dict(schema_revision="0021", valid=True, profile_sha256="b" * 64) | patch
+                        dict(schema_revision="0022", valid=True, profile_sha256="b" * 64) | patch
                     )
                 ),
             ]
@@ -1634,3 +1634,47 @@ async def test_knowledge_current_observer_after_ai_cannot_enroll_or_regenerate(
     harness, monkeypatch
 ):
     await knowledge_observer_journey(harness, monkeypatch, before_guarded=False)
+
+
+def test_portfolio_browser_identity_does_not_expand_closed_worker_seed_or_actions(harness):
+    fixture, worker = harness.fixture, harness.worker
+    assert fixture.PORTFOLIO_PRESETS == ("portfolio_photo",)
+    assert "portfolio_photo" not in fixture.PRESETS
+    assert fixture.bot("portfolio_photo") == "m24-portfolio_photo-bot"
+    assert fixture.route("portfolio_photo") == "m24-portfolio_photo-connection-0"
+    assert len(list(worker.seed_events())) < 128
+    assert all(e.bot_identity != fixture.bot("portfolio_photo") for e in worker.seed_events())
+    with pytest.raises(fixture.ProvisioningError):
+        worker.validate_operation("portfolio_photo", "success")
+
+
+@pytest.mark.parametrize(
+    "action,viewport,scenario",
+    [("sql", "desktop", "sent"), ("answer", "external", "sent"), ("answer", "desktop", "retry")],
+)
+async def test_portfolio_browser_helper_rejects_unassigned_scope_before_target(
+    harness, monkeypatch, action, viewport, scenario
+):
+    from m5_portfolio_delivery_fixtures import browser_action
+
+    def forbidden():
+        pytest.fail("Unexpected target resolution for unassigned browser action")
+
+    monkeypatch.setattr(harness.worker, "target", forbidden)
+    with pytest.raises(harness.fixture.ProvisioningError):
+        await browser_action(action, viewport, scenario)
+
+
+async def test_portfolio_browser_helper_rejects_privileged_environment_before_engine(
+    harness, monkeypatch
+):
+    import sqlalchemy.ext.asyncio
+    from m5_portfolio_delivery_fixtures import browser_action
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unexpected engine construction with a privileged environment")
+
+    monkeypatch.setattr(sqlalchemy.ext.asyncio, "create_async_engine", forbidden)
+    # The harness still contains a migration credential; runtime may not inherit it.
+    with pytest.raises(harness.fixture.ProvisioningError):
+        await browser_action("publish", "desktop", "sent")

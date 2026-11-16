@@ -26,17 +26,21 @@ from asm.ai.context import (
 )
 from asm.ai.contracts import (
     DTO,
+    AnyConversationResult,
     AnyGatewayConfig,
+    AnyGatewayResult,
     Budget,
     ConversationResult,
+    ConversationResultV2,
     Cost,
     ErrorCode,
     GatewayRequest,
-    GatewayResult,
     Handoff,
+    PortfolioDeliveryGatewayConfig,
     ReadTool,
     ToolResult,
     Usage,
+    validate_conversation_result,
     validate_gateway_config,
 )
 from asm.ai.gateway import ModelAdapter, ModelGateway
@@ -52,6 +56,7 @@ from asm.configuration.models import ActiveProjection
 
 if TYPE_CHECKING:
     from asm.ai.portfolio import PreparedPortfolioContext
+    from asm.ai.portfolio_delivery import PreparedPortfolioDeliveryContext
 
 
 Boundary = Literal["MODEL", "READ", "FOLLOWUP", "CANDIDATE"]
@@ -116,9 +121,9 @@ class CallObservation(DTO):
     cost: Cost
 
 
-class AgentOutcome(DTO):
+class _AgentOutcome[Candidate](DTO):
     status: Literal["CANDIDATE", "STOP"]
-    candidate: ConversationResult | None = Field(default=None, repr=False)
+    candidate: Candidate | None = Field(default=None, repr=False)
     reason: StopCode | None = None
     budget: Budget
     reads_executed: int = Field(ge=0, le=1)
@@ -135,6 +140,17 @@ class AgentOutcome(DTO):
         ):
             raise ValueError("Invalid agent outcome")
         return self
+
+
+class AgentOutcome(_AgentOutcome[ConversationResult]):
+    """Historical result; it cannot carry a portfolio-photo candidate."""
+
+
+class PortfolioDeliveryAgentOutcome(_AgentOutcome[ConversationResultV2]):
+    """Explicit v6 candidate, still without send authority."""
+
+
+AnyAgentOutcome = AgentOutcome | PortfolioDeliveryAgentOutcome
 
 
 class AuthorityFailure(Exception):
@@ -176,8 +192,8 @@ class ConversationAgent:
         self._deadline = 0.0
 
     def _outcome(
-        self, *, reason: StopCode | None = None, candidate: ConversationResult | None = None
-    ) -> AgentOutcome:
+        self, *, reason: StopCode | None = None, candidate: AnyConversationResult | None = None
+    ) -> AnyAgentOutcome:
         budget = (
             self._gateway.budget
             if self._gateway
@@ -189,13 +205,22 @@ class ConversationAgent:
                 currency=self.config.limits.currency,
             )
         )
-        return AgentOutcome(
-            status="STOP" if reason else "CANDIDATE",
-            reason=reason,
-            candidate=candidate,
-            budget=budget,
-            reads_executed=self._reads,
-            calls=tuple(self._calls),
+        model = (
+            PortfolioDeliveryAgentOutcome
+            if isinstance(self.config, PortfolioDeliveryGatewayConfig)
+            else AgentOutcome
+        )
+        return model.model_validate(
+            {
+                "status": "STOP" if reason else "CANDIDATE",
+                "reason": reason,
+                "candidate": validate_conversation_result(self.config, candidate)
+                if candidate is not None
+                else None,
+                "budget": budget,
+                "reads_executed": self._reads,
+                "calls": tuple(self._calls),
+            }
         )
 
     def _time_left(self) -> None:
@@ -209,6 +234,7 @@ class ConversationAgent:
         | PreparedKnowledgeContext
         | PreparedSearchContext
         | PreparedPortfolioContext
+        | PreparedPortfolioDeliveryContext
     ):
         return self.builder.build(snapshot, binding)
 
@@ -217,6 +243,9 @@ class ConversationAgent:
 
     def _read_result(self, view: DTO) -> str:
         return view.model_dump_json()
+
+    async def _after_read(self, view: DTO, binding: ContextBinding) -> None:
+        """Historical versions need no extra read attestation."""
 
     async def _authorize(self, binding: ContextBinding, boundary: Boundary) -> None:
         self._time_left()
@@ -238,7 +267,7 @@ class ConversationAgent:
 
     async def run(
         self, binding: ContextBinding, snapshot: object, *, run_id: str, deadline: datetime
-    ) -> AgentOutcome:
+    ) -> AnyAgentOutcome:
         if self._used:
             return self._outcome(reason="CLOSED")
         self._used = True  # Before the first await; another caller cannot start a new Gateway.
@@ -294,6 +323,7 @@ class ConversationAgent:
                         name=call.name,
                         result_json=self._read_result(refreshed.view),
                     )
+                    await self._after_read(refreshed.view, binding)
                     await self._authorize(binding, "FOLLOWUP")
                     result = await self._call((tool_result,))
                 if result.kind == "FINAL":
@@ -316,7 +346,7 @@ class ConversationAgent:
         except (ValueError, TypeError, AttributeError):
             return self._outcome(reason="INVALID_INPUT")
 
-    async def _call(self, results: tuple[ToolResult, ...] = ()) -> GatewayResult:
+    async def _call(self, results: tuple[ToolResult, ...] = ()) -> AnyGatewayResult:
         self._time_left()
         assert self._gateway is not None
         result = await self._gateway.call(results)
@@ -539,8 +569,8 @@ class SearchConversationAgent(ConversationAgent):
         )
 
     def _outcome(
-        self, *, reason: StopCode | None = None, candidate: ConversationResult | None = None
-    ) -> AgentOutcome:
+        self, *, reason: StopCode | None = None, candidate: AnyConversationResult | None = None
+    ) -> AnyAgentOutcome:
         # The application selects owner review after the ordinary fresh CANDIDATE gate.
         # A model cannot resolve conflicting owner-labelled facts by inventing a winner.
         if candidate is not None and self.search_projection.status == "CONFLICT":

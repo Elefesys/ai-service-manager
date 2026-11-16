@@ -157,6 +157,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "portfolio_assets",
             "portfolio_build_items",
             "portfolio_builds",
+            "portfolio_delivery_intents",
             "portfolio_items",
             "portfolio_release_builds",
             "portfolio_revisions",
@@ -174,7 +175,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M5.2C material tables are allowed"
+        ], "Only the accepted M0 through M5.2D material tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

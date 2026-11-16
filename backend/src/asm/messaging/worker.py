@@ -22,11 +22,16 @@ from asm.messaging.results import (
     TerminalRejection,
     TurnJobClaim,
 )
+from asm.portfolio.delivery import PortfolioDelivery, PortfolioPhotoSendPermit
 from asm.portfolio.errors import PortfolioError
 
 if TYPE_CHECKING:
     from asm.ai.provider_runtime import ProviderRuntime
-    from asm.ai.runtime import PortfolioSyntheticRuntime, SyntheticRuntime
+    from asm.ai.runtime import (
+        PortfolioDeliverySyntheticRuntime,
+        PortfolioSyntheticRuntime,
+        SyntheticRuntime,
+    )
     from asm.files.transfer import CleanupSweep, FetchTransfer
     from asm.portfolio.storage import PortfolioCleanupSweep
     from asm.telegram.client import TelegramClient
@@ -41,7 +46,8 @@ class Worker:
         deadline: float = 10,
         files: "FetchTransfer | None" = None,
         telegram: "TelegramClient | None" = None,
-        ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime | None" = None,
+        ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime | None" = None,
+        portfolio_delivery: PortfolioDelivery | None = None,
     ) -> None:
         if not 0 < deadline < 30:
             raise MessagingError(Code.INVALID_INPUT)
@@ -53,6 +59,13 @@ class Worker:
         if ai is not None and ai.database.messaging is not database:
             raise MessagingError(Code.NOT_ALLOWED)
         self.ai = ai
+        if portfolio_delivery is not None and (
+            ai is None
+            or not ai.database.portfolio_delivery
+            or portfolio_delivery.database is not database
+        ):
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.portfolio_delivery = portfolio_delivery
         self.worker_id = "controlled-" + str(uuid4())
 
     async def _finish(self, permit: SendPermit, outcome: SendOutcome) -> None:
@@ -115,6 +128,59 @@ class Worker:
                 await self.database.finish_turn(claim, result)
             except (SQLAlchemyError, MessagingError) as secondary:
                 raise secondary from primary
+
+    async def _send_photo(self, claim: JobClaim) -> None:
+        delivery = self.portfolio_delivery
+        if self.ai is None or delivery is None:
+            await self.database.retry(claim, Code.INVALID_INPUT, retryable=False)
+            return
+        try:
+            media = await delivery.read(claim)
+        except (MessagingError, TimeoutError, ValueError) as error:
+            if isinstance(error, MessagingError) and error.code == Code.STALE_CLAIM:
+                raise
+            # All failures here precede dispatch. Preserve the selected source;
+            # no original replacement or unexpected text send is attempted.
+            await self.database.retry(claim, Code.DEPENDENCY_UNAVAILABLE, retryable=False)
+            return
+        if isinstance(media, TerminalRejection):
+            return
+        read, content = media
+        transport = self.ai.telegram
+        probe = await self.database.telegram_probe(claim)
+        observation = None
+        if probe is not None:
+            if transport is None:
+                await self.database.retry(claim, Code.INVALID_INPUT, retryable=False)
+                return
+            observation = await transport.observe(
+                probe.bot_identity, probe.external_connection_id, probe.owner_user_id
+            )
+        permit = await delivery.begin(claim, read, probe, observation)
+        if not isinstance(permit, PortfolioPhotoSendPermit):
+            return
+        try:
+            async with asyncio.timeout(self.deadline):
+                await self.adapter.checkpoint("before_call")
+                if permit.provider == "TELEGRAM":
+                    if transport is None:
+                        raise MessagingError(Code.DEPENDENCY_UNAVAILABLE)
+                    outcome = await transport.send_photo(permit, content)
+                else:
+                    outcome = await self.adapter.send_photo(permit, content)
+        except asyncio.CancelledError:
+            try:
+                await self._finish(
+                    permit,
+                    SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT),
+                )
+            except (SQLAlchemyError, MessagingError):
+                pass
+            raise
+        except Exception:
+            outcome = SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT)
+        await self.adapter.checkpoint("before_finalize")
+        await self._finish(permit, outcome)
 
     async def execute(self, claim: JobClaim) -> None:
         if isinstance(claim, AIJobClaim):
@@ -201,6 +267,9 @@ class Worker:
                 await self.files.execute(claim)
             return
 
+        if claim.kind == "SEND_AI_PHOTO":
+            await self._send_photo(claim)
+            return
         if claim.kind not in {"SEND_MANUAL_TEXT", "SEND_GUARDED_TEXT", "SEND_AI_TEXT"}:
             raise MessagingError(Code.INVALID_INPUT)
 
@@ -333,7 +402,7 @@ async def run(
     cleanup: "CleanupSweep | None" = None,
     portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime | None" = None,
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     if role == "worker" and ai is not None:
         async with asyncio.TaskGroup() as group:
@@ -368,7 +437,7 @@ async def _run_ai(
     database: MessagingDatabase,
     adapter: ControlledAdapter,
     stop: asyncio.Event,
-    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime",
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime",
 ) -> None:
     worker = Worker(database, adapter, ai=ai)
     while not stop.is_set():
@@ -396,7 +465,7 @@ async def _run(
     cleanup: "CleanupSweep | None" = None,
     portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | ProviderRuntime | None" = None,
+    ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     worker = Worker(database, adapter, files=files, telegram=telegram, ai=ai)
     while not stop.is_set():

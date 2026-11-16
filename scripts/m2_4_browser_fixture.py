@@ -61,6 +61,9 @@ PRESETS = (
     + NATIVE_PRESETS
     + ("knowledge",)
 )
+# This identity has its own finite runtime bootstrap. It does not expand the
+# closed legacy Worker's <128 event list or alter any existing preset.
+PORTFOLIO_PRESETS = ("portfolio_photo",)
 ACTIONS = (
     "inventory",
     "stats",
@@ -108,7 +111,7 @@ def target():
 
 
 def bot(preset):
-    if preset not in PRESETS:
+    if preset not in PRESETS + PORTFOLIO_PRESETS:
         raise ProvisioningError("Invalid finite messaging preset")
     return "9000012" if preset == "material" else f"m24-{preset}-bot"
 
@@ -123,7 +126,7 @@ def route(preset, index=0):
 async def setup_messaging(password):
     url = target()  # No writes or hashing before the finite TEST target guard.
     fixtures = {}
-    for preset in PRESETS:
+    for preset in PRESETS + PORTFOLIO_PRESETS:
         fixtures[preset] = {
             "login": f"browser.m24-{preset}",
             **await provision("TEST", url, f"browser.m24-{preset}", password),
@@ -371,12 +374,12 @@ async def native_policy(connection, params, preset, operation, source_tree):
         .one()
     )
     installed = (
-        await connection.execute(text("SELECT platform.portfolio_schema_profile()"))
+        await connection.execute(text("SELECT platform.portfolio_delivery_schema_profile()"))
     ).scalar_one()
     if (
         not isinstance(installed, dict)
         or set(installed) != {"schema_revision", "valid", "profile_sha256"}
-        or installed["schema_revision"] != "0021"
+        or installed["schema_revision"] != "0022"
         or installed["valid"] is not True
         or not isinstance(installed["profile_sha256"], str)
         or re.fullmatch("[0-9a-f]{64}", installed["profile_sha256"]) is None
@@ -390,7 +393,7 @@ async def native_policy(connection, params, preset, operation, source_tree):
     # no old writers are started by it. This is not an operator drain probe.
     profile = dict(
         source_tree=source_tree,
-        schema_revision="0021",
+        schema_revision="0022",
         profile_sha256=installed["profile_sha256"],
         drain_confirmed=True,
     )

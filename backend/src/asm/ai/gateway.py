@@ -9,20 +9,25 @@ from typing import Protocol
 
 from asm.ai.contracts import (
     CONVERSATION_RESULT,
+    CONVERSATION_RESULT_V2,
     AdapterRequest,
     AdapterResponse,
     AnyGatewayConfig,
+    AnyGatewayResult,
     Budget,
     Capabilities,
     Cost,
     ErrorCode,
     GatewayRequest,
     GatewayResult,
+    PortfolioDeliveryGatewayConfig,
+    PortfolioDeliveryGatewayResult,
     ToolCall,
     ToolExchange,
     ToolResult,
     Usage,
     strict_json,
+    validate_conversation_result,
     validate_gateway_config,
 )
 
@@ -95,7 +100,7 @@ class ModelGateway:
         if initial_budget is not None:
             initial = Budget.model_validate(initial_budget)
             if (
-                self._config.prompt_revision != "conversation_v5"
+                self._config.prompt_revision not in {"conversation_v5", "conversation_v6"}
                 or initial.calls_used
                 or initial.reads_reserved
                 or initial.tokens_reserved
@@ -112,18 +117,37 @@ class ModelGateway:
         prompt_path = f"prompts/{self._config.prompt_revision}.txt"
         self._prompt = files("asm.ai").joinpath(prompt_path).read_text("utf-8")
         self._schema = (
-            files("asm.ai").joinpath("schemas/conversation_result_v1.json").read_text("utf-8")
+            files("asm.ai")
+            .joinpath(f"schemas/{self._config.schema_revision}.json")
+            .read_text("utf-8")
         )
-        if strict_json(self._schema) != CONVERSATION_RESULT.json_schema():
+        expected_schema = (
+            CONVERSATION_RESULT_V2
+            if isinstance(self._config, PortfolioDeliveryGatewayConfig)
+            else CONVERSATION_RESULT
+        )
+        if strict_json(self._schema) != expected_schema.json_schema():
             raise ValueError("Conversation schema drift")
+
+    @property
+    def _result_type(self) -> type[GatewayResult] | type[PortfolioDeliveryGatewayResult]:
+        return (
+            PortfolioDeliveryGatewayResult
+            if isinstance(self._config, PortfolioDeliveryGatewayConfig)
+            else GatewayResult
+        )
 
     @property
     def budget(self) -> Budget:
         return self._budget
 
-    def _error(self, code: ErrorCode, usage: Usage = Usage(), cost: Cost = Cost()) -> GatewayResult:
+    def _error(
+        self, code: ErrorCode, usage: Usage = Usage(), cost: Cost = Cost()
+    ) -> AnyGatewayResult:
         self._closed = True
-        return GatewayResult(kind="ERROR", error=code, budget=self._budget, usage=usage, cost=cost)
+        return self._result_type(
+            kind="ERROR", error=code, budget=self._budget, usage=usage, cost=cost
+        )
 
     def _remaining_seconds(self) -> float:
         return min(
@@ -172,9 +196,9 @@ class ModelGateway:
             self._pending = ()
         return None
 
-    async def call(self, tool_results: tuple[ToolResult, ...] = ()) -> GatewayResult:
+    async def call(self, tool_results: tuple[ToolResult, ...] = ()) -> AnyGatewayResult:
         if self._busy:
-            return GatewayResult(kind="ERROR", error="BUSY", budget=self._budget)
+            return self._result_type(kind="ERROR", error="BUSY", budget=self._budget)
         if self._closed:
             return self._error("CLOSED")
         self._busy = True
@@ -186,7 +210,7 @@ class ModelGateway:
         finally:
             self._busy = False
 
-    async def _call(self, tool_results: tuple[ToolResult, ...]) -> GatewayResult:
+    async def _call(self, tool_results: tuple[ToolResult, ...]) -> AnyGatewayResult:
         limits = self._config.limits
         if self._remaining_seconds() <= 0:
             return self._error("DEADLINE")
@@ -287,18 +311,30 @@ class ModelGateway:
                 return self._error("TRUNCATED", usage, cost)
             if response.kind == "REFUSAL":
                 self._closed = True
-                return GatewayResult(kind="REFUSAL", budget=self._budget, usage=usage, cost=cost)
+                return self._result_type(
+                    kind="REFUSAL", budget=self._budget, usage=usage, cost=cost
+                )
             if response.kind == "TOOLS":
                 return self._tools(response)
-            result = CONVERSATION_RESULT.validate_python(strict_json(response.output_json or ""))
+            result = validate_conversation_result(
+                self._config, strict_json(response.output_json or "")
+            )
             self._closed = True
+            if isinstance(self._config, PortfolioDeliveryGatewayConfig):
+                return PortfolioDeliveryGatewayResult(
+                    kind="FINAL", result=result, budget=self._budget, usage=usage, cost=cost
+                )
             return GatewayResult(
-                kind="FINAL", result=result, budget=self._budget, usage=usage, cost=cost
+                kind="FINAL",
+                result=CONVERSATION_RESULT.validate_python(result),
+                budget=self._budget,
+                usage=usage,
+                cost=cost,
             )
         except Exception:
             return self._error("INVALID_OUTPUT", usage, cost)
 
-    def _tools(self, response: AdapterResponse) -> GatewayResult:
+    def _tools(self, response: AdapterResponse) -> AnyGatewayResult:
         calls = response.tool_calls
         tools = {t.name: t for t in self._request.tools}
         limits = self._config.limits
@@ -331,7 +367,7 @@ class ModelGateway:
                 }
             )
         )
-        return GatewayResult(
+        return self._result_type(
             kind="TOOLS",
             tool_calls=calls,
             budget=self._budget,

@@ -26,15 +26,18 @@ from asm.ai.agent import (
 )
 from asm.ai.context import ContextBinding
 from asm.ai.contracts import (
-    CONVERSATION_RESULT,
     DTO,
     AdapterRequest,
     AdapterResponse,
+    AnyConversationResult,
     AnyGatewayConfig,
     Budget,
-    ConversationResult,
+    PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
+    PortfolioPhoto,
+    PortfolioPhotoSelection,
     Reply,
+    validate_conversation_result,
     validate_gateway_config,
 )
 from asm.ai.gateway import ModelAdapter
@@ -46,14 +49,24 @@ from asm.ai.portfolio import (
     PortfolioConversationAgent,
     PortfolioPin,
 )
+from asm.ai.portfolio_delivery import (
+    PortfolioDeliveryContextRead,
+    PortfolioDeliveryConversationAgent,
+)
 from asm.ai.runtime_contracts import (
+    AnyPortfolioQueryData,
+    AnyPortfolioRun,
     AnyPreparedRun,
+    AnyRuntimeReceipt,
     CallCompletion,
     KnowledgeRuntimeReceipt,
+    PortfolioDeliveryQueryData,
+    PortfolioDeliveryRuntimeReceipt,
     PortfolioQueryData,
     PortfolioQueryReservation,
     PortfolioRuntimeReceipt,
     PreparedKnowledgeRun,
+    PreparedPortfolioDeliveryRun,
     PreparedPortfolioRun,
     PreparedRun,
     PreparedSearchRun,
@@ -104,6 +117,7 @@ class AIDatabase:
         provider: "RuntimeSettings | None" = None,
         embeddings: EmbeddingClient | None = None,
         portfolio_session_id: UUID | None = None,
+        portfolio_delivery: bool = False,
     ):
         if environment not in {"LOCAL", "TEST"}:
             raise MessagingError(Code.NOT_ALLOWED)
@@ -120,6 +134,13 @@ class AIDatabase:
             or provider is not None
         ):
             raise MessagingError(Code.NOT_ALLOWED)
+        if (
+            type(portfolio_delivery) is not bool
+            or portfolio_delivery
+            and portfolio_session_id is None
+        ):
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.portfolio_delivery = portfolio_delivery
         self.portfolio_session_id = portfolio_session_id
         self.provider = provider
         if embeddings is not None and type(embeddings) is not EmbeddingClient:
@@ -127,6 +148,10 @@ class AIDatabase:
         self.embeddings = embeddings if embeddings is not None else EmbeddingClient()
 
     def config(self, config: AnyGatewayConfig) -> AnyGatewayConfig:
+        if self.portfolio_delivery:
+            if not isinstance(config, PortfolioDeliveryGatewayConfig):
+                raise MessagingError(Code.NOT_ALLOWED)
+            return PortfolioDeliveryGatewayConfig.model_validate(config)
         if self.portfolio_session_id is not None:
             if not isinstance(config, PortfolioGatewayConfig):
                 raise MessagingError(Code.NOT_ALLOWED)
@@ -162,13 +187,17 @@ class AIDatabase:
             "config": config.model_dump(mode="json"),
             "deadline": deadline.isoformat(),
         }
-        if isinstance(config, PortfolioGatewayConfig):
+        if isinstance(config, (PortfolioGatewayConfig, PortfolioDeliveryGatewayConfig)):
             if self.portfolio_session_id is None:
                 raise MessagingError(Code.NOT_ALLOWED)
             payload["portfolio_session_id"] = str(self.portfolio_session_id)
         raw = await self._command(claim, "PREPARE", **payload)
-        if config.prompt_revision == "conversation_v5":
-            run = decoded(PreparedPortfolioRun, raw)
+        if config.prompt_revision in {"conversation_v5", "conversation_v6"}:
+            run = (
+                decoded(PreparedPortfolioDeliveryRun, raw)
+                if isinstance(config, PortfolioDeliveryGatewayConfig)
+                else decoded(PreparedPortfolioRun, raw)
+            )
             if run.portfolio_session_id != self.portfolio_session_id:
                 raise MessagingError(Code.AI_STALE)
             return run
@@ -181,7 +210,9 @@ class AIDatabase:
     def authority(
         self, claim: JobClaim, run: AnyPreparedRun
     ) -> "PostgresAuthority | PostgresKnowledgeAuthority | PostgresSearchAuthority | PostgresPortfolioAuthority":
-        if isinstance(run, PreparedPortfolioRun):
+        if isinstance(run, PreparedPortfolioDeliveryRun):
+            return PostgresPortfolioDeliveryAuthority(self, claim, run)
+        if isinstance(run, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun)):
             return PostgresPortfolioAuthority(self, claim, run)
         if isinstance(run, PreparedSearchRun):
             return PostgresSearchAuthority(self, claim, run)
@@ -189,7 +220,9 @@ class AIDatabase:
             return PostgresKnowledgeAuthority(self, claim, run)
         return PostgresAuthority(self, claim, run)
 
-    def receipt(self, config: AnyGatewayConfig, raw: Any) -> RuntimeReceipt:
+    def receipt(self, config: AnyGatewayConfig, raw: Any) -> AnyRuntimeReceipt:
+        if isinstance(config, PortfolioDeliveryGatewayConfig):
+            return decoded(PortfolioDeliveryRuntimeReceipt, raw)
         return decoded(
             PortfolioRuntimeReceipt
             if config.prompt_revision == "conversation_v5"
@@ -219,20 +252,20 @@ class AIDatabase:
         )
 
     async def replay(
-        self, claim: JobClaim, config: AnyGatewayConfig, result: ConversationResult | None = None
-    ) -> RuntimeReceipt:
+        self, claim: JobClaim, config: AnyGatewayConfig, result: AnyConversationResult | None = None
+    ) -> AnyRuntimeReceipt:
         payload: dict[str, object] = {"config": self.config(config).model_dump(mode="json")}
         if result is not None:
-            payload["result"] = CONVERSATION_RESULT.validate_python(result).model_dump(mode="json")
+            payload["result"] = validate_conversation_result(config, result).model_dump(mode="json")
         return self.receipt(
             config,
             await self.messaging.replay_ai(claim.job_id, claim.claim_token, payload),
         )
 
     async def commit(
-        self, claim: JobClaim, run: AnyPreparedRun, result: ConversationResult
-    ) -> RuntimeReceipt:
-        result = CONVERSATION_RESULT.validate_python(result)
+        self, claim: JobClaim, run: AnyPreparedRun, result: AnyConversationResult
+    ) -> AnyRuntimeReceipt:
+        result = validate_conversation_result(run.config, result)
         try:
             return await self.replay(claim, run.config, result)
         except MessagingError as error:
@@ -260,7 +293,7 @@ class AIDatabase:
         *,
         deadline: datetime,
         telegram: "TelegramClient | None" = None,
-    ) -> RuntimeReceipt | RuntimeStop:
+    ) -> AnyRuntimeReceipt | RuntimeStop:
         config = self.config(config)
         try:
             return await self.replay(claim, config)
@@ -273,15 +306,15 @@ class AIDatabase:
             # cannot reconstruct its Gateway and never starts another POST.
             return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
         projection: SearchProjection | None = None
-        portfolio_data: PortfolioQueryData | None = None
-        if isinstance(run, PreparedPortfolioRun):
+        portfolio_data: AnyPortfolioQueryData | None = None
+        if isinstance(run, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun)):
             portfolio_data = await self.portfolio_query(claim, run)
             if portfolio_data is None:
                 return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
             # The shared QUERY has a durable hold. Re-read the same saved run so
             # Gateway starts with all auxiliary cost under the original budget.
             refreshed = await self.prepare(claim, config, deadline=run.deadline)
-            if not isinstance(refreshed, PreparedPortfolioRun):
+            if not isinstance(refreshed, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun)):
                 raise MessagingError(Code.AI_STALE)
             run = refreshed
             self._portfolio_data_current(run, portfolio_data)
@@ -294,7 +327,26 @@ class AIDatabase:
             )
         wrapped = DurableAdapter(self, claim, run, adapter)
         agent: ConversationAgent
-        if isinstance(run, PreparedPortfolioRun):
+        if isinstance(run, PreparedPortfolioDeliveryRun):
+            if not isinstance(portfolio_data, PortfolioDeliveryQueryData):
+                raise MessagingError(Code.AI_STALE)
+            agent = PortfolioDeliveryConversationAgent(
+                config,
+                wrapped,
+                PostgresPortfolioDeliveryAuthority(self, claim, run),
+                knowledge_pin=run.knowledge_pin,
+                active_projection=run.active_projection,
+                search_pin=run.search_pin,
+                portfolio_pin=run.portfolio_pin,
+                media_pin=run.media_pin,
+                search_projection=portfolio_data.knowledge,
+                portfolio_projection=portfolio_data.portfolio,
+                vision_analysis=run.vision_analysis,
+                search_query=run.search_query,
+                delivery_eligible=portfolio_data.delivery_eligible,
+                initial_budget=run.budget,
+            )
+        elif isinstance(run, PreparedPortfolioRun):
             assert portfolio_data is not None
             agent = PortfolioConversationAgent(
                 config,
@@ -342,13 +394,17 @@ class AIDatabase:
             raise asyncio.CancelledError
         if outcome.candidate is None:
             return RuntimeStop(run_id=run.run_id, reason="AGENT_STOP")
-        if self.delivery and isinstance(outcome.candidate, Reply):
+        if self.delivery and isinstance(outcome.candidate, (Reply, PortfolioPhoto)):
             return await self._commit_reply(claim, run, outcome.candidate, telegram)
         return await self.commit(claim, run, outcome.candidate)
 
     async def _commit_reply(
-        self, claim: JobClaim, run: AnyPreparedRun, result: Reply, telegram: "TelegramClient | None"
-    ) -> RuntimeReceipt | RuntimeStop:
+        self,
+        claim: JobClaim,
+        run: AnyPreparedRun,
+        result: Reply | PortfolioPhoto,
+        telegram: "TelegramClient | None",
+    ) -> AnyRuntimeReceipt | RuntimeStop:
         # The persisted run deadline also bounds HTTP after the agent returns.
         # Probe commits before I/O; observation CAS and canonical selection share
         # the second transaction. A rejected observation still commits as negative.
@@ -440,7 +496,7 @@ class AIDatabase:
         return decoded(SearchProjection, projection)
 
     @staticmethod
-    def _portfolio_pins(run: PreparedPortfolioRun) -> dict[str, Any]:
+    def _portfolio_pins(run: AnyPortfolioRun) -> dict[str, Any]:
         return {
             "search_pin": run.search_pin.model_dump(mode="json"),
             "portfolio_pin": run.portfolio_pin.model_dump(mode="json"),
@@ -448,7 +504,7 @@ class AIDatabase:
         }
 
     @staticmethod
-    def _portfolio_data_current(run: PreparedPortfolioRun, data: PortfolioQueryData) -> None:
+    def _portfolio_data_current(run: AnyPortfolioRun, data: AnyPortfolioQueryData) -> None:
         if (
             (
                 data.portfolio_pin,
@@ -469,18 +525,20 @@ class AIDatabase:
         ):
             raise MessagingError(Code.AI_STALE)
 
-    async def _portfolio_read(
-        self, claim: JobClaim, run: PreparedPortfolioRun
-    ) -> PortfolioQueryData:
+    async def _portfolio_read(self, claim: JobClaim, run: AnyPortfolioRun) -> AnyPortfolioQueryData:
         async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit.portfolio_runtime_read(run.run_id, self._portfolio_pins(run))
-        value = decoded(PortfolioQueryData, raw)
+        value = (
+            decoded(PortfolioDeliveryQueryData, raw)
+            if isinstance(run, PreparedPortfolioDeliveryRun)
+            else decoded(PortfolioQueryData, raw)
+        )
         self._portfolio_data_current(run, value)
         return value
 
     async def portfolio_query(
-        self, claim: JobClaim, run: PreparedPortfolioRun
-    ) -> PortfolioQueryData | None:
+        self, claim: JobClaim, run: AnyPortfolioRun
+    ) -> AnyPortfolioQueryData | None:
         async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit.portfolio_query_reserve(run.run_id, self._portfolio_pins(run))
         reservation = decoded(PortfolioQueryReservation, raw)
@@ -528,7 +586,11 @@ class AIDatabase:
             return None
         async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit.portfolio_query_apply(run.run_id, call, ticket, outcome["vectors"])
-        value = decoded(PortfolioQueryData, raw)
+        value = (
+            decoded(PortfolioDeliveryQueryData, raw)
+            if isinstance(run, PreparedPortfolioDeliveryRun)
+            else decoded(PortfolioQueryData, raw)
+        )
         self._portfolio_data_current(run, value)
         return value
 
@@ -685,7 +747,7 @@ class PostgresSearchAuthority:
 
 
 class PostgresPortfolioAuthority:
-    def __init__(self, database: AIDatabase, claim: JobClaim, run: PreparedPortfolioRun):
+    def __init__(self, database: AIDatabase, claim: JobClaim, run: AnyPortfolioRun):
         self.database, self.claim, self.run = database, claim, run
 
     async def authorize(
@@ -759,6 +821,54 @@ class PostgresPortfolioAuthority:
         # Admission metadata is private to this authority adapter, not a READ fact.
         return decoded(
             PortfolioContextRead, {k: v for k, v in raw.items() if k != "portfolio_session_id"}
+        )
+
+
+class PostgresPortfolioDeliveryAuthority(PostgresPortfolioAuthority):
+    async def read_current(
+        self,
+        binding: ContextBinding,
+        knowledge_pin: KnowledgePin,
+        search_pin: SearchPin,
+        portfolio_pin: PortfolioPin,
+        media_pin: MediaPin,
+    ) -> PortfolioDeliveryContextRead:
+        raw = await self.database._command(
+            self.claim,
+            "READ",
+            run_id=str(self.run.run_id),
+            binding=binding.model_dump(mode="json"),
+            knowledge_pin=knowledge_pin.model_dump(mode="json"),
+            search_pin=search_pin.model_dump(mode="json"),
+            portfolio_pin=portfolio_pin.model_dump(mode="json"),
+            media_pin=media_pin.model_dump(mode="json"),
+        )
+        if type(raw) is not dict or raw.get("portfolio_session_id") != str(
+            self.run.portfolio_session_id
+        ):
+            raise MessagingError(Code.AI_STALE)
+        return decoded(
+            PortfolioDeliveryContextRead,
+            {k: v for k, v in raw.items() if k != "portfolio_session_id"},
+        )
+
+    async def attest_read(
+        self,
+        binding: ContextBinding,
+        context_sha256: str,
+        shown_refs: tuple[PortfolioPhotoSelection, ...],
+    ) -> None:
+        await self.database._command(
+            self.claim,
+            "DELIVERY_READ",
+            run_id=str(self.run.run_id),
+            binding=binding.model_dump(mode="json"),
+            knowledge_pin=self.run.knowledge_pin.model_dump(mode="json"),
+            search_pin=self.run.search_pin.model_dump(mode="json"),
+            portfolio_pin=self.run.portfolio_pin.model_dump(mode="json"),
+            media_pin=self.run.media_pin.model_dump(mode="json"),
+            context_sha256=context_sha256,
+            shown_refs=[v.model_dump(mode="json") for v in shown_refs],
         )
 
 

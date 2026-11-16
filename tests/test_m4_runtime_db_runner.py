@@ -787,6 +787,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0019", "published_knowledge_schema_profile"),
         ("0020", "knowledge_search_schema_profile"),
         ("0021", "portfolio_schema_profile"),
+        ("0022", "portfolio_delivery_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -825,6 +826,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0019", "published_knowledge_schema_profile", 207, 206),
         ("0020", "knowledge_search_schema_profile", 233, 232),
         ("0021", "portfolio_schema_profile", 289, 288),
+        ("0022", "portfolio_delivery_schema_profile", 303, 302),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -834,7 +836,7 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
     predicate = {
         "functions": f"(SELECT count(*) FROM functions)={functions}",
         "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
-        "tables": f"(SELECT count(*) FROM tables)={68 if revision == '0021' else 59 if revision == '0020' else 52}",
+        "tables": f"(SELECT count(*) FROM tables)={69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
     }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
@@ -856,13 +858,22 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
 def test_catalog_primary_refusal_preserves_both_pin_facts(
     valid, hash_matches, body_matches, reason
 ):
-    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+    from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
-    expected = catalog.source_catalog(catalog.ROOT, "0021")
+    expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
+    profile_name = (
+        "platform.portfolio_delivery_schema_profile()"
+        if DATABASE_SCHEMA_REVISION == "0022"
+        else "platform.portfolio_schema_profile()"
+    )
     if not body_matches:
-        expected["functions"]["platform.portfolio_schema_profile()"]["body_sha256"] = "0" * 64
+        expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
-    declared = {"schema_revision": "0021", "valid": valid, "profile_sha256": digest}
+    declared = {
+        "schema_revision": DATABASE_SCHEMA_REVISION,
+        "valid": valid,
+        "profile_sha256": digest,
+    }
     result = carrier.catalog_comparison(expected, digest, "{}", declared)
     assert result["failed_predicate"] == reason
     assert result["application_pin_matches"] is hash_matches
@@ -2913,3 +2924,277 @@ def test_m5_foundation_budget_keeps_existing_runtime_inventory_and_sql_cap(
     assert summary["expected_cases"] == summary["collected_cases"] == 160
     assert summary["groups_visited"] == len(h["cleaned"]) == 8
     assert summary["sql_test_budget_seconds"] == 900
+
+
+def prepare_m5_delivery_event(
+    r,
+    monkeypatch,
+    route,
+    *,
+    extra=None,
+    wrong_parent=False,
+    wrong_amendment_parent=False,
+    missing_amendment=False,
+    application_amendment=False,
+    wrong_second_parent=False,
+    merged_second_parent=False,
+    missing_second_amendment=False,
+    application_second_amendment=False,
+):
+    """Constructed local Git/event metadata, never an Actions execution claim."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_DELIVERY_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_DELIVERY_TREE", f.git("rev-parse", r["source"] + "^{tree}"))
+    if wrong_parent:
+        f.git("commit", "--allow-empty", "-qm", "constructed unapproved assignment parent")
+    for relative in sorted(carrier.M5_DELIVERY_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# constructed immutable C0 photo assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed photo assignment")
+    monkeypatch.setattr(carrier, "M5_DELIVERY_ASSIGNMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(carrier, "M5_DELIVERY_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    if wrong_amendment_parent:
+        f.git("commit", "--allow-empty", "-qm", "constructed unapproved amendment parent")
+    handoff = f.root / "docs/tasks/M5_HANDOFF.md"
+    handoff.write_text(handoff.read_text() + "\n# C0 exact inventory scope amendment\n")
+    if application_amendment:
+        application = f.root / "backend/src/asm/ai/fake.py"
+        application.parent.mkdir(parents=True, exist_ok=True)
+        application.write_text(
+            (application.read_text() if application.exists() else "")
+            + "\n# unapproved amendment code\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed C0 scope amendment")
+    monkeypatch.setattr(carrier, "M5_DELIVERY_SCOPE_AMENDMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(
+        carrier, "M5_DELIVERY_SCOPE_AMENDMENT_TREE", f.git("rev-parse", "HEAD^{tree}")
+    )
+    if missing_amendment:
+        f.git("checkout", "--detach", carrier.M5_DELIVERY_ASSIGNMENT)
+    for relative in sorted(
+        (carrier.M5_DELIVERY_PATHS - carrier.M5_DELIVERY_C0_DOCS) | ({extra} if extra else set())
+    ):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            (path.read_text() if path.exists() else "") + "\n# constructed exact photo delta\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed bounded photo repair")
+    monkeypatch.setattr(
+        carrier, "M5_DELIVERY_SCOPE_AMENDMENT_02_PARENT", f.git("rev-parse", "HEAD")
+    )
+    if wrong_second_parent:
+        f.git("commit", "--allow-empty", "-qm", "constructed unapproved scope02 parent")
+    handoff.write_text(handoff.read_text() + "\n# C0 exact initializer scope02 receipt\n")
+    if application_second_amendment:
+        application = f.root / "backend/src/asm/ai/fake.py"
+        application.write_text(application.read_text() + "\n# unapproved scope02 code\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed C0 scope02 receipt")
+    if merged_second_parent:
+        merged = f.git(
+            "commit-tree",
+            f.git("rev-parse", "HEAD^{tree}"),
+            "-p",
+            carrier.M5_DELIVERY_SCOPE_AMENDMENT_02_PARENT,
+            "-p",
+            carrier.M5_DELIVERY_ASSIGNMENT,
+            "-m",
+            "constructed two-parent scope02 receipt",
+        )
+        f.git("checkout", "--detach", merged)
+    monkeypatch.setattr(carrier, "M5_DELIVERY_SCOPE_AMENDMENT_02", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(
+        carrier, "M5_DELIVERY_SCOPE_AMENDMENT_02_TREE", f.git("rev-parse", "HEAD^{tree}")
+    )
+    if missing_second_amendment:
+        f.git("checkout", "--detach", carrier.M5_DELIVERY_SCOPE_AMENDMENT_02_PARENT)
+    handoff.write_text(handoff.read_text() + "\n# constructed final photo candidate\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed final photo candidate")
+    return capability_checkout(
+        r, monkeypatch, route, f.git("rev-parse", "HEAD"), branch=carrier.M5_DELIVERY_BRANCH
+    )
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "base",
+        "branch",
+        "paths",
+        "tree",
+        "attempt",
+        "scope_sha",
+        "scope_tree",
+        "scope_parent",
+        "scope_missing",
+        "scope_extra",
+        "scope_type",
+        "scope02_sha",
+        "scope02_tree",
+        "scope02_parent",
+        "scope02_missing",
+        "scope02_extra",
+        "scope02_type",
+        "scope_receipts_swapped",
+    ],
+)
+def test_delivery_exact_source_producer_consumer_and_main_selector_priority(
+    r11_event, monkeypatch, route, damage
+):
+    r = r11_event
+    merged = prepare_m5_delivery_event(r, monkeypatch, route)
+    # An earlier main selector must never mask the newly assigned closed route.
+    monkeypatch.setattr(carrier, "foundation_budget_event", lambda event: True)
+    r["run"]()
+    assert len(r["boundary"]) == 1
+    bound = r["boundary"][0]
+    assert bound["mode"] == "runtime" and bound["sql_test_budget_seconds"] == 900
+    admission = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert admission["base"] == carrier.M5_DELIVERY_BASE
+    assert set(admission["paths"]) == carrier.M5_DELIVERY_PATHS
+    assert admission["scope_amendment"] == carrier.delivery_scope_amendment()
+    assert admission["scope_amendment_02"] == carrier.delivery_scope_amendment_02()
+    real_run = subprocess.run
+
+    class BeforeResources(Exception):
+        pass
+
+    def before_archive(args, *positional, **keywords):
+        assert args[0] == "git", "resource/credential access before exact source export"
+        if args[1] == "archive":
+            raise BeforeResources
+        return real_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(subprocess, "run", before_archive)
+    with pytest.raises(BeforeResources):
+        r["real_run_admitted"](
+            bound["root"],
+            bound["event"],
+            bound["manifest"],
+            bound["mode"],
+            sql_test_budget_seconds=900,
+        )
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert proof["branch"] == carrier.M5_DELIVERY_BRANCH
+    assert proof["scope_amendment"] == carrier.delivery_scope_amendment()
+    assert proof["scope_amendment_02"] == carrier.delivery_scope_amendment_02()
+    for name, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": proof["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + name, value)
+    if damage:
+        if damage in {"scope_sha", "scope_tree", "scope_parent"}:
+            proof["scope_amendment"][damage.removeprefix("scope_")] = "f" * 40
+        elif damage == "scope_missing":
+            del proof["scope_amendment"]
+        elif damage == "scope_extra":
+            proof["scope_amendment"]["unapproved"] = True
+        elif damage == "scope_type":
+            proof["scope_amendment"] = "unapproved"
+        elif damage in {"scope02_sha", "scope02_tree", "scope02_parent"}:
+            proof["scope_amendment_02"][damage.removeprefix("scope02_")] = "f" * 40
+        elif damage == "scope02_missing":
+            del proof["scope_amendment_02"]
+        elif damage == "scope02_extra":
+            proof["scope_amendment_02"]["unapproved"] = True
+        elif damage == "scope02_type":
+            proof["scope_amendment_02"] = "unapproved"
+        elif damage == "scope_receipts_swapped":
+            proof["scope_amendment"], proof["scope_amendment_02"] = (
+                proof["scope_amendment_02"],
+                proof["scope_amendment"],
+            )
+        else:
+            proof[damage] = {
+                "base": "f" * 40,
+                "branch": carrier.M5_FOUNDATION_BRANCH,
+                "paths": ["backend/src/asm/ai/polza.py"],
+                "tree": "f" * 40,
+                "attempt": 2,
+            }[damage]
+        carrier.write(path, proof)
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    else:
+        assert carrier.source_tree_from_evidence(path) == proof["tree"]
+    assert not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "base_tree",
+        "assignment_tree",
+        "parent",
+        "adjacent",
+        "amendment_tree",
+        "amendment_parent",
+        "amendment_ancestry",
+        "amendment_application",
+        "scope02_tree",
+        "scope02_parent",
+        "scope02_merged_parent",
+        "scope02_ancestry",
+        "scope02_application",
+    ],
+)
+def test_delivery_source_damage_refuses_before_resources(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    prepare_m5_delivery_event(
+        r,
+        monkeypatch,
+        route,
+        extra="backend/src/asm/ai/polza.py" if damage == "adjacent" else None,
+        wrong_parent=damage == "parent",
+        wrong_amendment_parent=damage == "amendment_parent",
+        missing_amendment=damage == "amendment_ancestry",
+        application_amendment=damage == "amendment_application",
+        wrong_second_parent=damage == "scope02_parent",
+        merged_second_parent=damage == "scope02_merged_parent",
+        missing_second_amendment=damage == "scope02_ancestry",
+        application_second_amendment=damage == "scope02_application",
+    )
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_DELIVERY_TREE", "f" * 40)
+    elif damage == "assignment_tree":
+        monkeypatch.setattr(carrier, "M5_DELIVERY_ASSIGNMENT_TREE", "f" * 40)
+    elif damage == "amendment_tree":
+        monkeypatch.setattr(carrier, "M5_DELIVERY_SCOPE_AMENDMENT_TREE", "f" * 40)
+    elif damage == "scope02_tree":
+        monkeypatch.setattr(carrier, "M5_DELIVERY_SCOPE_AMENDMENT_02_TREE", "f" * 40)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("relative", sorted(carrier.M5_DELIVERY_C0_DOCS))
+def test_delivery_assignment_docs_are_immutable_after_assignment(r11_event, monkeypatch, relative):
+    r = r11_event
+    prepare_m5_delivery_event(r, monkeypatch, "same-repository-pr-merge")
+    f = r["f"]
+    (f.root / relative).write_text("# unauthorized assignment rewrite\n")
+    f.git("add", relative)
+    f.git("commit", "-qm", "constructed forbidden assignment rewrite")
+    capability_checkout(
+        r,
+        monkeypatch,
+        "same-repository-pr-merge",
+        f.git("rev-parse", "HEAD"),
+        branch=carrier.M5_DELIVERY_BRANCH,
+    )
+    with pytest.raises(carrier.Refusal, match="DELIVERY_C0_DOCS_IMMUTABLE"):
+        r["run"]()
+    assert not r["boundary"]

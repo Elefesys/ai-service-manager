@@ -7,7 +7,11 @@ export type DeliveryError = FileError | 'NOT_ALLOWED' | 'UNKNOWN_EXTERNAL_RESULT
 export type ImageFile = { file_id: string; status: 'PENDING' | 'READY' | 'FAILED'; error_code: FileError | null; manifest: { mime_type: 'image/jpeg' | 'image/png' | 'image/webp'; size_bytes: string; width: number; height: number } | null };
 export type Delivery = { status: 'PENDING' | 'DISPATCHING' | 'SENT' | 'FAILED' | 'UNKNOWN'; error_code: DeliveryError | null; completed_at: string | null; version: string };
 export type MessageCurrent = { schema_version: 1; state: 'VISIBLE' | 'DELETED' | 'ORDER_UNCERTAIN' | 'UNSUPPORTED_CONTENT'; content_type: 'TEXT' | 'PHOTO' | null; text: string | null; image_availability: 'NOT_APPLICABLE' | 'ORIGINAL_PENDING' | 'ORIGINAL_READY' | 'ORIGINAL_FAILED' | 'ORIGINAL_NOT_FETCHED' | 'MEDIA_REPLACED_UNAVAILABLE' | 'HIDDEN'; changed: boolean };
-export type Message = { message_id: string; conversation_id: string; direction: 'INBOUND' | 'OUTBOUND'; content_type: 'TEXT' | 'IMAGE_REFERENCE'; text: string | null; occurred_at: string; created_at: string; version: string; file: ImageFile | null; delivery: Delivery | null; current: MessageCurrent };
+export type LegacyMessage = { message_id: string; conversation_id: string; direction: 'INBOUND' | 'OUTBOUND'; content_type: 'TEXT' | 'IMAGE_REFERENCE'; text: string | null; occurred_at: string; created_at: string; version: string; file: ImageFile | null; delivery: Delivery | null; current: MessageCurrent };
+export type PortfolioMessageCurrent = { schema_version: 2; state: MessageCurrent['state']; content_type: 'PHOTO' | null; text: string | null; image_availability: 'PORTFOLIO_AVAILABLE' | 'PORTFOLIO_UNAVAILABLE' | 'HIDDEN'; changed: boolean };
+export type PortfolioMessageSource = { schema_version: 1; item_id: string; revision_id: string; asset_id: string; asset_version_id: string; source_sha256: string };
+export type PortfolioMessage = { message_id: string; conversation_id: string; direction: 'OUTBOUND'; content_type: 'PORTFOLIO_PHOTO'; text: string; occurred_at: string; created_at: string; version: string; file: null; delivery: Delivery; current: PortfolioMessageCurrent; portfolio: PortfolioMessageSource };
+export type Message = LegacyMessage | PortfolioMessage;
 export type Page<T> = { items: T[]; next_cursor: string | null };
 export type SendBody = Readonly<{ text: string }>;
 export type SendReceipt = { workspace_id: string; receipt_id: string; message_id: string; accepted_at: string; outcome: 'ACCEPTED' | 'REPLAY' };
@@ -78,7 +82,28 @@ export function parseCurrent(value: unknown): MessageCurrent {
   return v as MessageCurrent;
 }
 export const currentImageEligible = (m: Message) => m.current.state === 'VISIBLE' && m.current.content_type === 'PHOTO' && m.current.image_availability === 'ORIGINAL_READY' && m.file?.status === 'READY';
+const caption = (x: unknown): x is string => typeof x === 'string' && !!x && [...x].length <= 1024 && !whitespace.test(x) && new TextEncoder().encode(x).length <= 4096 && ![...x].some(c => { const n = c.codePointAt(0)!; return n === 0 || (n >= 0xd800 && n <= 0xdfff); });
+export const currentPortfolioEligible = (m: Message): m is PortfolioMessage => m.content_type === 'PORTFOLIO_PHOTO' && m.current.state === 'VISIBLE' && m.current.content_type === 'PHOTO' && m.current.image_availability === 'PORTFOLIO_AVAILABLE';
+export function parsePortfolioCurrent(value: unknown): PortfolioMessageCurrent {
+  const v = object(value, ['schema_version','state','content_type','text','image_availability','changed']);
+  if (v.schema_version !== 2 || typeof v.changed !== 'boolean') invalid();
+  if (v.state === 'VISIBLE') {
+    if (v.content_type !== 'PHOTO' || !caption(v.text) || !oneOf(v.image_availability, ['PORTFOLIO_AVAILABLE','PORTFOLIO_UNAVAILABLE'])) invalid();
+  } else if (!oneOf(v.state, ['DELETED','ORDER_UNCERTAIN','UNSUPPORTED_CONTENT']) || v.content_type !== null || v.text !== null || v.image_availability !== 'HIDDEN' || !v.changed) invalid();
+  return v as PortfolioMessageCurrent;
+}
+function parsePortfolioMessage(value: unknown): PortfolioMessage {
+  const v = object(value, ['message_id','conversation_id','direction','content_type','text','occurred_at','created_at','version','file','delivery','current','portfolio']);
+  if (!uuid(v.message_id) || !uuid(v.conversation_id) || v.direction !== 'OUTBOUND' || v.content_type !== 'PORTFOLIO_PHOTO' || !caption(v.text) || !timestamp(v.occurred_at) || !timestamp(v.created_at) || !decimal(v.version) || v.file !== null || v.delivery === null) invalid();
+  const current = parsePortfolioCurrent(v.current);
+  if (current.changed !== (BigInt(v.version as string) > 1n) || !current.changed && (current.state !== 'VISIBLE' || current.text !== v.text)) invalid();
+  parseDelivery(v.delivery);
+  const source = object(v.portfolio, ['schema_version','item_id','revision_id','asset_id','asset_version_id','source_sha256']);
+  if (source.schema_version !== 1 || !['item_id','revision_id','asset_id','asset_version_id'].every(k => uuid(source[k])) || !matches(source.source_sha256, /^[0-9a-f]{64}$(?![\s\S])/)) invalid();
+  return v as PortfolioMessage;
+}
 export function parseMessage(value: unknown): Message {
+  if (typeof value === 'object' && value !== null && 'content_type' in value && value.content_type === 'PORTFOLIO_PHOTO') return parsePortfolioMessage(value);
   const v = object(value, ['message_id','conversation_id','direction','content_type','text','occurred_at','created_at','version','file','delivery','current']);
   if (!uuid(v.message_id) || !uuid(v.conversation_id) || !oneOf(v.direction, ['INBOUND','OUTBOUND']) || !oneOf(v.content_type, ['TEXT','IMAGE_REFERENCE']) || !(v.text === null || (typeof v.text === 'string' && [...v.text].length <= 4096)) || !timestamp(v.occurred_at) || !timestamp(v.created_at) || !decimal(v.version)) invalid();
   const current = parseCurrent(v.current);
@@ -91,7 +116,7 @@ export function parseMessage(value: unknown): Message {
   if (!current.changed && (current.state !== 'VISIBLE' || current.content_type !== (v.content_type === 'TEXT' ? 'TEXT' : 'PHOTO') || current.text !== v.text)) invalid();
   if (v.file !== null) parseFile(v.file);
   if (v.delivery !== null) parseDelivery(v.delivery);
-  return v as Message;
+  return v as LegacyMessage;
 }
 export function parsePage<T>(value: unknown, parse: (v: unknown) => T): Page<T> {
   const v = object(value, ['items','next_cursor']);

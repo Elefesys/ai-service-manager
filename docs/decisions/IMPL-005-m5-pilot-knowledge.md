@@ -9,8 +9,9 @@
 accepted main8eeeede1, post-merge CI43600856660 — итог12/12 SUCCESS после
 обоснованного повтора одной Docker setup job. Functional capability принят
 в ASSISTED_SYNTHETIC scope. M5.2B/PR #49 — INTEGRATED / VERIFIED в LOCAL/TEST.
-M5.2C/PR #50 слит; post-merge verification пока BLOCKED по foundation CI budget.
-C0 принял узкий CI fix 45→60 минут; контракт приложения и scope M5 не меняются.
+M5.2C/PR #50 и foundation CI fix/PR #51 — INTEGRATED / VERIFIED в synthetic
+LOCAL/TEST. Main 8d98593b/tree a14ed9b6, post-merge CI43818223732 — 12/12 SUCCESS,
+attempt 1. Единственная активная задача — M5.2D, ведущий C3; M5.3 не выдана.
 Актуальная задача и статус — только в CURRENT реестра/передачи по ссылкам ниже.
 Operator циклы C6 закончены.
 Текущее уточнение embedding usage ниже — ACCEPTED C0; client-data/paid/VM
@@ -184,6 +185,29 @@ M5.2B выдан от фактического accepted main8eeeede1; его cod
 не требует повторного M5.2A probe. Реальные данные/производственный route,
 версия upstream weights/alias и последующая operational reconciliation
 не объявляются закрытыми; IMPL-004/005 data и guarded runtime границы сохранены.
+
+## Уточнение C0 — ограниченная photo delivery M5.2D / 2026-11-16
+
+**ACCEPTED FOR IMPLEMENTATION в ранее принятом scope M5.2D.**
+Новый `conversation_v6`/`conversation_result_v2` только предлагает один
+Portfolio ref с caption. Сервер сверяет фактически показанный fresh READ,
+MY_WORK/confirmation/show_permission, active release/build, asset version/hash
+и текущие права, затем использует существующие Job/Outbox/dispatch/receipt.
+Прежние v1–v5 и schema v1 сохраняют свои значения и replay; mutation tool,
+новая очередь и ручной media composer не вводятся.
+
+Первый поддерживаемый исходящий набор — JPEG/PNG, без перекодирования, URL/
+file_id input и альбомов; точные bytes/dimensions/caption caps в CURRENT
+M5_HANDOFF согласованы с Telegram sendPhoto и текущим более строгим decoder.
+Private media читается по узкому permit до final dispatch admission, затем
+проверяется актуальность. Public S3 не появляется. После возможного эффекта
+UNKNOWN/no-resend сохраняется; уже начатую отправку нельзя обещать отозвать.
+Неподдерживаемый файл честно unavailable, не преобразуется скрыто.
+
+Только synthetic LOCAL/TEST, FAKE/EVAL_ONLY и CONTROLLED/exact MockTransport;
+старый M4 text-only live допуск не разрешает photo. Это техническое уточнение
+формы delivery, не новый provider/client-data/VM/paid допуск.
+Исходные ограничения и архитектурные инварианты не отменяются.
 
 ## Что остаётся OPEN до соответствующей задачи
 
