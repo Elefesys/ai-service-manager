@@ -1,13 +1,23 @@
 """Owned synthetic portfolio fixture; actual PG with explicit controlled/S3 bytes."""
+# ruff: noqa: E402 -- Direct finite CLI needs the project root before fixture imports.
 
 import asyncio
 import base64
 import hashlib
 import io
 import json
+import sys
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID
+
+if __name__ == "__main__":
+    # Python file execution places only /app/tests on sys.path. Keep the
+    # development image unchanged and resolve its owned scripts package before
+    # loading the shared fixtures. The CLI's exact TEST target guard still runs
+    # before constructing any database or S3 client.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest_asyncio
 from asm.ai.contracts import PortfolioDeliveryGatewayConfig

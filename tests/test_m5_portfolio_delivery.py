@@ -463,3 +463,40 @@ def test_snapshot4_preserves_photo_history_and_old_snapshot3_closed_shape():
     ).hexdigest()
     with pytest.raises(ValidationError):
         TurnSnapshotV3.model_validate(raw)
+
+
+def test_finite_browser_cli_bootstraps_imports_and_refuses_non_disposable_target():
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ)
+    for name in tuple(env):
+        if name.startswith("ASM_"):
+            del env[name]
+    env.update(
+        PYTHONPATH=str(root / "backend/src"),
+        ASM_ENVIRONMENT="TEST",
+        ASM_DATABASE_URL="postgresql+psycopg://asm_runtime:unused@127.0.0.1:1/asm_test",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(root / "tests/m5_portfolio_delivery_fixtures.py"),
+            "--action",
+            "publish",
+            "--viewport",
+            "desktop",
+            "--scenario",
+            "sent",
+        ],
+        cwd=root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=15,
+    )
+    assert result.returncode == 1 and result.stdout == ""
+    assert result.stderr.strip() == "M5_PORTFOLIO_BROWSER_FAILED"

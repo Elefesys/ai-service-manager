@@ -285,7 +285,7 @@ predecessor `0021`. Четыре assignment docs и applied migrations неиз�
 
 ### C3 — реализация и ограниченный возврат / 2026-11-16
 
-**C3: IN_PROGRESS; checkpoint WIP / UNVERIFIED для C0/CI.**
+**C3: BLOCKED_SCOPE; реализация UNVERIFIED, точечный допуск требуется от C0.**
 Интеграционное решение остаётся у C0. Checkpoint
 [`08524298`](https://github.com/Elefesys/ai-service-manager/commit/0852429849a41e95df637c6b7bffdaeb089f5084)
 опубликован в рабочую ветку восстановительным push до новых долгих проверок.
@@ -319,9 +319,12 @@ serialized admission → один counted photo effect → owner Inbox/preview.
   здесь из-за запрета netlink; Compose/images/dependencies не изменены.
   Дополнительно actual owner HTTP upload/confirm/publish → finite runtime
   `SENT`/`UNKNOWN` → preview/hash → revoke/unavailable PASS на fresh PG/S3.
-- Playwright desktop+narrow **NOT_RUN**: Chromium завершился до открытия
-  страницы (`socket(): EPERM`). Два сценария собраны; owner API не подменялся
-  HTTP routes. Native HTTP результат не является browser/Actions evidence.
+- **Actual Playwright desktop+narrow: 2 PASS**, 58.3s, на отдельном fresh
+  PG/S3/API без подмены HTTP routes: SENT/UNKNOWN, private owner preview,
+  context switch, source withdrawal и logout. Обычный Chromium здесь получил
+  `socket(): EPERM`; установленный официальный Playwright headless shell1193
+  выполнил оба сценария. Это LOCAL native execution с Garage и узким process
+  launcher bridge, не Docker/Actions evidence; repository dependencies неизменны.
 
 **C0-SCOPE-M5.2D-01 применён после checkpoint.** Исходный inventory failure
 сохранён в LOCAL evidence checkpoint. В `tests/test_postgres.py` добавлена ровно
@@ -350,8 +353,73 @@ Runtime/native inventories и исходные budgets900/600 сохранены
   guards; старый Vision lock не расширен. Actual PG проверил отказ обоих
   перекрёстных профилей и отсутствие runtime EXECUTE у private helper.
 
-Далее — готовый кандидат/Draft PR и штатный полный CI. LOCAL evidence и
-checkpoint не присваивают INTEGRATED/VERIFIED и не являются Actions execution.
+**Draft PR [#52](https://github.com/Elefesys/ai-service-manager/pull/52)** создан
+на candidate `2ffb4b6f3af026c2431f7ab989040138c1a4346f`, tree
+`c6b6939288930f97296cc673e0ff3115476827ee`.
+Первый штатный [CI43866508414](https://github.com/Elefesys/ai-service-manager/actions/runs/43866508414),
+attempt1, проверяет merge `49b0d1983a6bb71b5e9dee87a9d461004952450f`
+с тем же tree: **9 jobs SUCCESS / 3 FAILURE**, без rerun/dispatch.
+Browser имеет 69 PASS / 2 FAILED; M4 runtime — 151 PASS / 9 общих fixture
+setup errors, все8 cleanup PASS. Foundation: **4655 unit +161 subtests PASS**,
+**1036/1041 generic PG PASS**, пять call failures одной причины; все1041
+start/setup/call/teardown/end присутствуют, skip/xfail0, cleanup0/primary1.
+Все25 новых photo actual PG/S3 cases в CI PASS. Вторая половина backend phases
+после generic (downgrade/reupgrade/contracts/wheels) NOT_RUN, не PASS.
+Foundation artifact14229076925 SHA256
+`224fa80c000aa7efc55fc17ede49a175d095c5d0dcf47782ca51163e9e8e134c`;
+все449 source blobs/bytes/modes и связанный SHA256 manifest проверены по Git.
+
+Обе известные причины исправлены в разрешённых fixture paths:
+
+- File-CLI нового browser helper при минимальном image PYTHONPATH не находил
+  owned `scripts` package. Корень проекта добавлен только при direct CLI до
+  fixture imports; exact TEST target guard и образ не меняются. Новый subprocess
+  regression и весь новый unit module: **51 PASS**. Actual CLI + owner HTTP и
+  оба actual browser сценария прошли; соединения с реальными сервисами отсутствуют.
+- Schema fixture сравнивал retained0014 AIRun после0022 без удаления нового
+  nullable `delivery_read_audit` из projection. Строгое сравнение прежних данных
+  сохранено; добавлен отдельный assert, что новое поле у старого run `IS NULL`.
+  **Все 9 actual PG tests модуля PASS**, включая readiness/reverse и negative
+  drift/durability проверки, ранее скрытые общей setup ошибкой.
+
+Runtime current0022 preflight в первом Actions независимо подтвердил
+303 functions/69 tables и полный pin выше. Native-context actual112/112 PASS;
+foundation-durable primary/cleanup0. В обоих artifacts все449 Git blobs/bytes/
+modes совпали с candidate tree; runtime source-admission содержит exact C0
+amendment и producer/consumer proof.
+Два разрешённых исправления сохранены публичным reviewable commit (ссылка в
+описании PR), без перемещения PR head и повторного full CI с известным блокером.
+LOCAL evidence и checkpoint не присваивают INTEGRATED/VERIFIED и не являются
+Actions execution.
+
+**C0-SCOPE-M5.2D-02 — PROPOSED / NOT ACCEPTED.** Оставшаяся общая причина пяти
+foundation failures: `tests/test_m1_3_c0_acceptance.py` перечисляет в одном
+transactional TRUNCATE старые parent tables без новой
+`platform.portfolio_delivery_intents`; PostgreSQL выдаёт `0A000` / FK на
+`portfolio_asset_versions` ещё до проверки initializer. Этот path отсутствует
+в текущем M5.2D write-set. FK/guards и исторические сценарии ради PASS не меняются.
+
+Предлагаемый весь test delta — одна строка внутри существующего tuple:
+
+```diff
+                             "platform.portfolio_release_builds",
++                            "platform.portfolio_delivery_intents",
+                             "platform.ai_runs",
+```
+
+После явного C0 receipt потребуется добавить **только**
+`tests/test_m1_3_c0_acceptance.py` к `M5_DELIVERY_PATHS` и закрепить новый допуск
+в exact source proof. Старые routes, TRUNCATE без CASCADE, общий transaction,
+initializer assertions и полный69-table/catalog snapshot до/после rollback
+сохраняются. Patch proposal SHA256
+`5ccf623b101db20f19f709cf27ff5d8963cc42084ce508db36ef6c532787316e` включает
+только эту строку и одну запись нового task write-set; он не применён к repo.
+Отдельная LOCAL proposal copy всего модуля на fresh PG18.6/pgvector0.8.6/0022:
+**12 PASS**, 6.09s, включая все5 ранее скрытых initializer cases, без skip/xfail;
+собственный кластер остановлен. Это проверка предложенного diff, не CI execution.
+Исходный file SHA256
+`bb0ff0e888eca8ed9b756d7109c722b7f54cc3e305a9f2e4c251db582f292bae`
+и содержимое нового source admission до решения C0 не менялись.
 
 ### Разрешённый write-set
 
