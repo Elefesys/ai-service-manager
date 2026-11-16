@@ -10,44 +10,84 @@ ACCEPTED / LOCKED C0.
 C2 помогает с SQL/миграцией, C4 — с typed model selection, C5 — с Inbox,
 последовательно в одной ветке. C6 HOLD; M5.3 пока не выдаётся.
 
-### Уточнение C0 — сохранить checkpoint и дополнить write-set / 2026-11-16
+### Решение C0 по PR #52 — scope02 и исправленный кандидат / 2026-11-16
 
-**Та же задача C3-M5.2D-PORTFOLIO-PHOTO-R1; IN_PROGRESS.**
-Application base `8d98593bc739666176968c5d76b9c01a2a711686` и исходный
-assignment `63bb7147ec899eda1a538388aff18a01fc054e57` сохраняются.
+**C0-SCOPE-M5.2D-02 — ACCEPTED FOR IMPLEMENTATION.**
+Та же задача, ведущий C3, статус **IN_PROGRESS / UNVERIFIED**.
+Scope blocker снят; PR пока не готов к merge. Checkpoint уже сохранён:
+восстановительный порядок из прежнего receipt выполнен, повторять его не нужно.
 
-На момент проверки C0 ветка `c3/m5-2d-portfolio-photo-r1` всё ещё указывает
-на assignment 63bb7147; implementation commits и PR в ней не опубликованы.
-В доступном контексте C3 нет ссылки на обещанный patch. Сообщённые C3
-302 functions/69 tables и успешные локальные migration checks пока не
-сопоставлены C0 с исходниками/журналами; это не новая приёмка VERIFIED.
-Данный C0 receipt — отдельный docs-only commit; рабочая ветка C3 им не
-перемещается, чтобы не затронуть её неопубликованные изменения.
+- Единственный Draft PR: [#52](https://github.com/Elefesys/ai-service-manager/pull/52).
+  Проверенный PR head: `2ffb4b6f3af026c2431f7ab989040138c1a4346f`,
+  tree `c6b6939288930f97296cc673e0ff3115476827ee`.
+- Продолжение с опубликованного repair commit
+  `b4871ef1ad5a46ae7244397727f30629957470bb`,
+  tree `9cf550404d0f3dd81f4ec7fbac2ec8f73929e6e1`;
+  sole parent — PR head выше. Его diff: handoff и три разрешённых test files.
+- Application base `8d98593bc739666176968c5d76b9c01a2a711686`,
+  assignment `63bb7147ec899eda1a538388aff18a01fc054e57` и scope01
+  `37a92eece23452ac8d8715efa078db34d9cc10ff` сохраняются.
+  Этот docs-only receipt имеет sole parent b4871ef; C0 не перемещает ветку.
 
-**Первое действие C3 — сохранить текущую работу, до новых долгих проверок.**
+**Что проверил C0.** CI43866508414 attempt1 — 9 SUCCESS / 3 FAILURE,
+не timeout. Git и source archives core/runtime совпали по всем 449 paths,
+blob bytes и executable bits с tree c6b6939. Три ZIP digest совпали с Actions.
 
-1. Продолжить в прежнем рабочем окружении. Проверить status/diff и локальный
-   HEAD; не reset/clean/reclone поверх незакоммиченных файлов.
-   Если прежняя команда ещё выполняется, выяснить её session/process и
-   остановить только собственный зависший процесс; не чистить общий Docker/БД.
-2. Зафиксировать все относящиеся к задаче tracked и новые source files
-   в checkpoint текущей ветки, с честным состоянием **WIP / UNVERIFIED**.
-   До публикации проверить состав: без secrets/.env, caches, DB contents и
-   временных логов. Тесты могут быть неполными; сохранение не требует PASS.
-   Если GitHub недоступен — сохранить полный binary diff вместе с необходимыми
-   untracked source files в доступный пользователю архив и вернуть его ссылку.
-3. Разрешён **один восстановительный checkpoint push** в
-   `c3/m5-2d-portfolio-photo-r1`, без PR, CI dispatch/rerun и merge в main.
-   Это явное исключение из порядка «первый push только готового кандидата»;
-   задача и критерии финальной готовности не меняются.
-   Не переписывать уже опубликованный head. До продолжения вывести пользователю
-   точные checkpoint SHA/tree, compare link от assignment 63bb7147,
-   changed paths и короткий список PASS/FAILED/NOT_RUN.
-   Цель ближайшего возврата — дать C0 проверяемый diff и сохранить работу.
-4. Отдельно показать конкретный diff `tests/test_postgres.py` и текущие
-   findings по verifier 0021/native context/text-only session.
-   Последние исправления остаются в новой 0022; applied 0001–0021 не менять.
-   Не объявлять неисследованные photo/recovery сценарии прошедшими.
+| Группа | Подтверждённый сбой | Ограниченное исправление |
+|---|---|---|
+| Foundation | 1036/1041 generic PASS; 5 call failures в одном M1 initializer test: FK требует включить portfolio_delivery_intents в общий TRUNCATE | Одна строка ниже; FK и проверки initializer сохраняются |
+| Runtime | 151 PASS; 9 setup errors в schema15 на сохранённой строке AIRun, до call; все 8 cleanup успешны | В b4871ef новое nullable delivery_read_audit исключено только из старой projection и отдельно проверено IS NULL |
+| Browser | 69 PASS / 2 FAILED, оба новых photo journeys на finite helper | В b4871ef direct CLI добавляет owned project root перед fixture imports; TEST target guard сохраняется |
+
+Unit CI: 4655 PASS + 161 subtests. Generic содержит все 1041 start/setup/call/
+teardown/end; backend phases после generic остались NOT_RUN. Сохранённые C3
+51 unit / 9 actual PG / 2 actual browser PASS для repairs и 12 actual PG PASS
+proposal copy — **LOCAL report C3**, не новый Actions PASS и не приёмка всей M5.2D.
+C0 сверил смысл трёх исправлений с source и причинами CI; полный review продукта
+и готовность к merge остаются после исправленного полного CI.
+
+**Разрешён ровно следующий дополнительный delta.**
+
+1. В `tests/test_m1_3_c0_acceptance.py`, внутри существующего tuple общего
+   TRUNCATE в `test_initializer_conflict_has_no_catalog_or_workspace_side_effects`,
+   после `"platform.portfolio_release_builds",` добавить единственную строку
+   `"platform.portfolio_delivery_intents",`.
+   Таблица и FK действительно объявлены в новой 0022. C0 проверил, что этот
+   delta добавляет один literal и не меняет остальные AST nodes теста.
+   Сохранить TRUNCATE без CASCADE, transaction/finally rollback, все пять
+   parametrizations, initializer assertions и полный 69-table/catalog snapshot.
+2. В `scripts/m4_runtime_db.py` добавить только этот новый path в
+   `M5_DELIVERY_PATHS`. Остальные task routes не расширять.
+3. В уже разрешённых source-admission producer/consumer и runner tests
+   закрепить **оба** C0 scope receipts: сохранить exact proof scope01 и
+   добавить exact SHA/tree/sole-parent этого docs-only receipt, его ancestry
+   и diff только `docs/tasks/M5_HANDOFF.md` относительно b4871ef.
+   Не заменять старый допуск непроверенным новым объектом.
+   Application base/assignment и четыре protected C0 docs не менять.
+
+Это совместимость тестовой фикстуры с уже согласованной таблицей, без нового
+продуктового scope или изменения принятых архитектурных решений. Applied
+0001–0021, FK/RLS/guards, old profiles, workflows и budgets остаются прежними.
+
+**Далее C3 — без нового запроса разрешения.**
+
+1. Продолжить ту же ветку и PR, сохранив checkpoint, repair b4871ef и оба C0
+   receipts в ancestry; не терять локальные изменения и не переписывать head.
+2. Применить delta выше и проверить его на финальном source: весь M1 acceptance
+   module (12 actual PG cases, в том числе все 5 initializer cases), положительные
+   и отрицательные source-proof checks, clean Git admission для PR/main.
+   Ранее пройденные targeted repairs без нового изменения/сомнения не повторять.
+3. Одним push обновить существующий Draft PR полным исправленным кандидатом.
+   Дождаться нового штатного CI всех 12 jobs на одном source, включая фазы,
+   ранее не достигнутые после generic. Старый CI не rerun/dispatch и не считать
+   успешным. При новых сбоях вернуть все группы и конкретные причины.
+4. Вернуть C0 head/tree, tested SHA, новый CI и ограничения. До C0 review и
+   отдельного owner merge статус остаётся UNVERIFIED; M5.3 не выдаётся.
+
+### Сохранённый допуск C0-SCOPE-M5.2D-01
+
+[Исходный receipt и восстановительный checkpoint порядок](https://github.com/Elefesys/ai-service-manager/blob/37a92eece23452ac8d8715efa078db34d9cc10ff/docs/tasks/M5_HANDOFF.md#L13)
+сохранены в ancestry; checkpoint08524298 уже опубликован.
 
 **C0-SCOPE-M5.2D-01 — ACCEPTED FOR IMPLEMENTATION.**
 Пропуск `tests/test_postgres.py` в исходном write-set исправлен.
@@ -69,15 +109,6 @@ C0 прочитал exact файл assignment 63bb7147: в
 к конечному write-set новой задачи; исторические task routes не расширять.
 Остальные files и ограничения исходного поручения не меняются.
 Это допуск к конкретной форме исправления, не приёмка ещё не показанного diff.
-
-После сохранения checkpoint интегрировать это docs amendment без потери
-локального кода/контракта/журналов: исходный assignment и данный C0 commit
-сохранить в ancestry, 4 protected C0 docs не изменять.
-При необходимости совместить изменения handoff вручную, сохранив оба
-содержательных блока. Final source admission закрепляет этот scope amendment
-по exact SHA/tree/parent; основной base/assignment остаются прежними.
-Далее продолжать исходную задачу и целевые проверки; нового разрешения
-на уже перечисленные работы не требуется.
 
 ### Результат для пользователя
 
@@ -285,7 +316,7 @@ predecessor `0021`. Четыре assignment docs и applied migrations неиз�
 
 ### C3 — реализация и ограниченный возврат / 2026-11-16
 
-**C3: BLOCKED_SCOPE; реализация UNVERIFIED, точечный допуск требуется от C0.**
+**C3: реализация UNVERIFIED; прежний scope blocker снят решением C0 выше.**
 Интеграционное решение остаётся у C0. Checkpoint
 [`08524298`](https://github.com/Elefesys/ai-service-manager/commit/0852429849a41e95df637c6b7bffdaeb089f5084)
 опубликован в рабочую ветку восстановительным push до новых долгих проверок.
@@ -392,7 +423,7 @@ amendment и producer/consumer proof.
 LOCAL evidence и checkpoint не присваивают INTEGRATED/VERIFIED и не являются
 Actions execution.
 
-**C0-SCOPE-M5.2D-02 — PROPOSED / NOT ACCEPTED.** Оставшаяся общая причина пяти
+**Исходный запрос C3 C0-SCOPE-M5.2D-02 — принят решением C0 выше.** Оставшаяся общая причина пяти
 foundation failures: `tests/test_m1_3_c0_acceptance.py` перечисляет в одном
 transactional TRUNCATE старые parent tables без новой
 `platform.portfolio_delivery_intents`; PostgreSQL выдаёт `0A000` / FK на
@@ -407,7 +438,7 @@ transactional TRUNCATE старые parent tables без новой
                              "platform.ai_runs",
 ```
 
-После явного C0 receipt потребуется добавить **только**
+По принятому C0 receipt требуется добавить **только**
 `tests/test_m1_3_c0_acceptance.py` к `M5_DELIVERY_PATHS` и закрепить новый допуск
 в exact source proof. Старые routes, TRUNCATE без CASCADE, общий transaction,
 initializer assertions и полный69-table/catalog snapshot до/после rollback
@@ -459,6 +490,8 @@ initializer assertions и полный69-table/catalog snapshot до/после 
   PortfolioPanel/App и остальная owner Console — без перепроектирования.
 - `tests/test_postgres.py` — только C0-SCOPE-M5.2D-01 выше: exact inventory
   новой intent таблицы и пояснение, без изменения role/RLS/DDL assertions.
+- `tests/test_m1_3_c0_acceptance.py` — только C0-SCOPE-M5.2D-02 выше:
+  одна новая таблица в существующем transactional TRUNCATE; assertions неизменны.
 - Новые tests:
   `tests/test_m5_portfolio_delivery.py`,
   `tests/test_m5_portfolio_delivery_transport.py`,
