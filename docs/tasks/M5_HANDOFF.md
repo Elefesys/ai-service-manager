@@ -430,6 +430,16 @@ compatibility tests; runtime — на nullable intake_pin retained-row check и
 После целевых проверок исправленного дерева нужен новый полный штатный CI.
 Статус **IN_PROGRESS / UNVERIFIED**, до C0 review и отдельного merge владельца.
 
+CI44000571874 / tested00ebaf0d / head0771fe68 завершился 11/12 SUCCESS.
+Runtime160/160, browser73/73, frontend541 и unit4789 +161 subtests PASS;
+generic PG — 1059 PASS /2 FAIL, все1061 cases завершены, cleanup/source clean PASS.
+Два оставшихся compatibility пропуска: verifier0022 был выбран для revision0023
+в configuration migration test; exact tenancy surface не включал новые
+intake/duration source functions. Исправлен revision map с сохранением0022;
+0023 source functions проходят те же exact name/OID/security-definer/ACL checks.
+Локальные два reproducer PASS; предыдущий CI остаётся FAIL, нужен новый полный
+прогон изменённого candidate. Budgets/workflows и applied0001–0022 сохранены.
+
 ### Критерии готовности и возврат
 
 1. Targeted unit/schema tests и actual PostgreSQL на используемых операциях:

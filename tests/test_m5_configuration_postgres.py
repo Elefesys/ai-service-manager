@@ -389,11 +389,19 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
             revision = (
                 await c.execute(text("SELECT version_num FROM platform.alembic_version"))
             ).scalar_one()
-            if revision in {"0019", "0020", "0021", "0023"}:
+            if revision in {"0019", "0020", "0021", "0022", "0023"}:
                 assert not (
                     await c.execute(
                         text(
                             "SELECT EXISTS(SELECT 1 FROM platform.ai_runs WHERE knowledge_pin IS NOT NULL)"
+                        )
+                    )
+                ).scalar_one()
+            if revision == "0023":
+                assert not (
+                    await c.execute(
+                        text(
+                            "SELECT EXISTS(SELECT 1 FROM platform.ai_runs WHERE intake_pin IS NOT NULL)"
                         )
                     )
                 ).scalar_one()
@@ -439,7 +447,8 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
             full, nonfunction = (await c.execute(text(catalog.CATALOG_SQL))).one()
             name = {
                 "0021": "portfolio_schema_profile",
-                "0023": "portfolio_delivery_schema_profile",
+                "0022": "portfolio_delivery_schema_profile",
+                "0023": "intake_schema_profile",
                 "0019": "published_knowledge_schema_profile",
                 "0020": "knowledge_search_schema_profile",
                 "0018": "business_configuration_schema_profile",
