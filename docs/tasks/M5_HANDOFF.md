@@ -11,6 +11,100 @@ C4 с extraction/runtime, C5 с UI; работа последовательно 
 C3 — консультация только по существующим delivery/control контрактам.
 C6 HOLD. M5.3B и M6 пока не выданы.
 
+### Решение C0 — C0-SCOPE-M5.3A-01 / 2026-11-17
+
+**ACCEPTED FOR IMPLEMENTATION.** Пропуск в write-set исправлен; scope blocker
+снят. Та же задача C1-M5.3A-INTAKE-DURATION-R1, ведущий C1, статус
+**IN_PROGRESS / UNVERIFIED**. Это разрешение ограниченного diff, не приёмка
+всей реализации и не готовность к merge.
+
+- C0 проверил published review commit
+  `5ccd2f84ab3eb036ac602240b3eda7924aa818a9`, tree
+  `b3d0c48aabb42f1991a77013ce8d6203ffcb7d34`, sole parent/checkpoint
+  `3177f0ba1a3f6b65d40a7fdc47b235b045d94041`.
+  Ветка `c1/m5-3a-intake-duration-r1` пока указывает на этот checkpoint;
+  C0 не перемещает ref и не переписывает локальную работу C1.
+- Application base `220606193208a1ef082732e4dfcdf1f2ffbea857` и assignment
+  `c0b0800341ff6cf7b6d79a5012696f47ea717f64` остаются прежними.
+  Этот docs-only receipt — sole child review commit 5ccd2f8 выше;
+  diff только `docs/tasks/M5_HANDOFF.md`.
+- Все 88 изменённых относительно assignment paths входят в выданный write-set.
+  Четыре protected C0 docs, applied0001–0022 и `contracts/auth.v1.json`
+  не изменены; закрытый `tests/test_auth_contract.py` также пока не менялся.
+
+**Причина и проверенный меньший diff.** Реальный owner HTTP module и committed
+OpenAPI уже содержат шесть разрешённых M5.3A endpoints, но строгий старый
+inventory содержит 58 endpoints. C0 проверил предложенный +10-line patch:
+получаются ровно 64, все шесть совпадают с HTTP decorators и OpenAPI.
+После удаления двух новых assignments и одного list-concat AST полностью
+совпадает с исходным тестом: остальные проверки сохранены.
+Это статическая проверка точного scope; C0 не выполнял runtime pytest/PG/browser.
+
+Разрешён **ровно следующий delta**:
+
+1. В `tests/test_auth_contract.py`, в
+   `test_auth_machine_contract_and_generated_c5_api_have_no_drift`, после
+   `portfolio_endpoints` добавить:
+
+   ```python
+   intake_prefix = "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake"
+   intake_endpoints = [
+       f"GET {intake_prefix}/conversations/{{conversation_id}}",
+       f"POST {intake_prefix}/conversations/{{conversation_id}}/confirm",
+       f"POST {intake_prefix}/conversations/{{conversation_id}}/correct",
+       f"GET {intake_prefix}/duration-cases",
+       f"GET {intake_prefix}/duration-cases/search",
+       f"POST {intake_prefix}/duration-cases/{{operation}}",
+   ]
+   ```
+
+   В существующий `sorted(... + portfolio_endpoints)` добавить только
+   `+ intake_endpoints`. Сохранить exact equality, исходную comprehension
+   `actual_endpoints`, frozen auth.v1 с 7 endpoints, schema/error/password/
+   session/environment assertions и полный generated OpenAPI equality/diff.
+   Не менять production API ради теста, не применять filter/subset/skip/xfail.
+2. В уже разрешённом `scripts/m4_runtime_db.py` добавить только
+   `tests/test_auth_contract.py` в `M5_INTAKE_PATHS`; old task routes закрыты.
+3. В existing source-admission producer/consumer и runner tests закрепить
+   exact SHA/tree/sole-parent этого C0 receipt, его наличие в ancestry и
+   diff только handoff относительно 5ccd2f8. Сохранить original assignment
+   proof и четыре immutable C0 docs; новый proof обязателен на M5.3A PR/main.
+   Missing/forged receipt, другой parent/tree/path, изменённый protected doc
+   или посторонний implementation path должны по-прежнему отклоняться.
+
+**Пределы имеющихся результатов.** Архив C1
+`M5_3A_C1_SCOPE_REQUEST_evidence.zip` проверен по ZIP CRC и всем 24 manifest
+entries; SHA256
+`45e61265bccad5ff22ee893dae96a70f7158c314f50722062e517a29a3f2b46e`.
+Identity совпадает с review commit/tree. Лог полного local unit сохраняет
+4747 PASS + 161 subtests / 10 FAIL; отдельный current foundation log —
+430 PASS + 130 subtests после исправления девяти journal cases.
+Auth inventory failure воспроизведён C1 отдельно. Эти LOCAL logs не являются
+Actions PASS или полной приёмкой C0. Static scope review не подтверждает
+заново все reported PG/catalog/security results.
+Chromium desktop/narrow остановился на socket EPERM до app; browser NOT_PROVEN.
+Controlled photo bytes не выдаются за actual S3.
+
+**Дальше C1 — продолжить без нового запроса допуска.**
+
+1. Сохранить checkpoint, review commit 5ccd2f8 и этот receipt в ancestry той же
+   ветки, применить только разрешённый delta и необходимый source proof.
+   Не reset/force-push, не терять локальные изменения. Старый checkpoint не
+   пересдавать как финальный source.
+2. На финальном source выполнить auth contract test целиком, targeted
+   positive/negative source admission для PR и push/main и относящиеся к delta
+   lint/format checks. Остальные неизменённые целевые прогоны не повторять
+   без новой причины. Подготовленный diff smoke не заменяет этот pytest.
+3. Опубликовать исправленный final candidate и открыть один Draft PR в main;
+   пройти один штатный полный CI всех 12 jobs, включая реальные browser
+   desktop/narrow journeys, текущие PG/S3 проверки, все backend phases и cleanup.
+   Local EPERM не обходить отключением browser gate и не считать PASS.
+   CI budgets/workflows/fixtures assertions не ослаблять; при новых сбоях
+   вернуть все известные группы и разделить code/harness/infrastructure.
+4. Вернуть C0 PR/head/tree, exact tested SHA, CI и фактические ограничения.
+   Затем полный C0 review продукта; merge — отдельное действие владельца.
+   M5.3B/M6, paid/provider/live Telegram/VM/client-data actions не разрешены.
+
 ### Принятый main и завершение M5.2D
 
 - PR #52 слит владельцем. **M5.2D — INTEGRATED / VERIFIED в synthetic LOCAL/TEST.**
@@ -215,6 +309,8 @@ UNKNOWN/NOT_PROVEN/holds, receiver ACK/fence и полный live HUMAN/Resume
   через domain capabilities с проверкой target, без SQL shortcut/реального клиента.
   Existing targeted `tests/{test_m4_gateway,test_m4_gateway_failures,test_m4_agent,test_m4_runtime_database,test_m5_configuration,test_m5_configuration_migrations,test_m5_configuration_api_postgres,test_m5_portfolio_runtime,test_m5_portfolio_context,test_m5_portfolio_auth_boundary,test_m5_portfolio_runtime_postgres,test_m5_portfolio_delivery,test_m5_portfolio_delivery_postgres,test_m3_2_escalations,test_m3_2_escalations_api_postgres,test_m3_2_escalations_postgres}.py`;
   `tests/{m5_configuration_fixtures,m5_portfolio_fixtures,m5_portfolio_delivery_fixtures}.py`.
+- `tests/test_auth_contract.py` — только exact +10-line endpoint inventory
+  delta C0-SCOPE-M5.3A-01 выше; остальные AST/auth/OpenAPI checks неизменны.
 - **Только current 0023/readiness/fixture совместимость**:
   `tests/{generic_pg_schema,m5_knowledge_search_fixtures,test_foundation,test_m2_3_db_postgres,test_m2_3_schema_postgres,test_m2_3_setup,test_m2_4_browser_fixture,test_m3_1_guards_migrations,test_m3_1_native_context_postgres,test_m3_1_native_context_runtime_postgres,test_m3_2_escalations_migrations,test_m4_delivery,test_m4_delivery_postgres,test_m4_polza_runtime_postgres,test_m4_reply_rights,test_m4_runtime_migrations,test_m4_schema_postgres,test_m5_configuration_postgres,test_m5_knowledge_runtime_postgres,test_m5_portfolio_migrations,test_m5_portfolio_delivery_migrations,test_telegram_egress,test_telegram_egress_migration,test_telegram_egress_postgres,test_tenancy_postgres}.py`,
   `tests/fixtures/businesses.v1.json`, `scripts/{m2_4_browser_fixture,prepare_telegram_egress}.py`,
@@ -283,7 +379,10 @@ Checkpoint C1: контракт, первая связная реализаци�
 downgrade/reupgrade и 19 targeted unit PASS. Полная готовность **UNVERIFIED**;
 owner/runtime/browser/CI проверки продолжаются. PR и ручной CI ещё не создавались.
 
-### Возврат C1 — BLOCKED_SCOPE / LOCAL evidence, без приёмки C0
+### История возврата C1 — BLOCKED_SCOPE / LOCAL evidence
+
+Scope blocker этого возврата снят решением C0-SCOPE-M5.3A-01 выше;
+исходные результаты ниже сохранены без объявления готовности.
 
 Реализованы закрытая v7/v3 synthetic ветвь, source-backed intake, owner CAS,
 новая Action Center projection, owner-only DurationCase, UI и migration 0023.
