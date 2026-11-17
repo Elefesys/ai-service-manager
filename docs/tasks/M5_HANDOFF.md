@@ -409,6 +409,19 @@ Scope blocker этого возврата снят решением C0-SCOPE-M5.
 подготовлена отдельным review commit без продвижения ref. Draft PR и полный CI
 ожидают узкого C0 scope amendment. Статус не READY/VERIFIED; M5.3B/M6 не начинались.
 
+### Продолжение C1 после C0-SCOPE-M5.3A-01 — 2026-11-17
+
+Receipt `2c4baae377abd65bc3c807b265f123c23f3e818d`, tree
+`196dc2c89f4ad8bdcb8b6bac44178a91b20412b3`, sole parent review5ccd2f8
+сохранён в ancestry вместе с assignment/checkpoint. Применён точный +10-line
+API inventory delta; original auth AST после удаления additions совпадает.
+Новый producer/consumer требует exact receipt SHA/tree/parent, handoff-only
+receipt diff и ancestry; original assignment proof и immutable docs сохранены.
+Полный auth pytest и positive/negative PR/main admission: **81 PASS**;
+относящиеся ruff lint/format PASS. Остальные неизменённые прогоны не повторялись.
+Следующий шаг — один Draft PR и штатный CI. Статус **IN_PROGRESS / UNVERIFIED**,
+до C0 review и отдельного merge допуска владельца.
+
 ### Критерии готовности и возврат
 
 1. Targeted unit/schema tests и actual PostgreSQL на используемых операциях:

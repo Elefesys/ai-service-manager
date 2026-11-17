@@ -24,6 +24,9 @@ M5_INTAKE_BASE = "220606193208a1ef082732e4dfcdf1f2ffbea857"
 M5_INTAKE_TREE = "d15f9a75346ab881449010745cbe0216081b78cf"
 M5_INTAKE_ASSIGNMENT = "c0b0800341ff6cf7b6d79a5012696f47ea717f64"
 M5_INTAKE_ASSIGNMENT_TREE = "45c858d34d4098384b5f9e393af48e40e80b568e"
+M5_INTAKE_SCOPE_AMENDMENT = "2c4baae377abd65bc3c807b265f123c23f3e818d"
+M5_INTAKE_SCOPE_AMENDMENT_TREE = "196dc2c89f4ad8bdcb8b6bac44178a91b20412b3"
+M5_INTAKE_SCOPE_AMENDMENT_PARENT = "5ccd2f84ab3eb036ac602240b3eda7924aa818a9"
 M5_INTAKE_BRANCH = "c1/m5-3a-intake-duration-r1"
 M5_INTAKE_C0_DOCS = {
     "AGENTS.md",
@@ -32,6 +35,7 @@ M5_INTAKE_C0_DOCS = {
     "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
 }
 M5_INTAKE_PATHS = {
+    "tests/test_auth_contract.py",
     "AGENTS.md",
     "README.md",
     "backend/src/asm/ai/agent.py",
@@ -968,6 +972,7 @@ def source_tree_from_evidence(path=None):
     delivery = value.get("branch") == M5_DELIVERY_BRANCH
     if intake:
         keys.add("intake_assignment")
+        keys.add("intake_scope_amendment")
     if delivery:
         keys.add("scope_amendment")
         keys.add("scope_amendment_02")
@@ -976,6 +981,11 @@ def source_tree_from_evidence(path=None):
         require(
             value["intake_assignment"] == intake_assignment_proof(),
             "SOURCE_IDENTITY_INTAKE_ASSIGNMENT",
+        )
+        require(
+            type(value["intake_scope_amendment"]) is dict
+            and value["intake_scope_amendment"] == intake_scope_amendment_proof(),
+            "SOURCE_IDENTITY_INTAKE_SCOPE_AMENDMENT",
         )
     if delivery:
         require(
@@ -1536,6 +1546,15 @@ def intake_assignment_proof():
     }
 
 
+def intake_scope_amendment_proof():
+    return {
+        "sha": M5_INTAKE_SCOPE_AMENDMENT,
+        "tree": M5_INTAKE_SCOPE_AMENDMENT_TREE,
+        "parent": M5_INTAKE_SCOPE_AMENDMENT_PARENT,
+        "paths": ["docs/tasks/M5_HANDOFF.md"],
+    }
+
+
 def intake_event(event):
     if event.get("head_ref") == M5_INTAKE_BRANCH:
         return True
@@ -1585,6 +1604,34 @@ def admit_intake_source(event, manifest, evidence):
         "INTAKE_ASSIGNMENT_PATHS",
     )
     require(
+        capture(["git", "rev-parse", M5_INTAKE_SCOPE_AMENDMENT + "^{tree}"])
+        == M5_INTAKE_SCOPE_AMENDMENT_TREE,
+        "INTAKE_SCOPE_AMENDMENT_TREE",
+    )
+    require(
+        capture(["git", "rev-list", "--parents", "-n", "1", M5_INTAKE_SCOPE_AMENDMENT]).split()
+        == [M5_INTAKE_SCOPE_AMENDMENT, M5_INTAKE_SCOPE_AMENDMENT_PARENT],
+        "INTAKE_SCOPE_AMENDMENT_PARENT",
+    )
+    require(
+        capture(["git", "merge-base", M5_INTAKE_SCOPE_AMENDMENT, "HEAD"])
+        == M5_INTAKE_SCOPE_AMENDMENT,
+        "INTAKE_SCOPE_AMENDMENT_ANCESTRY",
+    )
+    require(
+        capture(
+            [
+                "git",
+                "diff",
+                "--name-only",
+                M5_INTAKE_SCOPE_AMENDMENT_PARENT,
+                M5_INTAKE_SCOPE_AMENDMENT,
+            ]
+        ).splitlines()
+        == intake_scope_amendment_proof()["paths"],
+        "INTAKE_SCOPE_AMENDMENT_PATHS",
+    )
+    require(
         not capture(
             [
                 "git",
@@ -1614,6 +1661,7 @@ def admit_intake_source(event, manifest, evidence):
             "paths": paths,
             "result": "PASS",
             "intake_assignment": intake_assignment_proof(),
+            "intake_scope_amendment": intake_scope_amendment_proof(),
         },
     )
     return event, manifest
@@ -2830,6 +2878,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     }
     if intake:
         source["intake_assignment"] = intake_assignment_proof()
+        source["intake_scope_amendment"] = intake_scope_amendment_proof()
     if delivery:
         source["scope_amendment"] = delivery_scope_amendment()
         source["scope_amendment_02"] = delivery_scope_amendment_02()

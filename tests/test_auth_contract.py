@@ -105,6 +105,15 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         f"POST {portfolio_prefix}/conversations/{{conversation_id}}/analysis",
         f"POST {portfolio_prefix}/conversations/{{conversation_id}}/matches",
     ]
+    intake_prefix = "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake"
+    intake_endpoints = [
+        f"GET {intake_prefix}/conversations/{{conversation_id}}",
+        f"POST {intake_prefix}/conversations/{{conversation_id}}/confirm",
+        f"POST {intake_prefix}/conversations/{{conversation_id}}/correct",
+        f"GET {intake_prefix}/duration-cases",
+        f"GET {intake_prefix}/duration-cases/search",
+        f"POST {intake_prefix}/duration-cases/{{operation}}",
+    ]
     assert len(contract["endpoints"]) == 7
     assert actual_endpoints == sorted(
         contract["endpoints"]
@@ -116,6 +125,7 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         + configuration_endpoints
         + knowledge_endpoints
         + portfolio_endpoints
+        + intake_endpoints
     )
     assert contract["schema_revision"] == "0003" and contract["down_revision"] == "0002"
     assert contract["environments"] == ["LOCAL", "TEST"]

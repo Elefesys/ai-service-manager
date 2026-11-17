@@ -3228,11 +3228,43 @@ def prepare_m5_intake_event(r, monkeypatch, route, *, damage=None):
         path = f.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text((path.read_text() if path.exists() else "") + "\n# finite intake delta\n")
-    if damage == "adjacent":
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed reviewed intake implementation")
+    review = f.git("rev-parse", "HEAD")
+    monkeypatch.setattr(carrier, "M5_INTAKE_SCOPE_AMENDMENT_PARENT", review)
+    if damage == "scope_parent":
+        f.git("commit", "--allow-empty", "-qm", "unapproved receipt parent")
+    handoff = f.root / "docs/tasks/M5_HANDOFF.md"
+    handoff.write_text(handoff.read_text() + "\n# exact C0 scope receipt\n")
+    if damage == "scope_application":
         path = f.root / "tests/test_auth_contract.py"
-        path.write_text("# scope omission cannot be silently widened\n")
+        path.write_text(path.read_text() + "# receipt must remain docs-only\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed C0 intake scope receipt")
+    if damage == "scope_merged_parent":
+        merged = f.git(
+            "commit-tree",
+            f.git("rev-parse", "HEAD^{tree}"),
+            "-p",
+            review,
+            "-p",
+            assignment,
+            "-m",
+            "unexpected two-parent scope receipt",
+        )
+        f.git("checkout", "--detach", merged)
+    monkeypatch.setattr(carrier, "M5_INTAKE_SCOPE_AMENDMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(
+        carrier, "M5_INTAKE_SCOPE_AMENDMENT_TREE", f.git("rev-parse", "HEAD^{tree}")
+    )
+    if damage == "missing_scope":
+        f.git("checkout", "--detach", review)
+    if damage == "adjacent":
+        path = f.root / "backend/src/asm/ai/polza.py"
+        path.write_text("# provider transport stays outside intake scope\n")
     if damage == "protected":
         (f.root / "AGENTS.md").write_text("# forbidden rewrite\n")
+    handoff.write_text(handoff.read_text() + "\n# final candidate after scope receipt\n")
     f.git("add", ".")
     f.git("commit", "-qm", "constructed intake candidate")
     return capability_checkout(
@@ -3252,6 +3284,13 @@ def prepare_m5_intake_event(r, monkeypatch, route, *, damage=None):
         "proof_extra",
         "proof_type",
         "proof_missing",
+        "scope_sha",
+        "scope_tree",
+        "scope_parent",
+        "scope_paths",
+        "scope_extra",
+        "scope_type",
+        "scope_missing",
         "base",
         "branch",
         "paths",
@@ -3271,6 +3310,7 @@ def test_intake_producer_consumer_proof_and_route_priority(r11_event, monkeypatc
     assert admission["base"] == carrier.M5_INTAKE_BASE
     assert set(admission["paths"]) == carrier.M5_INTAKE_PATHS
     assert admission["intake_assignment"] == carrier.intake_assignment_proof()
+    assert admission["intake_scope_amendment"] == carrier.intake_scope_amendment_proof()
     real_run = subprocess.run
 
     class BeforeArchive(Exception):
@@ -3293,6 +3333,7 @@ def test_intake_producer_consumer_proof_and_route_priority(r11_event, monkeypatc
         )
     path = r["root"] / "evidence/source.json"
     proof = json.loads(path.read_text())
+    assert proof["intake_scope_amendment"] == carrier.intake_scope_amendment_proof()
     for name, value in {
         "SOURCE_SHA": merged,
         "SOURCE_TREE": proof["tree"],
@@ -3311,11 +3352,21 @@ def test_intake_producer_consumer_proof_and_route_priority(r11_event, monkeypatc
                 proof["intake_assignment"][key] = (
                     [] if key == "paths" else True if key == "extra" else "f" * 40
                 )
+        elif damage.startswith("scope_"):
+            key = damage.removeprefix("scope_")
+            if key == "missing":
+                del proof["intake_scope_amendment"]
+            elif key == "type":
+                proof["intake_scope_amendment"] = "not-a-proof"
+            else:
+                proof["intake_scope_amendment"][key] = (
+                    [] if key == "paths" else True if key == "extra" else "f" * 40
+                )
         else:
             proof[damage] = {
                 "base": "f" * 40,
                 "branch": carrier.M5_DELIVERY_BRANCH,
-                "paths": ["tests/test_auth_contract.py"],
+                "paths": ["backend/src/asm/ai/polza.py"],
                 "tree": "f" * 40,
                 "attempt": 2,
             }[damage]
@@ -3336,6 +3387,12 @@ def test_intake_producer_consumer_proof_and_route_priority(r11_event, monkeypatc
         "parent",
         "assignment_application",
         "missing_assignment",
+        "scope_tree",
+        "scope_sha",
+        "scope_parent",
+        "scope_merged_parent",
+        "scope_application",
+        "missing_scope",
         "adjacent",
         "protected",
         "dirty",
@@ -3348,6 +3405,10 @@ def test_intake_source_damage_refused_before_resources(r11_event, monkeypatch, r
         monkeypatch.setattr(carrier, "M5_INTAKE_TREE", "f" * 40)
     elif damage == "assignment_tree":
         monkeypatch.setattr(carrier, "M5_INTAKE_ASSIGNMENT_TREE", "f" * 40)
+    elif damage == "scope_tree":
+        monkeypatch.setattr(carrier, "M5_INTAKE_SCOPE_AMENDMENT_TREE", "f" * 40)
+    elif damage == "scope_sha":
+        monkeypatch.setattr(carrier, "M5_INTAKE_SCOPE_AMENDMENT", "f" * 40)
     elif damage == "dirty":
         (r["f"].root / "untracked.py").write_text("# dirty source\n")
     with pytest.raises((carrier.Refusal, catalog.Refusal)):
