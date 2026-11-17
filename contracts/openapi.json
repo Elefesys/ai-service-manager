@@ -665,6 +665,133 @@
         "title": "BusinessesResponse",
         "type": "object"
       },
+      "CaseAsset": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "asset_version_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Asset Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "asset_version_id"
+        ],
+        "title": "CaseAsset",
+        "type": "object"
+      },
+      "CaseMatch": {
+        "additionalProperties": false,
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/DurationCase"
+          },
+          "differences": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Differences",
+            "type": "array"
+          },
+          "matches": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Matches",
+            "type": "array"
+          },
+          "unknown": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Unknown",
+            "type": "array"
+          }
+        },
+        "required": [
+          "case",
+          "matches",
+          "differences",
+          "unknown"
+        ],
+        "title": "CaseMatch",
+        "type": "object"
+      },
+      "CasePage": {
+        "additionalProperties": false,
+        "properties": {
+          "business_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Business Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DurationCase"
+            },
+            "maxItems": 20,
+            "title": "Items",
+            "type": "array"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "business_id",
+          "items"
+        ],
+        "title": "CasePage",
+        "type": "object"
+      },
+      "CaseSearch": {
+        "additionalProperties": false,
+        "properties": {
+          "business_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Business Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CaseMatch"
+            },
+            "maxItems": 5,
+            "title": "Items",
+            "type": "array"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "business_id",
+          "items"
+        ],
+        "title": "CaseSearch",
+        "type": "object"
+      },
       "CommandResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1992,6 +2119,321 @@
         "title": "DraftState",
         "type": "object"
       },
+      "DurationCase": {
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Case Id",
+            "type": "string"
+          },
+          "confirmed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed By"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DurationCaseInput"
+          },
+          "source_current": {
+            "title": "Source Current",
+            "type": "boolean"
+          },
+          "state": {
+            "enum": [
+              "DRAFT",
+              "CONFIRMED",
+              "REVOKED"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id",
+          "version",
+          "state",
+          "data",
+          "confirmed_by",
+          "source_current"
+        ],
+        "title": "DurationCase",
+        "type": "object"
+      },
+      "DurationCaseInput": {
+        "additionalProperties": false,
+        "properties": {
+          "asset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseAsset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "break_minutes": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Break Minutes"
+          },
+          "cleanup_minutes": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleanup Minutes"
+          },
+          "description": {
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "fill": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fill"
+          },
+          "height_mm": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 3000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height Mm"
+          },
+          "occupied_minutes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occupied Minutes"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "session_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 20.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Count"
+          },
+          "session_minutes": {
+            "anyOf": [
+              {
+                "items": {
+                  "exclusiveMinimum": 0.0,
+                  "maximum": 100000.0,
+                  "type": "integer"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Minutes"
+          },
+          "setup_minutes": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Minutes"
+          },
+          "stencil_minutes": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stencil Minutes"
+          },
+          "style": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style"
+          },
+          "treatment": {
+            "enum": [
+              "INCLUDED",
+              "EXCLUDED",
+              "UNKNOWN"
+            ],
+            "title": "Treatment",
+            "type": "string"
+          },
+          "width_mm": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 3000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width Mm"
+          },
+          "working_minutes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Working Minutes"
+          }
+        },
+        "required": [
+          "description",
+          "asset",
+          "width_mm",
+          "height_mm",
+          "placement",
+          "style",
+          "detail",
+          "fill",
+          "provider",
+          "working_minutes",
+          "occupied_minutes",
+          "setup_minutes",
+          "stencil_minutes",
+          "break_minutes",
+          "cleanup_minutes",
+          "treatment",
+          "session_count",
+          "session_minutes",
+          "explanation"
+        ],
+        "title": "DurationCaseInput",
+        "type": "object"
+      },
       "DurationPolicy": {
         "additionalProperties": false,
         "properties": {
@@ -2586,7 +3028,14 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/EscalationView"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EscalationView"
+                },
+                {
+                  "$ref": "#/components/schemas/IntakeEscalationView"
+                }
+              ]
             },
             "maxItems": 100,
             "title": "Items",
@@ -2994,6 +3443,66 @@
         "title": "FAQ",
         "type": "object"
       },
+      "Fact": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed By"
+          },
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "field": {
+            "enum": [
+              "idea",
+              "placement",
+              "approximate_size",
+              "style",
+              "references"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "status": {
+            "enum": [
+              "client-stated",
+              "observed",
+              "owner-confirmed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 300,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "status",
+          "source",
+          "confirmed_by",
+          "conflict"
+        ],
+        "title": "Fact",
+        "type": "object"
+      },
       "FileManifestResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3088,6 +3597,19 @@
           "manifest"
         ],
         "title": "FileResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
         "type": "object"
       },
       "Health": {
@@ -3913,6 +4435,245 @@
         "title": "IdleAutomationWork",
         "type": "object"
       },
+      "IntakeEscalationView": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee_user_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Assignee User Account Id",
+            "type": "string"
+          },
+          "bound_context": {
+            "$ref": "#/components/schemas/EscalationBoundContext"
+          },
+          "can_cancel": {
+            "title": "Can Cancel",
+            "type": "boolean"
+          },
+          "can_resolve": {
+            "title": "Can Resolve",
+            "type": "boolean"
+          },
+          "client_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "closure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationClosure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context_hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationContextHold"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_context": {
+            "$ref": "#/components/schemas/EscalationCurrentContext"
+          },
+          "due_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Due At",
+            "type": "string"
+          },
+          "escalation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Escalation Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "maintenance": {
+            "enum": [
+              "SCHEDULED",
+              "COMPLETE",
+              "FAILED"
+            ],
+            "title": "Maintenance",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "policy": {
+            "const": "PRELIMINARY_INTAKE_OWNER_V1",
+            "title": "Policy",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "reason": {
+            "const": "OWNER_DECISION_REQUIRED",
+            "title": "Reason",
+            "type": "string"
+          },
+          "reminders": {
+            "items": {
+              "$ref": "#/components/schemas/EscalationReminder"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Reminders",
+            "type": "array"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationResolution"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "second_reminder_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Second Reminder At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "RESOLVED",
+              "CANCELLED",
+              "EXPIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntakeProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary_current": {
+            "title": "Summary Current",
+            "type": "boolean"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "validity": {
+            "enum": [
+              "CURRENT",
+              "CONTROL_CHANGED",
+              "CONTEXT_CHANGED",
+              "ASSIGNEE_REVOKED",
+              "EXPIRED",
+              "TERMINAL",
+              "SOURCE_CHANGED"
+            ],
+            "title": "Validity",
+            "type": "string"
+          },
+          "version": {
+            "enum": [
+              "1",
+              "2"
+            ],
+            "title": "Version",
+            "type": "string"
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "const": "WAITING_FOR_HUMAN",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "escalation_id",
+          "conversation_id",
+          "client_id",
+          "turn_id",
+          "assignee_user_account_id",
+          "reason",
+          "question",
+          "policy",
+          "summary",
+          "summary_current",
+          "version",
+          "status",
+          "bound_context",
+          "current_context",
+          "validity",
+          "waiting",
+          "created_at",
+          "due_at",
+          "second_reminder_at",
+          "expires_at",
+          "observed_at",
+          "reminders",
+          "maintenance",
+          "resolution",
+          "closure",
+          "context_hold",
+          "can_resolve",
+          "can_cancel"
+        ],
+        "title": "IntakeEscalationView",
+        "type": "object"
+      },
       "IntakeField": {
         "additionalProperties": false,
         "properties": {
@@ -3938,6 +4699,253 @@
           "required"
         ],
         "title": "IntakeField",
+        "type": "object"
+      },
+      "IntakeProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "activation_version": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Activation Version",
+            "type": "string"
+          },
+          "business_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Business Id",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "NEW_TATTOO",
+              "COVER_UP",
+              "OTHER_COMPLEX",
+              "FAQ_ONLY",
+              "AMBIGUOUS"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "client_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "conflicts": {
+            "items": {
+              "enum": [
+                "idea",
+                "placement",
+                "approximate_size",
+                "style",
+                "references"
+              ],
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Context Version",
+            "type": "string"
+          },
+          "control_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Control Generation",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            },
+            "maxItems": 5,
+            "title": "Facts",
+            "type": "array"
+          },
+          "fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "enum": [
+                "idea",
+                "placement",
+                "approximate_size",
+                "style",
+                "references"
+              ],
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Missing",
+            "type": "array"
+          },
+          "preliminary": {
+            "const": true,
+            "title": "Preliminary",
+            "type": "boolean"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "revision": {
+            "const": "preliminary_intake_v1",
+            "title": "Revision",
+            "type": "string"
+          },
+          "service_id": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "pattern": "^[a-z][a-z0-9_-]{0,39}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Id"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceMessage"
+            },
+            "maxItems": 64,
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "NOT_STARTED",
+              "CLARIFY",
+              "OWNER_HANDOFF",
+              "PRELIMINARILY_COMPLETE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template_revision": {
+            "anyOf": [
+              {
+                "const": "tattoo_intake_v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Revision"
+          },
+          "version": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Version",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "workspace_id",
+          "business_id",
+          "conversation_id",
+          "client_id",
+          "service_id",
+          "release_id",
+          "activation_version",
+          "template_revision",
+          "control_generation",
+          "context_version",
+          "version",
+          "category",
+          "facts",
+          "missing",
+          "conflicts",
+          "status",
+          "question",
+          "sources",
+          "fingerprint",
+          "preliminary"
+        ],
+        "title": "IntakeProjection",
+        "type": "object"
+      },
+      "IntakeReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "ACCEPTED",
+              "REPLAY"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "receipt_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "receipt_id",
+          "version"
+        ],
+        "title": "IntakeReceipt",
         "type": "object"
       },
       "KnowledgeBuild": {
@@ -7927,6 +8935,89 @@
         "title": "SessionResponse",
         "type": "object"
       },
+      "Source": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Id"
+          },
+          "analysis_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Sha256"
+          },
+          "message_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 500,
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_version": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "source_version",
+          "quote",
+          "analysis_id",
+          "analysis_sha256"
+        ],
+        "title": "Source",
+        "type": "object"
+      },
+      "SourceMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "message_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "source_version": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Version",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4096,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "source_version",
+          "text"
+        ],
+        "title": "SourceMessage",
+        "type": "object"
+      },
       "Subscription": {
         "additionalProperties": false,
         "properties": {
@@ -8154,6 +9245,46 @@
           "recorded"
         ],
         "title": "UploadResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       },
       "ValidationIssue": {
@@ -10607,6 +11738,604 @@
         "summary": "Rollback",
         "tags": [
           "configuration"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}": {
+      "get": {
+        "operationId": "summary_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Summary",
+        "tags": [
+          "intake"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/confirm": {
+      "post": {
+        "operationId": "confirm_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_fingerprint": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Expected Fingerprint",
+                    "type": "string"
+                  },
+                  "expected_version": {
+                    "description": "Canonical decimal string, 0..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Version",
+                    "type": "string"
+                  },
+                  "field": {
+                    "enum": [
+                      "idea",
+                      "placement",
+                      "approximate_size",
+                      "style",
+                      "references"
+                    ],
+                    "title": "Field",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/components/schemas/Source"
+                  },
+                  "value": {
+                    "maxLength": 300,
+                    "title": "Value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_version",
+                  "expected_fingerprint",
+                  "field",
+                  "value",
+                  "source"
+                ],
+                "title": "IntakeCommand",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm",
+        "tags": [
+          "intake"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/correct": {
+      "post": {
+        "operationId": "correct_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__correct_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_fingerprint": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Expected Fingerprint",
+                    "type": "string"
+                  },
+                  "expected_version": {
+                    "description": "Canonical decimal string, 0..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Version",
+                    "type": "string"
+                  },
+                  "field": {
+                    "enum": [
+                      "idea",
+                      "placement",
+                      "approximate_size",
+                      "style",
+                      "references"
+                    ],
+                    "title": "Field",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/components/schemas/Source"
+                  },
+                  "value": {
+                    "maxLength": 300,
+                    "title": "Value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_version",
+                  "expected_fingerprint",
+                  "field",
+                  "value",
+                  "source"
+                ],
+                "title": "IntakeCommand",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Correct",
+        "tags": [
+          "intake"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/duration-cases": {
+      "get": {
+        "operationId": "cases_api_v1_workspaces__workspace_id__businesses__business_id__intake_duration_cases_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CasePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cases",
+        "tags": [
+          "intake"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/duration-cases/search": {
+      "get": {
+        "operationId": "search_api_v1_workspaces__workspace_id__businesses__business_id__intake_duration_cases_search_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "placement",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Placement",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "style",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Style",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "detail",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Detail",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fill",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Fill",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseSearch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "intake"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/duration-cases/{operation}": {
+      "post": {
+        "operationId": "command_api_v1_workspaces__workspace_id__businesses__business_id__intake_duration_cases__operation__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "operation",
+            "required": true,
+            "schema": {
+              "title": "Operation",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "case_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Case Id"
+                  },
+                  "data": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/DurationCaseInput"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "expected_version": {
+                    "description": "Canonical decimal string, 0..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_version",
+                  "case_id",
+                  "data"
+                ],
+                "title": "CaseCommand",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command",
+        "tags": [
+          "intake"
         ]
       }
     },
@@ -18012,7 +19741,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EscalationView"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EscalationView"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IntakeEscalationView"
+                    }
+                  ],
+                  "title": "Response Read Api V1 Workspaces  Workspace Id  Escalations  Escalation Id  Get"
                 }
               }
             },

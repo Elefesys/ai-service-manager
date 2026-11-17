@@ -13,8 +13,10 @@ from asm.ai.contracts import (
     Budget,
     ConversationResult,
     ConversationResultV2,
+    ConversationResultV3,
     Cost,
     GatewayConfig,
+    IntakeGatewayConfig,
     KnowledgeGatewayConfig,
     PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
@@ -32,6 +34,7 @@ from asm.ai.portfolio import (
 )
 from asm.billing.validation import Timestamp
 from asm.configuration.models import ActiveProjection
+from asm.intake.models import IntakeProjection
 
 
 class _PreparedRun(DTO):
@@ -212,6 +215,76 @@ class PreparedPortfolioDeliveryRun(_PreparedRun):
         return self
 
 
+class PreparedIntakeRun(_PreparedRun):
+    """One explicit synthetic intake run, scoped independently of older DTOs."""
+
+    config: IntakeGatewayConfig = Field(repr=False)
+    knowledge_pin: KnowledgePin = Field(repr=False)
+    active_projection: ActiveProjection = Field(repr=False)
+    search_pin: SearchPin = Field(repr=False)
+    search_refs: SearchRefs | None = Field(repr=False)
+    portfolio_pin: PortfolioPin = Field(repr=False)
+    media_pin: MediaPin = Field(repr=False)
+    portfolio_refs: PortfolioRefs | None = Field(repr=False)
+    portfolio_session_id: UUID = Field(repr=False)
+    search_query: str = Field(repr=False, max_length=1024)
+    vision_analysis: RawVisionObservation | None = Field(repr=False)
+
+    intake: IntakeProjection = Field(repr=False)
+
+    @model_validator(mode="after")
+    def pinned_scope(self) -> Self:
+        if (
+            self.intake.workspace_id != str(self.binding.workspace_id)
+            or self.intake.business_id != str(self.binding.business_id)
+            or self.intake.conversation_id != str(self.binding.conversation_id)
+            or self.intake.client_id != str(self.binding.client_id)
+            or self.intake.release_id != self.active_projection.release_id
+            or self.intake.activation_version != self.active_projection.activation_version
+            or self.intake.control_generation != str(self.binding.control_generation)
+            or self.intake.context_version != str(self.binding.context_version)
+        ):
+            raise ValueError("INTAKE_SCOPE_MISMATCH")
+        active, pin, search, portfolio = (
+            self.active_projection,
+            self.knowledge_pin,
+            self.search_pin,
+            self.portfolio_pin,
+        )
+        if (
+            self.binding.business_id != pin.business_id
+            or str(self.binding.workspace_id) != active.workspace_id
+            or str(pin.business_id) != active.business_id
+            or (str(pin.release_id) if pin.release_id else None) != active.release_id
+            or pin.activation_version != active.activation_version
+            or (search.business_id, search.release_id, search.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or (portfolio.business_id, portfolio.release_id, portfolio.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or not self.media_pin.scope(self.binding)
+            or self.search_refs is not None
+            and self.search_refs.profile_id != search.profile_id
+            or self.portfolio_refs is not None
+            and self.portfolio_refs.profile_id != portfolio.profile_id
+            or len(self.search_query.encode("utf-8")) > 1024
+        ):
+            raise ValueError("PORTFOLIO_SCOPE_MISMATCH")
+        if self.vision_analysis is None:
+            if self.media_pin.analysis_id is not None:
+                raise ValueError("VISION_SOURCE_MISMATCH")
+        elif (
+            self.vision_analysis.analysis_id,
+            self.vision_analysis.analysis_sha256,
+            self.vision_analysis.source_sha256,
+        ) != (
+            self.media_pin.analysis_id,
+            self.media_pin.analysis_sha256,
+            self.media_pin.source_sha256,
+        ):
+            raise ValueError("VISION_SOURCE_MISMATCH")
+        return self
+
+
 class PortfolioQueryData(DTO):
     knowledge: SearchProjection = Field(repr=False)
     portfolio: PortfolioProjection = Field(repr=False)
@@ -251,7 +324,7 @@ class PortfolioDeliveryQueryData(PortfolioQueryData):
 
 
 AnyPortfolioQueryData = PortfolioQueryData | PortfolioDeliveryQueryData
-AnyPortfolioRun = PreparedPortfolioRun | PreparedPortfolioDeliveryRun
+AnyPortfolioRun = PreparedPortfolioRun | PreparedPortfolioDeliveryRun | PreparedIntakeRun
 
 
 class QueryReservation(DTO):
@@ -413,7 +486,31 @@ class PortfolioDeliveryRuntimeReceipt(_RuntimeReceipt[ConversationResultV2]):
         return self
 
 
-AnyRuntimeReceipt = RuntimeReceipt | PortfolioDeliveryRuntimeReceipt
+class IntakeRuntimeReceipt(_RuntimeReceipt[ConversationResultV3]):
+    knowledge_pin: KnowledgePin = Field(repr=False)
+    search_pin: SearchPin = Field(repr=False)
+    search_refs: SearchRefs = Field(repr=False)
+    portfolio_pin: PortfolioPin = Field(repr=False)
+    media_pin: MediaPin = Field(repr=False)
+    portfolio_refs: PortfolioRefs = Field(repr=False)
+
+    @model_validator(mode="after")
+    def scope(self) -> Self:
+        pin, search, portfolio = self.knowledge_pin, self.search_pin, self.portfolio_pin
+        if (
+            (search.business_id, search.release_id, search.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or (portfolio.business_id, portfolio.release_id, portfolio.activation_version)
+            != (pin.business_id, pin.release_id, pin.activation_version)
+            or self.search_refs.profile_id != search.profile_id
+            or self.portfolio_refs.profile_id != portfolio.profile_id
+            or self.media_pin.business_id != pin.business_id
+        ):
+            raise ValueError("PORTFOLIO_SCOPE_MISMATCH")
+        return self
+
+
+AnyRuntimeReceipt = RuntimeReceipt | PortfolioDeliveryRuntimeReceipt | IntakeRuntimeReceipt
 
 
 class CallCompletion(DTO):

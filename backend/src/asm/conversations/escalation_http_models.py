@@ -7,6 +7,7 @@ from pydantic import Field, field_validator, model_validator
 from asm.billing.models import CommonCode, StrictModel
 from asm.billing.validation import CanonicalUUID, PositiveDecimal, Timestamp
 from asm.conversations.native_context_http_models import EscalationContextHold
+from asm.intake.models import IntakeProjection
 
 Operation = Literal["RESOLVE", "CANCEL"]
 Status = Literal["PENDING", "RESOLVED", "CANCELLED", "EXPIRED"]
@@ -158,8 +159,86 @@ class EscalationView(StrictModel):
         return self
 
 
+class IntakeEscalationView(StrictModel):
+    workspace_id: CanonicalUUID
+    escalation_id: CanonicalUUID
+    conversation_id: CanonicalUUID
+    client_id: CanonicalUUID
+    turn_id: CanonicalUUID
+    assignee_user_account_id: CanonicalUUID
+    reason: Literal["OWNER_DECISION_REQUIRED"]
+    question: str = Field(min_length=1, max_length=300)
+    policy: Literal["PRELIMINARY_INTAKE_OWNER_V1"]
+    summary: IntakeProjection | None
+    summary_current: bool
+    version: Literal["1", "2"]
+    status: Status
+    bound_context: EscalationBoundContext
+    current_context: EscalationCurrentContext
+    validity: Literal[
+        "CURRENT",
+        "CONTROL_CHANGED",
+        "CONTEXT_CHANGED",
+        "ASSIGNEE_REVOKED",
+        "EXPIRED",
+        "TERMINAL",
+        "SOURCE_CHANGED",
+    ]
+    waiting: Literal["WAITING_FOR_HUMAN"] | None
+    created_at: Timestamp
+    due_at: Timestamp
+    second_reminder_at: Timestamp
+    expires_at: Timestamp
+    observed_at: Timestamp
+    reminders: list[EscalationReminder] = Field(min_length=2, max_length=2)
+    maintenance: Literal["SCHEDULED", "COMPLETE", "FAILED"]
+    resolution: EscalationResolution | None
+    closure: EscalationClosure | None
+    context_hold: EscalationContextHold | None
+    can_resolve: bool
+    can_cancel: bool
+
+    @model_validator(mode="after")
+    def shape(self) -> Self:
+        if (self.summary is not None) != self.summary_current or (
+            self.can_resolve and not self.summary_current
+        ):
+            raise ValueError("Invalid intake escalation source")
+        pending = self.status == "PENDING"
+        current = pending and self.validity == "CURRENT"
+        if (
+            self.version != ("1" if pending else "2")
+            or (self.validity == "TERMINAL") == pending
+            or (self.waiting is not None) != current
+            or (self.resolution is not None) != (self.status == "RESOLVED")
+            or (self.closure is not None) != (self.status in ("CANCELLED", "EXPIRED"))
+            or [r.ordinal for r in self.reminders] != [1, 2]
+            or [r.due_at for r in self.reminders] != [self.due_at, self.second_reminder_at]
+            or not self.created_at < self.due_at < self.second_reminder_at < self.expires_at
+            or (self.can_resolve and not current)
+            or (self.context_hold is not None and (not current or self.can_resolve))
+            or (
+                self.can_cancel
+                and (
+                    not pending
+                    or self.validity not in ("CURRENT", "ASSIGNEE_REVOKED", "SOURCE_CHANGED")
+                    or self.observed_at >= self.expires_at
+                )
+            )
+        ):
+            raise ValueError("Invalid Escalation projection")
+        if self.closure and (
+            (self.status == "EXPIRED") != (self.closure.reason == "DEADLINE_ELAPSED")
+        ):
+            raise ValueError("Invalid closure status")
+        return self
+
+
+AnyEscalationView = EscalationView | IntakeEscalationView
+
+
 class EscalationPage(StrictModel):
-    items: list[EscalationView] = Field(max_length=100)
+    items: list[AnyEscalationView] = Field(max_length=100)
     next_cursor: str | None = Field(max_length=1024)
     observed_at: Timestamp
 

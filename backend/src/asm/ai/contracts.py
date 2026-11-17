@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
+from asm.intake.models import CandidateSet
+
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_.:/-]+$")]
 Text = Annotated[str, Field(min_length=1, max_length=4000, pattern=r"\S")]
 Reason = Annotated[str, Field(min_length=1, max_length=500, pattern=r"\S")]
@@ -150,16 +152,43 @@ class PortfolioDeliveryGatewayConfig(DTO):
         return self
 
 
+class IntakeGatewayConfig(DTO):
+    """Explicit v6 selection proposal; no historical config gains send authority."""
+
+    revision: Identifier
+    route: Route
+    prompt_revision: Literal["conversation_v7"]
+    schema_revision: Literal["conversation_result_v3"]
+    limits: Limits
+
+    @model_validator(mode="after")
+    def finite_synthetic_scope(self) -> Self:
+        if (
+            self.route.execution != "FAKE"
+            or self.route.adapter != "fake"
+            or self.route.endpoint != "https://fake.invalid/v1"
+            or self.route.eligibility != "EVAL_ONLY"
+            or self.limits.currency != "RUB"
+            or self.limits.model_calls > 2
+            or self.limits.read_executions > 1
+        ):
+            raise ValueError("INTAKE_CONFIG_INVALID")
+        return self
+
+
 AnyGatewayConfig = (
     GatewayConfig
     | KnowledgeGatewayConfig
     | SearchGatewayConfig
     | PortfolioGatewayConfig
     | PortfolioDeliveryGatewayConfig
+    | IntakeGatewayConfig
 )
 
 
 def validate_gateway_config(value: object) -> AnyGatewayConfig:
+    if isinstance(value, IntakeGatewayConfig):
+        return IntakeGatewayConfig.model_validate(value)
     if isinstance(value, PortfolioDeliveryGatewayConfig):
         return PortfolioDeliveryGatewayConfig.model_validate(value)
     if isinstance(value, PortfolioGatewayConfig):
@@ -264,10 +293,36 @@ class PortfolioPhoto(DTO):
 
 ConversationResultV2 = Reply | Handoff | NoReply | PortfolioPhoto
 CONVERSATION_RESULT_V2: TypeAdapter[ConversationResultV2] = TypeAdapter(ConversationResultV2)
-AnyConversationResult = ConversationResult | ConversationResultV2
+
+
+class IntakeReply(Reply):
+    intake: CandidateSet
+
+
+class IntakeHandoff(Handoff):
+    intake: CandidateSet
+
+
+class IntakeNoReply(NoReply):
+    intake: CandidateSet
+
+
+class IntakePhoto(PortfolioPhoto):
+    intake: CandidateSet
+
+
+ConversationResultV3 = IntakeReply | IntakeHandoff | IntakeNoReply | IntakePhoto
+CONVERSATION_RESULT_V3: TypeAdapter[ConversationResultV3] = TypeAdapter(ConversationResultV3)
+AnyConversationResult = ConversationResult | ConversationResultV2 | ConversationResultV3
 
 
 def validate_conversation_result(config: AnyGatewayConfig, value: object) -> AnyConversationResult:
+    if isinstance(config, IntakeGatewayConfig):
+        if isinstance(value, dict):
+            return CONVERSATION_RESULT_V3.validate_json(
+                json.dumps(value, ensure_ascii=False, allow_nan=False)
+            )
+        return CONVERSATION_RESULT_V3.validate_python(value)
     if isinstance(config, PortfolioDeliveryGatewayConfig):
         if isinstance(value, dict):
             return CONVERSATION_RESULT_V2.validate_json(
@@ -449,7 +504,11 @@ class PortfolioDeliveryGatewayResult(_GatewayResult[ConversationResultV2]):
     """New v2 wire result; a photo is still only an untrusted proposal."""
 
 
-AnyGatewayResult = GatewayResult | PortfolioDeliveryGatewayResult
+class IntakeGatewayResult(_GatewayResult[ConversationResultV3]):
+    """Only the new v7 path can return candidate facts."""
+
+
+AnyGatewayResult = GatewayResult | PortfolioDeliveryGatewayResult | IntakeGatewayResult
 
 
 def strict_json(raw: str) -> Any:

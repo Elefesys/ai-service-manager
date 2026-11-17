@@ -32,6 +32,7 @@ from asm.ai.contracts import (
     AnyConversationResult,
     AnyGatewayConfig,
     Budget,
+    IntakeGatewayConfig,
     PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
     PortfolioPhoto,
@@ -59,12 +60,14 @@ from asm.ai.runtime_contracts import (
     AnyPreparedRun,
     AnyRuntimeReceipt,
     CallCompletion,
+    IntakeRuntimeReceipt,
     KnowledgeRuntimeReceipt,
     PortfolioDeliveryQueryData,
     PortfolioDeliveryRuntimeReceipt,
     PortfolioQueryData,
     PortfolioQueryReservation,
     PortfolioRuntimeReceipt,
+    PreparedIntakeRun,
     PreparedKnowledgeRun,
     PreparedPortfolioDeliveryRun,
     PreparedPortfolioRun,
@@ -118,6 +121,7 @@ class AIDatabase:
         embeddings: EmbeddingClient | None = None,
         portfolio_session_id: UUID | None = None,
         portfolio_delivery: bool = False,
+        intake: bool = False,
     ):
         if environment not in {"LOCAL", "TEST"}:
             raise MessagingError(Code.NOT_ALLOWED)
@@ -140,6 +144,9 @@ class AIDatabase:
             and portfolio_session_id is None
         ):
             raise MessagingError(Code.NOT_ALLOWED)
+        if type(intake) is not bool or intake and not portfolio_delivery:
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.intake = intake
         self.portfolio_delivery = portfolio_delivery
         self.portfolio_session_id = portfolio_session_id
         self.provider = provider
@@ -148,6 +155,10 @@ class AIDatabase:
         self.embeddings = embeddings if embeddings is not None else EmbeddingClient()
 
     def config(self, config: AnyGatewayConfig) -> AnyGatewayConfig:
+        if self.intake:
+            if not isinstance(config, IntakeGatewayConfig):
+                raise MessagingError(Code.NOT_ALLOWED)
+            return IntakeGatewayConfig.model_validate(config)
         if self.portfolio_delivery:
             if not isinstance(config, PortfolioDeliveryGatewayConfig):
                 raise MessagingError(Code.NOT_ALLOWED)
@@ -187,14 +198,18 @@ class AIDatabase:
             "config": config.model_dump(mode="json"),
             "deadline": deadline.isoformat(),
         }
-        if isinstance(config, (PortfolioGatewayConfig, PortfolioDeliveryGatewayConfig)):
+        if isinstance(
+            config, (PortfolioGatewayConfig, PortfolioDeliveryGatewayConfig, IntakeGatewayConfig)
+        ):
             if self.portfolio_session_id is None:
                 raise MessagingError(Code.NOT_ALLOWED)
             payload["portfolio_session_id"] = str(self.portfolio_session_id)
         raw = await self._command(claim, "PREPARE", **payload)
-        if config.prompt_revision in {"conversation_v5", "conversation_v6"}:
+        if config.prompt_revision in {"conversation_v5", "conversation_v6", "conversation_v7"}:
             run = (
-                decoded(PreparedPortfolioDeliveryRun, raw)
+                decoded(PreparedIntakeRun, raw)
+                if isinstance(config, IntakeGatewayConfig)
+                else decoded(PreparedPortfolioDeliveryRun, raw)
                 if isinstance(config, PortfolioDeliveryGatewayConfig)
                 else decoded(PreparedPortfolioRun, raw)
             )
@@ -210,9 +225,9 @@ class AIDatabase:
     def authority(
         self, claim: JobClaim, run: AnyPreparedRun
     ) -> "PostgresAuthority | PostgresKnowledgeAuthority | PostgresSearchAuthority | PostgresPortfolioAuthority":
-        if isinstance(run, PreparedPortfolioDeliveryRun):
+        if isinstance(run, (PreparedPortfolioDeliveryRun, PreparedIntakeRun)):
             return PostgresPortfolioDeliveryAuthority(self, claim, run)
-        if isinstance(run, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun)):
+        if isinstance(run, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun, PreparedIntakeRun)):
             return PostgresPortfolioAuthority(self, claim, run)
         if isinstance(run, PreparedSearchRun):
             return PostgresSearchAuthority(self, claim, run)
@@ -221,6 +236,8 @@ class AIDatabase:
         return PostgresAuthority(self, claim, run)
 
     def receipt(self, config: AnyGatewayConfig, raw: Any) -> AnyRuntimeReceipt:
+        if isinstance(config, IntakeGatewayConfig):
+            return decoded(IntakeRuntimeReceipt, raw)
         if isinstance(config, PortfolioDeliveryGatewayConfig):
             return decoded(PortfolioDeliveryRuntimeReceipt, raw)
         return decoded(
@@ -307,14 +324,16 @@ class AIDatabase:
             return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
         projection: SearchProjection | None = None
         portfolio_data: AnyPortfolioQueryData | None = None
-        if isinstance(run, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun)):
+        if isinstance(run, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun, PreparedIntakeRun)):
             portfolio_data = await self.portfolio_query(claim, run)
             if portfolio_data is None:
                 return RuntimeStop(run_id=run.run_id, reason="INCOMPLETE")
             # The shared QUERY has a durable hold. Re-read the same saved run so
             # Gateway starts with all auxiliary cost under the original budget.
             refreshed = await self.prepare(claim, config, deadline=run.deadline)
-            if not isinstance(refreshed, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun)):
+            if not isinstance(
+                refreshed, (PreparedPortfolioRun, PreparedPortfolioDeliveryRun, PreparedIntakeRun)
+            ):
                 raise MessagingError(Code.AI_STALE)
             run = refreshed
             self._portfolio_data_current(run, portfolio_data)
@@ -327,10 +346,17 @@ class AIDatabase:
             )
         wrapped = DurableAdapter(self, claim, run, adapter)
         agent: ConversationAgent
-        if isinstance(run, PreparedPortfolioDeliveryRun):
+        if isinstance(run, (PreparedPortfolioDeliveryRun, PreparedIntakeRun)):
             if not isinstance(portfolio_data, PortfolioDeliveryQueryData):
                 raise MessagingError(Code.AI_STALE)
-            agent = PortfolioDeliveryConversationAgent(
+            from asm.ai.intake import IntakeConversationAgent
+
+            agent_class = (
+                IntakeConversationAgent
+                if isinstance(run, PreparedIntakeRun)
+                else PortfolioDeliveryConversationAgent
+            )
+            agent = agent_class(
                 config,
                 wrapped,
                 PostgresPortfolioDeliveryAuthority(self, claim, run),
@@ -346,6 +372,8 @@ class AIDatabase:
                 delivery_eligible=portfolio_data.delivery_eligible,
                 initial_budget=run.budget,
             )
+            if isinstance(run, PreparedIntakeRun) and isinstance(agent, IntakeConversationAgent):
+                agent.intake = run.intake
         elif isinstance(run, PreparedPortfolioRun):
             assert portfolio_data is not None
             agent = PortfolioConversationAgent(
@@ -530,7 +558,7 @@ class AIDatabase:
             raw = await unit.portfolio_runtime_read(run.run_id, self._portfolio_pins(run))
         value = (
             decoded(PortfolioDeliveryQueryData, raw)
-            if isinstance(run, PreparedPortfolioDeliveryRun)
+            if isinstance(run, (PreparedPortfolioDeliveryRun, PreparedIntakeRun))
             else decoded(PortfolioQueryData, raw)
         )
         self._portfolio_data_current(run, value)
@@ -588,7 +616,7 @@ class AIDatabase:
             raw = await unit.portfolio_query_apply(run.run_id, call, ticket, outcome["vectors"])
         value = (
             decoded(PortfolioDeliveryQueryData, raw)
-            if isinstance(run, PreparedPortfolioDeliveryRun)
+            if isinstance(run, (PreparedPortfolioDeliveryRun, PreparedIntakeRun))
             else decoded(PortfolioQueryData, raw)
         )
         self._portfolio_data_current(run, value)
@@ -847,6 +875,17 @@ class PostgresPortfolioDeliveryAuthority(PostgresPortfolioAuthority):
             self.run.portfolio_session_id
         ):
             raise MessagingError(Code.AI_STALE)
+        if isinstance(self.run, PreparedIntakeRun):
+            from asm.ai.intake import IntakeContextRead
+
+            value = decoded(
+                IntakeContextRead, {k: v for k, v in raw.items() if k != "portfolio_session_id"}
+            )
+            if value.intake != self.run.intake:
+                raise MessagingError(Code.AI_STALE)
+            return decoded(
+                PortfolioDeliveryContextRead, value.model_dump(mode="json", exclude={"intake"})
+            )
         return decoded(
             PortfolioDeliveryContextRead,
             {k: v for k, v in raw.items() if k != "portfolio_session_id"},

@@ -108,6 +108,7 @@ PORTFOLIO_NONFUNCTION_SHA256 = "dcc311ce3d0b978428f63ca27b69dbe8bc621b485d4f67bc
 PORTFOLIO_DELIVERY_NONFUNCTION_SHA256 = (
     "6890bd1d959ef3e6c05c0ca8f7e203586035e3a2f46c4e343e4e64dbf38bf210"
 )
+INTAKE_NONFUNCTION_SHA256 = "37c156d07431b688aa99e8afca2a83f09e8082f5a4b2d28f4ac5292286158d32"
 PROFILE = "platform.human_context_schema_profile()"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -274,7 +275,7 @@ def capture_source(root, revision="0013"):
     """Expand the actual chain without importing/mutating the real Alembic module."""
     require(
         revision
-        in {"0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022"},
+        in {"0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023"},
         "Unsupported catalog revision",
     )
     paths = sorted(p for p in (root / "migrations/versions").glob("*.py") if p.name[:4] <= revision)
@@ -482,6 +483,7 @@ def source_catalog(root, revision="0013"):
             "0020": 233,
             "0021": 289,
             "0022": 303,
+            "0023": 318,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -501,6 +503,7 @@ def source_catalog(root, revision="0013"):
             "0020": 59,
             "0021": 68,
             "0022": 69,
+            "0023": 73,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -552,7 +555,17 @@ def source_catalog(root, revision="0013"):
                 if revision >= "0021"
                 else set()
             )
-            | ({"platform.portfolio_delivery_intents"} if revision == "0022" else set())
+            | ({"platform.portfolio_delivery_intents"} if revision >= "0022" else set())
+            | (
+                {
+                    "platform.intake_state",
+                    "platform.intake_receipts",
+                    "platform.duration_cases",
+                    "platform.intake_escalation_links",
+                }
+                if revision >= "0023"
+                else set()
+            )
         ),
         "Independent source column replay differs",
     )
@@ -644,11 +657,13 @@ def compare_embedded_profile(expected):
     """
     revision = expected["revision"]
     require(
-        revision in {"0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022"},
+        revision in {"0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023"},
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.portfolio_delivery_schema_profile()"
+        "platform.intake_schema_profile()"
+        if revision == "0023"
+        else "platform.portfolio_delivery_schema_profile()"
         if revision == "0022"
         else "platform.portfolio_schema_profile()"
         if revision == "0021"
@@ -693,6 +708,7 @@ def compare_embedded_profile(expected):
             "0020": 232,
             "0021": 288,
             "0022": 302,
+            "0023": 317,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -733,6 +749,7 @@ def compare_embedded_profile(expected):
             "0020": 59,
             "0021": 68,
             "0022": 69,
+            "0023": 73,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -831,7 +848,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
         actual_columns.setdefault(table, []).append(column)
     require(actual_columns == expected_columns, "Missing/extra/reordered table columns")
     require(
-        revision in {"0013", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022"}
+        revision in {"0013", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023"}
         and sha256(nonfunction_text.encode("utf-8"))
         == (
             {
@@ -844,6 +861,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0020": KNOWLEDGE_SEARCH_NONFUNCTION_SHA256,
                 "0021": PORTFOLIO_NONFUNCTION_SHA256,
                 "0022": PORTFOLIO_DELIVERY_NONFUNCTION_SHA256,
+                "0023": INTAKE_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -2960,7 +2978,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0022"),
+            source_catalog(ROOT, "0023"),
         )
 
     def persist_partition(self, work):
@@ -3144,7 +3162,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0022"
+            and source["expected_revision"] == "0023"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

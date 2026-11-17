@@ -1,3 +1,4 @@
+import {parseIntake,type Intake} from './intake-api';
 import { parseContextHold, type ContextHold } from './human-context-api';
 // Four accepted owner routes (M3_CONTRACT §14.5/14.16). Receipts are historical.
 export type EscalationStatus = 'PENDING' | 'RESOLVED' | 'CANCELLED' | 'EXPIRED';
@@ -6,7 +7,7 @@ export type EscalationOperation = 'RESOLVE' | 'CANCEL';
 export type EscalationContext = Readonly<{ workspace: string; escalation: string; conversation: string; client: string }>;
 export type EscalationBody = Readonly<{ expected_conversation_id: string; expected_client_id: string; expected_escalation_version: string; expected_control_generation: string; expected_context_version: string; answer_text?: string }>;
 type ClosureReason = 'OWNER_CANCELLED' | 'CONTROL_CHANGED' | 'CONTEXT_CHANGED' | 'ASSIGNEE_REVOKED' | 'DEADLINE_ELAPSED';
-export type EscalationView = {
+export type LegacyEscalationView = {
   workspace_id: string; escalation_id: string; conversation_id: string; client_id: string; turn_id: string; assignee_user_account_id: string;
   reason: 'OWNER_DECISION_REQUIRED'; question: 'CONTROLLED ESCALATION TEST: требуется решение владельца.'; policy: 'LOCAL_TEST_OWNER_WAIT_V1';
   version: '1' | '2'; status: EscalationStatus;
@@ -20,6 +21,8 @@ export type EscalationView = {
   closure: { reason: ClosureReason; actor_user_account_id: string | null; completed_at: string } | null;
   context_hold: ContextHold | null; can_resolve: boolean; can_cancel: boolean;
 };
+export type IntakeEscalationView = Omit<LegacyEscalationView,'policy'|'question'|'validity'> & {policy:'PRELIMINARY_INTAKE_OWNER_V1';question:string;summary:Intake|null;summary_current:boolean;validity:LegacyEscalationView['validity']|'SOURCE_CHANGED'};
+export type EscalationView = LegacyEscalationView | IntakeEscalationView;
 export type EscalationPage = { items: EscalationView[]; next_cursor: string | null; observed_at: string };
 export type EscalationReceipt = { outcome: 'ACCEPTED' | 'REPLAY'; result: {
   workspace_id: string; escalation_id: string; conversation_id: string; client_id: string; receipt_id: string; audit_event_id: string;
@@ -46,7 +49,7 @@ export function exactAnswer(value: unknown): string {
   if (typeof value !== 'string' || [...value].length < 1 || [...value].length > 512 || /^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/u.test(value) || /[\u0000\uD800-\uDFFF]/u.test(value) || new TextEncoder().encode(value).length > 2048) throw new EscalationError(422,'INVALID_REQUEST');
   return value;
 }
-export function parseEscalation(value: unknown, workspace: string, expected?: Partial<Omit<EscalationContext,'workspace'>>): EscalationView {
+function parseLegacyEscalation(value: unknown, workspace: string, expected?: Partial<Omit<EscalationContext,'workspace'>>): LegacyEscalationView {
   const v = object(value,['workspace_id','escalation_id','conversation_id','client_id','turn_id','assignee_user_account_id','reason','question','policy','version','status','bound_context','current_context','validity','waiting','created_at','due_at','second_reminder_at','expires_at','observed_at','reminders','maintenance','resolution','closure','context_hold','can_resolve','can_cancel']);
   if (!['workspace_id','escalation_id','conversation_id','client_id','turn_id','assignee_user_account_id'].every(k=>uuid(v[k])) || v.workspace_id !== workspace || (expected?.escalation !== undefined && v.escalation_id !== expected.escalation) || (expected?.conversation !== undefined && v.conversation_id !== expected.conversation) || (expected?.client !== undefined && v.client_id !== expected.client)) invalid();
   const bound = object(v.bound_context,['turn_revision','control_generation','context_version','fingerprint']);
@@ -70,7 +73,18 @@ export function parseEscalation(value: unknown, workspace: string, expected?: Pa
     const c=object(v.closure,['reason','actor_user_account_id','completed_at']);
     if (!oneOf(c.reason,['OWNER_CANCELLED','CONTROL_CHANGED','CONTEXT_CHANGED','ASSIGNEE_REVOKED','DEADLINE_ELAPSED']) || !timestamp(c.completed_at) || (c.reason==='OWNER_CANCELLED'?!uuid(c.actor_user_account_id):c.actor_user_account_id!==null) || (v.status==='EXPIRED')!==(c.reason==='DEADLINE_ELAPSED')) invalid();
   }
-  return v as EscalationView;
+  return v as LegacyEscalationView;
+}
+export function parseEscalation(value:unknown,workspace:string,expected?:Partial<Omit<EscalationContext,'workspace'>>):EscalationView {
+ if(typeof value==='object'&&value!==null&&'policy' in value&&value.policy==='PRELIMINARY_INTAKE_OWNER_V1'){
+  const raw=value as Record<string,unknown>,{summary,summary_current,...rest}=raw;
+  if(typeof summary_current!=='boolean'||typeof rest.question!=='string'||!rest.question.trim()||[...rest.question].length>300||(summary!==null)!==summary_current||(!summary_current&&rest.can_resolve))invalid();
+  const sourceChanged=rest.validity==='SOURCE_CHANGED';if(sourceChanged&&(summary_current||rest.waiting!==null))invalid();
+  const legacy=parseLegacyEscalation({...rest,...(sourceChanged?{validity:'CURRENT',waiting:'WAITING_FOR_HUMAN'}:{}),policy:'LOCAL_TEST_OWNER_WAIT_V1',question:'CONTROLLED ESCALATION TEST: требуется решение владельца.'},workspace,expected);
+  const checked=summary===null?null:parseIntake(summary,{workspace,business:String((summary as Record<string,unknown>).business_id),conversation:legacy.conversation_id,client:legacy.client_id});
+  return {...legacy,...(sourceChanged?{validity:'SOURCE_CHANGED' as const,waiting:null}:{}),policy:'PRELIMINARY_INTAKE_OWNER_V1',question:rest.question as string,summary:checked,summary_current:summary_current as boolean};
+ }
+ return parseLegacyEscalation(value,workspace,expected);
 }
 export function parseEscalationPage(value: unknown, workspace: string, status: StatusFilter, limit=10): EscalationPage {
   const v=object(value,['items','next_cursor','observed_at']);

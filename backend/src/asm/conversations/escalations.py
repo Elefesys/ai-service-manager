@@ -6,19 +6,19 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, Self
 from uuid import UUID
 
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from asm.auth.service import AuthService
 from asm.billing.models import StrictModel
 from asm.billing.validation import Timestamp, encode_cursor
 from asm.conversations.escalation_http_models import (
+    AnyEscalationView,
     EscalationAcceptedResult,
     EscalationCancelRequest,
     EscalationCommandResponse,
     EscalationCursor,
     EscalationPage,
     EscalationResolveRequest,
-    EscalationView,
     Operation,
     StatusFilter,
 )
@@ -98,7 +98,7 @@ class _Saved(StrictModel):
 
 
 class _Listed(StrictModel):
-    items: list[EscalationView] = Field(max_length=101)
+    items: list[AnyEscalationView] = Field(max_length=101)
     observed_at: Timestamp
 
 
@@ -106,11 +106,13 @@ class OwnerEscalationService:
     def __init__(self, auth: AuthService) -> None:
         self.auth = auth
 
-    async def read(self, token: str, workspace: UUID, escalation: UUID) -> EscalationView:
+    async def read(self, token: str, workspace: UUID, escalation: UUID) -> AnyEscalationView:
         async with self.auth.workspace(token, workspace) as unit:
             await require_escalation(unit, EscalationPermission.READ)
             try:
-                result = EscalationView.model_validate(await unit.escalation_read(escalation))
+                result: AnyEscalationView = TypeAdapter(AnyEscalationView).validate_python(
+                    await unit.escalation_read(escalation)
+                )
             except ValidationError:
                 raise EscalationError(EscalationCode.UNAVAILABLE) from None
             if result.workspace_id != str(workspace) or result.escalation_id != str(escalation):

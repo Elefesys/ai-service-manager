@@ -10,6 +10,7 @@ from typing import Protocol
 from asm.ai.contracts import (
     CONVERSATION_RESULT,
     CONVERSATION_RESULT_V2,
+    CONVERSATION_RESULT_V3,
     AdapterRequest,
     AdapterResponse,
     AnyGatewayConfig,
@@ -20,6 +21,8 @@ from asm.ai.contracts import (
     ErrorCode,
     GatewayRequest,
     GatewayResult,
+    IntakeGatewayConfig,
+    IntakeGatewayResult,
     PortfolioDeliveryGatewayConfig,
     PortfolioDeliveryGatewayResult,
     ToolCall,
@@ -100,7 +103,8 @@ class ModelGateway:
         if initial_budget is not None:
             initial = Budget.model_validate(initial_budget)
             if (
-                self._config.prompt_revision not in {"conversation_v5", "conversation_v6"}
+                self._config.prompt_revision
+                not in {"conversation_v5", "conversation_v6", "conversation_v7"}
                 or initial.calls_used
                 or initial.reads_reserved
                 or initial.tokens_reserved
@@ -122,7 +126,9 @@ class ModelGateway:
             .read_text("utf-8")
         )
         expected_schema = (
-            CONVERSATION_RESULT_V2
+            CONVERSATION_RESULT_V3
+            if isinstance(self._config, IntakeGatewayConfig)
+            else CONVERSATION_RESULT_V2
             if isinstance(self._config, PortfolioDeliveryGatewayConfig)
             else CONVERSATION_RESULT
         )
@@ -130,9 +136,13 @@ class ModelGateway:
             raise ValueError("Conversation schema drift")
 
     @property
-    def _result_type(self) -> type[GatewayResult] | type[PortfolioDeliveryGatewayResult]:
+    def _result_type(
+        self,
+    ) -> type[GatewayResult] | type[PortfolioDeliveryGatewayResult] | type[IntakeGatewayResult]:
         return (
-            PortfolioDeliveryGatewayResult
+            IntakeGatewayResult
+            if isinstance(self._config, IntakeGatewayConfig)
+            else PortfolioDeliveryGatewayResult
             if isinstance(self._config, PortfolioDeliveryGatewayConfig)
             else GatewayResult
         )
@@ -320,6 +330,14 @@ class ModelGateway:
                 self._config, strict_json(response.output_json or "")
             )
             self._closed = True
+            if isinstance(self._config, IntakeGatewayConfig):
+                return IntakeGatewayResult(
+                    kind="FINAL",
+                    result=CONVERSATION_RESULT_V3.validate_python(result),
+                    budget=self._budget,
+                    usage=usage,
+                    cost=cost,
+                )
             if isinstance(self._config, PortfolioDeliveryGatewayConfig):
                 return PortfolioDeliveryGatewayResult(
                     kind="FINAL", result=result, budget=self._budget, usage=usage, cost=cost

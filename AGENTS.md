@@ -47,14 +47,19 @@ LOCAL/TEST. Accepted main `8d98593bc739666176968c5d76b9c01a2a711686`,
 tree `a14ed9b69e3529ac060bc015b9a24dcea515ef9b` совпадает с reviewed candidate.
 Post-merge CI43818223732 — 12/12 SUCCESS, attempt 1; прежний timeout
 CI43800096544 остаётся в истории CANCELLED.
-Единственная текущая выдача — C3-M5.2D-PORTFOLIO-PHOTO-R1, ведущий C3;
-C2/C4/C5 участвуют последовательно. Результат: одна разрешённая работа
-с caption клиенту через существующий guarded delivery и её статус в Inbox.
-Только synthetic LOCAL/TEST, новая v6/result_v2 и ограниченный JPEG/PNG;
-реальные отправки/paid/VM/client data не разрешены. Подробности и finite
-write-set — в CURRENT M5_HANDOFF. C0 assignment docs-only; один PR после
-готовности реализации и нового source admission.
-C6 HOLD; M5.3 пока не выдана. Новые operator циклы не нужны.
+M5.2D/PR52 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST. Accepted main
+`220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
+`d15f9a75346ab881449010745cbe0216081b78cf` совпадает с reviewed candidate.
+Post-merge CI43894664260 — 12/12 SUCCESS, attempt 1; прежний failed run
+сохраняет исходный результат. Приёмка и exact evidence — в CURRENT M5_HANDOFF.
+Единственная текущая выдача — C1-M5.3A-INTAKE-DURATION-R1, ведущий C1;
+C2/C4/C5 помогают последовательно, C3 консультирует по existing guards.
+Результат: предварительная сводка с источниками и исправлениями, один актуальный
+owner handoff, owner-only DurationCase. C6 HOLD; M5.3B/M6 не выданы.
+Только synthetic LOCAL/TEST; default OFF/FAKE/EVAL_ONLY и прежние реальные
+data/route ограничения сохраняются. Новые paid/VM/live действия не разрешены.
+Начать от docs-only assignment в c1/m5-3a-intake-duration-r1 с сохранением
+ancestry; finite paths и порядок checkpoint/PR/CI закреплены в M5_HANDOFF.
 Original UNKNOWN/diagnostic receipts, holds и real-client/data restrictions
 сохраняются; ручная приёмка evidence не переписывает результат старого probe.
 
@@ -64,13 +69,14 @@ OnboardingAgent, массовый импорт чатов, генерацию и
 заранее. Приёмка IMPL-005 явно фиксирует эти изменения порядка/scope.
 Не считать text-only M4 допуском к изображениям или embeddings.
 Нельзя создавать фиктивные conversations/messages ради owner upload/индексации
-либо обходить guards через ручную отправку. Один исходящий portfolio photo —
-отдельная ограниченная задача; текущий sendMessage его не реализует.
+либо обходить guards через ручную отправку. Один исходящий portfolio photo
+реализован отдельным guarded путём M5.2D;
+он не разрешает альбомы, произвольные media sends или реальные TEST отправки.
 
 C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
-Current migration head 0021; applied 0001–0021 immutable.
-Для M5.2D выделена только 0022/down_revision 0021; C3/C2 до SQL подтверждают
-актуальность слота. До реализации фактический head остаётся 0021.
+Current migration head 0022; applied 0001–0022 immutable.
+Для M5.3A выделена только 0023/down_revision 0022; C1/C2 до SQL подтверждают
+актуальность слота. До реализации фактический head остаётся 0022.
 Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
 При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
 не размножать длинные receipts между документами.
