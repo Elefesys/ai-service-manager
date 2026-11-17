@@ -194,3 +194,18 @@ async def test_used_downgrade_refuses_before_any_schema_change(db):
             ).scalar_one() == 1
         finally:
             await outer.rollback()
+
+
+def test_existing_text_session_admission_only_advances_current_readiness_verifier():
+    module = migration()
+    signature = "platform.ai_provider_session(jsonb,boolean)"
+    old = source_catalog(Path.cwd(), "0022")["functions"][signature]["definition"]
+    assert module.ORIGINAL[signature] == old
+    assert module.REPLACEMENTS[signature] == old.replace(
+        "platform.portfolio_delivery_schema_profile()", "platform.intake_schema_profile()"
+    )
+    assert "conversation_v7" not in module.REPLACEMENTS[signature]
+    assert (
+        "(('SYNTHETIC_TEXT_V1','conversation_v2'),('SYNTHETIC_PUBLISHED_KNOWLEDGE_V1','conversation_v3'))"
+        in old
+    )

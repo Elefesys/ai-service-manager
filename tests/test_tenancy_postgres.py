@@ -732,7 +732,18 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
         ).scalar_one()
         native_profiles = {}
-        if revision in {"0013", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023"}:
+        if revision in {
+            "0013",
+            "0015",
+            "0016",
+            "0017",
+            "0018",
+            "0019",
+            "0020",
+            "0021",
+            "0022",
+            "0023",
+        }:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
                 "platform.human_context_text_valid(text)": (True, False),

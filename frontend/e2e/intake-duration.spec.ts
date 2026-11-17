@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {resolve} from 'node:path';
+import {randomUUID} from 'node:crypto';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
 if(!fixtureFile||!passwordFile)throw new Error('E2E_INTAKE_PRIVATE_FIXTURES_REQUIRED');
@@ -12,6 +13,7 @@ const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixture
 test('@narrow source-backed intake, owner field confirmation, Action Center and measured owner case',async({page},info)=>{
  test.setTimeout(90000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const serviceName='Synthetic intake consultation '+variant+' '+randomUUID();
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
  async function input(operation:'seed'|'collect'|'complex',conversation?:string){
@@ -26,10 +28,10 @@ test('@narrow source-backed intake, owner field confirmation, Action Center and 
  const settings=page.getByRole('region',{name:'Настройки бизнеса',exact:true});
  await expect(settings.getByRole('button',{name:'Добавить услугу',exact:true})).toBeEnabled();
  if(await settings.getByLabel('Название услуги 1',{exact:true}).count()===0)await settings.getByRole('button',{name:'Добавить услугу',exact:true}).click();
- await settings.getByLabel('Название услуги 1',{exact:true}).fill('Synthetic intake consultation');await settings.getByLabel('Описание услуги 1',{exact:true}).fill('Synthetic browser template, owner review required.');
+ await settings.getByLabel('Название услуги 1',{exact:true}).fill(serviceName);const description=settings.getByLabel('Описание услуги 1');await expect(description).toHaveCount(1);await description.fill('Synthetic browser template '+variant+', owner review required.');
  await settings.getByRole('button',{name:'Применить шаблон новой татуировки v1',exact:true}).first().click();
  await settings.getByRole('button',{name:'Сохранить черновик',exact:true}).click();await expect(settings.getByText('Команда подтверждена. Текущее состояние получено.',{exact:true})).toBeVisible();
- await settings.getByRole('button',{name:'Проверить и показать предпросмотр',exact:true}).click();await expect(settings.getByRole('button',{name:'Опубликовать черновик',exact:true})).toBeEnabled();await settings.getByRole('button',{name:'Опубликовать черновик',exact:true}).click();await expect(settings.getByRole('region',{name:'Опубликованные сведения'}).getByText('Synthetic intake consultation',{exact:true})).toBeVisible();
+ await settings.getByRole('button',{name:'Проверить и показать предпросмотр',exact:true}).click();await expect(settings.getByRole('button',{name:'Опубликовать черновик',exact:true})).toBeEnabled();await settings.getByRole('button',{name:'Опубликовать черновик',exact:true}).click();await expect(settings.getByRole('region',{name:'Опубликованные сведения'}).getByRole('heading',{name:serviceName+' · Активна',exact:true})).toBeVisible();
  const seed=await input('seed');expect([seed.model_calls,seed.calls,seed.effects]).toEqual([0,0,0]);
  const inbox=page.getByRole('region',{name:'Переписка',exact:true});await inbox.getByRole('button',{name:'Обновить диалоги',exact:true}).click();await page.getByTestId(`conversation-${seed.conversation_id}`).click();
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();

@@ -419,8 +419,16 @@ API inventory delta; original auth AST после удаления additions с�
 receipt diff и ancestry; original assignment proof и immutable docs сохранены.
 Полный auth pytest и positive/negative PR/main admission: **81 PASS**;
 относящиеся ruff lint/format PASS. Остальные неизменённые прогоны не повторялись.
-Следующий шаг — один Draft PR и штатный CI. Статус **IN_PROGRESS / UNVERIFIED**,
-до C0 review и отдельного merge допуска владельца.
+Открыт Draft PR #53. Первый CI43994479059 на merge4d994136 (head2c0428cf,
+treef9583ae6) завершился 9/12 SUCCESS: foundation остановлен на format трёх
+compatibility tests; runtime — на nullable intake_pin retained-row check и
+старом verifier0022 в text provider admission; два новых browser cases — на
+точном label. Все runtime cleanup PASS, budget/infrastructure failures нет.
+Исправления сохраняют старый row equality, text v2/v3 admission и закрытые
+профили; обновлён только текущий verifier0023. Native Chromium/API/PG desktop
+и narrow journey теперь 2 PASS; это LOCAL, без Docker/S3 verification claim.
+После целевых проверок исправленного дерева нужен новый полный штатный CI.
+Статус **IN_PROGRESS / UNVERIFIED**, до C0 review и отдельного merge владельца.
 
 ### Критерии готовности и возврат
 

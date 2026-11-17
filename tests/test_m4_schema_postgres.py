@@ -58,14 +58,14 @@ async def schema15(pg):
     assert (
         await scalar(
             pg,
-            "SELECT to_jsonb(r)-'knowledge_pin'-'active_projection'-'knowledge_release_id'-'search_pin'-'search_refs'-'search_build_id'-'portfolio_build_id'-'portfolio_pin'-'media_pin'-'portfolio_refs'-'portfolio_session_id'-'delivery_read_audit' FROM platform.ai_runs r WHERE id=:id",
+            "SELECT to_jsonb(r)-'knowledge_pin'-'active_projection'-'knowledge_release_id'-'search_pin'-'search_refs'-'search_build_id'-'portfolio_build_id'-'portfolio_pin'-'media_pin'-'portfolio_refs'-'portfolio_session_id'-'delivery_read_audit'-'intake_pin' FROM platform.ai_runs r WHERE id=:id",
             id=receipt.run_id,
         )
         == before
     )
     assert await scalar(
         pg,
-        "SELECT delivery_read_audit IS NULL FROM platform.ai_runs WHERE id=:id",
+        "SELECT delivery_read_audit IS NULL AND intake_pin IS NULL FROM platform.ai_runs WHERE id=:id",
         id=receipt.run_id,
     )
     assert await scalar(pg, "SELECT count(*) FROM platform.ai_deliveries") == 0
