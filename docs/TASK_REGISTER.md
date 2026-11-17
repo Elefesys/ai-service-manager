@@ -2,40 +2,34 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.2D INTEGRATED / VERIFIED; M5.3A IN_PROGRESS / 2026-11-16
+## CURRENT — M5.3A INTEGRATED / VERIFIED; M5.3B IN_PROGRESS / 2026-11-17
 
-PR #52 слит владельцем. Accepted main:
-`220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
-`d15f9a75346ab881449010745cbe0216081b78cf`, совпадает с reviewed candidate
-`3cb99509796262112a563e5665d6cabb44fbfc99`.
-[Post-merge CI43894664260](https://github.com/Elefesys/ai-service-manager/actions/runs/43894664260)
-— **12/12 SUCCESS, attempt 1**. Source/449 blobs и core/runtime evidence
-проверены C0: 4680 unit + 161 subtests, 1041 generic PG, все 14 backend phases,
-primary/cleanup 0; runtime 160/160 и 8 cleanups PASS. Подробности в M5_HANDOFF.
-[C0 review M5.2D](https://github.com/Elefesys/ai-service-manager/blob/afb7b1b6f126446c8ac7162bd7f42a8603ff624f/docs/tasks/M5_HANDOFF.md#L13)
-сохранён. Старый CI43866508414 остаётся FAILURE.
+PR #53 слит владельцем. Accepted main:
+`c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
+`11c987fb12e4f88d27da3737911c468d520269b8`, совпадает с reviewed candidate
+`ae0a00262d46806d773c3b72e36ca21c5d9d8f40`.
+[Post-merge CI44018352191](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191)
+— **12/12 SUCCESS, attempt1**. C0 проверил Git identity/parents, source480,
+core/runtime artifacts: 4789 unit +161 subtests, frontend541, generic PG1061;
+14 backend/10 host phases и cleanup0; runtime160/160, 8 groups/cleanups PASS.
+[C0 review M5.3A](https://github.com/Elefesys/ai-service-manager/blob/539fdac33ed6ffa6713a2f2058e4a1f35342e2a6/docs/tasks/M5_HANDOFF.md#L7)
+и точные post-merge receipts сохранены в M5_HANDOFF.
 
-**M5.1A–M5.2D — INTEGRATED / VERIFIED в synthetic LOCAL/TEST** с прежними
-ограничениями; M5.2A functional capability — ASSISTED_SYNTHETIC.
-Новая реальная отправка фото и общий live VERIFIED не заявлены.
+**M5.1A–M5.3A — INTEGRATED / VERIFIED в synthetic LOCAL/TEST**;
+M5.2A functional capability — ASSISTED_SYNTHETIC. M5 целиком ещё не принят.
+Единственная активная задача — **C8-M5.3B-ACCEPTANCE-R1, ведущий C8**,
+ветка `c8/m5-3b-acceptance-r1`. Результат: общий review K01–K12 и проверенная
+передача контрактов/ограничений M6. Write-set C8 — только M5_HANDOFF;
+приложение read-only на exact base выше. Scope/возврат —
+[CURRENT M5_HANDOFF](tasks/M5_HANDOFF.md). C1–C5 консультируют только findings;
+C6 HOLD. Applied0001–0023 immutable; новый migration slot не выделен.
 
-**Единственная активная задача — C1-M5.3A-INTAKE-DURATION-R1, ведущий C1.**
-Ветка `c1/m5-3a-intake-duration-r1`, application base — полный SHA выше.
-C2/C4/C5 помогают последовательно; C3 консультирует по guards; C6 HOLD.
-Результат: исправляемая предварительная сводка запроса с источниками,
-один актуальный owner handoff и подтверждённые DurationCase только для мастера.
-Scope, finite paths, migration 0023←0022, новые closed contracts и checks —
-[CURRENT M5_HANDOFF](tasks/M5_HANDOFF.md). Applied 0001–0022 immutable.
-C0 выдаёт docs-only assignment; C1 сохраняет ancestry и начинает от него.
-
-IMPL-005 ACCEPTED / LOCKED. Цена/подтверждённая длительность/Quote/запись/
-платежи не входят. Default Vision/embedding DISABLED, FAKE/EVAL_ONLY,
-UNKNOWN/NOT_PROVEN receipts, confirmed 0.50229415 RUB / holds 11.75 RUB,
-receiver ACK/fence и полный live HUMAN/Resume сохраняются. Новых paid/VM/
-real Telegram/client-data допусков нет. M5.3B/M6 не выданы.
-
-Следующее действие — передать C1 закреплённое поручение M5.3A.
-Затем C0 review, отдельное owner merge и штатный post-merge CI.
+IMPL-005 ACCEPTED / LOCKED, scope не расширен. Default OFF/FAKE/EVAL_ONLY,
+старые UNKNOWN/NOT_PROVEN, confirmed0.50229415 RUB/holds11.75 RUB,
+receiver ACK/fence, полный live HUMAN/Resume и data-route ограничения остаются.
+Новых paid/provider/VM/live Telegram/client-data допусков нет. M6 не выдан.
+Следующее действие — передать C8 закреплённое поручение M5.3B.
+Итог M5 и следующую выдачу принимает C0 после независимого review.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 

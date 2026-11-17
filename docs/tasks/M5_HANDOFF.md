@@ -4,474 +4,137 @@
 Решение по объёму — [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md),
 ACCEPTED / LOCKED C0.
 
-## CURRENT — C1-M5.3A-INTAKE-DURATION-R1 / IN_PROGRESS / 2026-11-16
+## CURRENT — C8-M5.3B-ACCEPTANCE-R1 / IN_PROGRESS / 2026-11-17
 
-**Единственная активная задача — M5.3A, ведущий C1.** C2 помогает с БД,
-C4 с extraction/runtime, C5 с UI; работа последовательно в одной ветке.
-C3 — консультация только по существующим delivery/control контрактам.
-C6 HOLD. M5.3B и M6 пока не выданы.
+**Единственная активная задача — общая приёмка M5, ведущий C8.**
+C0 принимает итог и готовит следующую выдачу; C1/C2/C3/C4/C5 — только
+консультации по конкретным findings, без параллельных реализаций. C6 HOLD.
+M5.1A–M5.3A интегрированы; M5 целиком пока не принят, M6 не выдан.
 
-### Решение C0 — C0-SCOPE-M5.3A-01 / 2026-11-17
+### Принятый main и завершение M5.3A
 
-**ACCEPTED FOR IMPLEMENTATION.** Пропуск в write-set исправлен; scope blocker
-снят. Та же задача C1-M5.3A-INTAKE-DURATION-R1, ведущий C1, статус
-**IN_PROGRESS / UNVERIFIED**. Это разрешение ограниченного diff, не приёмка
-всей реализации и не готовность к merge.
-
-- C0 проверил published review commit
-  `5ccd2f84ab3eb036ac602240b3eda7924aa818a9`, tree
-  `b3d0c48aabb42f1991a77013ce8d6203ffcb7d34`, sole parent/checkpoint
-  `3177f0ba1a3f6b65d40a7fdc47b235b045d94041`.
-  Ветка `c1/m5-3a-intake-duration-r1` пока указывает на этот checkpoint;
-  C0 не перемещает ref и не переписывает локальную работу C1.
-- Application base `220606193208a1ef082732e4dfcdf1f2ffbea857` и assignment
-  `c0b0800341ff6cf7b6d79a5012696f47ea717f64` остаются прежними.
-  Этот docs-only receipt — sole child review commit 5ccd2f8 выше;
-  diff только `docs/tasks/M5_HANDOFF.md`.
-- Все 88 изменённых относительно assignment paths входят в выданный write-set.
-  Четыре protected C0 docs, applied0001–0022 и `contracts/auth.v1.json`
-  не изменены; закрытый `tests/test_auth_contract.py` также пока не менялся.
-
-**Причина и проверенный меньший diff.** Реальный owner HTTP module и committed
-OpenAPI уже содержат шесть разрешённых M5.3A endpoints, но строгий старый
-inventory содержит 58 endpoints. C0 проверил предложенный +10-line patch:
-получаются ровно 64, все шесть совпадают с HTTP decorators и OpenAPI.
-После удаления двух новых assignments и одного list-concat AST полностью
-совпадает с исходным тестом: остальные проверки сохранены.
-Это статическая проверка точного scope; C0 не выполнял runtime pytest/PG/browser.
-
-Разрешён **ровно следующий delta**:
-
-1. В `tests/test_auth_contract.py`, в
-   `test_auth_machine_contract_and_generated_c5_api_have_no_drift`, после
-   `portfolio_endpoints` добавить:
-
-   ```python
-   intake_prefix = "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake"
-   intake_endpoints = [
-       f"GET {intake_prefix}/conversations/{{conversation_id}}",
-       f"POST {intake_prefix}/conversations/{{conversation_id}}/confirm",
-       f"POST {intake_prefix}/conversations/{{conversation_id}}/correct",
-       f"GET {intake_prefix}/duration-cases",
-       f"GET {intake_prefix}/duration-cases/search",
-       f"POST {intake_prefix}/duration-cases/{{operation}}",
-   ]
-   ```
-
-   В существующий `sorted(... + portfolio_endpoints)` добавить только
-   `+ intake_endpoints`. Сохранить exact equality, исходную comprehension
-   `actual_endpoints`, frozen auth.v1 с 7 endpoints, schema/error/password/
-   session/environment assertions и полный generated OpenAPI equality/diff.
-   Не менять production API ради теста, не применять filter/subset/skip/xfail.
-2. В уже разрешённом `scripts/m4_runtime_db.py` добавить только
-   `tests/test_auth_contract.py` в `M5_INTAKE_PATHS`; old task routes закрыты.
-3. В existing source-admission producer/consumer и runner tests закрепить
-   exact SHA/tree/sole-parent этого C0 receipt, его наличие в ancestry и
-   diff только handoff относительно 5ccd2f8. Сохранить original assignment
-   proof и четыре immutable C0 docs; новый proof обязателен на M5.3A PR/main.
-   Missing/forged receipt, другой parent/tree/path, изменённый protected doc
-   или посторонний implementation path должны по-прежнему отклоняться.
-
-**Пределы имеющихся результатов.** Архив C1
-`M5_3A_C1_SCOPE_REQUEST_evidence.zip` проверен по ZIP CRC и всем 24 manifest
-entries; SHA256
-`45e61265bccad5ff22ee893dae96a70f7158c314f50722062e517a29a3f2b46e`.
-Identity совпадает с review commit/tree. Лог полного local unit сохраняет
-4747 PASS + 161 subtests / 10 FAIL; отдельный current foundation log —
-430 PASS + 130 subtests после исправления девяти journal cases.
-Auth inventory failure воспроизведён C1 отдельно. Эти LOCAL logs не являются
-Actions PASS или полной приёмкой C0. Static scope review не подтверждает
-заново все reported PG/catalog/security results.
-Chromium desktop/narrow остановился на socket EPERM до app; browser NOT_PROVEN.
-Controlled photo bytes не выдаются за actual S3.
-
-**Дальше C1 — продолжить без нового запроса допуска.**
-
-1. Сохранить checkpoint, review commit 5ccd2f8 и этот receipt в ancestry той же
-   ветки, применить только разрешённый delta и необходимый source proof.
-   Не reset/force-push, не терять локальные изменения. Старый checkpoint не
-   пересдавать как финальный source.
-2. На финальном source выполнить auth contract test целиком, targeted
-   positive/negative source admission для PR и push/main и относящиеся к delta
-   lint/format checks. Остальные неизменённые целевые прогоны не повторять
-   без новой причины. Подготовленный diff smoke не заменяет этот pytest.
-3. Опубликовать исправленный final candidate и открыть один Draft PR в main;
-   пройти один штатный полный CI всех 12 jobs, включая реальные browser
-   desktop/narrow journeys, текущие PG/S3 проверки, все backend phases и cleanup.
-   Local EPERM не обходить отключением browser gate и не считать PASS.
-   CI budgets/workflows/fixtures assertions не ослаблять; при новых сбоях
-   вернуть все известные группы и разделить code/harness/infrastructure.
-4. Вернуть C0 PR/head/tree, exact tested SHA, CI и фактические ограничения.
-   Затем полный C0 review продукта; merge — отдельное действие владельца.
-   M5.3B/M6, paid/provider/live Telegram/VM/client-data actions не разрешены.
-
-### Принятый main и завершение M5.2D
-
-- PR #52 слит владельцем. **M5.2D — INTEGRATED / VERIFIED в synthetic LOCAL/TEST.**
-- **Exact application base: `220606193208a1ef082732e4dfcdf1f2ffbea857`.**
-  Tree `d15f9a75346ab881449010745cbe0216081b78cf` совпадает с принятым кандидатом
-  `3cb99509796262112a563e5665d6cabb44fbfc99` и tested PR merge
-  `f6e09f313ca3bf58e71460d20acaefde703568d0`.
-  Actual merge parents: `8d98593bc739666176968c5d76b9c01a2a711686` +
-  `3cb99509796262112a563e5665d6cabb44fbfc99`.
-- [C0 review M5.2D](https://github.com/Elefesys/ai-service-manager/blob/afb7b1b6f126446c8ac7162bd7f42a8603ff624f/docs/tasks/M5_HANDOFF.md#L13)
-  и [PR CI43879466102](https://github.com/Elefesys/ai-service-manager/actions/runs/43879466102)
-  сохранены. Этот отдельный docs receipt не является application base.
-- [Post-merge CI43894664260](https://github.com/Elefesys/ai-service-manager/actions/runs/43894664260):
-  push/main, attempt 1, **12/12 SUCCESS**. C0 проверил Git identity/parents/tree,
-  ZIP digest/size/CRC core и runtime, совпадение всех 449 source paths,
-  Git blob bytes/executable bits и обоих SHA256 manifests с actual main.
-  Core: 4680 unit + 161 subtests, 1041/1041 generic PG, все 14 backend и
-  10 host phases PASS; primary/cleanup 0. Runtime: 160/160, 8/8 cleanup PASS,
-  source admission PASS, полный evidence manifest проверен; SQL 624.736s/900s.
-  Остальные 10 jobs SUCCESS по Actions API; их artifacts заново не аудировались.
-  Неизменённый CI C0 не повторял.
-- Core artifact14246322296 ZIP SHA256
-  `1eeb7e908e6c91ff676d6b27b2b6d50094ca6e2ffb09d012f6492c365236ca53`;
-  runtime artifact14239576641 ZIP SHA256
-  `a9001fb9a6ef7419b46de707855fc04d398c9fd1d9530bf3f7f2144dae764fb7`.
+- PR #53 слит владельцем обычным merge commit.
+  **M5.3A — INTEGRATED / VERIFIED в synthetic LOCAL/TEST.**
+- **Exact application base: `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`.**
+  Tree `11c987fb12e4f88d27da3737911c468d520269b8` совпадает с принятым
+  head `ae0a00262d46806d773c3b72e36ca21c5d9d8f40` и tested PR merge
+  `bb51c0c5b2ea62704228d146395a2c048946f465`. Actual merge parents:
+  `220606193208a1ef082732e4dfcdf1f2ffbea857` + принятый head выше.
+- [C0 review M5.3A](https://github.com/Elefesys/ai-service-manager/blob/539fdac33ed6ffa6713a2f2058e4a1f35342e2a6/docs/tasks/M5_HANDOFF.md#L7)
+  и [PR CI44009077342](https://github.com/Elefesys/ai-service-manager/actions/runs/44009077342)
+  сохранены. C0 receipt — отдельный docs-only commit, не application base.
+- [Post-merge CI44018352191](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191):
+  push/main, attempt1, **12/12 SUCCESS**. C0 проверил identity/parents/tree,
+  ZIP digest/size/CRC core/runtime, все480 source paths/Git blobs/executable bits,
+  оба source manifests и все211 runtime evidence-manifest entries.
+  Core: 4789 unit +161 subtests, frontend541, 1061/1061 generic PG;
+  все14 backend/10 host phases PASS, primary/cleanup0. Runtime160/160,
+  8/8 groups и cleanup PASS, source admission PASS; SQL614.910s/900s.
+  Остальные10 jobs SUCCESS по API; их post-merge artifacts не переаудировались.
+  Неизменённые прогоны не повторялись; прежние failed CI остаются FAILURE.
+- Core artifact14302722361, SHA256
+  `65ecfea3c93cfbfcd83ac9cc9d43383b9cab14433c728af2d0968db9819dc4f3`;
+  runtime artifact14299928899, SHA256
+  `75249a49f887fcfd9aa6d480455bfe5afad205f4865697e3dc20bfe5b2b87244`.
   Общий source archive SHA256
-  `a3e80ba2acafb3898ae90f329a65983d72927e2bf4b5e522c86b7f7b4c8848ab`.
-  Старый CI43866508414 остаётся FAILURE, не переписан в PASS.
-- M5.1A–M5.2C сохраняют приёмку. Functional capability M5.2A остаётся
-  ASSISTED_SYNTHETIC. Реальная доставка фото/общий live VERIFIED не заявлены.
+  `98c1ac21e0f66a1944a0bd2b15b97e863a1ef8cf7e670c1c57953007f69340d1`.
+- M5.1A–M5.2D сохраняют приёмку; M5.2A capability — ASSISTED_SYNTHETIC.
+  Current migration **0023**; applied0001–0023 immutable. Новый слот не выделен.
 
-### Результат для пользователя и порядок старта
+### Результат для пользователя
 
-Клиент сообщает идею, место, примерный размер, стиль и доступные референсы;
-AI спрашивает только недостающее и принимает исправления. Мастер видит
-предварительную сводку с источниками, неизвестным/конфликтами и похожими
-подтверждёнными примерами прошлых работ. Сложный случай даёт один актуальный
-вопрос в существующем Action Center. Часы прошлых кейсов видит только мастер.
-Это согласованный завершающий функциональный срез M5; без него нет собранного
-описания запроса для передачи M6. Цена, подтверждённая длительность и запись
-остаются за пределами этого задания.
+Проверить, что части M5 образуют пригодный для следующего этапа сценарий:
+владелец публикует знания и разрешённые работы; клиент получает ответ,
+анализ доступного изображения и одну подходящую работу; исправляемые
+предварительные сведения и сложный вопрос видит мастер. Примеры длительности
+остаются его справочным материалом. Итог — решение по всему M5, конкретные
+недостающие доказательства/дефекты и понятные контракты передачи M6.
+Этот согласованный финальный review нужен до выдачи M6; новые функции не добавлять.
+
+### Порядок работы и точный scope C8
 
 - Repository: `Elefesys/ai-service-manager`.
-- Branch: `c1/m5-3a-intake-duration-r1`; один небольшой Draft PR в `main`.
-- Начать с docs-only assignment C0 в этой ветке: его sole parent — exact base
-  выше, diff — только AGENTS, README, TASK_REGISTER, IMPL-005, M5_HANDOFF.
-  Взять полный assignment SHA/tree из закреплённой ссылки/Git, сохранить
-  ancestry; не продолжать старые ветки C1/C3/C4 и не переносить их scope proofs.
-- Прочитать этот CURRENT, IMPL-005, Spec §§5.5–5.10, 11.11, 23.3 и
-  ADR-023–026/030–034/065–068/265–267. IMPL-004 сохраняет operational границы.
-- До SQL записать здесь короткий контракт: projection/source refs,
-  template binding, candidate/result DTO, owner commands/errors, DurationCase
-  shape/access, escalation linkage, invalidation и точные новые таблицы/FK.
-  C1/C2 подтверждают слот **0023/down_revision 0022** по actual checkout.
-  Это выполнение уже выданной задачи, не обязательный дополнительный approval
-  после каждого решения в пределах ниже. Противоречие архитектуре или новый
-  необходимый path вернуть C0 с конкретным меньшим вариантом.
-- После контракта/первого связного результата разрешён один checkpoint push
-  в эту же ветку до долгих проверок, без PR/ручного CI; явно UNVERIFIED.
-  После готовности реализации и source admission — один Draft PR и штатный CI.
+  Review branch: `c8/m5-3b-acceptance-r1`.
+  Проверяемый application base — полный c0641147 SHA выше.
+- Прочитать AGENTS, CURRENT TASK_REGISTER/этот блок, IMPL-005 и применимые
+  IMPL-004/Spec/ADR. Для authority/currentness: Spec §§5.5–5.10, 11.11, 23.3;
+  ADR-023–026/030–034/065–068/265–267. История старых handoff — только по ссылке
+  конкретного зависимости/finding, не новый полный аудит M0–M4.
+- Этот docs-only assignment C0 — sole child application base с diff ровно
+  AGENTS.md, README.md, docs/TASK_REGISTER.md,
+  docs/decisions/IMPL-005-m5-pilot-knowledge.md, docs/tasks/M5_HANDOFF.md.
+  Полный assignment SHA/tree взять из закреплённой ссылки/Git и сохранить
+  в ancestry review branch. Для исполнения существующих checks использовать
+  отдельный чистый checkout **application base**, не выдавать docs tree за
+  tested application tree и не подменять закрытые source-admission proofs.
+- **Write-set C8: только `docs/tasks/M5_HANDOFF.md`** — краткий возврат внутри
+  этого CURRENT, evidence в существующей матрице §4, подготовка передачи §7.
+  Остальные tracked files только читать; четыре C0 docs после assignment
+  неизменны. Приложение, миграции, tests, runners, budgets, workflows,
+  manifests/locks и исходные architecture files не менять.
+- Разрешены read-only Git/PR/CI/artifact проверки и целевые LOCAL/TEST проверки
+  на собственных disposable PostgreSQL/S3/browser ресурсах без реальной сети
+  провайдеров. При конкретном пробеле допустим малый временный reproducer вне
+  tracked tree; сохранить команду, assertions и результат. Отсутствие local
+  Docker не отменяет доступное CI evidence, но не позволяет объявить невыполненный
+  reproducer PASS. Никаких broad reruns, нового test framework или постоянных
+  инфраструктурных changes ради review.
 
-### Контракт и границы реализации
+### Что проверить и критерии готовности
 
-1. **Предварительная projection, не новое CRM-ядро.** Связать с проверенными
-   Workspace/Business/Client/Conversation, service id, immutable active release,
-   template revision и context/control generation. Поля: value либо unknown,
-   статус client-stated / observed / owner-confirmed / unknown, source message
-   id + material/content version и при наличии file/analysis exact version.
-   Признаки Vision остаются наблюдениями; source id, provenance status и
-   currentness проверяет сервер, model confidence не даёт authority.
-   Неподтверждённый вывод не помечать client-stated/owner-confirmed.
-   Доступная projection должна восстанавливаться из разрешённых источников;
-   durable cache допустим с версией, bounded size и fail-closed invalidation.
-   Не создавать ServiceRequest/Assessment/Order/WorkflowInstance/StepInstance.
+1. Независимо пройти **весь M5 по K01–K12 в единственной матрице §4**.
+   Для каждой строки — конкретный source/assertion и evidence с exact SHA,
+   проверенный предел и вердикт. Общий зелёный CI/число тестов не заменяет
+   проверки поведения. Целевой review одного исправления не равен приёмке M5.
+2. Проследить пользовательскую цепочку на final application base: draft →
+   explicit publish → опубликованное знание/источник → доступное фото/analysis →
+   confirmed MY_WORK → один guarded photo → progressive intake/correction →
+   owner summary/complex handoff → private DurationCase comparison.
+   Подтвердить два бизнеса одним кодом и изоляцию двух клиентов одного Workspace.
+   Можно связать существующие реальные API/PG/browser cases на этом tree;
+   не называть их единым E2E, если общей цепочки фактически нет. Найденный
+   разрыв проверить узким reproducer либо обозначить точный evidence gap.
+3. Приоритет риска: source authority и stale publish/revoke/edit/delete;
+   private bytes и повторная авторизация; новая v7/v3 ветвь вместе с delivery;
+   HUMAN/Resume, OWNER reconciliation/observation barrier и final-send rights;
+   UNKNOWN/restart/no-resend; один актуальный owner question; отсутствие
+   price/time/eligibility authority у Vision, retrieval и DurationCase.
+   Проверить обоснованность v7 currentness/invalidation и сохранность known facts,
+   не ограничиваться успешными legacy v6 tests.
+4. Переиспользовать уже завершённые full PR/main CI выше. Новый неизменённый
+   full CI ради review не запускать. New code или конкретный uncovered risk
+   потребует ограниченного исправления/проверки по отдельному решению C0;
+   если найден defect — вернуть все известные группы, reproducer, file/line,
+   последствия и наименьший fix. Severity обосновать реальным сценарием.
+   Закрытый path самостоятельно не править; generic expected/skip/xfail не менять.
+5. Сверить пределы real evidence: M5.2A accepted assisted synthetic Vision и
+   embeddings из IMPL-005; actual PG/S3/browser отдельно от MockTransport и
+   controlled photo bytes. Нет новой real client-runtime E2E приёмки.
+   Missing real production route не скрывать, прежний принятый synthetic probe
+   заново не запускать. Отдельно сохранить open receiver ACK/fence, полный live
+   HUMAN/Resume, MEDIA_REPLACED_UNAVAILABLE и provider/data-route ограничения.
+6. В §7 подготовить короткую передачу M6: фактические service/rule/release/
+   activation/template IDs и версии контрактов, source refs/statuses/currentness,
+   owner commands и escalation linkage, private Portfolio/DurationCase access,
+   гарантиями чего они являются и чем ещё не являются. Указать переиспользуемые
+   module/API boundaries, OPEN вопросы и минимальный следующий срез без кода M6.
 
-2. **Один bounded template и последовательное уточнение.** Использовать
-   опубликованные service/intake field identifiers, а не бизнесовые UUID или
-   эвристику по произвольному label. Tattoo template v1: NEW_TATTOO;
-   COVER_UP/OTHER_COMPLEX — owner handoff. Идея, расположение, приблизительный
-   размер со слов клиента, стиль и референсы где доступны. Existing v1 bundle
-   уже содержит максимум 6 intake fields: сначала переиспользовать его;
-   owner-selected template можно применить к draft и явно publish через текущий
-   UI. Не менять уже опубликованный bundle при обновлении кода/template.
-   Если необходим новый metadata contract, только новая закрытая версия с
-   явной совместимостью v1, без silent reinterpretation старых release.
-   Known facts не спрашивать заново; optional/unavailable reference не делать
-   обязательным фото. FAQ-only сообщение не запускать в длинную анкету.
-   Неоднозначная услуга/смена темы/несколько запросов требуют уточнения, а не
-   смешивания фактов разных запросов в одну авторитетную запись.
+### Возврат и следующий шаг
 
-3. **Исправления, удаление и freshness.** Явное новое значение заменяет старое
-   с provenance; неявный конфликт остаётся вопросом. Edit/delete/redaction
-   message, replace/delete media, revoke analysis/material, publish/rollback,
-   смена Client/Business/control и native observation инвалидируют зависимые
-   данные до следующего чтения/модельного вызова/сохранения/отправки.
-   Старый cache/summary не восстанавливает удалённый факт. Изображение без
-   масштаба не доказывает сантиметры, возраст, здоровье или длительность.
-   Owner confirmation — отдельное аутентифицированное version-checked действие
-   над конкретным полем/источником; свободный ответ Action Center не становится
-   автоматическим подтверждением всех полей и условий заказа.
+Вернуть C0 один immutable Git link на docs-only receipt в указанной ветке:
+reviewed base/tree, receipt SHA/parent, K01–K12 и итог **REVIEW: PASS**,
+**CHANGES_REQUESTED** или **BLOCKED** с точной причиной. Для каждого finding —
+severity, source/reproducer, ожидаемое/фактическое поведение и минимальный delta.
+Приложить только новые целевые команды/results; не перепечатывать старые логи.
+Файл сохранить в Git, не оставлять единственный diff в неуказанном локальном пути.
+PR/full CI/merge для неизменённого application candidate сейчас не нужны.
 
-4. **LLM предлагает, сервер применяет.** Добавить узкую synthetic ветвь
-   `conversation_v7` / `conversation_result_v3` для candidate facts и одного
-   результата разговора. При необходимости — новую closed context/read DTO.
-   Старые prompts v1–v6, schemas v1/v2 и их parsers сохраняют прежние shapes;
-   нельзя расширять их через optional arbitrary JSON/extra=allow.
-   Candidate write выполняется сервером атомарно после schema/source/tenant/
-   context/control/native/claim checks; у LLM нет mutation tool.
-   Переходы clarify / owner handoff / preliminarily complete определяются
-   template и проверенными данными; complete не означает согласованный заказ.
-   Один обычный ответ — 1 model call, максимум 2 calls / 1 READ без нового loop.
-   Сохранить M5 knowledge/Vision/photo branches и счётчики; фото использует
-   существующий M5.2D intent/admission, без обхода или нового send effect.
-   Связь с runtime/worker должна быть настоящей, не отдельной demo function.
-   Default OFF, FAKE/EVAL_ONLY, finite TEST execution; старые реальные text
-   sessions не получают новый contract и права на private data автоматически.
-
-5. **Action Center — узкое расширение текущего механизма.** C0 проверил:
-   `EscalationView` и frontend codec сейчас фиксируют CONTROLLED ESCALATION TEST
-   / LOCAL_TEST_OWNER_WAIT_V1. Они не готовы принять произвольную intake сводку.
-   Разрешена новая закрытая discriminated projection/policy рядом с legacy,
-   с summary, проверяемыми source links и одним открытым вопросом; legacy
-   literal contract и M3 resolve/cancel/replay сохраняются.
-   COVER_UP/OTHER_COMPLEX, неподдерживаемый/рискованный случай и отсутствие
-   необходимого правила не получают автоматическое согласие. Неизвестная
-   цена/длительность консультации сама по себе не блокирует весь сбор данных.
-   Repeated turn/retry не плодит одинаковые pending escalations; изменение
-   источника делает прежний вопрос stale и оставляет не более одного актуального.
-   Accepted owner command и фактический runtime result различать в UI;
-   не обещать исполнение до принятого результата. Во время HUMAN не запускать
-   AI и не применять его старые candidates; Resume использует текущие данные,
-   OWNER reconciliation/observation barrier и прежние guards M3/M4.
-
-6. **DurationCase — owner-only примеры.** Компактная форма создания/исправления,
-   подтверждения и отзыва. В кейсе: разрешённое описание и optional точная
-   ссылка на business asset/version, реальные размеры если известны,
-   placement/style/detail/fill, исполнитель, actual working/occupied minutes,
-   setup/stencil/break/cleanup treatment, session count/durations и пояснение.
-   Unknown остаётся null/unknown, не 0 и не модельной оценкой; явные величины
-   валидируются, противоречивые суммы не исправлять догадкой. Подтверждение
-   имеет actor/source/version. Owner case не становится публичным Portfolio,
-   Knowledge или правом доступа к файлу другого Client.
-   Для изображения переиспользовать разрешённый business asset/private preview;
-   не создавать фиктивные messages/conversations и не копировать чужой
-   клиентский референс в общую базу. Отзыв/замена источника делает зависимый
-   preview/сравнение недействительным. Description-only case допустим.
-   Bounded structured/keyword поиск по подтверждённым текущим кейсам своего
-   Business; показать мастеру совпадения, различия и unknown с источниками.
-   Новые embeddings, AI estimator, усреднение часов, calibration/fine-tuning,
-   automatic rule publication и medical intervals не нужны.
-   Ни case times, ни owner-only notes не попадают в client ContextPack/read
-   tool, reply/caption или клиентский поиск; только отдельная owner projection.
-
-7. **Минимальный UI и БД.** В текущем Inbox — сводка, sources, missing/conflict,
-   понятный статус и owner correction/confirmation; в Action Center — вопрос;
-   рядом с настройками/портфолио — маленькая DurationCase форма/поиск.
-   Разрешено wiring в App/MessagingPanel/ConfigurationPanel/EscalationsPanel,
-   без нового dashboard или переделки навигации. На scope/auth/OWNER/context
-   смене очищать stale данные и private previews; не показывать successful
-   mutation до durable acceptance. Owner auth/CSRF/idempotency/expected version,
-   forced RLS, typed tenant/client FK, private capabilities, no runtime DDL и
-   exact current schema verifier обязательны. Внешний I/O вне DB transaction.
-   Единственная новая migration 0023; applied 0001–0022 immutable. Used downgrade
-   отказывает до изменений, unused downgrade и повторный upgrade проверяемы.
-
-Это конкретизация принятого IMPL-005 и ADR-024/265, не отмена архитектурных
-инвариантов. Цены, Quote, согласованная длительность, запись и платежи — M6–M8.
-Новых paid/provider/VM/real Telegram/client-data допусков нет. Исходные
-UNKNOWN/NOT_PROVEN/holds, receiver ACK/fence и полный live HUMAN/Resume
-сохраняются; старые receiver/probes не запускать.
-
-### Разрешённые paths
-
-Списки ниже конечные; brace notation разворачивается только в названные файлы.
-Это верхняя граница, не требование менять каждый файл. Новые модули не являются
-разрешением общего framework/refactor. Для нового path — показать C0 точный diff.
-
-- Новые `backend/src/asm/intake/{__init__,models,validation,projection,templates,duration_cases,repository,service,http,errors}.py`,
-  `backend/src/asm/ai/intake.py`, `backend/src/asm/ai/prompts/conversation_v7.txt`,
-  `backend/src/asm/ai/schemas/conversation_result_v3.json`,
-  `migrations/versions/0023_intake_duration.py`.
-- AI wiring/contracts: `backend/src/asm/ai/{contracts,gateway,agent,context,knowledge,portfolio,portfolio_delivery,runtime,runtime_contracts,database,fake,settings}.py`.
-  `backend/src/asm/ai/{runtime_settings,provider_runtime}.py` — только отказ
-  legacy real sessions/new synthetic registration; transport/routes не расширять.
-- Owner/domain integration: `backend/src/asm/configuration/{models,validation,permissions,errors,repository,service,http}.py`,
-  `backend/src/asm/portfolio/{models,repository,service,http,errors}.py`,
-  `backend/src/asm/conversations/{escalations,escalation_http,escalation_http_models,turns,material,guards,http_models}.py`,
-  `backend/src/asm/messaging/{models,results,database,worker,http_models,http_service,http,errors}.py`,
-  `backend/src/asm/tenancy/database.py`, `backend/src/asm/foundation.py`.
-  Только описанные projection/owner commands/guarded runtime; старые
-  control/native policies, transport/send/recovery не перепроектировать.
-  `backend/src/asm/billing/models.py` — при необходимости только typed audit
-  payload нового события, без billing operations/денежных правил.
-  `backend/src/asm/telegram/provisioning.py` — только current schema readiness.
-  `contracts/openapi.json` — штатная генерация изменённых DTO/API.
-- Новые UI `frontend/src/{IntakePanel.tsx,IntakePanel.test.tsx,DurationCasesPanel.tsx,DurationCasesPanel.test.tsx,intake-api.ts,intake-api.test.ts,intake-fixtures.test-helper.ts}`;
-  существующие `frontend/src/{App.tsx,App.test.tsx,MessagingPanel.tsx,MessagingPanel.test.tsx,EscalationsPanel.tsx,EscalationsPanel.test.tsx,ConfigurationPanel.tsx,ConfigurationPanel.test.tsx,PortfolioPanel.tsx,PortfolioPanel.test.tsx,messaging-api.ts,messaging-api.test.ts,messaging-fixtures.test-helper.ts,escalation-api.ts,escalation-api.test.ts,escalation-fixtures.test-helper.ts,configuration-api.ts,configuration-api.test.ts,configuration-fixtures.test-helper.ts,portfolio-api.ts,portfolio-api.test.ts,portfolio-fixtures.test-helper.ts,style.css}`.
-  Новая `frontend/e2e/intake-duration.spec.ts`; существующие
-  `frontend/e2e/{messaging,portfolio,portfolio-delivery}.spec.ts` — совместимость.
-- Новые `tests/{m5_intake_fixtures,test_m5_intake,test_m5_intake_runtime,test_m5_intake_postgres,test_m5_intake_api_postgres,test_m5_intake_migrations,test_m5_duration_cases,test_m5_duration_cases_postgres}.py`.
-  Новая `scripts/m5_intake_fixture.py` — только finite LOCAL/TEST browser setup
-  через domain capabilities с проверкой target, без SQL shortcut/реального клиента.
-  Existing targeted `tests/{test_m4_gateway,test_m4_gateway_failures,test_m4_agent,test_m4_runtime_database,test_m5_configuration,test_m5_configuration_migrations,test_m5_configuration_api_postgres,test_m5_portfolio_runtime,test_m5_portfolio_context,test_m5_portfolio_auth_boundary,test_m5_portfolio_runtime_postgres,test_m5_portfolio_delivery,test_m5_portfolio_delivery_postgres,test_m3_2_escalations,test_m3_2_escalations_api_postgres,test_m3_2_escalations_postgres}.py`;
-  `tests/{m5_configuration_fixtures,m5_portfolio_fixtures,m5_portfolio_delivery_fixtures}.py`.
-- `tests/test_auth_contract.py` — только exact +10-line endpoint inventory
-  delta C0-SCOPE-M5.3A-01 выше; остальные AST/auth/OpenAPI checks неизменны.
-- **Только current 0023/readiness/fixture совместимость**:
-  `tests/{generic_pg_schema,m5_knowledge_search_fixtures,test_foundation,test_m2_3_db_postgres,test_m2_3_schema_postgres,test_m2_3_setup,test_m2_4_browser_fixture,test_m3_1_guards_migrations,test_m3_1_native_context_postgres,test_m3_1_native_context_runtime_postgres,test_m3_2_escalations_migrations,test_m4_delivery,test_m4_delivery_postgres,test_m4_polza_runtime_postgres,test_m4_reply_rights,test_m4_runtime_migrations,test_m4_schema_postgres,test_m5_configuration_postgres,test_m5_knowledge_runtime_postgres,test_m5_portfolio_migrations,test_m5_portfolio_delivery_migrations,test_telegram_egress,test_telegram_egress_migration,test_telegram_egress_postgres,test_tenancy_postgres}.py`,
-  `tests/fixtures/businesses.v1.json`, `scripts/{m2_4_browser_fixture,prepare_telegram_egress}.py`,
-  `scripts/test_telegram_egress.sh`.
-  `tests/test_postgres.py` — добавить в exact ordered table inventory только
-  реально созданные 0023 таблицы; сохранить equality/roles/RLS/no-DDL assertions.
-  `tests/test_m1_3_c0_acceptance.py` — только новые FK-required table literals
-  в существующем transactional TRUNCATE; сохранить no CASCADE/rollback/все
-  пять initializer cases и assertions. Новые nullable поля retained legacy
-  fixtures исключать только из старой closed projection с отдельной IS NULL
-  проверкой; не замалчивать новые данные и не переписывать historical profiles.
-- Source/schema admission: `scripts/{m4_runtime_db,native_context_db_catalog}.py`,
-  `tests/{test_m4_runtime_db_runner,test_native_context_db_runner}.py`.
-  Новая exact M5.3A branch/base/tree/assignment route с producer/consumer proof,
-  clean PR merge и push/main acceptance; старые task routes не расширять.
-  Pin actual assignment SHA/tree/sole-parent и только 5 docs в initial diff.
-  AGENTS, README, TASK_REGISTER, IMPL-005 immutable после assignment;
-  `docs/tasks/M5_HANDOFF.md` — только короткий контракт/возврат C1 в этом CURRENT.
-  Current 0023 verifier/catalog учитывать во всех нужных entrypoints, в том
-  числе native context и old text sessions; их функциональные допуски прежние.
-- Все workflow YAML, CI scripts/budgets вне названного admission, Compose,
-  locks/dependencies/images, original architecture, operator/live probes,
-  Polza/Vision/embedding transports и остальные paths закрыты.
-  Foundation 60 min, browser 900s, runtime SQL 900s и прежние 600s сохраняются.
-
-### Контракт C1 до SQL — 2026-11-16
-
-Checkout assignment `c0b0800341ff6cf7b6d79a5012696f47ea717f64`, tree
-`45c858d34d4098384b5f9e393af48e40e80b568e`, sole parent exact application base;
-initial diff содержит только пять выданных docs. Подтверждён свободный слот
-**0023/down_revision 0022**; predecessors неизменны.
-
-- Tattoo v1 связывается с published service id и точным набором field ids
-  `idea/placement/approximate_size/style/references`; последний optional.
-  Кнопка применяет template только к draft, публикация остаётся явной.
-- `conversation_v7/conversation_result_v3`: закрытые candidate facts с field,
-  value, client-stated/observed, source message/material digest, exact quote,
-  optional exact analysis id/hash; один reply/handoff/no_reply/photo result.
-  Сервер проверяет scope/source/currentness и выбирает missing/conflict/handoff;
-  owner-confirmed устанавливает только отдельная owner CAS-команда.
-- Projection pin: Workspace/Business/Client/Conversation, service/release и
-  activation, template revision, control generation и current context version.
-  Cache facts повторно фильтруются по current material/analysis на каждом read
-  и runtime boundary. Изменённые/удалённые источники не восстанавливаются.
-- Новые таблицы: `platform.intake_state` (одна bounded projection разговора),
-  `platform.duration_cases` (owner-only cases с version/confirmation actor),
-  `platform.intake_receipts` (owner idempotency/audit snapshots),
-  `platform.intake_escalation_links` (typed escalation/conversation + summary pin).
-  Typed composite Workspace/Business/Client/Conversation, actor и exact asset
-  version FK; FORCE RLS, runtime получает только узкие function capabilities.
-- Owner API: current summary, field correct/confirm, create/edit/confirm/revoke
-  DurationCase и bounded confirmed-case search. Session/CSRF/key/version;
-  ACCESS_DENIED/NOT_FOUND/INVALID_INPUT/STALE_STATE/IDEMPOTENCY_KEY_CONFLICT/
-  UNAVAILABLE. Confirmation привязано к конкретному полю/источнику/версии.
-- DurationCase: description, optional business asset/version, dimensions,
-  placement/style/detail/fill/provider, working/occupied minutes, отдельные
-  setup/stencil/break/cleanup и treatment, sessions и explanation. Null unknown;
-  никакой оценки, усреднения или включения времени/notes в client context.
-- Action Center сохраняет legacy storage/control/replay, а новая закрытая
-  owner projection добавляет проверенные summary/source links и один вопрос.
-  Stale link запрещает resolve; free-text resolve не подтверждает intake fields.
-  Все AI writes и delivery используют текущие claim/native/control guards;
-  v7 требует отдельный finite synthetic TEST profile, default OFF.
-
-Checkpoint C1: контракт, первая связная реализация, 0023 upgrade/unused
-downgrade/reupgrade и 19 targeted unit PASS. Полная готовность **UNVERIFIED**;
-owner/runtime/browser/CI проверки продолжаются. PR и ручной CI ещё не создавались.
-
-### История возврата C1 — BLOCKED_SCOPE / LOCAL evidence
-
-Scope blocker этого возврата снят решением C0-SCOPE-M5.3A-01 выше;
-исходные результаты ниже сохранены без объявления готовности.
-
-Реализованы закрытая v7/v3 synthetic ветвь, source-backed intake, owner CAS,
-новая Action Center projection, owner-only DurationCase, UI и migration 0023.
-0001–0022 и четыре C0 docs после assignment неизменны. Ни live, ни paid запусков.
-
-- Actual PG18: fresh upgrade 0001→0023, unused downgrade/reupgrade, used refusal;
-  45 combined tests PASS (включая M1 initializer cases), 15 прежних photo/guard/
-  UNKNOWN cases PASS с controlled bytes, без утверждения actual S3.
-- Независимый catalog: 318 functions / 73 tables / 1060 columns, profile valid.
-  Full SHA256 `8ad79d23fbd456904c785e672d6dd0860064cd0a39064b9472b96b795e85102f`.
-- Frontend 541 PASS, TypeScript/mypy/ruff PASS; 28 targeted intake/schema unit,
-  69 source-admission/count cases и 430 current foundation cases PASS.
-- Полный local unit: 4747 PASS + 161 subtests, 10 FAIL. Девять current-journal
-  failures исправлены и перепроверены в 430 PASS; остался endpoint inventory ниже.
-- Finite input/real owner HTTP/worker journey PASS, 1 call/1 effect для clarify,
-  1 call/0 effects для handoff. Chromium desktop/narrow не стартовал: socket EPERM;
-  настоящий browser PASS не заявлен. Journey добавлен для штатного browser CI.
-- **Нужен один дополнительный path `tests/test_auth_contract.py`:** добавить ровно
-  шесть новых intake endpoints в существующую equality-проверку. Frozen auth.v1,
-  guards и OpenAPI equality сохраняются. Готовый diff: +10 строк, проба diff PASS;
-  сам закрытый файл не изменялся. Не заменять inventory фильтром/skip/extra=allow.
-
-Ветка остаётся на единственном UNVERIFIED checkpoint; финальная реализация
-подготовлена отдельным review commit без продвижения ref. Draft PR и полный CI
-ожидают узкого C0 scope amendment. Статус не READY/VERIFIED; M5.3B/M6 не начинались.
-
-### Продолжение C1 после C0-SCOPE-M5.3A-01 — 2026-11-17
-
-Receipt `2c4baae377abd65bc3c807b265f123c23f3e818d`, tree
-`196dc2c89f4ad8bdcb8b6bac44178a91b20412b3`, sole parent review5ccd2f8
-сохранён в ancestry вместе с assignment/checkpoint. Применён точный +10-line
-API inventory delta; original auth AST после удаления additions совпадает.
-Новый producer/consumer требует exact receipt SHA/tree/parent, handoff-only
-receipt diff и ancestry; original assignment proof и immutable docs сохранены.
-Полный auth pytest и positive/negative PR/main admission: **81 PASS**;
-относящиеся ruff lint/format PASS. Остальные неизменённые прогоны не повторялись.
-Открыт Draft PR #53. Первый CI43994479059 на merge4d994136 (head2c0428cf,
-treef9583ae6) завершился 9/12 SUCCESS: foundation остановлен на format трёх
-compatibility tests; runtime — на nullable intake_pin retained-row check и
-старом verifier0022 в text provider admission; два новых browser cases — на
-точном label. Все runtime cleanup PASS, budget/infrastructure failures нет.
-Исправления сохраняют старый row equality, text v2/v3 admission и закрытые
-профили; обновлён только текущий verifier0023. Native Chromium/API/PG desktop
-и narrow journey теперь 2 PASS; это LOCAL, без Docker/S3 verification claim.
-После целевых проверок исправленного дерева нужен новый полный штатный CI.
-Статус **IN_PROGRESS / UNVERIFIED**, до C0 review и отдельного merge владельца.
-
-CI44000571874 / tested00ebaf0d / head0771fe68 завершился 11/12 SUCCESS.
-Runtime160/160, browser73/73, frontend541 и unit4789 +161 subtests PASS;
-generic PG — 1059 PASS /2 FAIL, все1061 cases завершены, cleanup/source clean PASS.
-Два оставшихся compatibility пропуска: verifier0022 был выбран для revision0023
-в configuration migration test; exact tenancy surface не включал новые
-intake/duration source functions. Исправлен revision map с сохранением0022;
-0023 source functions проходят те же exact name/OID/security-definer/ACL checks.
-Локальные два reproducer PASS; предыдущий CI остаётся FAIL, нужен новый полный
-прогон изменённого candidate. Budgets/workflows и applied0001–0022 сохранены.
-
-### Критерии готовности и возврат
-
-1. Targeted unit/schema tests и actual PostgreSQL на используемых операциях:
-   два Business одним кодом; другой Workspace и другой Client того же Workspace
-   не доступны; owner-only DurationCase не попадает в client model/read/output;
-   source spoofing/unknown/observed не повышают authority.
-2. Multi-turn сценарий: часть данных уже известна → один нужный вопрос → ответ →
-   исправление → новая сводка с источником. Edit/delete/replaced file/revoke/
-   publish гонки дают свежую projection либо явный stale/refusal, не старый факт.
-   Смена темы не смешивает запросы. COVER_UP и missing rule дают один актуальный
-   handoff; concurrent/repeated execution и owner stale command не дублируют его.
-   HUMAN/OWNER observation/Resume и existing text/photo delivery guards проходят
-   положительные и отрицательные проверки; UNKNOWN не приводит к resend.
-3. DurationCase: owner создаёт и подтверждает описание/пример с unknown полями;
-   просмотр/исправление/отзыв и поиск показывают различия. Один настоящий
-   browser journey на desktop и narrow viewport: intake summary/source,
-   owner confirmation, Action Center и DurationCase без ручного SQL/JSON.
-   Проверить auth/scope смену и несвоевременный response UI.
-4. Actual PG: 0022→0023, repeat upgrade, fresh upgrade, unused downgrade/reupgrade,
-   used downgrade refusal; exact independently observed catalog/functions/
-   roles/RLS/FK/security/profile. После setup fix доходить до call в положительных
-   и отрицательных сценариях; не считать ранний отказ проверкой последнего guard.
-   Current table inventory и все M1 initializer cases включены заранее.
-5. После targeted checks — один штатный полный CI кандидата со всеми 12 jobs,
-   clean source/manifest, всеми фазами и cleanup. Не repeat unchanged runs,
-   не skip/xfail/замена expected ради PASS/рост timeout. При сбоях разобрать
-   все известные группы, разделяя implementation и test infrastructure.
-6. C1 возвращает PR/head/tree, exact tested SHA/CI, контракт/миграцию и один
-   понятный рабочий сценарий, evidence и реальные ограничения. Длинные логи
-   — PR/CI. Статус REVIEW до C0; merge только после отдельного решения владельца.
-   После actual merge/post-merge CI C0 выдаёт M5.3B. Не начинать M6.
-
+C0 после возврата либо принимает общий M5 в доказанных пределах и отдельно
+готовит выдачу M6, либо назначает один ограниченный fix с точным write-set/CI.
+M5.3B не разрешает ServiceRequest/Assessment/Quote/booking/payment реализацию.
+DEFAULT_OFF/FAKE/EVAL_ONLY сохраняются; никаких paid/provider/VM/live Telegram/
+client-data действий. Confirmed0.50229415 RUB/holds11.75 RUB и старые UNKNOWN
+не пересчитывать и не снимать. Общий live VERIFIED не заявлять.
 
 ## 1. Проверяемый результат всего этапа
 
@@ -715,8 +378,10 @@ authority, private media и конкуренции publish/send. Авторск�
 обязанностью исполнителя. Targeted review одного fix не выдаётся за review всего M5.
 
 Один финальный candidate → штатный полный CI → C0 acceptance → отдельный merge
-допуск → фактический push/main CI. Не менять существующие gates ради зелёного
-результата. Если CI сам запускается для docs PR, учитывать его один раз, без
+допуск → фактический push/main CI. Для текущего неизменённого application tree
+эта цепочка уже выполнена PR53; C8 выполняет общий независимый review принятого
+main. Повторный PR/CI нужен только при новом исправлении. Не менять существующие
+gates ради зелёного результата. Если CI сам запускается для docs PR, учитывать его один раз, без
 ручного rerun неизменённых исходников. После приёмки — одна запись в реестре,
 обновление CURRENT и передача M6 с release/intake/source contracts и ограничениями.
 
@@ -755,12 +420,11 @@ D mixed/full payment. В M5 проверяются настройки и чес�
 одного ведущего, exact write-set, dependency, критерии и что оставлено за границей.
 Не выдавать весь этот документ C1/C4 как одно задание «реализовать M5».
 
-M5.1A–M5.2D интегрированы; текущие paths и source admission задаёт только
+M5.1A–M5.3A интегрированы; текущий review scope и write-set задаёт только
 CURRENT выше. Допуски предыдущих PR не разрешают автоматически будущие изменения
-приложения. Current migration0022; слот0023←0022 выделен только M5.3A с проверкой
-C1/C2 до SQL. Новые номера не резервировать цепочкой.
+приложения. Current migration0023; новых слотов для M5.3B нет.
 
-Не менять applied0001–0022, роли/гранты всех старых модулей, исторические schema
+Не менять applied0001–0023, роли/гранты всех старых модулей, исторические schema
 checks, native context или `.github/workflows` ради удобства новой функции.
 Если additive migration требует current catalog/profile compatibility, перечислить
 конкретные затронутые guards/fixtures и доказать изменение. Проблема тестового
@@ -781,10 +445,10 @@ harness/locale отделяется от production SQL. Не подгонять
 
 ## 6. Действия владельца
 
-Сейчас достаточно передать C1 закреплённую ссылку на CURRENT M5.3A.
-PR #45–#52 уже интегрированы. Разработка LOCAL/TEST идёт без нового paid/VM
-допуска и без реальных материалов мастера. Новый PR открывает C1 после
-подготовки работающего сценария и source admission.
+Сейчас достаточно передать C8 закреплённую ссылку на CURRENT M5.3B.
+PR #45–#53 уже интегрированы. Общий review выполняется на принятом main,
+без нового paid/VM допуска и без реальных материалов мастера.
+При отсутствии implementation changes новый PR/CI не требуется.
 
 Позже — только конкретное действие по готовому результату:
 1. Если понадобится дополнительный real synthetic smoke — отдельные route,
