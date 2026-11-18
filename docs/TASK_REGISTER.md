@@ -2,29 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.3B IN_PROGRESS · общая приёмка CHANGES_REQUESTED · 2026-11-18
+## CURRENT — M5.3B REVIEW · независимая повторная приёмка PR #54 · 2026-11-18
 
-**Единственная активная задача — C1-M5.3B-V7-FIX-R1, ведущий C1.**
-Ветка `c1/m5-3b-v7-fixes-r1`. C0 подтвердил четыре замечания C8 к принятому main.
-Два P1 прерывают поиск с непустым индексом и выбор фото при стабильном READ.
-Два P2 затрагивают уже собранные поля и возможность решить открытый вопрос мастеру.
-C1 возвращает один исправленный PR с доказательством полного v7 пути на PostgreSQL,
-проверкой границ model history и актуальности перед отправкой. C2/C4 консультируют
-по своей части, C5 по существующим browser tests. Затем кандидат проверяет C8.
-[Решение и конечный scope C1](tasks/M5_HANDOFF.md). [Независимый возврат C8](https://github.com/Elefesys/ai-service-manager/blob/4cb6318f008d3ca952eb077268887e2d39714972/docs/tasks/M5_HANDOFF.md#L14).
+**Единственная активная задача — C8-M5.3B-ACCEPTANCE-R2, ведущий C8.** Ветка `c8/m5-3b-acceptance-r2`. C1 вернул исправленный кандидат. C0 принял доработку по явному выбору спорного значения для передачи на повторную проверку. C8 возвращает вердикт по C8-M5-01–04, обновлённую матрицу K01–K12 и проверенные границы передачи M6. Разрешён только `docs/tasks/M5_HANDOFF.md` в ветке C8. [Поручение C0](tasks/M5_HANDOFF.md).
 
-**Application base** `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
-`11c987fb12e4f88d27da3737911c468d520269b8`. PR #53 и post-merge CI прошли
-12/12 с первой попытки. M5.1A–M5.3A — INTEGRATED / VERIFIED в ранее проверенном
-synthetic LOCAL/TEST. M5.2A capability принята в ASSISTED_SYNTHETIC.
-Доказательство общего v7 сценария требуется на исправленном кандидате.
-[Приёмка PR #53](https://github.com/Elefesys/ai-service-manager/blob/3ba774da3bf61b57062098ea5e0470b1402eb70d/docs/tasks/M5_HANDOFF.md#L14). [Push/main CI44018352191](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191).
+Application base в main — `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`. Проверяемый head PR #54 — `9ead66496b37d78d35654c9a7b32ee66d1b30a7a`, tree `305dbbe737302680f658e05835f9b5ee82484309`, tested merge `e356b49ebaca589d2d221b06762c0cf3ae6b26c0`. Все 12 jobs прошли с первой попытки. Actual PG проверил исходный и альтернативный выбор при обоих статусах поля, сохранение подтверждения и следующий ответ клиенту. Один v7 worker провёл поиск и отправку разрешённого фото с оригиналом из MinIO. [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508).
 
-IMPL-005 — ACCEPTED / LOCKED. C0 выделяет только 0024 с родителем 0023.
-Применённые 0001–0023 неизменяемы. Default OFF/FAKE/EVAL_ONLY, старые UNKNOWN/
-NOT_PROVEN, 0.50229415 RUB подтверждённых расходов, holds 11.75 RUB, receiver
-ACK/fence, полный live HUMAN/Resume и ограничения data route сохранены. C6 HOLD.
-M6 ждёт отдельной выдачи после общей приёмки. Сейчас владелец передаёт C1 CURRENT.
+M5.1A–M5.3A сохраняют принятую область synthetic LOCAL/TEST, M5.2A capability — ASSISTED_SYNTHETIC. На main действует 0023, в кандидате PR #54 — 0024. IMPL-005 остаётся ACCEPTED / LOCKED. Default OFF/FAKE/EVAL_ONLY, прежние UNKNOWN/NOT_PROVEN, подтверждённые 0.50229415 RUB и holds 11.75 RUB, receiver ACK/fence, полный live HUMAN/Resume и ограничения реальных данных сохраняются. C6 HOLD. C0 примет следующее решение после возврата C8. Merge требует отдельного решения владельца, завершение M5 — проверки push/main CI. M6 ожидает приёмки.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 
