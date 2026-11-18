@@ -1,5 +1,6 @@
 """Actual v7 worker/claim commit, with current source and owner-only examples."""
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -14,19 +15,19 @@ from asm.ai.runtime_settings import IntakeRuntimeSettings
 from asm.conversations.escalations import EscalationCode, EscalationError
 from asm.foundation import create_worker
 from asm.intake.models import CandidateSet
-from asm.messaging.errors import MessagingError
+from asm.messaging.errors import Code, MessagingError
 from m5_intake_fixtures import intake_bundle
 from m5_knowledge_search_fixtures import db as db
 from m5_knowledge_search_fixtures import owner_unit
 from m5_knowledge_search_fixtures import search_pg as search_pg
 from m5_knowledge_search_fixtures import seeded as seeded
 from m5_portfolio_fixtures import call
-from sqlalchemy import text
+from sqlalchemy import event, text
 from test_m2_1_postgres import query
-from test_m3_1_native_context_postgres import claim_job, incoming, reconcile
+from test_m3_1_native_context_postgres import claim_job, incoming, reconcile, scalar, wait_blocked
 from test_m3_1_turns_postgres import seal
 from test_m4_agent import config
-from test_m4_delivery_postgres import run_turn, source_turn
+from test_m4_delivery_postgres import enrollment, run_turn, source_turn
 from test_m4_runtime_postgres import COUNTER, owner
 from test_m5_portfolio_runtime_postgres import PrivateBytes, bridge
 from test_m5_portfolio_runtime_postgres import portfolio_runtime_pg as portfolio_runtime_pg
@@ -262,6 +263,137 @@ async def test_complex_case_uses_existing_action_center_with_closed_summary(
     async with owner_unit(h) as u:
         final = await u.escalation_read(eid)
     assert final["status"] == "RESOLVED" and final["version"] == "2"
+
+
+async def overlap_intake_commands(h, worker_call, owner_command, owner_call):
+    """Pause the real worker below the configuration lock and above the conversation."""
+    loop = asyncio.get_running_loop()
+    worker_pid, owner_pid = loop.create_future(), loop.create_future()
+    sql_pids = {
+        "SELECT platform.ai_delivery_command(": worker_pid,
+        f"SELECT platform.{owner_command}(": owner_pid,
+    }
+    engine = h.runtime.engine.sync_engine
+
+    def record(connection, cursor, statement, parameters, context, executemany):
+        for prefix, pid in sql_pids.items():
+            if statement.startswith(prefix) and not pid.done():
+                pid.set_result(connection.connection.driver_connection.info.backend_pid)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        async with asyncio.timeout(5), asyncio.TaskGroup() as tasks:
+            async with h.migrator.begin() as latch:
+                latch_pid = (await latch.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+                await latch.execute(
+                    text(
+                        "SELECT workspace_id FROM platform.workspace_billing_accounts "
+                        "WHERE workspace_id=:ws FOR UPDATE"
+                    ),
+                    {"ws": A},
+                )
+                worker = tasks.create_task(worker_call())
+                await wait_blocked(h, await worker_pid, latch_pid)
+                owner = tasks.create_task(owner_call())
+                await wait_blocked(h, await owner_pid, worker_pid.result())
+                assert await scalar(
+                    h,
+                    """SELECT EXISTS(
+                      SELECT 1 FROM pg_locks waiting JOIN pg_locks held
+                        USING (locktype,database,classid,objid,objsubid)
+                      WHERE waiting.pid=:waiter AND held.pid=:holder
+                        AND waiting.locktype='advisory' AND NOT waiting.granted AND held.granted
+                    )""",
+                    waiter=owner_pid.result(),
+                    holder=worker_pid.result(),
+                )
+            # Releasing the billing latch lets the worker finish while the owner
+            # is still queued on the worker's actual configuration advisory lock.
+        return worker.result(), owner.result()
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+
+@pytest.mark.parametrize("operation", ["READ", "CONFIRM", "RESOLVE"])
+async def test_intake_owner_and_worker_share_configuration_lock_order(intake_pg, operation):
+    from test_m3_2_escalations_postgres import decide
+
+    h = intake_pg
+    cid, worker, model, _, reply = await application(h, {"idea": "flower"})
+    original = await summary(h, cid)
+    assert reply["selected_kind"] == "reply" and original["facts"][0]["value"] == "flower"
+    source = await queue_turn(h, "Please continue the fictional consultation")
+    await worker.execute(source)
+    claim = await h.kernel.claim_job("intake-overlap", ai=True)
+    assert claim is not None and claim.job_id == (await enrollment(h, source))["job_id"]
+
+    async def prepare():
+        return await worker.ai.database.prepare(
+            claim, worker.ai.config, deadline=datetime.now(UTC) + timedelta(seconds=20)
+        )
+
+    async def read():
+        return await summary(h, cid)
+
+    if operation == "READ":
+        prepared, read_back = await overlap_intake_commands(h, prepare, "intake_owner", read)
+        assert prepared.binding.conversation_id == cid
+        assert read_back["facts"] == original["facts"]
+        assert read_back["context_version"] == str(prepared.binding.context_version)
+        return
+
+    # The already claimed response now competes with a newer intake handoff.
+    # PREPARE must reject that response without modifying the pending decision.
+    model.category, model.values = "COVER_UP", {}
+    _, handoff = await next_turn(h, worker, "This is a fictional cover-up request")
+    assert handoff["selected_kind"] == "handoff"
+    eid = handoff["escalation_id"]
+    row = (await query(h, "SELECT * FROM app.escalations WHERE id=:id", id=eid))[0]
+    async with owner_unit(h) as u:
+        card = await u.escalation_read(eid)
+    assert card["status"] == "PENDING" and card["can_resolve"]
+    pin = card["summary"]
+    command = dict(
+        expected_version=pin["version"],
+        expected_fingerprint=pin["fingerprint"],
+        field="idea",
+        value="flower",
+        source=pin["facts"][0]["source"],
+    )
+
+    async def prepare_stale():
+        with pytest.raises(MessagingError) as error:
+            await prepare()
+        return error.value.code
+
+    async def decide_card():
+        if operation == "RESOLVE":
+            return await decide(h, row, "RESOLVE", "concurrent-resolve")
+        async with owner_unit(h) as u:
+            return await u.intake_owner(BA, cid, operation, "concurrent-confirm", command)
+
+    rejected, accepted = await overlap_intake_commands(
+        h,
+        prepare_stale,
+        "escalation_command" if operation == "RESOLVE" else "intake_owner",
+        decide_card,
+    )
+    assert rejected == Code.NOT_ALLOWED
+    assert h.adapter.calls == h.adapter.effects == 0
+    async with owner_unit(h) as u:
+        current = await u.escalation_read(eid)
+    assert current["escalation_id"] == card["escalation_id"] == str(eid)
+    assert current["assignee_user_account_id"] == card["assignee_user_account_id"] == str(UA)
+    assert (
+        await scalar(h, "SELECT count(*) FROM app.escalations WHERE conversation_id=:c", c=cid) == 1
+    )
+    if operation == "RESOLVE":
+        assert current["status"] == "RESOLVED" and accepted["code"] == "ACCEPTED"
+        assert await decide_card() == accepted | {"code": "REPLAY"}
+    else:
+        assert current["status"] == "PENDING" and accepted["outcome"] == "ACCEPTED"
+        assert current["summary"]["facts"][0]["status"] == "owner-confirmed"
+        assert await decide_card() == accepted | {"outcome": "REPLAY"}
 
 
 async def queue_turn(h, text_value):

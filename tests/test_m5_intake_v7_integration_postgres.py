@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from asm.ai.contracts import IntakeGatewayConfig
+from asm.ai.contracts import IntakeGatewayConfig, IntakeHandoff
 from asm.ai.fake import FakeAdapter
 from asm.ai.intake import IntakeConversationAgent
 from asm.ai.runtime_settings import IntakeRuntimeSettings
@@ -19,7 +19,13 @@ from asm.foundation import create_worker
 from asm.intake.projection import QUESTIONS
 from asm.messaging.errors import Code, MessagingError
 from m5_intake_fixtures import intake_bundle
-from m5_knowledge_search_fixtures import owner_unit
+from m5_knowledge_search_fixtures import (
+    ControlledEmbeddings,
+    knowledge_command,
+    owner_unit,
+    publication,
+    vector,
+)
 from m5_portfolio_delivery_fixtures import CAPTION, published_photo, revoke
 from m5_portfolio_fixtures import call
 from sqlalchemy import text
@@ -36,6 +42,7 @@ from test_m4_delivery_postgres import (
 )
 from test_m4_runtime_postgres import COUNTER, owner
 from test_m5_intake_postgres import db as db
+from test_m5_intake_postgres import intake_pg as intake_pg
 from test_m5_intake_postgres import next_turn, queue_turn, summary
 from test_m5_intake_postgres import portfolio_runtime_pg as portfolio_runtime_pg
 from test_m5_intake_postgres import search_pg as search_pg
@@ -49,6 +56,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 DETAILS = "CurrentV7Marker flower forearm 8 cm linework"
 VALUES = dict(idea="flower", placement="forearm", approximate_size="8 cm", style="linework")
+FAQ_QUESTION = "Should I bring the preparation form?"
 
 
 @pytest_asyncio.fixture
@@ -211,6 +219,163 @@ async def compose(h, cid, trace, *, settings=None, telegram=None, **behavior):
     db.embeddings = SimpleNamespace(complete=observe_query)
     db.commit = observe_commit
     return worker, model, settings
+
+
+@pytest_asyncio.fixture
+async def v7_faq_pg(intake_pg, request):
+    h = intake_pg
+    h.photo_workers, h.photo_store = h.intake_workers, h.store
+    sources = [{"text": "The preparation form is required.", "claim_key": "preparation-form"}]
+    if getattr(request, "param", "conflict") == "conflict":
+        sources.append(
+            {"text": "The preparation form is optional.", "claim_key": "preparation-form"}
+        )
+    h.photo_embeddings = ControlledEmbeddings(choose=lambda value: vector(int(value == DETAILS)))
+    _, state, _ = await publication(h, sources, h.photo_embeddings, bundle=intake_bundle())
+    return h, state
+
+
+async def faq_turn(h, *, with_intake):
+    cid, source, h.intake_scope = await source_turn(
+        h, native=True, message_text=DETAILS if with_intake else FAQ_QUESTION
+    )
+    if with_intake:
+        worker, _, _ = await compose(h, cid, [], photo=False, values={"idea": "flower"})
+        _, reply = await run_turn(h, worker, source)
+        assert reply["selected_kind"] == "reply"
+        await send(h, worker, reply)
+        assert await status(h, reply) == "SENT"
+        source = await queue_turn(h, FAQ_QUESTION)
+    previous = await summary(h, cid)
+    assert previous["service_id"] == ("consultation" if with_intake else None)
+    assert [f["value"] for f in previous["facts"]] == (["flower"] if with_intake else [])
+
+    def faq(value):
+        value["intake"]["service_id"] = None
+
+    worker, model, _ = await compose(
+        h, cid, [], photo=False, values={}, category="FAQ_ONLY", mutate=faq
+    )
+    return cid, source, previous, worker, model
+
+
+@pytest.mark.parametrize(
+    "v7_faq_pg,with_intake,search_status",
+    [
+        ("conflict", True, "CONFLICT"),
+        ("conflict", False, "CONFLICT"),
+        ("consistent", True, "RESULTS"),
+    ],
+    ids=["started", "empty", "ordinary-faq"],
+    indirect=["v7_faq_pg"],
+)
+async def test_v7_faq_conflict_routes_to_owner_with_current_intake(
+    v7_faq_pg, with_intake, search_status
+):
+    h, publication_state = v7_faq_pg
+    cid, source, previous, worker, model = await faq_turn(h, with_intake=with_intake)
+    before = await counts(h, cid)
+    transport = (h.adapter.calls, h.adapter.effects)
+    claim, delivery = await run_turn(h, worker, source)
+    saved = (await query(h, "SELECT * FROM platform.ai_runs WHERE job_id=:id", id=claim.job_id))[0]
+    assert saved["search_refs"]["status"] == search_status
+    assert saved["search_pin"]["build_id"] == publication_state["active_build_id"]
+    assert len(model.requests) == 2
+    if search_status == "RESULTS":
+        assert delivery["selected_kind"] == "reply" and delivery["escalation_id"] is None
+        assert saved["result"]["intake"] == dict(
+            service_id=None, category="FAQ_ONLY", switch_request=False, facts=[]
+        )
+        await send(h, worker, delivery)
+        assert await status(h, delivery) == "SENT"
+        assert (await summary(h, cid))["facts"] == previous["facts"]
+        assert not await query(h, "SELECT id FROM app.escalations WHERE conversation_id=:c", c=cid)
+        return
+
+    assert saved["search_refs"]["reason_code"] == "OWNER_LABEL_CONFLICT"
+    assert len(saved["search_refs"]["conflicts"][0]["revision_ids"]) == 2
+    eid = delivery["escalation_id"]
+    assert delivery["selected_kind"] == "handoff" and eid is not None
+    assert saved["result"]["intake"] == dict(
+        service_id=previous["service_id"], category="OTHER_COMPLEX", switch_request=False, facts=[]
+    )
+    assert delivery["message_id"] is delivery["outbox_id"] is delivery["send_job_id"] is None
+    async with owner_unit(h) as u:
+        listing = await u.escalation_list(10, "PENDING", None, None)
+        card = await u.escalation_read(eid)
+    assert [item["escalation_id"] for item in listing["items"]] == [str(eid)]
+    assert card["status"] == "PENDING" and card["can_resolve"] and card["summary_current"]
+    assert card["assignee_user_account_id"] == str(UA) and card["question"] == FAQ_QUESTION
+    assert (card["conversation_id"], card["client_id"]) == (str(cid), previous["client_id"])
+    saved_facts = card["summary"]
+    assert saved_facts["business_id"] == str(BA)
+    assert saved_facts["service_id"] == previous["service_id"]
+    assert saved_facts["release_id"] == previous["release_id"] == publication_state["release_id"]
+    assert saved_facts["facts"] == previous["facts"]
+    after = before | {"query": before["query"] + 1}
+    assert await counts(h, cid) == after
+    assert (h.adapter.calls, h.adapter.effects) == transport
+    receipt = await worker.ai.database.replay(claim, worker.ai.config)
+    assert receipt.result.model_dump(mode="json") == saved["result"]
+    await worker.execute(claim)
+    assert len(model.requests) == 2
+    assert await counts(h, cid) == after
+    assert (h.adapter.calls, h.adapter.effects) == transport
+    assert (await enrollment(h, source))["escalation_id"] == eid
+    assert (await query(h, "SELECT id FROM app.escalations WHERE conversation_id=:c", c=cid)) == [
+        {"id": eid}
+    ]
+
+
+@pytest.mark.parametrize("boundary", ["stale-publication", "foreign-conversation"])
+async def test_v7_faq_handoff_commit_rejects_an_invalid_binding(v7_faq_pg, boundary):
+    h, publication_state = v7_faq_pg
+    cid, source, previous, worker, _ = await faq_turn(h, with_intake=True)
+    other_claim = None
+    if boundary == "foreign-conversation":
+        other_cid, other_source, _ = await source_turn(h, native=True, message_text=DETAILS)
+        other_worker, _, _ = await compose(h, other_cid, [], photo=False)
+        await other_worker.execute(other_source)
+        other_claim = await h.kernel.claim_job("intake-foreign-faq", ai=True)
+        assert other_claim is not None
+        assert other_claim.job_id == (await enrollment(h, other_source))["job_id"]
+        await other_worker.ai.database.prepare(
+            other_claim, other_worker.ai.config, deadline=datetime.now(UTC) + timedelta(seconds=30)
+        )
+
+    before = await counts(h, cid)
+    transport = (h.adapter.calls, h.adapter.effects)
+    commit = worker.ai.database.commit
+    declined = []
+
+    async def commit_at_boundary(claim, run, result):
+        assert isinstance(result, IntakeHandoff) and result.intake.service_id == "consultation"
+        if other_claim is None:
+            knowledge = publication_state["sources"][0]
+            await knowledge_command(
+                h,
+                "KNOWLEDGE_REVOKE",
+                {
+                    "schema_version": 1,
+                    "source_id": knowledge["source_id"],
+                    "expected_source_version": knowledge["source_version"],
+                    "expected_activation_version": publication_state["activation_version"],
+                },
+            )
+        try:
+            return await commit(other_claim or claim, run, result)
+        except MessagingError as error:
+            declined.append(error.code)
+            raise
+
+    worker.ai.database.commit = commit_at_boundary
+    _, delivery = await run_turn(h, worker, source)
+    assert declined == [Code.AI_STALE if other_claim is None else Code.NOT_ALLOWED]
+    assert delivery["escalation_id"] is delivery["selected_kind"] is None
+    assert await counts(h, cid) == before | {"query": before["query"] + 1}
+    assert (h.adapter.calls, h.adapter.effects) == transport
+    assert (await summary(h, cid))["facts"] == previous["facts"]
+    assert not await query(h, "SELECT id FROM app.escalations WHERE workspace_id=:ws", ws=A)
 
 
 async def counts(h, cid):

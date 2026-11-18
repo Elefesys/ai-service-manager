@@ -441,7 +441,7 @@ END $$""",
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       DECLARE ws uuid; actor uuid; corr uuid; c app.conversations%ROWTYPE; e app.escalations%ROWTYPE;
         saved platform.escalation_command_receipts%ROWTYPE; fingerprint bytea; result jsonb;
-        native_hold jsonb; validity text; moment timestamptz; receipt uuid; audit uuid; accepted text;
+        native_hold jsonb; validity text; moment timestamptz; receipt uuid; audit uuid; accepted text; intake_business uuid;
       BEGIN
         PERFORM platform.turn_require_isolation(); ws:=app.current_messaging_owner_workspace_id();
         actor:=nullif(current_setting('asm.actor_id',true),'')::uuid;
@@ -463,6 +463,12 @@ END $$""",
           RETURN jsonb_build_object('code','REPLAY','result',saved.result,'request_fingerprint',encode(saved.request_fingerprint,'hex'));
         END IF;
         IF p_operation='RESOLVE' THEN
+          -- Worker order: owner, Business/configuration, channel, Conversation.
+          SELECT c0.business_id INTO intake_business FROM app.conversations c0
+          JOIN platform.intake_escalation_links l ON (l.workspace_id,l.business_id,l.conversation_id,l.client_id)
+            =(c0.workspace_id,c0.business_id,c0.id,c0.client_id)
+          WHERE (c0.workspace_id,c0.id,c0.client_id,l.escalation_id)=(ws,p_conversation,p_client,p_escalation);
+          IF intake_business IS NOT NULL THEN PERFORM platform.knowledge_owner_lock(intake_business); END IF;
           PERFORM 1 FROM app.channel_connections cc JOIN app.conversations c0 ON (c0.workspace_id,c0.connection_id)=(cc.workspace_id,cc.id)
             WHERE c0.workspace_id=ws AND c0.id=p_conversation AND c0.client_id=p_client FOR SHARE OF cc;
         END IF;
@@ -478,11 +484,10 @@ END $$""",
         IF p_operation='RESOLVE' AND (e.assignee_user_account_id<>actor OR validity<>'CURRENT') THEN RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE='P2501'; END IF;
         IF (e.version,c.control_generation,c.version) IS DISTINCT FROM (p_version,p_generation,p_context) THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P2501'; END IF;
         IF c.version=9223372036854775807 THEN RAISE EXCEPTION 'VERSION_EXHAUSTED' USING ERRCODE='P2501'; END IF;
-        IF p_operation='RESOLVE' AND EXISTS(SELECT 1 FROM platform.intake_escalation_links l WHERE l.workspace_id=ws AND l.escalation_id=e.id) THEN
-          PERFORM platform.knowledge_owner_lock(c.business_id);
-          IF EXISTS(SELECT 1 FROM platform.intake_escalation_links l WHERE l.workspace_id=ws AND l.escalation_id=e.id
-            AND l.pin IS DISTINCT FROM platform.intake_runtime_pin(ws,c.business_id,c.id,c.client_id)) THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P2501'; END IF;
-        END IF;
+        IF p_operation='RESOLVE' AND EXISTS(SELECT 1 FROM platform.intake_escalation_links l WHERE l.workspace_id=ws AND l.escalation_id=e.id
+          AND ((intake_business,l.business_id,l.conversation_id,l.client_id) IS DISTINCT FROM (c.business_id,c.business_id,c.id,c.client_id)
+            OR l.pin IS DISTINCT FROM platform.intake_runtime_pin(ws,c.business_id,c.id,c.client_id))) THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P2501'; END IF;
         IF p_operation='RESOLVE' THEN
           SELECT platform.human_context_escalation_hold(ws,e.id,moment) INTO native_hold;
           IF native_hold IS NOT NULL THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P2501'; END IF;
@@ -636,7 +641,10 @@ BEGIN
  IF r.config->>'prompt_revision'<>'conversation_v7' THEN RETURN; END IF;
  IF platform.intake_candidates_valid(p) IS NOT TRUE OR platform.intake_current(r) IS NOT TRUE THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
  projection:=platform.intake_project(r.workspace_id,r.business_id,r.conversation_id,r.client_id);
- IF r.search_refs->>'status'='CONFLICT' AND p->>'category'<>'OTHER_COMPLEX' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
+ IF r.search_refs->>'status'='CONFLICT' AND (p->>'category'<>'OTHER_COMPLEX'
+  OR p->>'service_id' IS DISTINCT FROM projection->>'service_id'
+  OR p->'switch_request' IS DISTINCT FROM 'false'::jsonb OR p->'facts' IS DISTINCT FROM '[]'::jsonb) THEN
+  RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
  IF p->>'category'='FAQ_ONLY' THEN RETURN; END IF;
  SELECT x INTO service FROM jsonb_array_elements(r.active_projection->'bundle'->'services') x WHERE x->>'id'=p->>'service_id' AND x->>'active'='true';
  IF p->>'service_id' IS NOT NULL AND service IS NULL OR p->>'service_id' IS NULL AND p->>'category' NOT IN ('AMBIGUOUS','COVER_UP','OTHER_COMPLEX')
@@ -690,35 +698,39 @@ BEGIN
 END $$""",
     "platform.intake_escalation_decorate(jsonb)": r"""CREATE FUNCTION platform.intake_escalation_decorate(p jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
-DECLARE link platform.intake_escalation_links%ROWTYPE; fresh boolean;
+DECLARE link platform.intake_escalation_links%ROWTYPE; fresh boolean; client_question text;
 BEGIN
  SELECT * INTO link FROM platform.intake_escalation_links WHERE workspace_id=(p->>'workspace_id')::uuid AND escalation_id=(p->>'escalation_id')::uuid;
  IF NOT FOUND THEN RETURN p; END IF;
  PERFORM platform.knowledge_owner_lock(link.business_id);
  fresh:=link.pin=platform.intake_runtime_pin(link.workspace_id,link.business_id,link.conversation_id,link.client_id);
- RETURN p||jsonb_build_object('policy','PRELIMINARY_INTAKE_OWNER_V1','question',link.summary->>'question','summary',CASE WHEN fresh THEN link.summary END,'summary_current',fresh,'validity',CASE WHEN NOT fresh AND p->>'validity'='CURRENT' THEN 'SOURCE_CHANGED' ELSE p->>'validity' END,'waiting',CASE WHEN fresh THEN p->>'waiting' END,'context_hold',CASE WHEN fresh THEN p->'context_hold' END,'can_resolve',fresh AND (p->>'can_resolve')::boolean);
+ IF fresh AND p->>'validity'='CURRENT' THEN
+  -- Show the current inbound text captured by the run that opened this card.
+  SELECT nullif(btrim(left(platform.knowledge_query_text(r),300)),'') INTO client_question
+  FROM app.escalations e JOIN platform.ai_runs r ON (r.workspace_id,r.job_id)=(e.workspace_id,e.source_job_id)
+  WHERE (e.workspace_id,e.id)=(link.workspace_id,link.escalation_id)
+   AND (r.business_id,r.conversation_id,r.client_id)=(link.business_id,link.conversation_id,link.client_id)
+   AND r.config->>'prompt_revision'='conversation_v7' AND r.result->>'kind'='handoff'
+   AND r.search_refs->>'status'='CONFLICT' AND r.search_refs->>'reason_code'='OWNER_LABEL_CONFLICT';
+ END IF;
+ RETURN p||jsonb_build_object('policy','PRELIMINARY_INTAKE_OWNER_V1','question',coalesce(client_question,link.summary->>'question'),'summary',CASE WHEN fresh THEN link.summary END,'summary_current',fresh,'validity',CASE WHEN NOT fresh AND p->>'validity'='CURRENT' THEN 'SOURCE_CHANGED' ELSE p->>'validity' END,'waiting',CASE WHEN fresh THEN p->>'waiting' END,'context_hold',CASE WHEN fresh THEN p->'context_hold' END,'can_resolve',fresh AND (p->>'can_resolve')::boolean);
 END $$""",
     "platform.intake_owner(uuid,uuid,text,text,jsonb)": r"""CREATE FUNCTION platform.intake_owner(business uuid,conversation uuid,operation text,key text,p jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
 <<owner_command>>
-DECLARE ws uuid:=app.current_workspace_id(); actor uuid:=nullif(current_setting('asm.actor_id',true),'')::uuid;
+DECLARE ws uuid:=platform.knowledge_owner_lock(business); actor uuid:=nullif(current_setting('asm.actor_id',true),'')::uuid;
  c app.conversations%ROWTYPE; projection jsonb; facts jsonb; f jsonb; pin jsonb; d platform.duration_cases%ROWTYPE;
  receipt platform.intake_receipts%ROWTYPE; request_hash text; result jsonb; v bigint; aid uuid; avid uuid;
  pending_id uuid; refreshed jsonb;
 BEGIN
  IF conversation IS NOT NULL THEN
-  PERFORM platform.turn_require_isolation();
-  IF ws IS NULL OR platform.messaging_lock_owner(ws,actor) IS NOT TRUE THEN RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE='P2801'; END IF;
-  -- Match the conversation/connection order of guarded owner decisions.
+  -- Configuration is already locked, matching the guarded worker order.
   IF operation IN ('CONFIRM','CORRECT') THEN
    PERFORM 1 FROM app.channel_connections cc
    JOIN app.conversations c0 ON (c0.workspace_id,c0.connection_id)=(cc.workspace_id,cc.id)
    WHERE c0.workspace_id=ws AND c0.business_id=business AND c0.id=conversation FOR SHARE OF cc;
   END IF;
   SELECT * INTO c FROM app.conversations WHERE workspace_id=ws AND business_id=business AND id=conversation FOR NO KEY UPDATE;
- END IF;
- ws:=platform.knowledge_owner_lock(business);
- IF conversation IS NOT NULL THEN
   IF c.id IS NULL THEN RAISE EXCEPTION 'NOT_FOUND' USING ERRCODE='P3001'; END IF;
   projection:=platform.intake_project(ws,business,conversation,c.client_id);
  END IF;
@@ -992,7 +1004,7 @@ $$""",
 ('platform.conversation_turn_activation_matches(uuid,uuid)','ed3f021b97d11656125233eac69944bfb4a3cf09abe761d63c8cc14d531e90a5','sql',true,'v',false),
 ('platform.duration_case_valid(jsonb)','353ff3d8b2a9b803f7a450bf5948228b475df13d1d2d8c8a59a3b2e65c06ffd5','plpgsql',true,'i',false),
 ('platform.duration_source_current(uuid,uuid,uuid,uuid)','c7c67464d97acba8e8b8e2ec811d6667c4246f313ab09921208cedcb9f47cb3d','sql',true,'s',false),
-('platform.escalation_command(uuid,uuid,uuid,text,text,bigint,bigint,bigint,text)','a090552f9fe139bac56647665906a9f64a802639c8a83068b5f866ecacc2c7be','plpgsql',true,'v',true),
+('platform.escalation_command(uuid,uuid,uuid,text,text,bigint,bigint,bigint,text)','d78188b472c058faa457ea118928fe5e27e64798206fa826548f120821d1db39','plpgsql',true,'v',true),
 ('platform.escalation_command_fingerprint(uuid,uuid,uuid,uuid,uuid,text,bigint,bigint,bigint,text)','83bc68632b05e2b1cc74ecb8ac81c595034dccb634182b93fa5335633ebd5c0c','sql',false,'i',false),
 ('platform.escalation_context_changed()','2f46330f429632c4704fde14a4002b4ac30b30fa496394216766d62ab02cc392','plpgsql',true,'v',false),
 ('platform.escalation_immutable()','19c64f64d5352a55d4667f6902ebbb9afe163a66ff4f2d97c390defae6a237ed','plpgsql',true,'v',false),
@@ -1059,13 +1071,13 @@ $$""",
 ('platform.initialize_local_billing(uuid,text,integer,text,text,text,timestamptz,timestamptz,text)','20b0e1ea5d37d8710b485232cff1441ea7c6998d431233877d2ab1814f620e83','plpgsql',true,'v',false),
 ('platform.initialize_local_messaging_billing(uuid,text,timestamptz,timestamptz)','2863259a15ff3178525d044704c26dbc57c35e4322f5412bed6dd13989098f7d','plpgsql',true,'v',false),
 ('platform.initialize_telegram_connection(uuid,uuid,text,text,text,jsonb)','bfae87784d2145810f9ed12f1dfab4416d8041c9d2044c1397204bbe0f8275bf','plpgsql',true,'v',false),
-('platform.intake_apply(platform.ai_runs,jsonb)','97730c122e6fdb65b43a654aa3361a39af0ea93a02a65c48b17b6dea2739b096','plpgsql',true,'v',false),
+('platform.intake_apply(platform.ai_runs,jsonb)','2cd34b223afd4cac720ad64d0b103d35c37dac14bea36944da1d84114b6a330f','plpgsql',true,'v',false),
 ('platform.intake_candidates_valid(jsonb)','8341249f2e0a5b4a546b7685134aec687fb8065624c72acfea2700a13863632e','plpgsql',true,'i',false),
 ('platform.intake_current(platform.ai_runs)','1d3b0395102b257d83c46ff69dda128436c840b229c71480d4efcfe03e0d9e3f','plpgsql',true,'s',false),
 ('platform.intake_delivery_guard(platform.ai_runs)','dc64fc2273a9197d65b5c01fc931174a7b91913dc5521f5fb12d4b47918c2e47','plpgsql',true,'v',false),
 ('platform.intake_delivery_session_lock(uuid,uuid,uuid,numeric)','193b23fc217a3d439d03acaccdd44887d0723e8f94c04429968c8a881ab424b5','plpgsql',true,'v',false),
-('platform.intake_escalation_decorate(jsonb)','c6dacce18f32ef0bfd29d74573243922c782a8242e22e578a780dedaee641edd','plpgsql',true,'v',false),
-('platform.intake_owner(uuid,uuid,text,text,jsonb)','8fa3a1ee5350aa8c279b4ba1d4a6d2aaba04207933b07b1929090c864721ba72','plpgsql',true,'v',true),
+('platform.intake_escalation_decorate(jsonb)','d4ea1bcf1556f3593c24c2844c248634490272d8ffa3c79bd6cfd0fcb5a75dfe','plpgsql',true,'v',false),
+('platform.intake_owner(uuid,uuid,text,text,jsonb)','c940819b500be416ee02e8faa269072d2e3a9f0de1337efe00f325778fd3010e','plpgsql',true,'v',true),
 ('platform.intake_project(uuid,uuid,uuid,uuid)','68363d82af951fef71220a60cd921e173e6d502df2d099c46c66d83d47216491','plpgsql',true,'s',false),
 ('platform.intake_result_valid(jsonb)','ddba46cf9b1b02521b42687743544d031f22cfcc94aff0c132f1053935088993','sql',true,'i',false),
 ('platform.intake_runtime_pin(uuid,uuid,uuid,uuid)','e2731baa38c541254ec9244f3337e236c9735c4fe77d484f35d9c9947ed35380','sql',true,'s',false),

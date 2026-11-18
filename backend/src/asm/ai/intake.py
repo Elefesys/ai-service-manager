@@ -137,11 +137,12 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                     )
                     if proposed.service_id is not None and service is None:
                         raise ValueError("Service is not published")
-                    if self.search.status == "CONFLICT" or (
+                    knowledge_conflict = self.search.status == "CONFLICT"
+                    if knowledge_conflict or (
                         service is None and proposed.category == "NEW_TATTOO"
                     ):
                         proposed = CandidateSet(
-                            service_id=proposed.service_id,
+                            service_id=self.intake.service_id if knowledge_conflict else None,
                             category="OTHER_COMPLEX",
                             switch_request=False,
                             facts=(),
