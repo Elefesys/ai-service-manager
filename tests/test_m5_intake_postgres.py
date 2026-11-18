@@ -11,6 +11,7 @@ from asm.ai.contracts import Budget, IntakeGatewayConfig, IntakeReply
 from asm.ai.fake import FakeAdapter
 from asm.ai.runtime_contracts import CallCompletion
 from asm.ai.runtime_settings import IntakeRuntimeSettings
+from asm.conversations.escalations import EscalationCode, EscalationError
 from asm.foundation import create_worker
 from asm.intake.models import CandidateSet
 from asm.messaging.errors import MessagingError
@@ -35,9 +36,14 @@ pytestmark = pytest.mark.integration
 
 
 class Extractor(FakeAdapter):
-    def __init__(self, route, values, *, category="NEW_TATTOO", correction=False):
+    def __init__(self, route, values, *, category="NEW_TATTOO", correction=False, switch=False):
         super().__init__(route, ("reply",) * 4)
-        self.values, self.category, self.correction = values, category, correction
+        self.values, self.category, self.correction, self.switch = (
+            values,
+            category,
+            correction,
+            switch,
+        )
 
     async def complete(self, request):
         response = await super().complete(request)
@@ -51,7 +57,7 @@ class Extractor(FakeAdapter):
         candidate = {
             "service_id": "consultation",
             "category": self.category,
-            "switch_request": False,
+            "switch_request": self.switch,
             "facts": [
                 {
                     "field": field,
@@ -204,18 +210,63 @@ async def test_real_worker_applies_sources_and_asks_only_next_missing_question(i
     )
 
 
-async def test_complex_case_uses_existing_action_center_with_closed_summary(intake_pg):
+@pytest.mark.parametrize("operation,value", [("CONFIRM", "flower"), ("CORRECT", "blue flower")])
+async def test_complex_case_uses_existing_action_center_with_closed_summary(
+    intake_pg, operation, value
+):
+    from test_m3_2_escalations_postgres import body, decide
+
     h = intake_pg
     cid, _, model, _, delivery = await application(h, {"idea": "flower"}, category="COVER_UP")
     assert len(model.requests) == 1 and delivery["selected_kind"] == "handoff"
+    eid = delivery["escalation_id"]
+    row = (await query(h, "SELECT * FROM app.escalations WHERE id=:id", id=eid))[0]
     async with owner_unit(h) as u:
-        card = await u.escalation_read(delivery["escalation_id"])
-    assert card["policy"] == "PRELIMINARY_INTAKE_OWNER_V1" and card["summary_current"] is True
-    assert card["summary"]["facts"][0]["value"] == "flower" and card["can_resolve"]
+        card = await u.escalation_read(eid)
+        assert card["policy"] == "PRELIMINARY_INTAKE_OWNER_V1" and card["summary_current"]
+        assert card["summary"]["facts"][0]["value"] == "flower" and card["can_resolve"]
+        pin = card["summary"]
+        command = dict(
+            expected_version=pin["version"],
+            expected_fingerprint=pin["fingerprint"],
+            field="idea",
+            value=value,
+            source=pin["facts"][0]["source"],
+        )
+        accepted = await u.intake_owner(BA, cid, operation, "field-decision", command)
+    async with owner_unit(h) as u:
+        current = await u.escalation_read(eid)
+        assert await u.intake_owner(BA, cid, operation, "field-decision", command) == (
+            accepted | {"outcome": "REPLAY"}
+        )
+    assert current["escalation_id"] == card["escalation_id"] == str(eid)
+    assert current["status"] == "PENDING" and current["version"] == "1"
+    assert current["assignee_user_account_id"] == card["assignee_user_account_id"] == str(UA)
+    assert current["summary_current"] and current["can_resolve"]
+    assert [(f["status"], f["value"]) for f in current["summary"]["facts"]] == [
+        ("owner-confirmed", value)
+    ]
+    assert (
+        len(await query(h, "SELECT id FROM app.escalations WHERE conversation_id=:c", c=cid)) == 1
+    )
+    stale = body(row, answer="Synthetic internal decision")
+    with pytest.raises(EscalationError) as error:
+        await decide(h, row, "RESOLVE", "obsolete-decision", stale)
+    assert error.value.code == EscalationCode.STALE_STATE
+    fresh = stale.model_copy(
+        update={"expected_context_version": current["current_context"]["context_version"]}
+    )
+    result = await decide(h, row, "RESOLVE", "current-decision", fresh)
+    replay = await decide(h, row, "RESOLVE", "current-decision", fresh)
+    assert result["code"] == "ACCEPTED" and replay == (result | {"code": "REPLAY"})
+    async with owner_unit(h) as u:
+        final = await u.escalation_read(eid)
+    assert final["status"] == "RESOLVED" and final["version"] == "2"
 
 
-async def next_turn(h, worker, text_value):
-    _, _, cid = await incoming(h, next(COUNTER), **dict(h.intake_scope, text=text_value))
+async def queue_turn(h, text_value):
+    field = "value" if h.intake_scope.get("provider") == "TELEGRAM" else "text"
+    _, _, cid = await incoming(h, next(COUNTER), **(h.intake_scope | {field: text_value}))
     turn = (
         await query(
             h,
@@ -232,8 +283,11 @@ async def next_turn(h, worker, text_value):
             r=sealed.turn_revision,
         )
     )[0]["id"]
-    source = await claim_job(h, job)
-    return await run_turn(h, worker, source)
+    return await claim_job(h, job)
+
+
+async def next_turn(h, worker, text_value):
+    return await run_turn(h, worker, await queue_turn(h, text_value))
 
 
 async def summary(h, cid):
@@ -295,7 +349,15 @@ async def prepared_output(h):
     run = await database.prepare(
         claim, worker.ai.config, deadline=datetime.now(UTC) + timedelta(seconds=30)
     )
-    assert await database.portfolio_query(claim, run) is not None
+    first = await database.portfolio_query(claim, run)
+    assert first is not None and first.knowledge.status == first.portfolio.status == "EMPTY"
+    assert await database.portfolio_query(claim, run) == first
+    assert (
+        await query(
+            h, "SELECT 1 FROM platform.knowledge_embedding_calls WHERE run_id=:id", id=run.run_id
+        )
+        == []
+    )
     run = await database.prepare(claim, worker.ai.config, deadline=run.deadline)
     budget = Budget(
         calls_used=1,
@@ -386,13 +448,30 @@ async def test_human_rejects_ai_candidates_and_stale_owner_confirmation(intake_p
     assert (await summary(h, cid))["facts"] == []
 
 
-async def test_publish_invalidates_projection_and_pending_intake_question_without_confirming_fields(
+async def test_compatible_publish_and_rollback_retain_fact_while_old_card_stays_stale(
     intake_pg,
 ):
     h = intake_pg
     cid, _, _, _, delivery = await application(h, {"idea": "flower"}, category="COVER_UP")
     async with owner_unit(h) as u:
+        card = await u.escalation_read(delivery["escalation_id"])
+        assert card["summary_current"]
+        current = card["summary"]
+        await u.intake_owner(
+            BA,
+            cid,
+            "CONFIRM",
+            "confirm-before-publish",
+            {
+                "expected_version": current["version"],
+                "expected_fingerprint": current["fingerprint"],
+                "field": "idea",
+                "value": "flower",
+                "source": current["facts"][0]["source"],
+            },
+        )
         before = await u.escalation_read(delivery["escalation_id"])
+        release = (await u.intake_owner(BA, cid, "READ", "", {}))["release_id"]
         await u.configuration_command(
             BA, "EDIT", str(uuid4()), {"expected_draft_version": "1", "bundle": intake_bundle()}
         )
@@ -411,6 +490,31 @@ async def test_publish_invalidates_projection_and_pending_intake_question_withou
         and not card["can_resolve"]
         and card["validity"] == "SOURCE_CHANGED"
     )
+    stable = before["summary"]["facts"]
+    assert len(stable) == 1 and stable[0]["status"] == "owner-confirmed"
+    published = await summary(h, cid)
+    assert published["facts"] == stable and published["release_id"] != release
+    async with owner_unit(h) as u:
+        await u.configuration_command(
+            BA,
+            "ROLLBACK",
+            str(uuid4()),
+            {"release_id": release, "expected_activation_version": "2"},
+        )
+    rolled = await summary(h, cid)
+    assert rolled["release_id"] == release and rolled["facts"] == stable
+    async with owner_unit(h) as u:
+        incompatible = intake_bundle()
+        incompatible["services"][0]["intake_fields"] = []
+        await u.configuration_command(
+            BA, "EDIT", str(uuid4()), {"expected_draft_version": "2", "bundle": incompatible}
+        )
+        await u.configuration_command(
+            BA,
+            "PUBLISH",
+            str(uuid4()),
+            {"expected_draft_version": "3", "expected_activation_version": "3"},
+        )
     assert (await summary(h, cid))["facts"] == []
 
 
@@ -469,3 +573,65 @@ async def test_actual_material_mutation_removes_cached_fact_and_never_resurrects
             != fact["source"]["source_version"]
         )
     assert len(model.requests) == 1
+
+
+async def test_pending_card_source_change_refuses_old_owner_command_and_hides_summary(intake_pg):
+    from asm.intake.errors import IntakeError
+    from test_m3_1_provenance_postgres import process, raw
+    from test_m3_2_escalations_postgres import decide
+
+    h = intake_pg
+    cid, _, _, _, delivery = await application(
+        h, {"idea": "flower"}, category="COVER_UP", telegram=True
+    )
+    eid = delivery["escalation_id"]
+    e = (await query(h, "SELECT * FROM app.escalations WHERE id=:id", id=eid))[0]
+    async with owner_unit(h) as u:
+        card = await u.escalation_read(eid)
+    initial = card["summary"]
+    fact = initial["facts"][0]
+    msg = (
+        await query(
+            h,
+            "SELECT provider_message_id,provider_chat_id FROM app.messages WHERE id=:id",
+            id=UUID(fact["source"]["message_id"]),
+        )
+    )[0]
+    _, _, changed = await process(
+        h,
+        raw(
+            900000 + next(COUNTER),
+            int(msg["provider_message_id"]),
+            kind="DELETE",
+            chat=msg["provider_chat_id"],
+            sender=msg["provider_chat_id"],
+            date=40,
+        ),
+    )
+    assert changed.code == "MATERIAL_PROCESSED"
+    with pytest.raises(IntakeError) as stale:
+        async with owner_unit(h) as u:
+            await u.intake_owner(
+                BA,
+                cid,
+                "CONFIRM",
+                "old-source-confirm",
+                {
+                    "expected_version": initial["version"],
+                    "expected_fingerprint": initial["fingerprint"],
+                    "field": "idea",
+                    "value": "flower",
+                    "source": fact["source"],
+                },
+            )
+    assert stale.value.code == "STALE_STATE"
+    with pytest.raises(EscalationError) as invalid:
+        await decide(h, e, "RESOLVE", "old-source-decision")
+    assert invalid.value.code in {EscalationCode.ESCALATION_FINAL, EscalationCode.STALE_STATE}
+    async with owner_unit(h) as u:
+        revoked = await u.escalation_read(eid)
+    assert (
+        not revoked["summary_current"] and revoked["summary"] is None and not revoked["can_resolve"]
+    )
+    assert revoked["escalation_id"] == str(eid)
+    assert (await summary(h, cid))["facts"] == []

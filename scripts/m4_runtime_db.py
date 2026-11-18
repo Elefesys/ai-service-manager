@@ -200,6 +200,78 @@ M5_INTAKE_PATHS = {
     "tests/test_tenancy_postgres.py",
 }
 
+# C0's prepared M5.3B branch and the complete write set from its assignment.
+M5_V7_FIX_BASE = "c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba"
+M5_V7_FIX_TREE = "11c987fb12e4f88d27da3737911c468d520269b8"
+M5_V7_FIX_ASSIGNMENT = "ba80e2500e56f45059c89eda0127362ffbfe1464"
+M5_V7_FIX_ASSIGNMENT_TREE = "930c174f98015a1a706e033a8ea7b416b72acaf1"
+M5_V7_FIX_BRANCH = "c1/m5-3b-v7-fixes-r1"
+M5_V7_FIX_DOCS = M5_INTAKE_C0_DOCS | {"docs/tasks/M5_HANDOFF.md"}
+M5_V7_FIX_PATHS = M5_V7_FIX_DOCS | {
+    "backend/src/asm/ai/agent.py",
+    "backend/src/asm/ai/context.py",
+    "backend/src/asm/ai/contracts.py",
+    "backend/src/asm/ai/database.py",
+    "backend/src/asm/ai/intake.py",
+    "backend/src/asm/ai/portfolio.py",
+    "backend/src/asm/ai/portfolio_delivery.py",
+    "backend/src/asm/ai/runtime.py",
+    "backend/src/asm/ai/runtime_contracts.py",
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/intake/models.py",
+    "backend/src/asm/intake/projection.py",
+    "backend/src/asm/intake/repository.py",
+    "backend/src/asm/intake/service.py",
+    "backend/src/asm/intake/templates.py",
+    "backend/src/asm/intake/validation.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "frontend/e2e/configuration.spec.ts",
+    "frontend/e2e/intake-duration.spec.ts",
+    "migrations/versions/0024_intake_v7_repair.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_intake_fixtures.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_delivery_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/test_foundation.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake.py",
+    "tests/test_m5_intake_api_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_postgres.py",
+    "tests/test_m5_intake_runtime.py",
+    "tests/test_m5_intake_v7_integration_postgres.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
+
 BASE = "6851b8f1c12b50cf0051353f29a41cf89c94a280"
 BASE_TREE = "ffed6f5c7560d080baa672d50850c56eba4060ba"
 BRANCH = "c3/m4-precommit-rights-r1"
@@ -968,8 +1040,11 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    v7_fix = value.get("branch") == M5_V7_FIX_BRANCH
     intake = value.get("branch") == M5_INTAKE_BRANCH
     delivery = value.get("branch") == M5_DELIVERY_BRANCH
+    if v7_fix:
+        keys.update({"v7_fix_assignment", "v7_fix_candidate"})
     if intake:
         keys.add("intake_assignment")
         keys.add("intake_scope_amendment")
@@ -977,6 +1052,22 @@ def source_tree_from_evidence(path=None):
         keys.add("scope_amendment")
         keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    if v7_fix:
+        require(
+            value["v7_fix_assignment"] == v7_fix_assignment_proof(),
+            "SOURCE_IDENTITY_V7_FIX_ASSIGNMENT",
+        )
+        candidate = value["v7_fix_candidate"]
+        require(
+            type(candidate) is dict
+            and set(candidate) == {"sha", "tree", "merge_parents"}
+            and type(candidate["sha"]) is str
+            and re.fullmatch(r"[0-9a-f]{40}", candidate["sha"])
+            and candidate["sha"] not in (M5_V7_FIX_BASE, M5_V7_FIX_ASSIGNMENT, value["source"])
+            and candidate["tree"] == value["tree"]
+            and candidate["merge_parents"] == [M5_V7_FIX_BASE, candidate["sha"]],
+            "SOURCE_IDENTITY_V7_FIX_CANDIDATE",
+        )
     if intake:
         require(
             value["intake_assignment"] == intake_assignment_proof(),
@@ -1006,7 +1097,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M5_INTAKE_BASE, M5_INTAKE_TREE)
+        (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
+        if v7_fix
+        else (M5_INTAKE_BASE, M5_INTAKE_TREE)
         if intake
         else (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
         if delivery
@@ -1065,7 +1158,7 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
-            or intake
+            or (intake or v7_fix)
             and value["event"] in {"pull_request", "push"}
             or delivery
             and value["event"] in {"pull_request", "push"}
@@ -1092,7 +1185,9 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if intake:
+    if v7_fix:
+        require(M5_V7_FIX_DOCS <= set(paths) <= M5_V7_FIX_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif intake:
         require(set(paths) <= M5_INTAKE_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif delivery:
         require(set(paths) <= M5_DELIVERY_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -1537,6 +1632,115 @@ def root_path():
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
 
 
+def v7_fix_assignment_proof():
+    return {
+        "sha": M5_V7_FIX_ASSIGNMENT,
+        "tree": M5_V7_FIX_ASSIGNMENT_TREE,
+        "parent": M5_V7_FIX_BASE,
+        "paths": sorted(M5_V7_FIX_DOCS),
+    }
+
+
+def commit_parents(revision):
+    headers = capture(["git", "cat-file", "commit", revision]).split("\n\n", 1)[0]
+    return [
+        line.removeprefix("parent ") for line in headers.splitlines() if line.startswith("parent ")
+    ]
+
+
+def v7_fix_event(event):
+    if event.get("head_ref") == M5_V7_FIX_BRANCH:
+        return True
+    if event["ref"] != "refs/heads/main" or event["head"] == M5_V7_FIX_BASE:
+        return False
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", M5_V7_FIX_BASE, "HEAD"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    require(result.returncode in (0, 1, 128), "V7_FIX_SOURCE_ANCESTRY")
+    return result.returncode == 0
+
+
+def v7_fix_candidate(event):
+    require(
+        event["event"] == "pull_request"
+        and event.get("head_ref") == M5_V7_FIX_BRANCH
+        and event.get("base_sha") == M5_V7_FIX_BASE
+        or event["event"] == "push"
+        and event["ref"] == "refs/heads/main",
+        "V7_FIX_EVENT",
+    )
+    parents = commit_parents("HEAD")
+    require(len(parents) == 2 and parents[0] == M5_V7_FIX_BASE, "V7_FIX_MERGE_PARENTS")
+    candidate = parents[1]
+    if event["event"] == "pull_request":
+        require(candidate == event["head_sha"], "V7_FIX_MERGE_CANDIDATE")
+    require(
+        candidate != M5_V7_FIX_ASSIGNMENT
+        and capture(["git", "merge-base", M5_V7_FIX_ASSIGNMENT, candidate]) == M5_V7_FIX_ASSIGNMENT,
+        "V7_FIX_ASSIGNMENT_ANCESTRY",
+    )
+    candidate_tree = capture(["git", "rev-parse", candidate + "^{tree}"])
+    require(candidate_tree == event["tree"], "V7_FIX_MERGE_TREE")
+    return {"sha": candidate, "tree": candidate_tree, "merge_parents": parents}
+
+
+def admit_v7_fix_source(event, manifest, evidence):
+    require(event["attempt"] == "1", "RUN_ATTEMPT")
+    require(
+        capture(["git", "rev-parse", M5_V7_FIX_BASE + "^{tree}"]) == M5_V7_FIX_TREE,
+        "V7_FIX_BASE_TREE",
+    )
+    require(
+        capture(["git", "rev-parse", M5_V7_FIX_ASSIGNMENT + "^{tree}"])
+        == M5_V7_FIX_ASSIGNMENT_TREE,
+        "V7_FIX_ASSIGNMENT_TREE",
+    )
+    require(commit_parents(M5_V7_FIX_ASSIGNMENT) == [M5_V7_FIX_BASE], "V7_FIX_ASSIGNMENT_PARENT")
+    assignment = v7_fix_assignment_proof()
+    require(
+        capture(["git", "diff", "--name-only", M5_V7_FIX_BASE, M5_V7_FIX_ASSIGNMENT]).splitlines()
+        == assignment["paths"],
+        "V7_FIX_ASSIGNMENT_PATHS",
+    )
+    candidate = v7_fix_candidate(event)
+    require(
+        not capture(
+            [
+                "git",
+                "diff",
+                "--name-only",
+                M5_V7_FIX_ASSIGNMENT,
+                candidate["sha"],
+                "--",
+                *sorted(M5_INTAKE_C0_DOCS),
+            ]
+        ),
+        "V7_FIX_C0_DOCS_IMMUTABLE",
+    )
+    paths = capture(["git", "diff", "--name-only", M5_V7_FIX_BASE, "HEAD"]).splitlines()
+    require(M5_V7_FIX_DOCS <= set(paths) <= M5_V7_FIX_PATHS, "V7_FIX_WRITE_SET")
+    require(
+        not capture(["git", "status", "--porcelain", "--untracked-files=all"]),
+        "V7_FIX_CLEAN_SOURCE",
+    )
+    write(
+        evidence / "source-admission.json",
+        {
+            "base": M5_V7_FIX_BASE,
+            "base_tree": M5_V7_FIX_TREE,
+            "source": event["head"],
+            "tree": event["tree"],
+            "paths": paths,
+            "result": "PASS",
+            "v7_fix_assignment": assignment,
+            "v7_fix_candidate": candidate,
+        },
+    )
+    return event, manifest
+
+
 def intake_assignment_proof():
     return {
         "sha": M5_INTAKE_ASSIGNMENT,
@@ -1781,6 +1985,8 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    if v7_fix_event(event):
+        return admit_v7_fix_source(event, manifest, evidence)
     if intake_event(event):
         return admit_intake_source(event, manifest, evidence)
     require(event["attempt"] == "1", "RUN_ATTEMPT")
@@ -2214,7 +2420,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.intake_schema_profile()"
+        "platform.intake_v7_schema_profile()"
+        if revision == "0024"
+        else "platform.intake_schema_profile()"
         if revision == "0023"
         else "platform.portfolio_delivery_schema_profile()"
         if revision == "0022"
@@ -2236,6 +2444,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0023":
+        profile_pin = "4732ea9f9b0039b8616daf081f78e0ce4731a63884605eb88fe22bfb5851179d"
+        body_pin = "87197672ba2e5476ec2657e5c1d96c49ef78eff6892c26258f0fb3eb8c07e899"
     if revision == "0022":
         profile_pin = "5e4191f74a2eba509085072acc5d4fc62366207d4b434a33a770d504273a2bc7"
         body_pin = "499d3b25887b3dd50f0a2f8f7e7b324d8cca226a270a3dd99e5506e376733bf0"
@@ -2298,14 +2509,14 @@ def stock_catalog():
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
         require(
-            revision in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023"},
+            revision in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"},
             "CATALOG_REVISION",
         )
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision in {"0017", "0018", "0019", "0020", "0021", "0022", "0023"}:
+        if revision in {"0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"}:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -2352,7 +2563,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.intake_schema_profile()"
+            "platform.intake_v7_schema_profile()"
+            if revision == "0024"
+            else "platform.intake_schema_profile()"
             if revision == "0023"
             else "platform.portfolio_delivery_schema_profile()"
             if revision == "0022"
@@ -2763,7 +2976,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            intake_event(event)
+            v7_fix_event(event)
+            or intake_event(event)
             or delivery_event(event)
             or foundation_budget_event(event)
             or portfolio_event(event)
@@ -2790,26 +3004,36 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    intake = intake_event(event)
-    delivery = not intake and delivery_event(event)
-    foundation_budget = not (intake or delivery) and foundation_budget_event(event)
-    portfolio = not (intake or delivery or foundation_budget) and portfolio_event(event)
-    search = not (intake or delivery or foundation_budget or portfolio) and search_event(event)
+    v7_fix = v7_fix_event(event)
+    intake = not v7_fix and intake_event(event)
+    intake_carrier = intake or v7_fix
+    delivery = not intake_carrier and delivery_event(event)
+    foundation_budget = not (intake_carrier or delivery) and foundation_budget_event(event)
+    portfolio = not (intake_carrier or delivery or foundation_budget) and portfolio_event(event)
+    search = not (intake_carrier or delivery or foundation_budget or portfolio) and search_event(
+        event
+    )
     capability = not (
-        intake or delivery or foundation_budget or portfolio or search
+        intake_carrier or delivery or foundation_budget or portfolio or search
     ) and capability_event(event)
     knowledge = not (
-        intake or delivery or foundation_budget or portfolio or search or capability
+        intake_carrier or delivery or foundation_budget or portfolio or search or capability
     ) and knowledge_event(event)
     configuration = not (
-        intake or delivery or foundation_budget or portfolio or search or capability or knowledge
+        intake_carrier
+        or delivery
+        or foundation_budget
+        or portfolio
+        or search
+        or capability
+        or knowledge
     ) and configuration_event(event)
     require(
         sql_test_budget_seconds == 600
         or sql_test_budget_seconds == 900
         and mode == "runtime"
         and (
-            intake
+            intake_carrier
             or delivery
             or foundation_budget
             or portfolio
@@ -2820,7 +3044,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M5_INTAKE_BASE, M5_INTAKE_TREE)
+        (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
+        if v7_fix
+        else (M5_INTAKE_BASE, M5_INTAKE_TREE)
         if intake
         else (M5_DELIVERY_BASE, M5_DELIVERY_TREE)
         if delivery
@@ -2855,6 +3081,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M5_V7_FIX_BRANCH
+            if v7_fix
             else M5_INTAKE_BRANCH
             if intake
             else M5_DELIVERY_BRANCH
@@ -2876,6 +3104,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if v7_fix:
+        source["v7_fix_assignment"] = v7_fix_assignment_proof()
+        source["v7_fix_candidate"] = v7_fix_candidate(event)
     if intake:
         source["intake_assignment"] = intake_assignment_proof()
         source["intake_scope_amendment"] = intake_scope_amendment_proof()
@@ -3039,7 +3270,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
             if module == "preflight":
-                current_revision = "0023" if intake else "0022" if delivery else "0021"
+                current_revision = (
+                    "0024" if v7_fix else "0023" if intake else "0022" if delivery else "0021"
+                )
                 sql_phase(
                     group,
                     "schema-" + current_revision,

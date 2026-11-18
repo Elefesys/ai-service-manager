@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -129,11 +130,20 @@ class PhotoModel(FakeAdapter):
 
 @pytest_asyncio.fixture
 async def photo_pg(portfolio_runtime_pg, request):
-    h = portfolio_runtime_pg
-    h.photo_store = PhotoBytes(h, actual=getattr(request, "param", "controlled") == "s3")
+    async with published_photo(
+        portfolio_runtime_pg, actual=getattr(request, "param", "controlled") == "s3"
+    ) as h:
+        yield h
+
+
+@asynccontextmanager
+async def published_photo(h, *, actual=False, bundle=None):
+    h.photo_store = PhotoBytes(h, actual=actual)
     h.photo_workers = []
     try:
-        _, _, h.photo_embeddings = await publication(h, ["Synthetic flower preparation"])
+        _, _, h.photo_embeddings = await publication(
+            h, ["Synthetic flower preparation"], bundle=bundle
+        )
         h.photo_state = await publish_portfolio(h, h.photo_embeddings)
         source = (
             await query(

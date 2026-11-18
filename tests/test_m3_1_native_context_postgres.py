@@ -328,7 +328,9 @@ async def policy(
     binding["owner_user_id"] = state[0]["owner_user_id"] if state else None
     revision = getattr(h, "schema_revision", "0013")
     capability = (
-        "intake_schema_profile"
+        "intake_v7_schema_profile"
+        if revision == "0024"
+        else "intake_schema_profile"
         if revision == "0023"
         else "portfolio_delivery_schema_profile"
         if revision == "0022"

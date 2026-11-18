@@ -221,6 +221,18 @@ class PortfolioDeliveryConversationAgent(PortfolioConversationAgent):
     def _project(
         self, snapshot: object, binding: ContextBinding
     ) -> PreparedPortfolioDeliveryContext:
+        context = self._delivery_projection(snapshot, binding)
+        self._bind_shown(context.view)
+        return context
+
+    def _bind_shown(self, view: PortfolioDeliveryContextView) -> None:
+        if self.shown is not None and view != self.shown:
+            raise KnowledgeFailure("KNOWLEDGE_STALE")
+        self.shown = view
+
+    def _delivery_projection(
+        self, snapshot: object, binding: ContextBinding
+    ) -> PreparedPortfolioDeliveryContext:
         base = super()._project(snapshot, binding)
         conversation, business = base.view.conversation, base.view.business
         while True:
@@ -237,9 +249,6 @@ class PortfolioDeliveryConversationAgent(PortfolioConversationAgent):
                 <= self.portfolio_builder.limits.max_bytes
             ):
                 view.messages()
-                if self.shown is not None and view != self.shown:
-                    raise KnowledgeFailure("KNOWLEDGE_STALE")
-                self.shown = view
                 return PreparedPortfolioDeliveryContext(
                     binding=base.binding,
                     snapshot_fingerprint=base.snapshot_fingerprint,

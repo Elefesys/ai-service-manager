@@ -77,6 +77,8 @@ tests/{test_m5_configuration_postgres,test_m5_intake_migrations,test_m5_knowledg
 
 Режим — synthetic LOCAL/TEST, default OFF/FAKE/EVAL_ONLY. Прежние UNKNOWN/NOT_PROVEN, holds 11.75 RUB, подтверждённые 0.50229415 RUB, receiver ACK/fence, полный live HUMAN/Resume и ограничение `MEDIA_REPLACED_UNAVAILABLE` остаются записанными в §7. Новых paid/model/VM/live Telegram или реальных клиентских данных это поручение не допускает. Следующее действие владельца — передать C1 ссылку на этот CURRENT.
 
+**Возврат C1.** Кандидат включает исправления C8-M5-01–04, миграцию 0024 и синтетические проверки K11/K12. Идентичность кандидата и результаты проверок собраны в Draft PR ветки задания для повторной проверки C8.
+
 ## 1. Проверяемый результат всего этапа
 
 Владелец может завести услуги и подтверждённые знания, проверить изменения и
