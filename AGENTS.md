@@ -51,17 +51,20 @@ M5.2D/PR52 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST. Accepted main
 `220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
 `d15f9a75346ab881449010745cbe0216081b78cf` совпадает с reviewed candidate.
 Post-merge CI43894664260 — 12/12 SUCCESS, attempt 1; прежний failed run
-сохраняет исходный результат. Приёмка и exact evidence — в CURRENT M5_HANDOFF.
-Единственная текущая выдача — C1-M5.3A-INTAKE-DURATION-R1, ведущий C1;
-C2/C4/C5 помогают последовательно, C3 консультирует по existing guards.
-Результат: предварительная сводка с источниками и исправлениями, один актуальный
-owner handoff, owner-only DurationCase. C6 HOLD; M5.3B/M6 не выданы.
-Только synthetic LOCAL/TEST; default OFF/FAKE/EVAL_ONLY и прежние реальные
-data/route ограничения сохраняются. Новые paid/VM/live действия не разрешены.
-Начать от docs-only assignment в c1/m5-3a-intake-duration-r1 с сохранением
-ancestry; finite paths и порядок checkpoint/PR/CI закреплены в M5_HANDOFF.
-Original UNKNOWN/diagnostic receipts, holds и real-client/data restrictions
-сохраняются; ручная приёмка evidence не переписывает результат старого probe.
+сохраняет исходный результат. Ссылка на post-merge CI M5.2D есть в README.
+M5.3A/PR53 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST. Accepted main
+`c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
+`11c987fb12e4f88d27da3737911c468d520269b8`; post-merge CI44018352191 —
+12/12 SUCCESS, attempt1. Preliminary intake, owner Action Center и private
+DurationCase интегрированы в пределах проверенных сценариев. Общая приёмка M5 — CHANGES_REQUESTED.
+Единственная активная задача — C1-M5.3B-V7-FIX-R1. C1 ведёт один PR по четырём
+замечаниям C8 к диалогу v7 и проверяет историю, актуальность источников и одну
+отправку фото сквозным тестом. C2 консультирует по SQL, C4 по v7, C5 по browser
+при необходимости. Затем C8 проверяет исправленный кандидат. C6 HOLD, M6 не выдан.
+Точные base, разрешённые файлы и условия возврата закреплены в CURRENT M5_HANDOFF.
+Работа ведётся в synthetic LOCAL/TEST с default OFF/FAKE/EVAL_ONLY.
+Исходные UNKNOWN, receipts, holds, ограничения реальных данных и live-проверок
+сохраняются.
 
 M5 делает подтверждённые настройки и знания полезными в разговоре, затем Vision,
 портфолио и предварительный intake. Не строить universal workflow engine,
@@ -74,9 +77,8 @@ OnboardingAgent, массовый импорт чатов, генерацию и
 он не разрешает альбомы, произвольные media sends или реальные TEST отправки.
 
 C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
-Current migration head 0022; applied 0001–0022 immutable.
-Для M5.3A выделена только 0023/down_revision 0022; C1/C2 до SQL подтверждают
-актуальность слота. До реализации фактический head остаётся 0022.
+На принятом main текущая миграция 0023. Миграции 0001–0023 неизменяемы.
+Для исправления C0 выделяет только 0024 с родителем 0023.
 Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
 При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
 не размножать длинные receipts между документами.
