@@ -11,6 +11,137 @@ C0 принимает итог и готовит следующую выдачу
 консультации по конкретным findings, без параллельных реализаций. C6 HOLD.
 M5.1A–M5.3A интегрированы; M5 целиком пока не принят, M6 не выдан.
 
+### Возврат C8 · 2026-11-18 · CHANGES_REQUESTED
+
+**M5 целиком требует доработки.** В v7 два независимых отказа в обычной
+цепочке с опубликованным портфолио. Прогресс intake теряется в нескольких штатных переходах,
+а подтверждение поля лишает мастера доступного решения по открытому вопросу. Пределы проверенных частей указаны в §4.
+
+Проверен application SHA `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
+`11c987fb12e4f88d27da3737911c468d520269b8`. Parent этого receipt —
+`3ba774da3bf61b57062098ea5e0470b1402eb70d`, tree
+`6899534d1c4b2b7ed68beab090ccb71e497dd759`. Git подтвердил один parent
+assignment и ровно пять перечисленных ниже paths в его diff. Receipt изменяет
+только этот файл в `c8/m5-3b-acceptance-r1`. Application проверялся в
+отдельном чистом detached checkout. [push/main 44018352191](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191) и [PR #53 CI 44009077342](https://github.com/Elefesys/ai-service-manager/actions/runs/44009077342) — оба 12/12, attempt 1.
+Сверены SHA-256/CRC четырёх post-merge ZIP, 480 Git blobs/paths/modes,
+runtime и native source manifests, 211 записей runtime manifest и
+конкретные call outcomes. [Core](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191/artifacts/14302722361), [Runtime](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191/artifacts/14299928899), [Browser](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191/artifacts/14299958828), [Native](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191/artifacts/14300611411).
+
+1. **C8-M5-01 · P1 · v7 не доходит до модели с непустым индексом.** Для
+   непустого запроса и опубликованного embedding build ожидается резервирование
+   одного shared QUERY в сессии `SYNTHETIC_INTAKE_V1`. PREPARE требует этот
+   профиль, а QUERY вызывает guard, который допускает только
+   `SYNTHETIC_PORTFOLIO_PHOTO_V1`. Установленный SQL возвращает
+   `SESSION_NOT_ALLOWED` до резерва. Пустой индекс уходит в ранний `REPLAY`,
+   поэтому штатный v7 intake case проходит. Минимальная правка — вызывать
+   соответствующий v7 guard при QUERY с прежней проверкой scope и бюджета.
+   [PREPARE](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L3116), [QUERY](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L4090), [guard v6](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0022_portfolio_delivery.py#L7641), [fixture v7](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L86).
+2. **C8-M5-02 · P1 · стабильный READ останавливает v7.** При первом
+   рендере v7 сохраняет `IntakeContextView` в `self.shown`. При READ
+   родитель сравнивает его с `PortfolioDeliveryContextView` и поднимает
+   `KNOWLEDGE_STALE` при неизменных данных. Целевой FakeAdapter прогон
+   дошёл до READ и дал `STOP / KNOWLEDGE_STALE`, 1 model call, 0 attestation,
+   0 follow-up. Контроль v6 дошёл до photo candidate с 2 calls и 1 attestation.
+   Минимальная правка — сравнивать одинаковые представления, закрепить полный
+   v7 context для READ и сохранить проверку точного ref и digest перед COMMIT.
+   [v7 projection](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/intake.py#L60), [parent equality](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/portfolio_delivery.py#L221), [shared READ](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/agent.py#L307).
+3. **C8-M5-03 · P2 · текущие факты и статус подтверждения теряются.**
+   При публикации того же service/template с неизменными сообщениями
+   меняется release/activation и owner read возвращает `facts=[]`. Именно
+   это утверждает существующий PG тест. При `AMBIGUOUS` Python и SQL
+   очищают факты незавершённого запроса до уточнения. Повтор того же
+   значения в новом сообщении снимает `owner-confirmed` и может погасить
+   неразрешённый конфликт. Последние два перехода воспроизведены вызовом
+   штатного reducer. Требование §3 оставляет известное известным, пока источник
+   и привязка факта действительны. Минимальная правка — заново проверить service,
+   template и provenance для каждого сохраняемого факта. При неоднозначности
+   ждать подтверждённой смены запроса, при повторе сохранить подтверждение и
+   конфликт до явной коррекции. Старый run, устаревший источник и send admission
+   по-прежнему должны отклоняться.
+   [pin и фильтр](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L5908), [commit факта](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L6134), [reducer](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/intake/projection.py#L18), [assertion после PUBLISH](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L389).
+4. **C8-M5-04 · P2 · подтверждение поля делает действующий вопрос мастеру
+   недоступным.** После COVER_UP владелец может подтвердить поле через Inbox.
+   Это изменяет version intake, которую хеширует Action Center. Даже при
+   неизменной теме, release и источниках карточка становится `SOURCE_CHANGED`,
+   без summary и RESOLVE. Она остаётся PENDING и блокирует новый AI run до
+   отмены владельцем или expiry. Browser проверяет подтверждение поля до
+   создания вопроса. Минимальная правка — при подтверждении поля для той же
+   актуальной темы атомарно обновлять связку summary/pin, сохраняя CAS решения
+   и единственный PENDING. Изменение источника должно по-прежнему запрещать
+   решение по старой карточке.
+   [owner version](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L6396), [freshness](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L6485), [resolve guard](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L5743), [PENDING guard](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0022_portfolio_delivery.py#L6184), [порядок browser case](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/e2e/intake-duration.spec.ts#L38).
+
+**Проверка исходников и локальный прогон.** В чистом checkout
+`git rev-parse HEAD HEAD^{tree}` совпал с SHA/tree выше. Для SQL-проверки
+прочитаны строковые определения через `python` и `ast.parse`, включая
+последний `REPLACEMENTS` в 0023 и исходный guard 0022. Утверждения сверили
+допустимый профиль PREPARE, выбор guard QUERY, рост intake version и поля
+хеша Action Center. Дефекты 01 и 04 установлены по исходникам. Отбрасывание
+фактов при publish подтверждено существующим PG assertion на проверенном tree.
+
+Временная проверка из checkout
+`PYTHONPATH=backend/src:tests PYTHONDONTWRITEBYTECODE=1 python ../repro_v7.py`
+использовала `v3_owner` из `tests/fixtures/m4_context_cases.json`,
+`FakeAdapter(("tools", photo_output))` и синтетический authority,
+который возвращал одинаковый snapshot, pinned views и один eligible ref.
+Утверждения — v6 candidate/2 calls/1 attestation, v7 STOP/1 call/0 attestation,
+после одинакового нового сообщения `owner-confirmed → client-stated`, при
+`AMBIGUOUS` `CLARIFY` с 0 фактов. Дополнительный K02 прогон отправил
+одинаковый user input двум изолированным v3 projections через один agent.
+Разные FAQ из опубликованных bundles дали разные replies, по 1 fake call.
+Прогон использовал установленный Python 3.12/Pydantic и подстановки imports
+неиспользуемых DB-модулей. Штатный `uv run --offline --locked --python
+/usr/bin/python3.13 --project . pytest --version` остановился на
+некэшированном Pillow. Docker/PostgreSQL в этом окружении отсутствовали.
+PostgreSQL, S3 и браузерные результаты в §4 взяты из существующего CI.
+
+<details>
+<summary>Повтор проверки READ через штатные synthetic fixtures</summary>
+
+Из чистого checkout application SHA с зависимостями из lockfile.
+Полный PostgreSQL для этой пробы не нужен.
+
+```bash
+PYTHONPATH=tests uv run --locked python - <<'PY'
+import asyncio
+import json
+from asm.ai.contracts import AdapterResponse, IntakeGatewayConfig
+from asm.ai.fake import FakeAdapter
+from asm.ai.intake import IntakeConversationAgent
+from m5_intake_fixtures import projection
+from test_m5_portfolio_delivery import fixture
+
+state = fixture()
+config = IntakeGatewayConfig.model_validate(state.config.model_dump() | {
+    "prompt_revision": "conversation_v7", "schema_revision": "conversation_result_v3"
+})
+result = state.photo.model_dump(mode="json")
+result["intake"] = dict(service_id=None, category="FAQ_ONLY", switch_request=False, facts=[])
+adapter = FakeAdapter(config.route, ("tools", AdapterResponse(kind="OUTPUT", output_json=json.dumps(result))))
+agent = IntakeConversationAgent(config, adapter, state.authority,
+                                delivery_eligible=state.eligible, **state.args)
+agent.intake = projection()
+outcome = asyncio.run(agent.run(state.old.binding, state.old.snapshot,
+                                run_id="c8-v7-read", deadline=state.old.deadline))
+assert (outcome.status, outcome.reason) == ("STOP", "KNOWLEDGE_STALE")
+assert len(adapter.requests) == 1 and not state.authority.attestations
+PY
+```
+
+</details>
+
+**Пробел, который проверяется вместе с исправлением.** Нужен один
+synthetic actual-PG worker case v7 с опубликованным непустым KB и MY_WORK,
+с разрешённым клиентским анализом, QUERY → MODEL → READ → FOLLOWUP →
+COMMIT → private read → SEND. Один контролируемый wire effect в
+положительном исходе. Целевые варианты проверяют revoke, edit/delete
+выбранного источника, HUMAN/Resume и свежие send rights после принятия
+результата. Проверить UNKNOWN/restart с нулём повторных вызовов. Отдельно
+сверить границу history intake в v7 по K12 и переход поля с действующим
+вопросом по C8-M5-04. Для неизменённого кандидата использованы имеющиеся
+CI runs.
+
 ### Принятый main и завершение M5.3A
 
 - PR #53 слит владельцем обычным merge commit.
@@ -392,27 +523,33 @@ REVIEW/BLOCKED по точной причине, а не автоматичес�
 
 ## 4. Одна приёмочная матрица
 
-| ID | Сценарий / обязательный результат | Доказательство |
-|---|---|---|
-| K01 | Draft изолирован; publish/rollback атомарны; edit/publish replay и конфликт корректны | PG + owner API |
-| K02 | Один вопрос даёт разные подтверждённые ответы у разных бизнесов; нет if workspace_id | Runtime + fixtures |
-| K03 | Missing/conflicting knowledge → уточнение/handoff; trace содержит реальные sources | Runtime/eval |
-| K04 | Publish/revoke во время run не выпускает старый ещё не отправленный ответ; UNKNOWN не повторяется | PG race + wire/restart |
-| K05 | Общие опубликованные знания/разрешённое портфолио Business доступны его клиентам; личные данные другого Client и недоступные Business/Workspace изолированы в search/context/media | PG runtime-role + API |
-| K06 | Compatible embedding build; failed rebuild не ломает active; semantic relevance и empty result | PG + разрешённый real embedding receipt |
-| K07 | Vision читает реальные доступные pixels; не угадывает scale/time/price; injection не управляет tools | Media tests + real synthetic Vision probe |
-| K08 | MY_WORK подтверждён; reference не становится портфолио; withdrawn asset не показывается | PG/S3 + UI |
-| K09 | Один разрешённый portfolio photo reply, guards/UNKNOWN/restart/no-resend; состояние видно | Controlled wire + browser; live отдельно |
-| K10 | Intake исправляем/прослеживаем; COVER_UP handoff; case duration не обещается клиенту | Runtime/eval + browser |
-| K11 | Владелец review/publish/revoke без SQL; draft ошибки понятны | Real browser |
-| K12 | HUMAN/Resume/currentness и старые source gates сохранены; all features одного accepted candidate | Штатный CI + scoped C8/C0 |
+Все ссылки на source в матрице закреплены на application SHA
+`c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`. **Core**, **Runtime**, **Browser** и **Native** — проверенные выше
+артефакты push/main `44018352191`, attempt 1. Core call outcomes
+сверены по `ci.log` и выборочно по nodeid/digest в `cases.jsonl`.
+Один сквозной v7 результат **не подтверждён**. Ниже связаны самостоятельные
+кейсы actual API/PG/browser и controlled transports.
 
-Исполнитель связывает соответствующие строки с конкретными assertions и результатом
-в PR; не создаёт ещё несколько независимых matrices/реестров. Число тестов не gate.
-Fixtures: два изолированных Workspace и минимум два Client внутри одного; варианты
-A fixed/fixed/fixed deposit, B configured formula/rule/percent, C owner/owner/NONE,
-D mixed/full payment. В M5 проверяются настройки и честные ограничения, не работа
-ещё отсутствующего pricing/payment engine. Не нужен полный декартов перебор.
+| ID | Сценарий / обязательный результат | Проверенная граница и вердикт C8 |
+|---|---|---|
+| K01 | Draft, explicit publish/rollback и replay | **PASS.** Core PG/owner API проверяет draft вне active, конкурентные publish 200/409, replay той же команды без новых записей, rollback с ростом activation. При ошибке валидации/записи и при отзыве исходника остаётся текущий допустимый набор. [API CAS](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_configuration_api_postgres.py#L148), [rollback и отзыв](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_configuration_postgres.py#L196), [атомарность поздней ошибки](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_configuration_postgres.py#L343) |
+| K02 | Один вопрос, разные подтверждённые ответы двух бизнесов | **PASS в synthetic scope.** Runtime actual PG закрепляет разные bundles Tattoo/Ceramics за разными Workspace/Business и один обычный source-backed reply. Локальная проба выше подтвердила разный FAQ reply для одинакового input в общем v3 agent. Выбор по trusted Business и publication pin. Live quality за пределом. [две проекции](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_postgres.py#L347), [ответ и один эффект](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_runtime_postgres.py#L111), [projection](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/knowledge.py#L72) |
+| K03 | Missing/conflict, уточнение/handoff и source trace | **CHANGES_REQUESTED для v7.** Core PG v4 проверяет точные source/revision/chunk refs без текста в durable trace и handoff при конфликте до top-four. Core PG v7 без индекса даёт следующий недостающий вопрос. С действующим индексом v7 останавливается до этого поведения по 01. [source refs](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_search_runtime_postgres.py#L245), [conflict](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_search_runtime_postgres.py#L327), [v7 clarify](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L184) |
+| K04 | Publish/revoke race, pending reply, UNKNOWN/restart | **PASS для проверенных v4–v6, GAP для v7 SEND.** Core PG сериализует publish/revoke, блокирует старый текст до send и хранит UNKNOWN/no-resend. Photo guard после потери authority до/после S3 GET даёт 0 wire effects. Core PG v7 проверяет edit/delete/revert видимых фактов. После ремонта 01/02 нужна v7 проверка от аттестации до send, включая race и restart. [publish/revoke](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_search_runtime_postgres.py#L825), [UNKNOWN](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_search_runtime_postgres.py#L579), [до/после GET](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_delivery_postgres.py#L123), [material versions](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L418) |
+| K05 | Общая публикация и изоляция другого Client/Business/Workspace | **PASS для межобъектной изоляции.** Runtime PG показывает двум разным Client одно опубликованное знание; чужой текст отсутствует в обоих model requests. Core PG отклоняет чужой intake source в том же и другом Workspace, два Client получают одну общую допустимую работу по отдельным intents. Owner лишается preview после S3 GET, чужой Business не добирается до GET. [client text](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_runtime_postgres.py#L148), [intake guard](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L313), [photo scopes](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_delivery_postgres.py#L341), [preview recheck](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_api_postgres.py#L564), [private S3](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_storage_postgres.py#L123) |
+| K06 | Compatible embeddings, active после сбоя, relevance и empty | **CHANGES_REQUESTED для v7.** Core PG подтвердил exact vector/keyword/empty, неудачный rebuild оставил активный release. Реальный исторический probe 3×1536/cosine/relevance принят ASSISTED_SYNTHETIC. V7 QUERY с непустым build отклоняется по 01. [PG retrieval](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_search_runtime_postgres.py#L287), [rebuild failure](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_knowledge_search_api_postgres.py#L597), [receipt PR48](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6876443802) |
+| K07 | Приватные pixels, UNKNOWN scale и границы полномочий | **PASS для synthetic Vision capability и v5 plumbing.** Core PG/S3 передаёт decodable pixels в MockTransport и закрепляет exact file/hash/analysis. Схема отвергает бизнесовые поля и tool output. Новейшее unavailable фото не подменяется старым ready. Три исторических synthetic samples включают изображение с текстом-инструкцией. Поля `price/time/eligibility` не устанавливаются Vision. Live client route остаётся OPEN. [S3 pixels](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_storage_postgres.py#L70), [guarded worker](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_runtime_postgres.py#L383), [schema/tool assertions](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_vision_pixels.py#L192), [unavailable](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_runtime_postgres.py#L670), [Vision receipt](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6876443802) |
+| K08 | Подтверждённая MY_WORK, reference и отзыв | **PASS.** Core PG исключает INSPIRATION из подтверждаемого MY_WORK и защищает origin. Совместная публикация содержит только подтверждённые revisions с show permission. Browser с actual private S3 проверяет owner upload/review/revoke/delete, а delivery journey — исчезновение preview отозванного источника. [origin](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_postgres.py#L301), [опубликованный build](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_postgres.py#L415), [private owner S3](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/e2e/portfolio.spec.ts#L111), [withdrawal](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/e2e/portfolio-delivery.spec.ts#L42) |
+| K09 | Одно фото, rights, restart, видимость статуса | **CHANGES_REQUESTED для v7.** Core v6 PG/S3 подтвердил оригинальные bytes и единственный Outbox/wire effect. Mock Telegram сделан через rights probe и final send probe, отказ даёт 0 sendPhoto. Потеря ACK и отмена после учтённого эффекта дают UNKNOWN без повтора. Browser отображает SENT/UNKNOWN. В v7 01 и 02 блокируют путь до этого. [один эффект](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_delivery_postgres.py#L47), [actual S3](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_delivery_postgres.py#L105), [dispatch recovery](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_delivery_postgres.py#L232), [cancel after effect](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_delivery_postgres.py#L282), [final rights](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_portfolio_delivery_postgres.py#L406), [delivery journey](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/e2e/portfolio-delivery.spec.ts#L42) |
+| K10 | Progressive intake/correction, COVER_UP, private DurationCase | **CHANGES_REQUESTED.** Core PG v7 проверяет последовательный вопрос, коррекцию с новым message id, CAS подтверждения и закрытую owner сводку COVER_UP. Browser проверяет source link/внутреннее решение/известные и неизвестные минуты. DurationCase остаётся owner-only, compare фильтрует отозванные assets и не отдаёт часы в model context. 03/04 нарушают сохранность фактов и обработку действующего вопроса. [correction](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L244), [handoff](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L207), [private case](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_duration_cases_postgres.py#L22), [owner journey](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/e2e/intake-duration.spec.ts#L13) |
+| K11 | Owner review/publish/revoke из Console, понятные ошибки | **PASS для операций UI, GAP для одного негативного browser case.** Chromium desktop/narrow проверил edit/preview/explicit publish и отзыв источника через реальные owner API. Невалидный draft даёт детерминированную ошибку и не меняет active в Core PG/API, UI показывает ошибки и блокирует publish в component test. Нет отдельного browser прогона невалидного draft на этом tree. [publish](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/e2e/configuration.spec.ts#L49), [ревью и отзыв](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/e2e/configuration.spec.ts#L115), [ошибка draft](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_configuration_api_postgres.py#L181), [component](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/frontend/src/ConfigurationPanel.test.tsx#L27) |
+| K12 | HUMAN/Resume, reconciliation, observation, source gates | **CHANGES_REQUESTED / GAP v7.** Native проверил reconcile+Resume, новое observation, stale work и source admission. Runtime сверил installed 0023 с source catalog. Core v7 отклоняет candidate после TAKEOVER и stale owner confirmation. Native carrier проверяет исторический профиль 0013. В v6 контроль прав и send также подтверждены на application tree. В v7 `intake_sources` выбирает VISIBLE inbound того же Client без сверки нового model payload с admitted snapshot/history policy. `OFF_UNUSED` даёт V2 без истории в ContextBuilder, а `IntakeContextView` добавляет отдельный список. На уровне source это различие требует явной проверки и ограничения свежими авторизованными материалами. Отдельная new-branch proof для resume/observation → READ → SEND остаётся открытой. [reconcile/Resume](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m3_1_native_context_postgres.py#L583), [v7 takeover](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_intake_postgres.py#L368), [intake sources](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/migrations/versions/0023_intake_duration.py#L5846), [V2 history boundary](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/context.py#L309), [v7 model projection](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/intake.py#L60) |
+
+Fixtures A/B прошли publish через одинаковый owner API. Режимы и неизвестные
+значения проверялись как configuration, с независимыми price/duration/deposit.
+`businesses.v1.json` содержит также C/D. Проведённые runtime journeys
+не покрывают каждый вариант с живым провайдером, pricing и payment engine
+выходят за рамки M5. [две конфигурации](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_configuration_api_postgres.py#L95), [независимые policies](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/test_m5_configuration.py#L13), [A–D fixtures](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/tests/fixtures/businesses.v1.json#L1).
 
 ## 5. Правила выдачи и инженерные ограничения
 
@@ -461,8 +598,61 @@ PR #45–#53 уже интегрированы. Общий review выполня
 
 ## 7. Передача M6
 
-M6 получает принятые service/intake/rule/release identifiers, source provenance,
-private Portfolio/DurationCase access и предварительные факты разговора.
-Он создаёт ServiceRequest/Assessment, утверждение цены/времени, QuoteAcceptance,
-Order/Session и owner decision, не заменяя их результатом Vision или похожим кейсом.
-Все OPEN live ограничения переносятся отдельным коротким списком.
+Использовать после решения C0 по §4. Ниже фактические контракты application
+`c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, на которых можно проектировать следующий срез.
+
+- `configuration` и owner API `/configuration` возвращают `ActiveProjection`
+  schema v1. `Service.id`, `Rule.id` и `Rule.service_id` принадлежат bundle
+  в рамках Business и immutable `release_id`. `draft_version` нужен для
+  EDIT/PUBLISH CAS. `activation_version` увеличивается при publish/rollback
+  и инвалидирующих операциях. Запрос к старому release не даёт текущей authority.
+  `tattoo_intake_v1` привязан к опубликованному списку field IDs и required,
+  включая optional `references`. Price/duration/deposit проверяются отдельно.
+  [bundle и policy IDs](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/configuration/models.py#L63), [release и CAS](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/configuration/models.py#L147), [template](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/intake/templates.py#L5).
+- `knowledge` и `portfolio` имеют раздельные paths/API. Authorization связывает
+  release/activation и build с Workspace/Business. Knowledge содержит
+  `source_id/revision_id/chunk_id/sha256`, owner confirmation и effective window.
+  Portfolio содержит `item_id/revision_id/asset_version_id/source_sha256`,
+  MY_WORK и show permission. `current_image_v1` закрепляет текущие
+  Client/Conversation/message/file/version/hash и optional analysis id/hash.
+  Перед чтением байтов и отправкой действуют частные permits и новые проверки.
+  Отзыв прекращает доступ к этому источнику. Разрешённая работа или наблюдение
+  Vision не даёт решения о цене, времени или допустимости запроса.
+  [knowledge source/build](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/knowledge/models.py#L119), [portfolio/media pins](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/portfolio.py#L59), [private GET](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/portfolio/delivery.py#L121).
+- `intake` и owner API `/intake/conversations/{conversation_id}` возвращают
+  `preliminary_intake_v1` со scope, service/template/release/activation,
+  control/context versions и version/fingerprint для owner `CONFIRM/CORRECT`.
+  `conversation_v7` / `conversation_result_v3` предлагают candidate facts и
+  один outcome через существующий worker. Статусы `client-stated`, `observed`,
+  `owner-confirmed` и missing/conflict несут provenance `message_id/source_version`
+  с optional analysis id/hash. Проверять source и актуальность в транзакции.
+  `PRELIMINARILY_COMPLETE` означает, что известны поля шаблона на текущих
+  источниках. Открытые дефекты 01–04 существенны при использовании этого пути.
+  [DTO и owner CAS](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/intake/models.py#L18), [входы API](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/intake/http.py#L39), [result v3](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/ai/contracts.py#L296).
+- Action Center использует `escalation_id` и `PRELIMINARY_INTAKE_OWNER_V1`
+  через прежние list/read/resolve/cancel API. Summary потребляет current pin,
+  команда владельца сохраняет версионированное внутреннее решение/receipt.
+  Отдельные поля подтверждаются в Intake. `DurationCase` имеет
+  `case_id/version/state/source_current`, optional exact asset/version и
+  working/occupied minutes с unknown. CRUD/confirm/revoke/search owner-only.
+  Comparison возвращает до пяти подтверждённых и действительных примеров
+  по placement/style/detail/fill, с совпадениями, различиями и unknown.
+  Данные остаются справочными для мастера. [escalation contract](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/conversations/escalation_http_models.py#L164), [DurationCase DTO](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/intake/models.py#L104), [сравнение](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/backend/src/asm/intake/duration_cases.py#L6).
+
+**Минимальный следующий срез для решения C0.** После закрытия findings и
+принятия M5 проверить транзакционный перенос одного актуального intake в
+черновой ServiceRequest с provenance и idempotency. В M6 владелец или принятая
+детерминированная policy смогут утверждать Assessment. Порядок Quote/Order,
+записи и оплаты следует своим этапам. OPEN-080/081 сохраняют вопросы
+о конкретных временах мастера, границах сессий и калибровке. [OPEN-080/081](https://github.com/Elefesys/ai-service-manager/blob/c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba/docs/architecture/04_OPEN_QUESTIONS.md#L441).
+
+**Открыто для live.** Receiver ACK/fence и полный live HUMAN/Resume остаются
+OPEN_OPERATIONAL. `MEDIA_REPLACED_UNAVAILABLE` сохраняет недоступность
+заменённых bytes. Production provider/data route, разрешение обработки
+клиентских материалов и реальный client-runtime E2E не подтверждены.
+IMPL-005 принимает существующие owner-reported synthetic Vision и embedding
+receipts. Исходные UNKNOWN/NOT_PROVEN и учёт confirmed 0.50229415 RUB /
+holds 11.75 RUB сохранены. На этом review использованы только DEFAULT_OFF /
+FAKE / EVAL_ONLY, реальные provider/Telegram/VM вызовы отсутствовали.
+[Решение IMPL-005](https://github.com/Elefesys/ai-service-manager/blob/3ba774da3bf61b57062098ea5e0470b1402eb70d/docs/decisions/IMPL-005-m5-pilot-knowledge.md),
+[embedding history](https://github.com/Elefesys/ai-service-manager/pull/48#issuecomment-6877156327).
