@@ -4,131 +4,37 @@
 Решение по объёму — [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md),
 ACCEPTED / LOCKED C0.
 
-## CURRENT — C8-M5.3B-ACCEPTANCE-R2 / REVIEW / 2026-11-18
+## CURRENT — C1-M5.3B-V7-FIX-R1 / IN_PROGRESS / возврат после C8 R2 / 2026-11-19
 
-**C0 → C8. Проведи независимую повторную приёмку [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) по четырём замечаниям C8 и дай итог по матрице K01–K12.** Проверяем, что клиент получает фото подтверждённой работы, сохраняет прогресс и может явно разрешить противоречие, а мастер может решить уже открытый вопрос.
+**C0 → C1. Исправь два замечания в существующем Draft PR #54.** Мастер должен иметь возможность открыть или обработать карточку, пока worker готовит ответ в том же диалоге. Если посреди сбора сведений клиент задаёт вопрос, на который опубликованные источники отвечают по-разному, мастер должен получить этот вопрос вместе с уже собранными сведениями. [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54).
 
-**Решение C0.** Исправление C1 принято для повторного review. На предыдущем head выбор исходного значения оставлял `conflict=true`. На новом head C0 проверил тот же сценарий штатным Python reducer. В CI на actual PostgreSQL все четыре сочетания исхода и статуса поля дошли до следующего вопроса о месте татуировки. Подтверждение мастера и его исходный источник сохранены при возврате к тому же значению. Точная привязка уточнения есть в результате run. Обычный повтор оставляет конфликт открытым. [Исходный возврат C8](https://github.com/Elefesys/ai-service-manager/blob/4cb6318f008d3ca952eb077268887e2d39714972/docs/tasks/M5_HANDOFF.md#L14) · [остаток, найденный C0](https://github.com/Elefesys/ai-service-manager/blob/24f9439e78c017d4e467ceb6338545aca099471a/docs/tasks/M5_HANDOFF.md#L9) · [worker и проверки результата](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_integration_postgres.py#L625).
+**Решение C0 — CHANGES_REQUESTED.** На проверенном кандидате C8-M5-01, 02 и 03 закрыты. Открыты C8-M5-04 (K10, P2) и C8-M5-05 (K03, P2). C0 сверил порядок блокировок в установленной схеме 0024 из CI и отдельно воспроизвёл отказ на штатной функции обработки intake. Последовательная работа карточки и четыре варианта явного выбора спорного поля уже подтверждены PostgreSQL. [Заключение C8](https://github.com/Elefesys/ai-service-manager/blob/d2af1c5f8d51590ff354ee21db2b4648a9042d04/docs/tasks/M5_HANDOFF.md#L37) · [матрица проверенного кандидата](https://github.com/Elefesys/ai-service-manager/blob/d2af1c5f8d51590ff354ee21db2b4648a9042d04/docs/tasks/M5_HANDOFF.md#L389).
 
-### Какой код проверять
-
-| Объект | Git identity |
+| Что использовать | Значение |
 |---|---|
-| Принятый application base в `main` · PR #53 | `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba` · tree `11c987fb12e4f88d27da3737911c468d520269b8` |
-| Предыдущий проверенный head PR #54 | `593c9d633b144d149be6699b8228e0d08f0a31ab` |
-| **Application head для этого review** | **`9ead66496b37d78d35654c9a7b32ee66d1b30a7a`** · tree **`305dbbe737302680f658e05835f9b5ee82484309`** |
-| Проверенный GitHub test merge | `e356b49ebaca589d2d221b06762c0cf3ae6b26c0` · родители в порядке main, application head · то же дерево |
-| Рабочая ветка C8 | `c8/m5-3b-acceptance-r2` · стартовый commit с этим CURRENT имеет единственного родителя `9ead66496b37d78d35654c9a7b32ee66d1b30a7a` |
+| Принятый application base в `main` | `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba` (PR #53, миграция 0023) |
+| **Откуда продолжать реализацию** | Ветка `c1/m5-3b-v7-fixes-r1`, head **`9ead66496b37d78d35654c9a7b32ee66d1b30a7a`**, tree `305dbbe737302680f658e05835f9b5ee82484309` |
+| Уже проверенный test merge | `e356b49ebaca589d2d221b06762c0cf3ae6b26c0` с тем же деревом, [CI 44337635508](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508) — 12/12 SUCCESS с первой попытки |
+| Заключение C8 для чтения | `d2af1c5f8d51590ff354ee21db2b4648a9042d04`. Документы C8 и этого возврата C0 находятся в отдельных ветках. Все новые коммиты реализации идут в существующую ветку C1 поверх указанного head. |
 
-Последний commit C1 изменил пять разрешённых путей. Все 12 jobs завершились SUCCESS с первой попытки. C0 сверил ZIP digest и CRC для core, runtime и browser, все 483 файла и режимы source archive с Git и результаты фазы вызова в `cases.jsonl` для четырёх intake-комбинаций, фото с MinIO, UNKNOWN/restart и обеих политик history. Runtime дал 160/160, Chromium 73/73. Установленная 0024 совпала с каталогом из исходников, включая 321 функцию и 73 таблицы. [CI 44337635508](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508) · [core](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508/artifacts/14446459123) · [runtime](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508/artifacts/14442513168) · [Chromium](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508/artifacts/14442299492).
+**C8-M5-04. Одновременная работа мастера и worker.** В установленной 0024 `ai_runtime_current` и `ai_delivery_current` берут блокировку `CONFIGURATION_V1` перед строкой диалога. `intake_owner` (включая READ) и `escalation_command` для RESOLVE intake-карточки берут строку диалога до той же блокировки. Это допускает взаимное ожидание. До возврата конкурентная ошибка на работающем PostgreSQL отдельно не измерялась. Приведи пути к согласованному порядку, сохранив проверку полномочий, Business/Conversation, актуальности, версии карточки и идемпотентности. [Путь мастера](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0024_intake_v7_repair.py#L709) · [RESOLVE](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0024_intake_v7_repair.py#L465) · [порядок worker](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0022_portfolio_delivery.py#L6125).
 
-### Границы и критерии C8
+На реальном локальном или CI PostgreSQL организуй контролируемое пересечение двух независимых транзакций в одном диалоге через штатные точки входа. Проверь worker одновременно с READ, с одной из команд CONFIRM/CORRECT и с RESOLVE intake-карточки. Покажи, что операции действительно пересеклись и завершились с допустимым последовательным результатом. Взаимная блокировка, таймаут или `UNAVAILABLE` означают сбой проверки. Сохрани один ID, адресата и результат повтора. Прежний CAS по действительно изменившимся данным должен по-прежнему отклоняться. Используй существующие проверки последовательного сценария там, где они уже покрывают эти свойства.
 
-Единственный ведущий — C8. C1 завершил доработку. Объект проверки — application head выше. Изучай исходники из отдельного чистого checkout этого SHA или из сверенного source archive. В ветке `c8/m5-3b-acceptance-r2` разрешён один файл — `docs/tasks/M5_HANDOFF.md` для короткого возврата под CURRENT, матрицы §4 и сверки фактических контрактов §7. Документальная выдача C8 находится вне PR #54. Остальные роли на паузе.
+**C8-M5-05. Противоречащие друг другу ответы FAQ при начатом intake.** При сохранённой услуге `consultation` и известной идее `flower` штатный агент C8 получил `STOP/INVALID_OUTPUT` на валидном `FAQ_ONLY / service_id=null / facts=[]` при `CONFLICT/OWNER_LABEL_CONFLICT`. Та же проба с пустым intake дошла до handoff. Для обязательной передачи используй текущую проверенную услугу в том же диалоге и публикации. У мастера должны сохраниться факты и их источники. Выбор между противоречащими ответами остаётся за мастером. Сохрани проверки смены услуги, источников и актуальности при COMMIT. [Переход к handoff](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/backend/src/asm/ai/intake.py#L140) · [проверка услуги](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/backend/src/asm/intake/projection.py#L29) · [SQL при COMMIT](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0024_intake_v7_repair.py#L638).
 
-1. Сопоставь первоначальные C8-M5-01–04 и критерии последнего возврата C0 с кодом и наблюдаемыми результатами текущего CI. Для каждого замечания укажи CLOSED либо OPEN с причиной. Для K03/K06/K09 проверь непустой индекс, один общий QUERY в сессии v7, стабильный READ с attestation, точный выбор, оригинал MinIO и один контролируемый SEND с подписью. Сверь, где проверяются права и версия источника до COMMIT, private GET и wire. Для K04 проверь отзыв и UNKNOWN с нулём повторных отправок.
-2. Для K10 проверь обычный повтор, неоднозначность и явный выбор каждого варианта, в том числе после подтверждения мастером. Нужны сохранённые поля и источники, фактически отправленный следующий вопрос и отсутствие новых эффектов при replay. Сверь повторную публикацию/rollback, EDIT/DELETE и порядок COVER_UP → открытая карточка → подтверждение поля → та же карточка → RESOLVE. Для K11 сопоставь ошибки некорректного черновика и сценарий мастера с desktop/narrow browser evidence.
-3. Для K12 проверь содержимое MODEL, READ и FOLLOWUP в пределах текущего turn и разрешённой истории, включая source quotes. Сохраняются tenant/client scope, OWNER reconciliation, observation barrier, HUMAN/Resume, права Telegram и ограничения бюджета. Проверь связь actual SQL 0024 с предыдущей 0023, сохранение PENDING/UNKNOWN и допуск проверенного дерева. [Контрольные сценарии v7](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_integration_postgres.py) · [миграция на заполненной БД](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_repair_migrations.py).
-4. Обнови все 12 строк §4 для указанного кандидата. Для ранее прошедших K01/K02/K05/K07/K08 достаточно проверить применимость прежнего evidence к изменившимся путям и дать ссылки. Сохрани границы PG, MinIO, controlled Telegram, FAKE и ранее принятого ASSISTED_SYNTHETIC. Укажи пробел отдельно, если он меняет решение. Используй завершённый CI. При конкретной нехватке доказательств допустима точечная локальная синтетическая проверка.
-5. В §7 сверь контракты передачи M6 и перечисли оставшиеся live-ограничения. В возврате укажи head/tree/tested merge, решение **PASS для C0** или **CHANGES_REQUESTED**, четыре исхода по замечаниям и ссылку на обновлённую матрицу. Для открытого замечания приложи ожидаемое и наблюдаемое поведение, точный путь и границу проверки. Верни C0 одну закреплённую ссылку на результат в своей ветке. При смене application head укажи SHA, к которому относится заключение.
+Проведи этот случай через штатный v7 worker на PostgreSQL с начатым intake и двумя противоречащими опубликованными источниками. Для этого хода мастер видит одну `PENDING` карточку в Action Center с правильными клиентом, диалогом, услугой и собранными фактами. У фактов прежние источники, автономных отправок текста или фото клиенту — ноль. Повтор сохраняет ту же карточку. Сверь контрольные случаи с пустым intake и обычным FAQ без конфликта, а также сохранение отказа при устаревшей или чужой привязке.
 
-Проверка ограничена synthetic LOCAL/TEST. Default OFF/FAKE/EVAL_ONLY, прежние UNKNOWN/NOT_PROVEN и holds, receiver ACK/fence, полный live HUMAN/Resume и ограничения обработки реальных материалов действуют. Операторские действия и платные вызовы требуют отдельного допуска. PR #54 остаётся Draft до решения C0 по возврату C8. После независимого review вопрос о merge решается отдельно с владельцем. Общая приёмка M5 учитывает фактический push/main CI после слияния.
+### Разрешённые пути для изменений поверх `9ead66496b37d78d35654c9a7b32ee66d1b30a7a`
 
-### Возврат C8 — CHANGES_REQUESTED
+- `backend/src/asm/ai/intake.py` и при необходимости `backend/src/asm/intake/projection.py`.
+- `migrations/versions/0024_intake_v7_repair.py` и `backend/src/asm/foundation.py` для вычисленных по фактической 0024 контрольных сумм профиля. На принятом main действует 0023. Выделена только существующая миграция кандидата 0024 с родителем 0023.
+- `tests/test_m5_intake_postgres.py`, `tests/test_m5_intake_v7_integration_postgres.py`. При необходимости в этих двух сценариях также `tests/test_m5_intake_runtime.py`, `tests/test_m5_intake_api_postgres.py`, `tests/test_m5_intake_v7_repair_migrations.py`, `tests/m5_intake_fixtures.py`, `tests/m5_knowledge_search_fixtures.py`.
+- `docs/tasks/M5_HANDOFF.md` в ветке C1 только для краткого возврата до финального CI. Четыре служебных файла C0 в ветке реализации защищены исходным допуском. [Первоначальные пути и допуск PR](https://github.com/Elefesys/ai-service-manager/blob/ba80e2500e56f45059c89eda0127362ffbfe1464/docs/tasks/M5_HANDOFF.md#L42).
 
-**PR #54 требует доработки.** Два исходных блокера v7 устранены, прогресс
-intake и явный выбор восстановлены. Последовательный сценарий карточки мастера
-проходит. Проверка обновления карточки выявила обратный порядок блокировок.
-Отдельно воспроизведён пропуск передачи мастеру при конфликте знаний в
-диалоге с уже начатым intake. [Матрица K01–K12](#4-одна-приёмочная-матрица).
+**Порядок и возврат.** Единственный ведущий — C1. C2 доступен для консультации по SQL. Сначала выполни целевые проверки 04/05 и затронутого профиля 0024. Затем проведи один штатный полный CI изменённого кандидата. В том же PR верни C0 итоговый head/tree, tested merge и ссылку на CI, названия фактически прошедших PG-сценариев и их результаты по обоим замечаниям. Сохраняются проверки 0023→0024, повторного upgrade, безопасного или отклонённого downgrade, PENDING и UNKNOWN/no-resend. После возврата C0 сверит новый кандидат и передаст дельту C8 на повторную проверку.
 
-Проверен head `9ead66496b37d78d35654c9a7b32ee66d1b30a7a`, tree `305dbbe737302680f658e05835f9b5ee82484309`,
-tested merge `e356b49ebaca589d2d221b06762c0cf3ae6b26c0` с родителями
-`c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba` и проверенным head. Родитель
-отчёта C8 — выдача `2bf7aaf3068f03f705140684dc3ff9f54c7314b3`, tree
-`3a382b545f17fdb02a4996fd3fc063d0e11862d6`. [CI 44337635508](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508) ·
-12/12 SUCCESS, attempt 1. Сверены SHA-256/CRC четырёх ZIP, 483 Git blob/path/mode
-в каждом из трёх source archives, оба source manifest и 211 записей runtime
-manifest. Core — 1098/1098 actual PG с проверенными setup/call/teardown по
-nodeid digest, из них 35 новых v7 и migration cases. Runtime 160/160,
-Native 112/112, Chromium 73/73. Новый full CI для этой проверки не запускался.
-[Core](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508/artifacts/14446459123), [Runtime](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508/artifacts/14442513168), [Native](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508/artifacts/14443790444), [Chromium](https://github.com/Elefesys/ai-service-manager/actions/runs/44337635508/artifacts/14442299492).
-
-- **C8-M5-01 · CLOSED.** 0024 выбирает допустимый для `SYNTHETIC_INTAKE_V1`
-  проверяющий механизм и проверяет conversation/client, профиль, владельца,
-  expiry и бюджет. Непустые KB и MY_WORK используют один QUERY. Пустой build
-  не создаёт резерва. Повтор возвращает сохранённый результат. [Порядок QUERY](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0024_intake_v7_repair.py#L847),
-  [MinIO happy path](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_integration_postgres.py#L227), [отказы сессии и replay](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_integration_postgres.py#L322).
-- **C8-M5-02 · CLOSED.** Сравнивается полный показанный `IntakeContextView`.
-  Стабильный READ даёт тот же digest и одну attestation. Уточнение сохраняет
-  фиксированный контекст. SQL COMMIT сверяет все четыре поля именно
-  засвидетельствованного выбора. Изменение authority после READ даёт ноль
-  intent/Message/Outbox. [Сравнение проекции](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/backend/src/asm/ai/intake.py#L60),
-  [положительный путь и digest](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_integration_postgres.py#L249), [COMMIT по четырём полям](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_integration_postgres.py#L878).
-- **C8-M5-03 · CLOSED.** В actual PG обычный повтор сохраняет конфликт,
-  `AMBIGUOUS` сохраняет факты, оба явных выбора для обоих статусов снимают
-  конфликт и дают отправленный вопрос о месте. При выборе того же
-  `owner-confirmed` значения исходное подтверждение сохраняется, а уточнение
-  связано с новым сообщением, версией и цитатой в `ai_runs.result`. Replay
-  не меняет счётчики. Совместимые publish/rollback сохраняют подтверждённый
-  факт, несовместимый шаблон, EDIT/DELETE исключают его. [Четыре PG-комбинации](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_v7_integration_postgres.py#L625),
-  [publish/rollback](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_postgres.py#L451),
-  [EDIT/DELETE/EDIT_REVERT](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_postgres.py#L521).
-- **C8-M5-04 · OPEN · P2.** В последовательном actual PG и Chromium
-  `COVER_UP → PENDING → CONFIRM/CORRECT → RESOLVE` сохраняет один ID и
-  адресата. Старый CAS отклоняется, replay возвращает receipt. При удалении
-  источника прежнее решение запрещено. Остаток в 0024 затрагивает штатное
-  чтение Inbox во время подготовки ответа. [Сохранение и решение карточки](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_postgres.py#L213),
-  [Удаление источника](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/tests/test_m5_intake_postgres.py#L578),
-  [desktop/narrow](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/frontend/e2e/intake-duration.spec.ts#L45).
-
-  **Ожидание.** Worker и owner read/decision сериализуют доступ к одному
-  диалогу. **Наблюдение в установленном каталоге 0024.** Worker
-  `ai_runtime_current` и `ai_delivery_current` берут
-  `CONFIGURATION_V1` до `Conversation FOR NO KEY UPDATE`.
-  Новый `intake_owner` берёт ту же строку до `knowledge_owner_lock`,
-  включая READ. `escalation_command` делает это для RESOLVE intake-карточки.
-  На одном Workspace/Business/Conversation это образует цикл ожидания.
-  Если worker уже держит CONFIGURATION, а Inbox — Conversation, обе
-  транзакции ждут друг друга. PostgreSQL может прервать штатное чтение
-  (`UNAVAILABLE`/503) или работу worker. Наблюдался порядок блокировок
-  в actual installed SQL, отдельный конкурентный PG-прогон не проводился.
-  Существующий тест проверяет последовательную и устаревшую команды.
-  Минимальный шаг — согласовать порядок с действующим worker и подтвердить
-  параллельный owner READ/field mutation против worker на PostgreSQL, сохранив
-  CAS, owner checks и один PENDING. [intake_owner](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0024_intake_v7_repair.py#L709),
-  [RESOLVE](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0024_intake_v7_repair.py#L465), [Общий CONFIGURATION lock](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0020_knowledge_search.py#L141),
-  [Порядок worker](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0022_portfolio_delivery.py#L6125),
-  [Отображение ошибки чтения](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/backend/src/asm/intake/errors.py#L17).
-
-**C8-M5-05 · OPEN · P2 · K03.** При `SearchProjection.status=CONFLICT`
-для активного intake (`service_id=consultation`) ответ на FAQ по форме
-`FAQ_ONLY / service_id=null` должен стать owner handoff, сохранив прежний
-intake. `IntakeConversationAgent` меняет категорию на `OTHER_COMPLEX`,
-оставляя `service_id=null`. Reducer воспринимает это как смену услуги
-и возвращает отказ. Целевая синтетическая проверка штатного агента
-дала `MODEL → CANDIDATE → STOP/INVALID_OUTPUT`, без handoff. На том же
-input с пустым intake получен handoff candidate. Эффекты worker/PG в
-этом локальном сравнении не измерялись. Минимальная правка — для
-обязательного handoff при конфликте привязать candidate к действующей
-проверенной услуге intake, сохранив поля и запрет смены услуги, затем
-проверить через штатный PG worker. [Конфликт и DTO](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/backend/src/asm/ai/intake.py#L140),
-[Проверка смены услуги](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/backend/src/asm/intake/projection.py#L21),
-[Проверка того же scope на COMMIT](https://github.com/Elefesys/ai-service-manager/blob/9ead66496b37d78d35654c9a7b32ee66d1b30a7a/migrations/versions/0024_intake_v7_repair.py#L638).
-
-**Целевые локальные проверки.** Штатный FakeAdapter и контролируемый
-authority на `v3_owner` fixture дали для v6/v7 photo candidate с двумя
-model calls, одним READ и одной attestation. Для C8-M5-05 поданы
-`CONFLICT/OWNER_LABEL_CONFLICT` с двумя synthetic source refs и один
-валидный результат `FAQ_ONLY / service_id=null / facts=[]`. Между запусками
-изменялось только наличие начатого intake с сохранённой идеей.
-Для C8-M5-04 определения взяты из `catalog-0024/installed-catalog.pg-json.txt`
-в Runtime artifact, группа 0. Проверки PostgreSQL, MinIO и Chromium
-подтверждены завершённым CI.
-
-**Следующее действие для C0.** Вернуть C1 два остатка в тот же Draft PR #54.
-После точечных PG проверок провести CI на новом head. Интеграция M5 зависит
-от решения C0, отдельного merge владельца и проверенного push/main CI.
+Действует synthetic LOCAL/TEST с default OFF/FAKE/EVAL_ONLY. Для VM, платных вызовов, live Telegram и реальных данных требуется отдельный допуск. C6 на паузе. Слияние требует отдельного решения владельца после review. Приёмка M5 и выдача M6 следуют за успешной проверкой фактического push/main.
 
 ## 1. Проверяемый результат всего этапа
 
@@ -371,7 +277,7 @@ C8 проверяет весь интегрируемый scope по матри�
 authority, private media и конкуренции publish/send. Авторские тесты остаются
 обязанностью исполнителя. Targeted review одного fix не выдаётся за review всего M5.
 
-Первичный review C8 выявил четыре замечания на принятом main. C1 вернул исправленный кандидат PR #54. После полного CI и проверки C0 активна независимая повторная приёмка C8. Затем C0 решает вопрос о готовности к интеграции. Владелец отдельно разрешает merge, а C0 проверяет фактический push/main CI и обновляет статус M5 и передачу M6.
+По результатам повторной приёмки PR #54 C0 принял закрытие C8-M5-01–03 и вернул C1 два замечания по K03 и K10. После исправлений и CI C0 и C8 проверят новый кандидат. Владелец отдельно разрешает merge, а C0 проверяет фактический push/main CI перед завершением M5 и выдачей M6. [Возврат C8](https://github.com/Elefesys/ai-service-manager/blob/d2af1c5f8d51590ff354ee21db2b4648a9042d04/docs/tasks/M5_HANDOFF.md#L37).
 
 Отдельно перечислить, какие реальные Vision/embedding/Telegram проверки выполнены,
 какие требуют владельца. LOCAL/TEST VERIFIED не равен готовности реального бизнеса.
@@ -413,7 +319,7 @@ fixtures. Согласованные режимы и unknown подтвержд�
 одного ведущего, exact write-set, dependency, критерии и что оставлено за границей.
 Не выдавать весь этот документ C1/C4 как одно задание «реализовать M5».
 
-M5.1A–M5.3A интегрированы. На принятом main действует 0023. В рассматриваемом PR #54 добавлена 0024 с родителем 0023. Изменения C8 ограничены отчётом в M5_HANDOFF согласно CURRENT.
+M5.1A–M5.3A интегрированы. На принятом main действует 0023. В рассматриваемом PR #54 добавлена 0024 с родителем 0023. Дополнительные изменения C1 для C8-M5-04/05 ограничены путями в CURRENT.
 
 Не менять applied0001–0023, роли/гранты всех старых модулей, исторические schema
 checks, native context или `.github/workflows` ради удобства новой функции.
@@ -436,7 +342,7 @@ harness/locale отделяется от production SQL. Не подгонять
 
 ## 6. Действия владельца
 
-Сейчас владелец передаёт C8 ссылку на CURRENT этого поручения. После возврата C8 решение о готовности PR #54 к интеграции принимает C0.
+Сейчас владелец передаёт C1 ссылку на CURRENT этого поручения. C1 возвращает тот же PR #54 с новым head и результатами CI. Решение о готовности к слиянию принимает C0 после проверки исправлений.
 
 Позже — только конкретное действие по готовому результату:
 1. Если понадобится дополнительный real synthetic smoke — отдельные route,

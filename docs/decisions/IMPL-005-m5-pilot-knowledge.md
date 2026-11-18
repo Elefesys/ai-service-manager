@@ -17,9 +17,10 @@ accepted main `220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
 12/12 SUCCESS, attempt1. M5.3A/PR53 — INTEGRATED / VERIFIED в synthetic
 LOCAL/TEST: main `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
 `11c987fb12e4f88d27da3737911c468d520269b8`, post-merge CI44018352191 —
-12/12 SUCCESS, attempt1. C1 вернул исправления в PR #54. После целевой проверки C0
-активна независимая повторная приёмка C8-M5.3B-ACCEPTANCE-R2 на `9ead66496b37d78d35654c9a7b32ee66d1b30a7a`.
-Итог по M5 принимает C0 после review и интеграционных проверок. M6 ждёт отдельной выдачи.
+12/12 SUCCESS, attempt1. На `9ead66496b37d78d35654c9a7b32ee66d1b30a7a` C8 закрыл 01–03 и вернул два замечания.
+C0 передал C1 продолжение PR #54 по порядку блокировок в одном диалоге
+и передаче конфликтующего FAQ мастеру при начатом intake. Итог по M5 принимает C0
+после review и интеграционных проверок. M6 ждёт отдельной выдачи. [Заключение C8](https://github.com/Elefesys/ai-service-manager/blob/d2af1c5f8d51590ff354ee21db2b4648a9042d04/docs/tasks/M5_HANDOFF.md#L37).
 Scope решения не расширен: preliminary intake с provenance/deterministic
 transitions, новая закрытая Action Center projection с сохранением legacy,
 owner-only DurationCase; без M6 request/assessment, клиентского обещания
