@@ -69,10 +69,25 @@ def reduce_candidates(
             and old.value == candidate.value
             and (old.status != "observed" or old.conflict or candidate.status == "observed")
         ):
-            # Repeating evidence cannot remove the owner's confirmation or
-            # resolve an already recorded conflict.
-            continue
-        if old is not None and old.value != candidate.value and not candidate.explicit_correction:
+            if not (
+                old.conflict
+                and candidate.status == "client-stated"
+                and candidate.explicit_correction
+                and source.message_id != old.source.message_id
+            ):
+                continue
+            if old.status == "owner-confirmed":
+                # The accepted run records the new clarification separately.
+                facts[candidate.field] = old.model_copy(update={"conflict": False})
+                continue
+        if (
+            old is not None
+            and old.value != candidate.value
+            and (
+                not candidate.explicit_correction
+                or (old.conflict and candidate.status == "observed")
+            )
+        ):
             facts[candidate.field] = old.model_copy(update={"conflict": True})
         else:
             facts.pop(candidate.field, None)

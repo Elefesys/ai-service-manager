@@ -16,6 +16,7 @@ from asm.ai.fake import FakeAdapter
 from asm.ai.intake import IntakeConversationAgent
 from asm.ai.runtime_settings import IntakeRuntimeSettings
 from asm.foundation import create_worker
+from asm.intake.projection import QUESTIONS
 from asm.messaging.errors import Code, MessagingError
 from m5_intake_fixtures import intake_bundle
 from m5_knowledge_search_fixtures import owner_unit
@@ -39,6 +40,7 @@ from test_m5_intake_postgres import next_turn, queue_turn, summary
 from test_m5_intake_postgres import portfolio_runtime_pg as portfolio_runtime_pg
 from test_m5_intake_postgres import search_pg as search_pg
 from test_m5_intake_postgres import seeded as seeded
+from test_m5_knowledge_runtime_postgres import outbound_text
 from test_m5_portfolio_delivery_postgres import send, status
 from test_m5_portfolio_runtime_postgres import analyse, bridge, source_image
 from test_tenancy_postgres import BA, UA, A, B
@@ -620,34 +622,81 @@ async def test_v7_serialized_model_read_followup_scope_and_omission(
     assert (await summary(h, cid))["facts"] == [original]
 
 
+@pytest.mark.parametrize("owner_confirmed", [False, True], ids=["client-stated", "owner-confirmed"])
+@pytest.mark.parametrize("choice", ["flower", "bird"], ids=["same-value", "other-value"])
 async def test_v7_equal_current_candidates_preserve_confirmation_conflict_and_ambiguous_progress(
-    v7_photo_pg,
+    v7_photo_pg, owner_confirmed, choice
 ):
     h = v7_photo_pg
     cid, source, h.intake_scope = await source_turn(h, native=True, message_text=DETAILS)
     worker, _, _ = await compose(h, cid, [], photo=False, values={"idea": "flower"})
     _, reply = await run_turn(h, worker, source)
     await send(h, worker, reply)
-    confirmed = await confirm_idea(h, cid, "confirmed-before-conflict")
+    original = (
+        await confirm_idea(h, cid, "confirmed-before-conflict")
+        if owner_confirmed
+        else (await summary(h, cid))["facts"][0]
+    )
 
     async def turn(message, values, **options):
-        worker, _, _ = await compose(h, cid, [], photo=False, values=values, **options)
-        _, reply = await next_turn(h, worker, message)
+        worker, model, _ = await compose(h, cid, [], photo=False, values=values, **options)
+        claim, reply = await next_turn(h, worker, message)
         assert reply["selected_kind"] == "reply"
         await send(h, worker, reply)
-        return await summary(h, cid)
+        assert await status(h, reply) == "SENT"
+        return worker, model, claim, reply
 
-    conflicting = await turn("I am also considering a bird", {"idea": "bird"})
-    assert conflicting["facts"] == [confirmed | {"conflict": True}]
-    equal = await turn("The flower is still a possibility", {"idea": "flower"})
+    await turn("I am also considering a bird", {"idea": "bird"})
+    conflicting = await summary(h, cid)
+    assert conflicting["facts"] == [original | {"conflict": True}]
+    _, _, _, repeated = await turn("The flower is still a possibility", {"idea": "flower"})
+    equal = await summary(h, cid)
     assert equal["facts"] == conflicting["facts"]
-    ambiguous = await turn("About the other thing?", {}, category="AMBIGUOUS")
+    assert await outbound_text(h, repeated) == "Уточните противоречивое поле: idea."
+    await turn("About the other thing?", {}, category="AMBIGUOUS")
+    ambiguous = await summary(h, cid)
     assert ambiguous["facts"] == conflicting["facts"] and ambiguous["category"] == "AMBIGUOUS"
-    corrected = await turn("Correction: use bird instead", {"idea": "bird"}, correction=True)
+
+    clarification = f"Final choice: {choice}. The other option is cancelled."
+    worker, model, claim, reply = await turn(
+        clarification, {"idea": choice}, correction=True, quote_full=True
+    )
+    corrected = await summary(h, cid)
     revised = corrected["facts"][0]
-    assert revised["value"] == "bird" and not revised["conflict"]
-    assert revised["source"]["message_id"] != confirmed["source"]["message_id"]
-    switched = await turn("Start a separate request for a rose", {"idea": "rose"}, switch=True)
+    assert (revised["conflict"], await outbound_text(h, reply)) == (False, QUESTIONS["placement"])
+    assert corrected["conflicts"] == [] and revised["value"] == choice
+    admitted = next(s for s in corrected["sources"] if s["text"] == clarification)
+    result = await scalar(
+        h,
+        "SELECT result FROM platform.ai_runs WHERE id=:id AND conversation_id=:c",
+        id=reply["run_id"],
+        c=cid,
+    )
+    proposal = result["intake"]["facts"][0]
+    assert proposal["explicit_correction"] and proposal["status"] == "client-stated"
+    assert proposal["source"] == {
+        "message_id": admitted["message_id"],
+        "source_version": admitted["source_version"],
+        "quote": clarification,
+        "analysis_id": None,
+        "analysis_sha256": None,
+    }
+    assert proposal["source"]["message_id"] != original["source"]["message_id"]
+    if owner_confirmed and choice == original["value"]:
+        assert revised == original
+    else:
+        assert revised["status"] == "client-stated" and revised["confirmed_by"] is None
+        assert revised["source"] == proposal["source"]
+
+    before = await counts(h, cid), h.adapter.calls, h.adapter.effects, len(model.requests)
+    receipt = await worker.ai.database.replay(claim, worker.ai.config)
+    assert receipt.result.model_dump(mode="json") == result
+    await worker.execute(claim)
+    assert (await counts(h, cid), h.adapter.calls, h.adapter.effects, len(model.requests)) == before
+    assert await summary(h, cid) == corrected
+
+    await turn("Start a separate request for a rose", {"idea": "rose"}, switch=True)
+    switched = await summary(h, cid)
     assert len(switched["facts"]) == 1 and switched["facts"][0]["value"] == "rose"
     assert switched["facts"][0]["source"]["message_id"] != revised["source"]["message_id"]
 

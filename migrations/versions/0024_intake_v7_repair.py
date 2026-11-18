@@ -662,8 +662,18 @@ BEGIN
    OR f->'source'->>'message_id' IS DISTINCT FROM r.media_pin->>'message_id' OR f->'source'->>'analysis_id' IS DISTINCT FROM r.media_pin->>'analysis_id' OR f->'source'->>'analysis_sha256' IS DISTINCT FROM r.media_pin->>'analysis_sha256') THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
   SELECT x INTO old FROM jsonb_array_elements(facts) x WHERE x->'field'=f->'field';
   IF old IS NOT NULL AND old->'value'=f->'value'
-   AND (old->>'status'<>'observed' OR old->>'conflict'='true' OR f->>'status'='observed') THEN CONTINUE; END IF;
-  IF old IS NOT NULL AND old->'value' IS DISTINCT FROM f->'value' AND f->>'explicit_correction'<>'true' THEN
+   AND (old->>'status'<>'observed' OR old->>'conflict'='true' OR f->>'status'='observed') THEN
+   IF NOT (old->>'conflict'='true' AND f->>'status'='client-stated' AND f->>'explicit_correction'='true'
+    AND (old->'source'->>'message_id' IS DISTINCT FROM f->'source'->>'message_id')) THEN CONTINUE; END IF;
+   IF old->>'status'='owner-confirmed' THEN
+    -- Keep the confirmation and its source. The run retains the clarification.
+    SELECT jsonb_agg(CASE WHEN x->'field'=f->'field' THEN x||jsonb_build_object('conflict',false) ELSE x END ORDER BY ordinal)
+    INTO facts FROM jsonb_array_elements(facts) WITH ORDINALITY t(x,ordinal);
+    CONTINUE;
+   END IF;
+  END IF;
+  IF old IS NOT NULL AND old->'value' IS DISTINCT FROM f->'value'
+   AND (f->>'explicit_correction'<>'true' OR (old->>'conflict'='true' AND f->>'status'='observed')) THEN
    SELECT coalesce(jsonb_agg(CASE WHEN x->'field'=f->'field' THEN x||jsonb_build_object('conflict',true) ELSE x END),'[]') INTO facts FROM jsonb_array_elements(facts) x;
   ELSE
    fact:=(f-'explicit_correction')||jsonb_build_object('confirmed_by',NULL,'conflict',false);
@@ -1049,7 +1059,7 @@ $$""",
 ('platform.initialize_local_billing(uuid,text,integer,text,text,text,timestamptz,timestamptz,text)','20b0e1ea5d37d8710b485232cff1441ea7c6998d431233877d2ab1814f620e83','plpgsql',true,'v',false),
 ('platform.initialize_local_messaging_billing(uuid,text,timestamptz,timestamptz)','2863259a15ff3178525d044704c26dbc57c35e4322f5412bed6dd13989098f7d','plpgsql',true,'v',false),
 ('platform.initialize_telegram_connection(uuid,uuid,text,text,text,jsonb)','bfae87784d2145810f9ed12f1dfab4416d8041c9d2044c1397204bbe0f8275bf','plpgsql',true,'v',false),
-('platform.intake_apply(platform.ai_runs,jsonb)','ead518963e8d42770b8a53a4bb57c84b31fee8ff92f1d4492ffc2db459552910','plpgsql',true,'v',false),
+('platform.intake_apply(platform.ai_runs,jsonb)','97730c122e6fdb65b43a654aa3361a39af0ea93a02a65c48b17b6dea2739b096','plpgsql',true,'v',false),
 ('platform.intake_candidates_valid(jsonb)','8341249f2e0a5b4a546b7685134aec687fb8065624c72acfea2700a13863632e','plpgsql',true,'i',false),
 ('platform.intake_current(platform.ai_runs)','1d3b0395102b257d83c46ff69dda128436c840b229c71480d4efcfe03e0d9e3f','plpgsql',true,'s',false),
 ('platform.intake_delivery_guard(platform.ai_runs)','dc64fc2273a9197d65b5c01fc931174a7b91913dc5521f5fb12d4b47918c2e47','plpgsql',true,'v',false),
