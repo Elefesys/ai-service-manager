@@ -1,3 +1,5 @@
+import {parseDurationPolicy,type DurationPolicy} from './configuration-api';
+
 export type IntakeScope = { workspace: string; business: string; conversation?: string; client?: string };
 export type Source = { message_id: string; source_version: string; quote: string; analysis_id: string|null; analysis_sha256: string|null };
 export type FieldId = (typeof fields)[number];
@@ -44,6 +46,27 @@ export type ServiceRequestDraft = {
  conflicts: FieldId[];
  question: string|null;
 };
+const assessmentOutcomes=['FEASIBLE','NEEDS_DATA','NEEDS_OWNER','DECLINED'] as const;
+const assessmentReasons=['FIXED_DURATION','SIZE_DURATION_RULE','MISSING_FACT','CONFLICTING_FACT','SOURCE_CHANGED',
+ 'SIZE_NEEDS_CONFIRMATION','MIN_AGE_UNCONFIRMED','SIZE_LIMIT_EXCEEDED','OWNER_HANDOFF','OWNER_DURATION',
+ 'SERVICE_UNAVAILABLE','DURATION_UNPUBLISHED'] as const;
+export type ServiceAssessment = {
+ assessment_id:string;
+ request_id:string;
+ request_revision:string;
+ release_id:string|null;
+ activation_version:string;
+ current:boolean;
+ outcome:(typeof assessmentOutcomes)[number];
+ reason:(typeof assessmentReasons)[number];
+ field:FieldId|null;
+ rule_id:string|null;
+ limit:number|null;
+ size_mm:number|null;
+ occupied_minutes:number|null;
+ duration_policy:DurationPolicy|null;
+ evidence:Fact[];
+};
 export type CaseInput = { description: string; asset: {asset_id:string;asset_version_id:string}|null; width_mm:number|null; height_mm:number|null; placement:string|null; style:string|null; detail:string|null; fill:string|null; provider:string|null; working_minutes:number|null; occupied_minutes:number|null; setup_minutes:number|null; stencil_minutes:number|null; break_minutes:number|null; cleanup_minutes:number|null; treatment:'INCLUDED'|'EXCLUDED'|'UNKNOWN'; session_count:number|null; session_minutes:number[]|null; explanation:string|null };
 export type DurationCase = {case_id:string;version:string;state:'DRAFT'|'CONFIRMED'|'REVOKED';data:CaseInput;confirmed_by:string|null;source_current:boolean};
 export type CasePage = {workspace_id:string;business_id:string;items:DurationCase[]};
@@ -60,6 +83,7 @@ const decimal=(v:unknown,zero=true)=>typeof v==='string'&&/^(0|[1-9][0-9]{0,18})
 const text=(v:unknown,max:number)=>typeof v==='string'&&[...v].length<=max&&!/[\u0000\uD800-\uDFFF]/u.test(v);
 const one=(v:unknown,choices:readonly string[])=>typeof v==='string'&&choices.includes(v);
 const nullable=(v:unknown,check:(v:unknown)=>boolean)=>v===null||check(v);
+const positiveWithin=(v:unknown,max:number)=>typeof v==='number'&&Number.isInteger(v)&&v>=1&&v<=max;
 const serviceId=(v:unknown)=>typeof v==='string'&&/^[a-z][a-z0-9_-]{0,39}$/.test(v);
 function object(v:unknown,keys:string[]):Record<string,unknown>{if(typeof v!=='object'||v===null||Array.isArray(v)||Object.keys(v).length!==keys.length||!keys.every(k=>Object.hasOwn(v,k)))return invalid();return v as Record<string,unknown>;}
 function array(v:unknown,max:number):unknown[]{if(!Array.isArray(v)||v.length>max)return invalid();return v;}
@@ -113,6 +137,22 @@ export function parseDraft(value:unknown,scope:IntakeScope,requestId?:string):Se
  }
  return v as ServiceRequestDraft;
 }
+export function parseAssessment(value:unknown,requestId:string,expectedRevision?:string):ServiceAssessment{
+ const v=object(value,['assessment_id','request_id','request_revision','release_id','activation_version','current','outcome','reason',
+  'field','rule_id','limit','size_mm','occupied_minutes','duration_policy','evidence']);
+ if(!uuid(v.assessment_id)||!uuid(v.request_id)||v.request_id!==requestId||!decimal(v.request_revision,false)
+   ||(expectedRevision!==undefined&&v.request_revision!==expectedRevision)||!nullable(v.release_id,uuid)||!decimal(v.activation_version)
+   ||typeof v.current!=='boolean'||!one(v.outcome,assessmentOutcomes)||!one(v.reason,assessmentReasons)
+   ||!nullable(v.field,x=>one(x,fields))||!nullable(v.rule_id,serviceId)||!nullable(v.limit,x=>positiveWithin(x,1000))
+   ||!nullable(v.size_mm,x=>positiveWithin(x,1000))||!nullable(v.occupied_minutes,x=>positiveWithin(x,10080))
+   ||(v.outcome==='FEASIBLE')!==(v.occupied_minutes!==null))invalid();
+ const facts=parseFacts(v.evidence);
+ if(facts.some(fact=>fact.source.quote!==''||(fact.status==='observed'&&fact.source.analysis_id===null)))invalid();
+ if(v.duration_policy!==null){
+  try{parseDurationPolicy(v.duration_policy);}catch{return invalid();}
+ }
+ return v as ServiceAssessment;
+}
 export function parseIntake(value:unknown,scope:IntakeScope):Intake{
  const v=object(value,['revision','workspace_id','business_id','conversation_id','client_id','service_id','release_id','activation_version','template_revision','control_generation','context_version','version','category','facts','missing','conflicts','status','question','sources','fingerprint','preliminary']);
  if(v.revision!=='preliminary_intake_v1'||v.preliminary!==true||!inConversation(v,scope)||!nullable(v.release_id,uuid)||!nullable(v.service_id,serviceId)||!decimal(v.activation_version)||!decimal(v.version)||!decimal(v.control_generation,false)||!decimal(v.context_version,false)||!one(v.category,['NEW_TATTOO','COVER_UP','OTHER_COMPLEX','FAQ_ONLY','AMBIGUOUS'])||!one(v.status,['NOT_STARTED','CLARIFY','OWNER_HANDOFF','PRELIMINARILY_COMPLETE'])||!nullable(v.template_revision,x=>x==='tattoo_intake_v1')||!nullable(v.question,x=>text(x,300))||!digest(v.fingerprint))invalid();
@@ -147,6 +187,7 @@ async function request<T>(scope:IntakeScope,path:string,parse:(v:unknown)=>T,sig
  try{const response=await fetch(`/api/v1/workspaces/${encodeURIComponent(scope.workspace)}/businesses/${encodeURIComponent(scope.business)}/intake${path}`,{...init,credentials:'include',cache:'no-store',signal:controller.signal});let value:unknown;try{value=await response.json();}catch{return invalid();}if(response.status!==200){const e=object(object(value,['error']).error,['code']);if(typeof e.code!=='string')invalid();throw new IntakeError(response.status,e.code as string);}return parse(value);}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
 }
 const draftPath=(scope:IntakeScope)=>`/conversations/${encodeURIComponent(scope.conversation??'')}/service-requests`;
+const assessmentPath=(scope:IntakeScope,id:string)=>`${draftPath(scope)}/${encodeURIComponent(id)}/assessment`;
 export const intakeApi={
  summary:(scope:IntakeScope,signal?:AbortSignal)=>request(scope,`/conversations/${encodeURIComponent(scope.conversation??'')}`,v=>parseIntake(v,scope),signal),
  draft:(scope:IntakeScope,requestId?:string,signal?:AbortSignal)=>request(
@@ -158,6 +199,12 @@ export const intakeApi={
   request(scope,draftPath(scope),parseDraftReceipt,signal,jsonMutation('POST',body,key,csrf)),
  reviseDraft:(scope:IntakeScope,requestId:string,body:DraftRevisionCommand,key:string,csrf:string,signal?:AbortSignal)=>
   request(scope,`${draftPath(scope)}/${encodeURIComponent(requestId)}`,v=>parseDraftReceipt(v,requestId),signal,jsonMutation('PATCH',body,key,csrf)),
+ assessment:(scope:IntakeScope,requestId:string,signal?:AbortSignal)=>
+  request(scope,assessmentPath(scope,requestId),v=>v===null?null:parseAssessment(v,requestId),signal),
+ assess:(scope:IntakeScope,requestId:string,revision:string,csrf:string,signal?:AbortSignal)=>
+  request(scope,assessmentPath(scope,requestId),v=>parseAssessment(v,requestId,revision),signal,{
+   method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({expected_revision:revision}),
+  }),
  cases:(scope:IntakeScope,signal?:AbortSignal)=>request(scope,'/duration-cases',v=>parseCases(v,scope),signal),
  search:(scope:IntakeScope,query:Record<string,string>,signal?:AbortSignal)=>request(scope,`/duration-cases/search?${new URLSearchParams(query)}`,v=>parseSearch(v,scope),signal),
  command:(scope:IntakeScope,operation:string,body:unknown,key:string,csrf:string,signal?:AbortSignal)=>request(scope,operation.startsWith('case-')?`/duration-cases/${operation.slice(5)}`:`/conversations/${encodeURIComponent(scope.conversation??'')}/${operation}`,parseReceipt,signal,jsonMutation('POST',body,key,csrf)),

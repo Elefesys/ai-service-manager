@@ -676,46 +676,55 @@ async def test_0025_upgrade_preserves_0024_intake_and_rejects_downgrade_with_req
     h = service_request_pg
     cid, _, _, _, _ = await application(h, {"idea": "flower"})
     prior = await summary(h, cid)
-    await _migrate("downgrade", "0024")
+    await _migrate("downgrade", "0025")
     try:
-        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0024"
-        assert await scalar(h, "SELECT to_regclass('app.service_requests') IS NULL")
-        assert (await scalar(h, "SELECT platform.intake_v7_schema_profile()"))["valid"] is True
-        assert await summary(h, cid) == prior
-    finally:
-        await _migrate("upgrade", "0025")
-    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0025"
-    assert await summary(h, cid) == prior
-    assert not await scalar(
-        h, "SELECT has_table_privilege('asm_runtime','app.service_requests','SELECT')"
-    )
-    assert not await scalar(
-        h, "SELECT has_table_privilege('asm_runtime','platform.service_request_receipts','INSERT')"
-    )
-    assert not await scalar(
-        h,
-        "SELECT has_function_privilege('asm_runtime',"
-        "'platform.service_request_command(app.conversations,text,text,uuid,jsonb)','EXECUTE')",
-    )
-    assert not await scalar(
-        h,
-        "SELECT has_function_privilege('asm_runtime',"
-        "'platform.service_request_fact_available(app.conversations,uuid,jsonb)','EXECUTE')",
-    )
-    result = await create(h, cid, "0025-data", create_body(prior, fields=[]))
-    with pytest.raises(AssertionError, match="SERVICE_REQUEST_DURABLE_DATA"):
         await _migrate("downgrade", "0024")
-    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0025"
-    draft = await read(h, cid)
-    assert draft["request_id"] == result["request_id"]
-    assert draft["facts"] == [] and "idea" in draft["missing"]
-    old_question = draft["question"]
-    async with owner_unit(h) as u:
-        assert (
-            await revise(
-                u, cid, draft["request_id"], "supply-first-field", revise_body(prior, draft, "idea")
-            )
-            == result
+        try:
+            assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0024"
+            assert await scalar(h, "SELECT to_regclass('app.service_requests') IS NULL")
+            assert (await scalar(h, "SELECT platform.intake_v7_schema_profile()"))["valid"] is True
+            assert await summary(h, cid) == prior
+        finally:
+            await _migrate("upgrade", "0025")
+        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0025"
+        assert await summary(h, cid) == prior
+        assert not await scalar(
+            h, "SELECT has_table_privilege('asm_runtime','app.service_requests','SELECT')"
         )
-    updated = await read(h, cid, draft["request_id"])
-    assert "idea" not in updated["missing"] and updated["question"] != old_question
+        assert not await scalar(
+            h,
+            "SELECT has_table_privilege('asm_runtime','platform.service_request_receipts','INSERT')",
+        )
+        assert not await scalar(
+            h,
+            "SELECT has_function_privilege('asm_runtime',"
+            "'platform.service_request_command(app.conversations,text,text,uuid,jsonb)','EXECUTE')",
+        )
+        assert not await scalar(
+            h,
+            "SELECT has_function_privilege('asm_runtime',"
+            "'platform.service_request_fact_available(app.conversations,uuid,jsonb)','EXECUTE')",
+        )
+        result = await create(h, cid, "0025-data", create_body(prior, fields=[]))
+        with pytest.raises(AssertionError, match="SERVICE_REQUEST_DURABLE_DATA"):
+            await _migrate("downgrade", "0024")
+        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0025"
+        draft = await read(h, cid)
+        assert draft["request_id"] == result["request_id"]
+        assert draft["facts"] == [] and "idea" in draft["missing"]
+        old_question = draft["question"]
+        async with owner_unit(h) as u:
+            assert (
+                await revise(
+                    u,
+                    cid,
+                    draft["request_id"],
+                    "supply-first-field",
+                    revise_body(prior, draft, "idea"),
+                )
+                == result
+            )
+        updated = await read(h, cid, draft["request_id"])
+        assert "idea" not in updated["missing"] and updated["question"] != old_question
+    finally:
+        await _migrate("upgrade", "0026")

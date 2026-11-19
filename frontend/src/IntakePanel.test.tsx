@@ -1,14 +1,15 @@
 import {afterEach,beforeEach,it,expect,vi} from 'vitest';
 import {randomUUID,webcrypto} from 'node:crypto';
-import {render,screen,waitFor,cleanup} from '@testing-library/react';
+import {render,screen,waitFor,cleanup,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {IntakePanel} from './IntakePanel';
 import {intakeApi,IntakeError} from './intake-api';
-import {draft,intake,scope,session,message,listItem,lateSize} from './intake-fixtures.test-helper';
+import {assessment,draft,intake,scope,session,message,listItem,lateSize} from './intake-fixtures.test-helper';
 beforeEach(()=>{
  vi.stubGlobal('crypto',{randomUUID,subtle:webcrypto.subtle});
  vi.spyOn(intakeApi,'draft').mockResolvedValue(null);
  vi.spyOn(intakeApi,'drafts').mockResolvedValue([]);
+ vi.spyOn(intakeApi,'assessment').mockResolvedValue(null);
 });
 afterEach(()=>{cleanup();sessionStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('shows one missing question, a source link and confirms only the selected field',async()=>{
@@ -182,4 +183,47 @@ it('uses the chosen late source and loaded revision in an exact replay of one fi
  expect(screen.getByText(/12 cm · Со слов клиента/)).toBeVisible();
  expect(screen.getByText(/flower · Со слов клиента/)).toBeVisible();
  expect(create).not.toHaveBeenCalled();
+});
+
+it('shows archive provenance and exposes minutes only from a current explicitly evaluated result',async()=>{
+ const owner=session(),card=draft(),value=assessment();
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ vi.mocked(intakeApi.draft).mockResolvedValue(card);
+ vi.mocked(intakeApi.assessment).mockResolvedValue({...value,current:false});
+ const evaluate=vi.spyOn(intakeApi,'assess').mockRejectedValueOnce(new TypeError('lost')).mockResolvedValueOnce(value);
+ render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);
+ const panel=within(await screen.findByRole('region',{name:'Оценка заявки'}));
+ expect(await panel.findByText(/Архивная оценка/)).toBeVisible();
+ expect(panel.queryByText('65 мин',{exact:true})).not.toBeInTheDocument();
+ expect(panel.getByText(value.release_id!,{exact:true})).toBeVisible();
+ expect(evaluate).not.toHaveBeenCalled();
+ await userEvent.click(panel.getByRole('button',{name:'Пересчитать оценку'}));
+ await userEvent.click(await panel.findByRole('button',{name:'Повторить оценку заявки'}));
+ expect(await panel.findByText('65 мин',{exact:true})).toBeVisible();
+ expect(panel.getByText('Выполнимо',{exact:true})).toBeVisible();
+ expect(panel.getByText('Фиксированная длительность из опубликованных настроек.')).toBeVisible();
+ expect(panel.getByRole('link',{name:'Источник оценки для поля Идея'})).toHaveAttribute('href',`#message-${message}`);
+ expect(evaluate.mock.calls.map(call=>call.slice(0,4))).toEqual([
+  [scope,card.request_id,card.revision,owner.csrf_token],[scope,card.request_id,card.revision,owner.csrf_token],
+ ]);
+});
+
+it('does not display delayed minutes from another selected request in the same conversation',async()=>{
+ const a=draft(),b={...draft(),request_id:'018f0000-0000-7000-8000-000000000015'},value=assessment();
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ vi.mocked(intakeApi.drafts).mockResolvedValue([listItem(a),listItem(b)]);
+ vi.mocked(intakeApi.draft).mockImplementation(async (_scope,id)=>id===b.request_id?b:a);
+ let finish!:(value:ReturnType<typeof assessment>)=>void;
+ vi.mocked(intakeApi.assessment).mockImplementation(async (_scope,id)=>id===a.request_id?new Promise(resolve=>{finish=resolve;}):{
+  ...value,request_id:b.request_id,outcome:'NEEDS_DATA',reason:'MISSING_FACT',field:'approximate_size',occupied_minutes:null,evidence:[],
+ });
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()}/>);
+ const picker=await screen.findByLabelText('Сохранённая заявка');
+ await waitFor(()=>expect(intakeApi.assessment).toHaveBeenCalledWith(scope,a.request_id,expect.any(AbortSignal)));
+ await userEvent.selectOptions(picker,b.request_id);
+ const panel=within(await screen.findByRole('region',{name:'Оценка заявки'}));
+ expect(await panel.findByText('Нужны данные')).toBeVisible();
+ finish(value);
+ expect(panel.getByText('Какой примерный размер вы представляете, в сантиметрах?')).toBeVisible();
+ expect(panel.queryByText('65 мин',{exact:true})).not.toBeInTheDocument();
 });

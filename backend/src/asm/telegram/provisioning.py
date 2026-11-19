@@ -325,7 +325,7 @@ class NativePolicyBinding(NativeOperatorModel):
 
 class NativeSourceProfile(NativeOperatorModel):
     source_tree: str = Field(pattern=r"^[0-9a-f]{40}$", repr=False)
-    schema_revision: Literal["0025"]
+    schema_revision: Literal["0026"]
     profile_sha256: str = Field(pattern=r"^[0-9a-f]{64}$", repr=False)
     drain_confirmed: Literal[True]
 
@@ -485,7 +485,7 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
             material = {
                 "role": role,
                 "source_tree": tree,
-                "schema_revision": "0025",
+                "schema_revision": "0026",
                 "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
                 "files": {name: entries[name] for name in paths},
             }
@@ -495,11 +495,11 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
             if digest != approval.components[role]:
                 raise ValueError
         stage = "HOST_SOURCE_EXPANSION"
-        expected = runner.source_catalog(root, "0025")
+        expected = runner.source_catalog(root, "0026")
         if (
-            len(expected["functions"]) != 331
-            or len(expected["columns"]) != 75
-            or sum(map(len, expected["columns"].values())) != 1087
+            len(expected["functions"]) != 339
+            or len(expected["columns"]) != 76
+            or sum(map(len, expected["columns"].values())) != 1111
         ):
             raise ValueError
         return runner, expected
@@ -529,7 +529,7 @@ async def native_catalog_profile(
             raise ValueError
         if (
             await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-        ).scalar_one() != "0025":
+        ).scalar_one() != "0026":
             raise ValueError
         extra = (
             await connection.execute(
@@ -562,7 +562,7 @@ async def native_catalog_profile(
             expected["functions"], functions, {r["signature"]: r["oid"] for r in resolved_rows}
         )
         stage = "CATALOG_NONFUNCTION"
-        digest = runner.compare_snapshot(expected["columns"], full, nonfunction, revision="0025")
+        digest = runner.compare_snapshot(expected["columns"], full, nonfunction, revision="0026")
         stage = "APPLICATION_FULL_CATALOG_PIN"
         if digest != NATIVE_CONTEXT_PROFILE_SHA256:
             raise ValueError
@@ -590,10 +590,10 @@ async def native_catalog_profile(
         runner.compare_roles(roles, memberships, owned)
         stage = "CATALOG_DECLARED_PROFILE"
         declared = (
-            await connection.execute(text("SELECT platform.service_request_schema_profile()"))
+            await connection.execute(text("SELECT platform.service_assessment_schema_profile()"))
         ).scalar_one()
         if (
-            declared != {"schema_revision": "0025", "valid": True, "profile_sha256": digest}
+            declared != {"schema_revision": "0026", "valid": True, "profile_sha256": digest}
             or type(declared["valid"]) is not bool
         ):
             raise ValueError

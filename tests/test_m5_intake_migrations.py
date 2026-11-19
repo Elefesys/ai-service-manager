@@ -121,10 +121,15 @@ def execute_migration(connection, direction):
 def downgrade_to_intake_schema(connection):
     from test_m5_intake_v7_repair_migrations import execute_repair
 
-    script = ScriptDirectory("migrations").get_revision("0025")
-    with Operations.context(MigrationContext.configure(connection)):
-        script.module.downgrade()
-    connection.execute(text("UPDATE platform.alembic_version SET version_num='0024'"))
+    scripts = ScriptDirectory("migrations")
+    for revision, predecessor in (("0026", "0025"), ("0025", "0024")):
+        script = scripts.get_revision(revision)
+        with Operations.context(MigrationContext.configure(connection)):
+            script.module.downgrade()
+        connection.execute(
+            text("UPDATE platform.alembic_version SET version_num=:revision"),
+            {"revision": predecessor},
+        )
     execute_repair(connection, "downgrade")
 
 

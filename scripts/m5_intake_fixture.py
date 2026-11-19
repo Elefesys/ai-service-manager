@@ -42,12 +42,21 @@ INPUTS = {
     "ambiguous": "Synthetic intake flower and swallow, shared size unclear",
     "second": "Synthetic intake separate swallow shoulder",
     "late-size": "Synthetic intake for the first work, flower size 12 cm",
+    "assess-first": "Synthetic assessment flower forearm 8 cm linework",
+    "assess-second": "Synthetic assessment separate swallow shoulder linework",
 }
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
     "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
     "second": (("idea", "swallow"), ("placement", "shoulder")),
     "late-size": (("approximate_size", "12 cm"),),
+    "assess-first": (
+        ("idea", "flower"),
+        ("placement", "forearm"),
+        ("approximate_size", "8 cm"),
+        ("style", "linework"),
+    ),
+    "assess-second": (("idea", "swallow"), ("placement", "shoulder"), ("style", "linework")),
 }
 CATEGORIES = {"complex": "COVER_UP", "ambiguous": "AMBIGUOUS"}
 
@@ -96,7 +105,7 @@ class IntakeModel(FakeAdapter):
             intake=dict(
                 service_id=self.service,
                 category=CATEGORIES.get(self.operation, "NEW_TATTOO"),
-                switch_request=self.operation == "second",
+                switch_request=self.operation in {"second", "assess-second"},
                 facts=facts,
             ),
         )
@@ -316,7 +325,9 @@ def main():
         parser.add_argument("--operation", choices=tuple(INPUTS), required=True)
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
         parser.add_argument(
-            "--journey", choices=("intake", "request", "request-deferred"), default="intake"
+            "--journey",
+            choices=("intake", "request", "request-deferred", "assessment"),
+            default="intake",
         )
         for name in ("actor", "workspace", "business"):
             parser.add_argument("--" + name, required=True)

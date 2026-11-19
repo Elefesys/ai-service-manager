@@ -1,6 +1,8 @@
 // Closed M5.1A owner API. Server validation and live OWNER remain authoritative.
 export type IntakeField = { id: string; label: string; required: boolean };
-export type Service = { id: string; name: string; description: string; active: boolean; intake_fields: IntakeField[]; price: { mode: string; amount_minor: number | null; formula_note: string | null }; duration: { mode: string; minutes: number | null; rule_note: string | null }; deposit: { mode: string; amount_minor: number | null; percent: number | null } };
+export type SizeDurationRule = { threshold_mm: number; at_or_below_minutes: number; above_minutes: number };
+export type DurationPolicy = { mode: string; minutes: number | null; rule_note: string | null; size_rule?: SizeDurationRule | null };
+export type Service = { id: string; name: string; description: string; active: boolean; intake_fields: IntakeField[]; price: { mode: string; amount_minor: number | null; formula_note: string | null }; duration: DurationPolicy; deposit: { mode: string; amount_minor: number | null; percent: number | null } };
 export type Rule = { id: string; service_id: string | null; kind: string; value: number | boolean };
 export type FAQ = { id: string; service_id: string | null; question: string; answer: string; source: string; confirmed: boolean; rule_ids: string[] };
 export type Bundle = { schema_version: 1; communication_style: string; services: Service[]; rules: Rule[]; faqs: FAQ[] };
@@ -28,11 +30,25 @@ const number = (v: unknown): v is number => typeof v === 'number' && Number.isSa
 const nullable = (v: unknown, check: (x: unknown) => boolean) => v === null || check(v);
 function items(v: unknown, n: number): unknown[] { if (!Array.isArray(v) || v.length > n) invalid(); return v as unknown[]; }
 function timestamp(v: unknown): v is string { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$(?![\s\S])/.test(v) && !v.startsWith('0000') && !Number.isNaN(new Date(v).valueOf()) && new Date(v).toISOString() === v.slice(0, 23) + 'Z'; }
+const positiveWithin = (v:unknown,max:number):v is number => number(v)&&v>=1&&v<=max;
+export function parseDurationPolicy(value:unknown):DurationPolicy{
+  const keys=['mode','minutes','rule_note'];
+  if(typeof value==='object'&&value!==null&&Object.hasOwn(value,'size_rule'))keys.push('size_rule');
+  const d=object(value,keys);
+  if(!text(d.mode,32,true)||!nullable(d.minutes,number)||!nullable(d.rule_note,x=>text(x,160)))invalid();
+  if(d.size_rule!=null){
+    const rule=object(d.size_rule,['threshold_mm','at_or_below_minutes','above_minutes']);
+    if(d.mode!=='CONFIGURED_RULE'||!positiveWithin(rule.threshold_mm,999)
+      ||!positiveWithin(rule.at_or_below_minutes,10080)||!positiveWithin(rule.above_minutes,10080))invalid();
+  }else if(Object.hasOwn(d,'size_rule')&&d.size_rule!==null)invalid();
+  return d as DurationPolicy;
+}
 function service(value: unknown): Service {
   const s = object(value, ['id','name','description','active','intake_fields','price','duration','deposit']);
   if (!slug(s.id) || !text(s.name,100,true) || !text(s.description,500) || typeof s.active !== 'boolean') invalid();
   for (const field of items(s.intake_fields,6)) { const f=object(field,['id','label','required']); if (!slug(f.id)||!text(f.label,100,true)||typeof f.required!=='boolean') invalid(); }
-  for (const [name, keys] of [['price',['mode','amount_minor','formula_note']],['duration',['mode','minutes','rule_note']],['deposit',['mode','amount_minor','percent']]] as const) {
+  parseDurationPolicy(s.duration);
+  for (const [name, keys] of [['price',['mode','amount_minor','formula_note']],['deposit',['mode','amount_minor','percent']]] as const) {
     const p=object(s[name],[...keys]); if (!text(p.mode,32,true)) invalid();
     for (const [key,v] of Object.entries(p)) if (key!=='mode' && !nullable(v, key.endsWith('_note') ? x=>text(x,160) : number)) invalid();
   }

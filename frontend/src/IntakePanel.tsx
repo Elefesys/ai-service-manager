@@ -1,7 +1,8 @@
 import {useEffect,useId,useRef,useState} from 'react';
+import type {ReactNode} from 'react';
 import {Session} from './api';
 import {IntakeError,intakeApi,labels} from './intake-api';
-import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,ServiceRequestDraft} from './intake-api';
+import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 
 export function IntakePanel({session,scope,expired,refresh=0}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number}){
  const key=scope?JSON.stringify({...scope,refresh}):'',current=useRef({key,session,epoch:0});
@@ -65,7 +66,7 @@ function factStatus(fact:Fact){
  return fact.status==='observed'?'Наблюдение изображения':'Со слов клиента';
 }
 
-function DraftCard({draft}:{draft:ServiceRequestDraft}){
+function DraftCard({draft,children}:{draft:ServiceRequestDraft;children:ReactNode}){
  return <section aria-label="Черновик заявки">
   <h4>Черновик заявки</h4>
   <article>
@@ -86,6 +87,100 @@ function DraftCard({draft}:{draft:ServiceRequestDraft}){
    {draft.conflicts.length>0&&<p>Противоречия: {draft.conflicts.map(field=>labels[field]).join(', ')}</p>}
    {draft.question&&<p>{draft.question}</p>}
   </article>
+  {children}
+ </section>;
+}
+
+const assessmentLabels:Record<ServiceAssessment['outcome'],string>={
+ FEASIBLE:'Выполнимо',NEEDS_DATA:'Нужны данные',NEEDS_OWNER:'Решает мастер',DECLINED:'Отказ',
+};
+
+function assessmentReason(value:ServiceAssessment):string{
+ const field=value.field?` «${labels[value.field]}»`:'';
+ switch(value.reason){
+  case 'FIXED_DURATION':return 'Фиксированная длительность из опубликованных настроек.';
+  case 'SIZE_DURATION_RULE':return 'Опубликованное правило длительности по размеру.';
+  case 'MISSING_FACT':return value.field==='approximate_size'?'Какой примерный размер вы представляете, в сантиметрах?':`Уточните сведение${field}.`;
+  case 'CONFLICTING_FACT':return `Уточните противоречивое сведение${field}.`;
+  case 'SOURCE_CHANGED':return `Проверьте текущий источник сведения${field} и обновите заявку.`;
+  case 'SIZE_NEEDS_CONFIRMATION':return 'Подтвердите размер в сантиметрах или миллиметрах.';
+  case 'MIN_AGE_UNCONFIRMED':return 'Уточните возраст для проверки опубликованного ограничения.';
+  case 'SIZE_LIMIT_EXCEEDED':return value.size_mm!==null&&value.limit!==null
+   ?`Размер ${value.size_mm} мм превышает опубликованный предел ${value.limit} мм.`:'Размер превышает опубликованный предел.';
+  case 'OWNER_HANDOFF':return 'Мастер проверяет возможность выполнения этой работы.';
+  case 'OWNER_DURATION':return 'Мастер задаёт длительность следующего сеанса.';
+  case 'SERVICE_UNAVAILABLE':return 'Опубликованная услуга для этой заявки недоступна.';
+  case 'DURATION_UNPUBLISHED':return 'Опубликуйте настройку длительности или передайте выбор мастеру.';
+ }
+}
+
+function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;locked:boolean;expired:()=>void}){
+ const [value,setValue]=useState<ServiceAssessment|null>(null);
+ const [busy,setBusy]=useState(true);
+ const [error,setError]=useState('');
+ const [retry,setRetry]=useState(false);
+ const [blocked,setBlocked]=useState(false);
+ const active=useRef<AbortController|null>(null);
+
+ async function load(evaluate:boolean){
+  if(active.current)return;
+  const controller=new AbortController(),{signal}=controller;
+  active.current=controller;
+  setBusy(true);setError('');setRetry(false);
+  try{
+   const result=evaluate
+    ?await intakeApi.assess(scope,draft.request_id,draft.revision,csrf,signal)
+    :await intakeApi.assessment(scope,draft.request_id,signal);
+   if(signal.aborted)return;
+   setValue(result);setBlocked(false);
+  }catch(failure){
+   if(signal.aborted)return;
+   setValue(previous=>previous?{...previous,current:false}:previous);
+   if(failure instanceof IntakeError&&[401,403,404].includes(failure.status)){
+    setValue(null);setBlocked(true);setError('Оценка заявки недоступна.');
+    if(failure.status===401)expired();
+   }else if(failure instanceof IntakeError&&failure.code==='STALE_STATE'){
+    setBlocked(true);setError('Заявка изменилась. Обновите карточку заявки и пересчитайте оценку.');
+   }else{
+    setRetry(evaluate);setError(evaluate?'Результат оценки неизвестен. Повторите оценку заявки.':'Не удалось получить оценку заявки.');
+   }
+  }finally{
+   if(active.current===controller){active.current=null;if(!signal.aborted)setBusy(false);}
+  }
+ }
+
+ useEffect(()=>{
+  void load(false);
+  return ()=>{active.current?.abort();active.current=null;};
+ },[draft]);
+
+ const current=!!value&&value.current&&value.request_revision===draft.revision&&!busy
+  &&(activation===undefined||BigInt(activation)<=BigInt(value.activation_version));
+ return <section aria-label="Оценка заявки" style={{overflowWrap:'anywhere'}}>
+  <h4>Оценка заявки</h4>
+  {error&&<p role="alert">{error}</p>}
+  {value&&<article>
+   <p>{current?assessmentLabels[value.outcome]:busy?'Проверяем актуальность оценки':'Архивная оценка. Для актуального результата выполните пересчёт.'}</p>
+   {current&&<p>{assessmentReason(value)}</p>}
+   {current&&value.occupied_minutes!==null&&<>
+    <p>Занято на следующий сеанс <strong>{value.occupied_minutes} мин</strong>.</p>
+    <p>Занятость включает подготовку внутри сеанса. Внешние буферы учитываются отдельно.</p>
+   </>}
+   {value.release_id&&<p>Публикация <code>{value.release_id}</code> · версия активации {value.activation_version}</p>}
+   {current&&value.duration_policy?.size_rule&&<p>Порог опубликованного правила {value.duration_policy.size_rule.threshold_mm} мм.</p>}
+   {current&&value.size_mm!==null&&value.reason!=='SIZE_LIMIT_EXCEEDED'&&<p>Размер для оценки {value.size_mm} мм.</p>}
+   {value.rule_id&&<p>Правило <code>{value.rule_id}</code></p>}
+   {value.evidence.length>0&&<ul>
+    {value.evidence.map(fact=><li key={fact.field}>
+     {labels[fact.field]} · {fact.value} · {factStatus(fact)}{fact.conflict?' · есть противоречие':''} · <a href={`#message-${fact.source.message_id}`}>Источник оценки для поля {labels[fact.field]}</a> · версия <code>{fact.source.source_version}</code>
+     {fact.source.analysis_id&&<> · анализ <code>{fact.source.analysis_id}</code> · SHA-256 <code>{fact.source.analysis_sha256}</code></>}
+    </li>)}
+   </ul>}
+  </article>}
+  <div className="control-actions">
+   <button type="button" disabled={busy||locked||blocked} onClick={()=>void load(true)}>{retry?'Повторить оценку заявки':value?'Пересчитать оценку':'Оценить заявку'}</button>
+   <button type="button" className="secondary" disabled={busy||locked} onClick={()=>void load(false)}>Обновить оценку заявки</button>
+  </div>
  </section>;
 }
 
@@ -237,7 +332,9 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
     </option>)}
    </select>
   </section>}
-  {draft&&<DraftCard draft={draft}/>}
+  {draft&&<DraftCard draft={draft}>
+   <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired}/>
+  </DraftCard>}
   {error&&<p role="alert">{error}</p>}
   {waiting&&!busy&&<button type="button" onClick={()=>void open(desiredCard.current,waiting)}>
    {waiting.acceptedId?'Открыть сохранённую заявку':waiting.operation==='create'?'Повторить создание заявки':'Повторить изменение заявки'}

@@ -109,6 +109,9 @@ PORTFOLIO_DELIVERY_NONFUNCTION_SHA256 = (
     "6890bd1d959ef3e6c05c0ca8f7e203586035e3a2f46c4e343e4e64dbf38bf210"
 )
 INTAKE_NONFUNCTION_SHA256 = "37c156d07431b688aa99e8afca2a83f09e8082f5a4b2d28f4ac5292286158d32"
+SERVICE_ASSESSMENT_NONFUNCTION_SHA256 = (
+    "5a29cbdf68c98dcd9628a20cddf8dadd17d6cba5087a6d7c3a259c3218d0aabc"
+)
 SERVICE_REQUEST_NONFUNCTION_SHA256 = (
     "421339b8ed8e33f168a087f1e2b1ca8f8f719a7f8be9efe2eb0ec7e2bedbedd2"
 )
@@ -292,6 +295,7 @@ def capture_source(root, revision="0013"):
             "0023",
             "0024",
             "0025",
+            "0026",
         },
         "Unsupported catalog revision",
     )
@@ -503,6 +507,7 @@ def source_catalog(root, revision="0013"):
             "0023": 318,
             "0024": 321,
             "0025": 331,
+            "0026": 339,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -525,6 +530,7 @@ def source_catalog(root, revision="0013"):
             "0023": 73,
             "0024": 73,
             "0025": 75,
+            "0026": 76,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -592,6 +598,7 @@ def source_catalog(root, revision="0013"):
                 if revision >= "0025"
                 else set()
             )
+            | ({"app.service_assessments"} if revision >= "0026" else set())
         ),
         "Independent source column replay differs",
     )
@@ -684,11 +691,26 @@ def compare_embedded_profile(expected):
     revision = expected["revision"]
     require(
         revision
-        in {"0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"},
+        in {
+            "0015",
+            "0016",
+            "0017",
+            "0018",
+            "0019",
+            "0020",
+            "0021",
+            "0022",
+            "0023",
+            "0024",
+            "0025",
+            "0026",
+        },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.service_request_schema_profile()"
+        "platform.service_assessment_schema_profile()"
+        if revision == "0026"
+        else "platform.service_request_schema_profile()"
         if revision == "0025"
         else "platform.intake_v7_schema_profile()"
         if revision == "0024"
@@ -742,6 +764,7 @@ def compare_embedded_profile(expected):
             "0023": 317,
             "0024": 320,
             "0025": 330,
+            "0026": 338,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -785,6 +808,7 @@ def compare_embedded_profile(expected):
             "0023": 73,
             "0024": 73,
             "0025": 75,
+            "0026": 76,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -897,6 +921,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0023",
             "0024",
             "0025",
+            "0026",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -913,6 +938,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0023": INTAKE_NONFUNCTION_SHA256,
                 "0024": INTAKE_NONFUNCTION_SHA256,
                 "0025": SERVICE_REQUEST_NONFUNCTION_SHA256,
+                "0026": SERVICE_ASSESSMENT_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3029,7 +3055,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0025"),
+            source_catalog(ROOT, "0026"),
         )
 
     def persist_partition(self, work):
@@ -3213,7 +3239,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0025"
+            and source["expected_revision"] == "0026"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(
