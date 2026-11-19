@@ -2,40 +2,29 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.2D INTEGRATED / VERIFIED; M5.3A IN_PROGRESS / 2026-11-16
+## CURRENT — M5.3B IN_PROGRESS · общая приёмка CHANGES_REQUESTED · 2026-11-18
 
-PR #52 слит владельцем. Accepted main:
-`220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
-`d15f9a75346ab881449010745cbe0216081b78cf`, совпадает с reviewed candidate
-`3cb99509796262112a563e5665d6cabb44fbfc99`.
-[Post-merge CI43894664260](https://github.com/Elefesys/ai-service-manager/actions/runs/43894664260)
-— **12/12 SUCCESS, attempt 1**. Source/449 blobs и core/runtime evidence
-проверены C0: 4680 unit + 161 subtests, 1041 generic PG, все 14 backend phases,
-primary/cleanup 0; runtime 160/160 и 8 cleanups PASS. Подробности в M5_HANDOFF.
-[C0 review M5.2D](https://github.com/Elefesys/ai-service-manager/blob/afb7b1b6f126446c8ac7162bd7f42a8603ff624f/docs/tasks/M5_HANDOFF.md#L13)
-сохранён. Старый CI43866508414 остаётся FAILURE.
+**Единственная активная задача — C1-M5.3B-V7-FIX-R1, ведущий C1.**
+Ветка `c1/m5-3b-v7-fixes-r1`. C0 подтвердил четыре замечания C8 к принятому main.
+Два P1 прерывают поиск с непустым индексом и выбор фото при стабильном READ.
+Два P2 затрагивают уже собранные поля и возможность решить открытый вопрос мастеру.
+C1 возвращает один исправленный PR с доказательством полного v7 пути на PostgreSQL,
+проверкой границ model history и актуальности перед отправкой. C2/C4 консультируют
+по своей части, C5 по существующим browser tests. Затем кандидат проверяет C8.
+[Решение и конечный scope C1](tasks/M5_HANDOFF.md). [Независимый возврат C8](https://github.com/Elefesys/ai-service-manager/blob/4cb6318f008d3ca952eb077268887e2d39714972/docs/tasks/M5_HANDOFF.md#L14).
 
-**M5.1A–M5.2D — INTEGRATED / VERIFIED в synthetic LOCAL/TEST** с прежними
-ограничениями; M5.2A functional capability — ASSISTED_SYNTHETIC.
-Новая реальная отправка фото и общий live VERIFIED не заявлены.
+**Application base** `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
+`11c987fb12e4f88d27da3737911c468d520269b8`. PR #53 и post-merge CI прошли
+12/12 с первой попытки. M5.1A–M5.3A — INTEGRATED / VERIFIED в ранее проверенном
+synthetic LOCAL/TEST. M5.2A capability принята в ASSISTED_SYNTHETIC.
+Доказательство общего v7 сценария требуется на исправленном кандидате.
+[Приёмка PR #53](https://github.com/Elefesys/ai-service-manager/blob/3ba774da3bf61b57062098ea5e0470b1402eb70d/docs/tasks/M5_HANDOFF.md#L14). [Push/main CI44018352191](https://github.com/Elefesys/ai-service-manager/actions/runs/44018352191).
 
-**Единственная активная задача — C1-M5.3A-INTAKE-DURATION-R1, ведущий C1.**
-Ветка `c1/m5-3a-intake-duration-r1`, application base — полный SHA выше.
-C2/C4/C5 помогают последовательно; C3 консультирует по guards; C6 HOLD.
-Результат: исправляемая предварительная сводка запроса с источниками,
-один актуальный owner handoff и подтверждённые DurationCase только для мастера.
-Scope, finite paths, migration 0023←0022, новые closed contracts и checks —
-[CURRENT M5_HANDOFF](tasks/M5_HANDOFF.md). Applied 0001–0022 immutable.
-C0 выдаёт docs-only assignment; C1 сохраняет ancestry и начинает от него.
-
-IMPL-005 ACCEPTED / LOCKED. Цена/подтверждённая длительность/Quote/запись/
-платежи не входят. Default Vision/embedding DISABLED, FAKE/EVAL_ONLY,
-UNKNOWN/NOT_PROVEN receipts, confirmed 0.50229415 RUB / holds 11.75 RUB,
-receiver ACK/fence и полный live HUMAN/Resume сохраняются. Новых paid/VM/
-real Telegram/client-data допусков нет. M5.3B/M6 не выданы.
-
-Следующее действие — передать C1 закреплённое поручение M5.3A.
-Затем C0 review, отдельное owner merge и штатный post-merge CI.
+IMPL-005 — ACCEPTED / LOCKED. C0 выделяет только 0024 с родителем 0023.
+Применённые 0001–0023 неизменяемы. Default OFF/FAKE/EVAL_ONLY, старые UNKNOWN/
+NOT_PROVEN, 0.50229415 RUB подтверждённых расходов, holds 11.75 RUB, receiver
+ACK/fence, полный live HUMAN/Resume и ограничения data route сохранены. C6 HOLD.
+M6 ждёт отдельной выдачи после общей приёмки. Сейчас владелец передаёт C1 CURRENT.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 

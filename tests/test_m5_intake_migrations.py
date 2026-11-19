@@ -124,6 +124,9 @@ async def test_actual_unused_downgrade_reupgrade_keeps_exact_catalog_and_legacy_
     async with migrator.connect() as c:
         transaction = await c.begin()
         try:
+            from test_m5_intake_v7_repair_migrations import execute_repair
+
+            await c.run_sync(execute_repair, "downgrade")
             before = (await c.execute(text("SELECT platform.intake_schema_profile()"))).scalar_one()
             assert before["valid"] is True
             await c.run_sync(execute_migration, "downgrade")
@@ -159,6 +162,9 @@ async def test_used_downgrade_refuses_before_any_schema_change(db):
     async with migrator.connect() as c:
         outer = await c.begin()
         try:
+            from test_m5_intake_v7_repair_migrations import execute_repair
+
+            await c.run_sync(execute_repair, "downgrade")
             # Existing constraints are deliberately exercised through the owner
             # DurationCase capability in API tests; here inspect the DDL guard by
             # inserting a minimal complete typed owner receipt in a savepoint.

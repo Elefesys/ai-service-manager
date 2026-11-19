@@ -55,7 +55,17 @@ test('@narrow owner edits FAQ/rule, previews and publishes current active knowle
   const writesBeforePreview=writes;await page.getByRole('button',{name:'Проверить и показать предпросмотр'}).click();await expect(page.getByRole('button',{name:'Опубликовать черновик'})).toBeEnabled();expect(writes).toBe(writesBeforePreview);
   await page.getByRole('button',{name:'Опубликовать черновик'}).click();await expect(page.getByRole('region',{name:'Опубликованные сведения'}).getByText(answer,{exact:true})).toBeVisible();
   const after=await read(page.request,'active');expect(after.release_id!==before.release_id&&BigInt(after.activation_version)===BigInt(before.activation_version)+1n&&after.bundle?.faqs[0].answer===answer&&after.bundle.rules[0].value===21).toBe(true);
-  expect(writes).toBe(2);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  expect(writes).toBe(2);
+  await page.getByLabel('Владелец подтвердил FAQ 1').uncheck();
+  await page.getByRole('button',{name:'Сохранить черновик'}).click();
+  await expect(page.getByLabel('Владелец подтвердил FAQ 1')).toBeEnabled();
+  await page.getByRole('button',{name:'Проверить и показать предпросмотр'}).click();
+  await expect(page.getByText('Публикация заблокирована ошибками.',{exact:true})).toBeVisible();
+  await expect(page.getByText(/ERROR — ошибка.*Укажите источник FAQ и подтвердите сведения/)).toBeVisible();
+  await expect(page.getByRole('button',{name:'Опубликовать черновик'})).toBeDisabled();
+  expect(writes).toBe(3);
+  expect(await read(page.request,'active')).toEqual(after);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.getByRole('button',{name:'Выйти',exact:true}).click();await expect(page.getByRole('region',{name:'Настройки бизнеса'})).toHaveCount(0);
 });
 

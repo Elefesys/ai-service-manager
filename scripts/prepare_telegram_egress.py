@@ -2001,16 +2001,18 @@ SCHEMA_TABLES["0023"] = SCHEMA_TABLES["0022"] | {
     "platform.intake_escalation_links",
 }
 
+SCHEMA_TABLES["0024"] = SCHEMA_TABLES["0023"]
+
 
 def native_source_profile():
-    """Current0023 inventory; the historical0012/0013 inventories stay closed."""
+    """Current 0024 inventory; the historical0012/0013 inventories stay closed."""
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT, "0023")
-    schema_inventory("0023", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0024")
+    schema_inventory("0024", profile["columns"])
     require(
-        len(profile["functions"]) == 318 and sum(map(len, profile["columns"].values())) == 1060,
+        len(profile["functions"]) == 321 and sum(map(len, profile["columns"].values())) == 1060,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -2038,7 +2040,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0023",
+            "schema_revision": "0024",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

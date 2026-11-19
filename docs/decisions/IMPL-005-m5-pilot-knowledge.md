@@ -14,13 +14,22 @@ LOCAL/TEST. Main 8d98593b/tree a14ed9b6, post-merge CI43818223732 — 12/12 SUCC
 attempt 1. M5.2D/PR #52 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST:
 accepted main `220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
 `d15f9a75346ab881449010745cbe0216081b78cf`, post-merge CI43894664260 —
-12/12 SUCCESS, attempt 1. Единственная активная задача — M5.3A, ведущий C1;
-M5.3B/M6 не выданы. Scope решения не расширен: предварительная intake
-projection с provenance и deterministic transitions, без M6 request/assessment;
-подтверждённые DurationCase доступны только мастеру, без клиентского обещания
-времени и без автоматического обучения. Текущие closed test-only Action Center
-DTO требуют узкой новой projection для intake, сохраняя legacy contracts;
-конкретное разрешение и write-set — в CURRENT M5_HANDOFF.
+12/12 SUCCESS, attempt1. M5.3A/PR53 — INTEGRATED / VERIFIED в synthetic
+LOCAL/TEST: main `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
+`11c987fb12e4f88d27da3737911c468d520269b8`, post-merge CI44018352191 —
+12/12 SUCCESS, attempt1. Общая приёмка M5 получила CHANGES_REQUESTED.
+C1 ведёт C1-M5.3B-V7-FIX-R1 по четырём замечаниям C8. M6 ждёт отдельной выдачи.
+Scope решения не расширен: preliminary intake с provenance/deterministic
+transitions, новая закрытая Action Center projection с сохранением legacy,
+owner-only DurationCase; без M6 request/assessment, клиентского обещания
+времени и автоматического обучения. General live VERIFIED не заявлен.
+Уточнение C0 от 2026-11-18 к требованиям актуальности и intake. Каждая новая
+активация инвалидирует прежний run и его допуски. В новой проекции можно
+сохранить факт по тому же запросу после проверки совместимости услуги и поля,
+актуальности источника и привязки подтверждения. Повтор значения сохраняет
+подтверждение и нерешённый конфликт до явной коррекции. Исходный текст и цитаты
+допускаются к модели только в границах текущего сообщения и разрешённого
+snapshot истории M4. Уточнение применяется к M5 в рамках принятого IMPL-005.
 Актуальная задача и статус — только в CURRENT реестра/передачи по ссылкам ниже.
 Operator циклы C6 закончены.
 Текущее уточнение embedding usage ниже — ACCEPTED C0; client-data/paid/VM

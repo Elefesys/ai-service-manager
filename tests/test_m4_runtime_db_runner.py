@@ -789,6 +789,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0021", "portfolio_schema_profile"),
         ("0022", "portfolio_delivery_schema_profile"),
         ("0023", "intake_schema_profile"),
+        ("0024", "intake_v7_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -829,6 +830,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0021", "portfolio_schema_profile", 289, 288),
         ("0022", "portfolio_delivery_schema_profile", 303, 302),
         ("0023", "intake_schema_profile", 318, 317),
+        ("0024", "intake_v7_schema_profile", 321, 320),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -838,7 +840,7 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
     predicate = {
         "functions": f"(SELECT count(*) FROM functions)={functions}",
         "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
-        "tables": f"(SELECT count(*) FROM tables)={73 if revision == '0023' else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
+        "tables": f"(SELECT count(*) FROM tables)={73 if revision in {'0023', '0024'} else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
     }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
@@ -864,8 +866,8 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
     profile_name = (
-        "platform.intake_schema_profile()"
-        if DATABASE_SCHEMA_REVISION == "0023"
+        "platform.intake_v7_schema_profile()"
+        if DATABASE_SCHEMA_REVISION == "0024"
         else "platform.portfolio_schema_profile()"
     )
     if not body_matches:
@@ -3414,3 +3416,164 @@ def test_intake_source_damage_refused_before_resources(r11_event, monkeypatch, r
     with pytest.raises((carrier.Refusal, catalog.Refusal)):
         r["run"]()
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+def prepare_v7_fix_event(r, monkeypatch, route, *, damage=None):
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_V7_FIX_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M5_V7_FIX_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    if damage == "assignment_parent":
+        f.git("commit", "--allow-empty", "-qm", "unexpected prior commit")
+    for name in sorted(carrier.M5_V7_FIX_DOCS):
+        path = f.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# exact assignment draft\n")
+    if damage == "assignment_paths":
+        (f.root / "outside.md").write_text("# adjacent assignment rewrite\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "v7 assignment")
+    assignment = f.git("rev-parse", "HEAD")
+    monkeypatch.setattr(carrier, "M5_V7_FIX_ASSIGNMENT", assignment)
+    monkeypatch.setattr(carrier, "M5_V7_FIX_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    if damage == "assignment_ancestry":
+        f.git("checkout", "--detach", r["source"])
+    path = f.root / "migrations/versions/0024_intake_v7_repair.py"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# approved repair\n")
+    if damage == "write_set":
+        (f.root / "outside.md").write_text("# outside scope\n")
+    if damage in carrier.M5_INTAKE_C0_DOCS:
+        (f.root / damage).write_text("# unauthorized rewrite\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "v7 candidate")
+    head = f.git("rev-parse", "HEAD")
+    tree = f.git("rev-parse", "HEAD^{tree}")
+    merge = capability_checkout(
+        r,
+        monkeypatch,
+        route,
+        head,
+        branch="c1/other-v7-branch" if damage == "branch" else carrier.M5_V7_FIX_BRANCH,
+        wrong_base=damage == "merge_parents",
+    )
+    if damage in {"merge_tree", "single_parent"}:
+        (f.root / "m4-carrier-receipt.md").write_text("# unexpected merge-specific bytes\n")
+        f.git("add", ".")
+        replacement = f.git(
+            "commit-tree",
+            f.git("write-tree"),
+            "-p",
+            r["source"],
+            *(["-p", head] if damage == "merge_tree" else []),
+            "-m",
+            "damaged merge",
+        )
+        f.git("reset", "--hard", replacement)
+        monkeypatch.setenv("GITHUB_SHA", replacement)
+        if route == "main-push":
+            r["payload"].update(after=replacement, head_commit={"id": replacement})
+    if damage == "dirty":
+        (f.root / "untracked.txt").write_text("# working tree drift\n")
+    return head, tree, merge
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage", [None, "assignment", "candidate_parents", "candidate_tree", "paths"]
+)
+def test_v7_fix_actual_git_two_parent_source_and_child_receipt(
+    r11_event, monkeypatch, route, damage
+):
+    r = r11_event
+    head, tree, merge = prepare_v7_fix_event(r, monkeypatch, route)
+    r["run"]()
+    (bound,) = r["boundary"]
+    assert bound["mode"] == "runtime" and bound["sql_test_budget_seconds"] == 900
+    expected = {"sha": head, "tree": tree, "merge_parents": [r["source"], head]}
+    admission = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert admission["base"] == carrier.M5_V7_FIX_BASE and admission["tree"] == tree
+    assert admission["v7_fix_assignment"] == carrier.v7_fix_assignment_proof()
+    assert admission["v7_fix_candidate"] == expected
+
+    real_run = subprocess.run
+
+    class Archived(Exception):
+        pass
+
+    def before_archive(args, *positional, **keywords):
+        assert args[0] == "git"
+        if args[1] == "archive":
+            raise Archived
+        return real_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(subprocess, "run", before_archive)
+    with pytest.raises(Archived):
+        r["real_run_admitted"](
+            bound["root"],
+            bound["event"],
+            bound["manifest"],
+            bound["mode"],
+            sql_test_budget_seconds=900,
+        )
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert proof["source"] == merge and proof["branch"] == carrier.M5_V7_FIX_BRANCH
+    assert proof["v7_fix_candidate"] == expected
+    for key, value in {
+        "SOURCE_SHA": merge,
+        "SOURCE_TREE": tree,
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, value)
+    assert carrier.source_tree_from_evidence(path) == tree
+    if damage:
+        if damage == "assignment":
+            del proof["v7_fix_assignment"]
+        elif damage == "candidate_parents":
+            proof["v7_fix_candidate"]["merge_parents"].reverse()
+        elif damage == "candidate_tree":
+            proof["v7_fix_candidate"]["tree"] = "f" * 40
+        else:
+            proof["paths"] = sorted([*proof["paths"], "outside.md"])
+        carrier.write(path, proof)
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    assert not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "base_tree",
+        "assignment_tree",
+        "assignment_parent",
+        "assignment_paths",
+        "assignment_ancestry",
+        "merge_parents",
+        "merge_tree",
+        "single_parent",
+        "write_set",
+        "dirty",
+        *sorted(carrier.M5_INTAKE_C0_DOCS),
+    ],
+)
+def test_v7_fix_rejects_damage_before_resources(r11_event, monkeypatch, route, damage):
+    r = r11_event
+    prepare_v7_fix_event(r, monkeypatch, route, damage=damage)
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_V7_FIX_TREE", "f" * 40)
+    elif damage == "assignment_tree":
+        monkeypatch.setattr(carrier, "M5_V7_FIX_ASSIGNMENT_TREE", "a" * 40)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+def test_v7_fix_refuses_other_pr_branch(r11_event, monkeypatch):
+    r = r11_event
+    prepare_v7_fix_event(r, monkeypatch, "same-repository-pr-merge", damage="branch")
+    with pytest.raises(carrier.Refusal, match="POLZA_RUNTIME_EVENT_BRANCH"):
+        r["run"]()
+    assert not r["boundary"]

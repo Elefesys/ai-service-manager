@@ -1,11 +1,12 @@
 """Authority, source evidence and progressive-intake behavior without a model loop."""
 
 import json
+from uuid import UUID
 
 import pytest
 from asm.ai.contracts import CONVERSATION_RESULT, CONVERSATION_RESULT_V2, CONVERSATION_RESULT_V3
-from asm.intake.models import CandidateSet
-from asm.intake.projection import COMPLETE_TEXT, reduce_candidates
+from asm.intake.models import CandidateSet, SourceMessage
+from asm.intake.projection import COMPLETE_TEXT, QUESTIONS, reduce_candidates
 from asm.intake.templates import template_revision
 from m5_intake_fixtures import OWNER, active, candidates, projection
 from pydantic import ValidationError
@@ -24,18 +25,50 @@ def test_known_fields_produce_only_the_next_missing_question_and_no_photo_requir
     assert "пока не согласованы" in COMPLETE_TEXT
 
 
-def test_correction_replaces_explicit_value_while_implicit_conflict_stays_unresolved():
+@pytest.mark.parametrize("owner_confirmed", [False, True], ids=["client-stated", "owner-confirmed"])
+@pytest.mark.parametrize("choice", ["цветок", "птица"], ids=["same-value", "other-value"])
+def test_correction_replaces_explicit_value_while_implicit_conflict_stays_unresolved(
+    owner_confirmed, choice
+):
     current = projection("цветок, птица")
     facts, _, _ = reduce_candidates(current, candidates(), active())
-    current = current.model_copy(update={"service_id": "consultation", "facts": facts})
+    original = facts[0]
+    if owner_confirmed:
+        original = original.model_copy(update={"status": "owner-confirmed", "confirmed_by": OWNER})
+    current = current.model_copy(update={"service_id": "consultation", "facts": [original]})
     new = candidates({"idea": "птица"})
     facts, status, question = reduce_candidates(current, new, active())
-    assert facts[0].value == "цветок" and facts[0].conflict and "противоречивое" in question
-    new = new.model_copy(
-        update={"facts": (new.facts[0].model_copy(update={"explicit_correction": True}),)}
+    assert facts == [original.model_copy(update={"conflict": True})]
+    assert status == "CLARIFY" and question == "Уточните противоречивое поле: idea."
+
+    source = SourceMessage(
+        message_id=str(UUID(int=8)), source_version="e" * 64, text=f"Окончательно выбираю {choice}"
     )
-    facts, _, _ = reduce_candidates(current, new, active())
-    assert facts[0].value == "птица" and not facts[0].conflict
+    current = current.model_copy(update={"facts": facts, "sources": [source]})
+    new = candidates({"idea": choice})
+    candidate = new.facts[0]
+    candidate = candidate.model_copy(
+        update={
+            "explicit_correction": True,
+            "source": candidate.source.model_copy(
+                update={
+                    "message_id": source.message_id,
+                    "source_version": source.source_version,
+                    "quote": source.text,
+                }
+            ),
+        }
+    )
+    revised, status, question = reduce_candidates(
+        current, new.model_copy(update={"facts": (candidate,)}), active()
+    )
+    assert not revised[0].conflict and revised[0].value == choice
+    assert status == "CLARIFY" and question == QUESTIONS["placement"]
+    if owner_confirmed and choice == original.value:
+        assert revised == [original]
+    else:
+        assert revised[0].status == "client-stated" and revised[0].confirmed_by is None
+        assert revised[0].source == candidate.source
 
 
 @pytest.mark.parametrize(
@@ -123,6 +156,53 @@ def test_repeated_candidate_cannot_remove_owner_confirmation_or_clear_conflict()
     current = current.model_copy(update={"facts": [conflict]})
     repeated, state, _ = reduce_candidates(current, candidates(), active())
     assert repeated == [conflict] and state == "CLARIFY"
+
+
+@pytest.mark.parametrize(
+    "kind", ["used-message", "stale-version", "vision-same", "vision-different"]
+)
+def test_conflict_resolution_requires_fresh_explicit_client_evidence(kind):
+    current = projection()
+    facts, _, _ = reduce_candidates(current, candidates(), active())
+    conflict = facts[0].model_copy(update={"conflict": True})
+    source = current.sources[0].model_copy(
+        update={"message_id": str(UUID(int=8)), "source_version": "e" * 64}
+    )
+    if kind == "used-message":
+        source = current.sources[0]
+    current = current.model_copy(
+        update={"service_id": "consultation", "facts": [conflict], "sources": [source]}
+    )
+    new = candidates()
+    candidate = new.facts[0]
+    evidence = candidate.source.model_copy(
+        update={
+            "message_id": source.message_id,
+            "source_version": "f" * 64 if kind == "stale-version" else source.source_version,
+        }
+    )
+    if kind.startswith("vision-"):
+        evidence = evidence.model_copy(update={"analysis_id": OWNER, "analysis_sha256": "d" * 64})
+        candidate = candidate.model_copy(
+            update={
+                "status": "observed",
+                "value": "птица" if kind == "vision-different" else "цветок",
+            }
+        )
+    new = new.model_copy(
+        update={
+            "facts": (
+                candidate.model_copy(update={"source": evidence, "explicit_correction": True}),
+            )
+        }
+    )
+    if kind == "stale-version":
+        with pytest.raises(ValueError, match="Source is not current"):
+            reduce_candidates(current, new, active())
+    else:
+        repeated, state, question = reduce_candidates(current, new, active())
+        assert repeated == [conflict] and state == "CLARIFY"
+        assert question == "Уточните противоречивое поле: idea."
 
 
 def test_facts_without_published_service_are_schema_rejected():

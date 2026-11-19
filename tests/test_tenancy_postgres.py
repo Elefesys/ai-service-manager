@@ -743,6 +743,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0021",
             "0022",
             "0023",
+            "0024",
         }:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
@@ -799,7 +800,18 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 "platform.human_context_stale()": (True, False),
                 "platform.human_context_schema_profile()": (True, False),
             }
-        if revision in {"0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023"}:
+        if revision in {
+            "0015",
+            "0016",
+            "0017",
+            "0018",
+            "0019",
+            "0020",
+            "0021",
+            "0022",
+            "0023",
+            "0024",
+        }:
             from scripts import native_context_db_catalog as catalog
 
             source = catalog.source_catalog(catalog.ROOT, revision)
@@ -809,25 +821,25 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                         function["security_definer"],
                         function["runtime_execute"],
                     )
-            if revision in {"0018", "0019", "0020", "0021", "0022", "0023"}:
+            if revision in {"0018", "0019", "0020", "0021", "0022", "0023", "0024"}:
                 for signature, function in source["functions"].items():
                     if (
                         signature.startswith("platform.configuration_")
                         or signature == "platform.business_configuration_schema_profile()"
                         or signature == "platform.published_knowledge_schema_profile()"
                         or (
-                            revision in {"0020", "0021", "0022", "0023"}
+                            revision in {"0020", "0021", "0022", "0023", "0024"}
                             and signature.startswith("platform.knowledge_")
                         )
                         or (
-                            revision in {"0021", "0022", "0023"}
+                            revision in {"0021", "0022", "0023", "0024"}
                             and (
                                 signature.startswith("platform.portfolio_")
                                 or signature.startswith("platform.vision_")
                             )
                         )
                         or (
-                            revision == "0023"
+                            revision in {"0023", "0024"}
                             and signature.startswith(("platform.intake_", "platform.duration_"))
                         )
                     ):

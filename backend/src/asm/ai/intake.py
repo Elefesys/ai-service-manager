@@ -58,20 +58,50 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
     intake: IntakeProjection
 
     def _project(self, snapshot: object, binding: ContextBinding) -> PreparedIntakeContext:
-        base = super()._project(snapshot, binding)
+        base = self._delivery_projection(snapshot, binding)
         current = self.intake
-        # Source identities are deliberately new in v7. Actor IDs/DurationCase are absent.
-        facts = tuple(f.model_copy(update={"confirmed_by": None}) for f in current.facts)
-        sources = tuple(s.model_copy(update={"text": s.text[:500]}) for s in current.sources[-8:])
+        # The builder validated the snapshot and kept every current turn member.
+        # Intake extraction uses these members only. Native history, when admitted,
+        # is already bounded by the ordinary conversation projection.
+        assert isinstance(snapshot, dict)
+        visible = {
+            member["message_id"]: message.text or ""
+            for member, message in zip(
+                snapshot["members"], base.view.conversation.current, strict=True
+            )
+            if message.state == "VISIBLE"
+        }
+        self.candidate_sources = [
+            source for source in current.sources if visible.get(source.message_id) == source.text
+        ][-8:]
+        shown_sources = tuple(
+            source.model_copy(update={"text": source.text[:500]})
+            for source in self.candidate_sources
+        )
+        quotes = {(s.message_id, s.source_version): s.text for s in shown_sources}
+        facts = []
+        for fact in current.facts:
+            source = fact.source
+            admitted_text = quotes.get((source.message_id, source.source_version), "")
+            facts.append(
+                fact.model_copy(
+                    update={
+                        "confirmed_by": None,
+                        "source": source.model_copy(
+                            update={"quote": source.quote if source.quote in admitted_text else ""}
+                        ),
+                    }
+                )
+            )
         view = IntakeContextView(
             **base.view.model_dump(),
             intake=ClientIntakeView(
                 service_id=current.service_id,
                 template_revision=current.template_revision,
-                facts=facts,
+                facts=tuple(facts),
                 missing=tuple(current.missing),
                 question=current.question,
-                sources=sources,
+                sources=shown_sources,
             ),
         )
         if (
@@ -79,7 +109,7 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
             > self.config.limits.input_bytes
         ):
             raise KnowledgeFailure("KNOWLEDGE_STALE")
-        self.shown = view
+        self._bind_shown(view)
         return PreparedIntakeContext(
             binding=base.binding, snapshot_fingerprint=base.snapshot_fingerprint, view=view
         )
@@ -107,13 +137,14 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                     )
                     if proposed.service_id is not None and service is None:
                         raise ValueError("Service is not published")
-                    if self.search.status == "CONFLICT" or (
+                    knowledge_conflict = self.search.status == "CONFLICT"
+                    if knowledge_conflict or (
                         service is None and proposed.category == "NEW_TATTOO"
                     ):
                         proposed = CandidateSet(
-                            service_id=proposed.service_id,
+                            service_id=self.intake.service_id if knowledge_conflict else None,
                             category="OTHER_COMPLEX",
-                            switch_request=proposed.switch_request,
+                            switch_request=False,
                             facts=(),
                         )
                     if proposed.facts and (service is None or not template_revision(service)):
@@ -131,7 +162,9 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                     ):
                         raise ValueError("Observation source does not match current analysis")
                     _, state, question = reduce_candidates(
-                        self.intake, candidate.intake, self.active
+                        self.intake.model_copy(update={"sources": self.candidate_sources}),
+                        candidate.intake,
+                        self.active,
                     )
                     body = candidate.model_dump(mode="json")
                     if state == "OWNER_HANDOFF" and candidate.intake.category != "FAQ_ONLY":

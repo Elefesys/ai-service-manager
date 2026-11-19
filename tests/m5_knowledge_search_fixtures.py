@@ -224,7 +224,9 @@ async def knowledge_state(h, *, business=BA, workspace=A, actor=UA):
         ).scalar_one()
 
 
-async def publication(h, sources, embeddings=None, *, business=BA, workspace=A, actor=UA):
+async def publication(
+    h, sources, embeddings=None, *, business=BA, workspace=A, actor=UA, bundle=None
+):
     embeddings = embeddings or ControlledEmbeddings()
     scope = dict(business=business, workspace=workspace, actor=actor)
     revisions = []
@@ -234,7 +236,10 @@ async def publication(h, sources, embeddings=None, *, business=BA, workspace=A, 
             business,
             "EDIT",
             str(uuid4()),
-            {"expected_draft_version": draft["draft_version"], "bundle": configuration_bundle()},
+            {
+                "expected_draft_version": draft["draft_version"],
+                "bundle": bundle if bundle is not None else configuration_bundle(),
+            },
         )
     for item in sources:
         payload = {
@@ -411,7 +416,7 @@ async def search_pg(seeded, tmp_path):
         kernel=MessagingDatabase(runtime.engine, environment="TEST"),
         adapter=ControlledAdapter(environment="TEST", ledger=tmp_path / "search-effects.jsonl"),
         source_tree=test_tree(),
-        schema_revision="0023",
+        schema_revision="0024",
     )
     try:
         async with migrator.begin() as c:

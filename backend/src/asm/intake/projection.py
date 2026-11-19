@@ -21,7 +21,9 @@ def reduce_candidates(
     if candidates.category == "FAQ_ONLY":
         return current.facts, current.status, current.question
     if candidates.category == "AMBIGUOUS":
-        return [], "CLARIFY", AMBIGUOUS_QUESTION
+        return current.facts, "CLARIFY", AMBIGUOUS_QUESTION
+    if candidates.switch_request and not any(f.status == "client-stated" for f in candidates.facts):
+        raise ValueError("Request change requires current client evidence")
     if (
         current.service_id is not None
         and current.service_id != candidates.service_id
@@ -62,13 +64,33 @@ def reduce_candidates(
         ):
             raise ValueError("Unscaled image cannot establish dimensions or placement")
         old = facts.get(candidate.field)
-        if old is not None and old.value == candidate.value and old.source == candidate.source:
-            # Repeating evidence cannot remove the owner's confirmation or
-            # resolve an already recorded conflict.
-            continue
-        if old is not None and old.value != candidate.value and not candidate.explicit_correction:
+        if (
+            old is not None
+            and old.value == candidate.value
+            and (old.status != "observed" or old.conflict or candidate.status == "observed")
+        ):
+            if not (
+                old.conflict
+                and candidate.status == "client-stated"
+                and candidate.explicit_correction
+                and source.message_id != old.source.message_id
+            ):
+                continue
+            if old.status == "owner-confirmed":
+                # The accepted run records the new clarification separately.
+                facts[candidate.field] = old.model_copy(update={"conflict": False})
+                continue
+        if (
+            old is not None
+            and old.value != candidate.value
+            and (
+                not candidate.explicit_correction
+                or (old.conflict and candidate.status == "observed")
+            )
+        ):
             facts[candidate.field] = old.model_copy(update={"conflict": True})
         else:
+            facts.pop(candidate.field, None)
             facts[candidate.field] = Fact(
                 field=candidate.field,
                 value=candidate.value,
