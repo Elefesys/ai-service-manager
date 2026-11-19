@@ -46,6 +46,10 @@ async def service_request_pg(intake_pg):
             )
 
 
+def source_pin(source):
+    return {name: source[name] for name in ("message_id", "source_version")}
+
+
 def create_body(projection, *, anchor=None, selection="ONE_WORK", fields=None):
     if anchor is None:
         anchor = next(
@@ -55,8 +59,21 @@ def create_body(projection, *, anchor=None, selection="ONE_WORK", fields=None):
     return {
         "expected_version": projection["version"],
         "expected_fingerprint": projection["fingerprint"],
-        "intent_source": {name: anchor[name] for name in ("message_id", "source_version")},
+        "intent_source": source_pin(anchor),
         "fields": [f["field"] for f in projection["facts"]] if fields is None else fields,
+        "selection": selection,
+    }
+
+
+def revise_body(projection, draft, field, *, source=None, selection="ONE_WORK"):
+    if source is None:
+        source = next(f["source"] for f in projection["facts"] if f["field"] == field)
+    return {
+        "expected_revision": draft["revision"],
+        "expected_version": projection["version"],
+        "expected_fingerprint": projection["fingerprint"],
+        "field": field,
+        "source": source_pin(source),
         "selection": selection,
     }
 
@@ -84,6 +101,22 @@ async def read(h, cid, request_id=None, *, business=BA, workspace=A, actor=UA):
             {"b": business, "c": cid, "rid": request_id},
         )
         return result.scalar_one()
+
+
+async def list_drafts(h, cid, *, business=BA, workspace=A, actor=UA):
+    async with owner_unit(h, workspace=workspace, actor=actor) as u:
+        result = await u._execute(
+            "SELECT platform.service_request_owner_list(:b,:c)", {"b": business, "c": cid}
+        )
+        return result.scalar_one()
+
+
+async def revise(u, cid, request_id, key, body, *, business=BA):
+    result = await u._execute(
+        "SELECT platform.service_request_owner_revise(:b,:c,:rid,:key,CAST(:body AS jsonb))",
+        {"b": business, "c": cid, "rid": UUID(request_id), "key": key, "body": json.dumps(body)},
+    )
+    return result.scalar_one()
 
 
 @asynccontextmanager
@@ -166,9 +199,7 @@ async def test_q1_concurrent_transactions_return_one_request_and_replay_after_lo
     )
 
 
-async def test_q1_corrected_size_revises_same_request_but_separate_work_gets_own_facts(
-    service_request_pg,
-):
+async def test_q1_late_correction_revises_only_selected_work_and_field(service_request_pg):
     h = service_request_pg
     cid, worker, model, _, delivery = await application(
         h, {"idea": "flower", "approximate_size": "8 cm"}
@@ -176,62 +207,163 @@ async def test_q1_corrected_size_revises_same_request_but_separate_work_gets_own
     initial = await summary(h, cid)
     first_body = create_body(initial)
     first = await create(h, cid, "first-work", first_body)
+    first_id = first["request_id"]
+    original = await read(h, cid, first_id)
+    assert original["revision"] == "1"
+    assert {f["value"] for f in original["facts"]} == {"flower", "8 cm"}
+    assert await create(h, cid, "reopen-empty", first_body | {"fields": []}) == first
+    assert await read(h, cid, first_id) == original
     await worker.execute(await claim_job(h, delivery["send_job_id"]))
 
-    model.values = {"approximate_size": "10 cm"}
+    model.values = {"idea": "bird", "placement": "shoulder"}
+    model.switch = True
+    _, delivery = await next_turn(h, worker, "Separate work: a bird on the shoulder")
+    separate = await summary(h, cid)
+    async with rejected("NEEDS_CLARIFICATION"):
+        await create(h, cid, "unclear-association", create_body(separate, selection="UNCLEAR"))
+    second_body = create_body(separate)
+    second = await create(h, cid, "second-work", second_body)
+    second_id = second["request_id"]
+    second_draft = await read(h, cid, second_id)
+    assert second_id != first_id and second_draft["revision"] == "1"
+    assert second_draft["service_id"] == original["service_id"]
+    assert {f["value"] for f in second_draft["facts"]} == {"bird", "shoulder"}
+    async with rejected("NEEDS_CLARIFICATION"), owner_unit(h) as u:
+        await revise(
+            u, cid, first_id, "other-work-anchor", revise_body(separate, original, "placement")
+        )
+    assert await read(h, cid, first_id) == original
+    await worker.execute(await claim_job(h, delivery["send_job_id"]))
+
+    model.values = {"approximate_size": "12 cm", "style": "fine line"}
+    model.switch = False
     model.correction = True
-    _, delivery = await next_turn(h, worker, "Actually 10 cm for the flower")
+    _, delivery = await next_turn(h, worker, "For the first flower tattoo, size 12 cm, fine line")
     corrected = await summary(h, cid)
-    assert corrected["fingerprint"] != initial["fingerprint"]
+    size = revise_body(corrected, original, "approximate_size")
+    assert size["source"] == source_pin(corrected["sources"][-1])
+    assert size["source"]["message_id"] not in {
+        first_body["intent_source"]["message_id"],
+        second_body["intent_source"]["message_id"],
+    }
     assert await create(h, cid, "first-work", first_body) == first
     async with rejected("STALE_STATE"):
         await create(h, cid, "stale-new-key", first_body)
     async with rejected("NEEDS_CLARIFICATION"):
-        await create(
-            h, cid, "wrong-segment", create_body(corrected, anchor=corrected["sources"][-1])
+        await create(h, cid, "wrong-segment", create_body(corrected, anchor=size["source"]))
+    async with rejected("STALE_STATE"), owner_unit(h) as u:
+        await revise(u, cid, first_id, "old-intake", revise_body(initial, original, "idea"))
+    async with rejected("STALE_STATE"), owner_unit(h) as u:
+        await revise(
+            u,
+            cid,
+            first_id,
+            "old-source-version",
+            size | {"source": size["source"] | {"source_version": "0" * 64}},
         )
-    assert await create(h, cid, "correct-size", create_body(corrected)) == first
-    first_draft = await read(h, cid, first["request_id"])
+    async with rejected("NEEDS_CLARIFICATION"), owner_unit(h) as u:
+        await revise(u, cid, first_id, "unclear-correction", size | {"selection": "UNCLEAR"})
+
+    stale_style = revise_body(corrected, original, "style")
+    started = asyncio.Queue()
+    first_effect = asyncio.Event()
+
+    async def stale_tab():
+        await first_effect.wait()
+        async with rejected("STALE_STATE"), owner_unit(h) as u:
+            started.put_nowait((await u._execute("SELECT pg_backend_pid()", {})).scalar_one())
+            await revise(u, cid, first_id, "stale-tab", stale_style)
+
+    async with asyncio.TaskGroup() as group:
+        group.create_task(stale_tab())
+        async with owner_unit(h) as u:
+            first_pid = (await u._execute("SELECT pg_backend_pid()", {})).scalar_one()
+            assert await revise(u, cid, first_id, "correct-size", size) == first
+            first_effect.set()
+            async with asyncio.timeout(1.5):
+                stale_pid = await started.get()
+                assert stale_pid != first_pid
+                await wait_blocked(h, stale_pid, first_pid)
+
+    corrected_fact = next(f for f in corrected["facts"] if f["field"] == "approximate_size")
     assert (
-        first_draft["revision"] == "2"
-        and first_draft["intent_source"] == first_body["intent_source"]
+        corrected_fact["value"] == "12 cm"
+        and source_pin(corrected_fact["source"]) == size["source"]
     )
-    assert {f["value"] for f in first_draft["facts"]} == {"10 cm", "flower"}
-    assert await request_count(h, cid) == 1
+    revised = original | {
+        "revision": "2",
+        "facts": [
+            corrected_fact | {"source": corrected_fact["source"] | {"quote": ""}}
+            if f["field"] == "approximate_size"
+            else f
+            for f in original["facts"]
+        ],
+    }
+    async with rejected("NEEDS_CLARIFICATION"), owner_unit(h) as u:
+        await revise(
+            u,
+            cid,
+            second_id,
+            "pin-already-in-first",
+            revise_body(corrected, second_draft, "approximate_size"),
+        )
+    async with rejected("IDEMPOTENCY_KEY_CONFLICT"), owner_unit(h) as u:
+        await revise(u, cid, second_id, "correct-size", size)
+    async with rejected("IDEMPOTENCY_KEY_CONFLICT"), owner_unit(h) as u:
+        await revise(u, cid, first_id, "first-work", size)
+    async with rejected("IDEMPOTENCY_KEY_CONFLICT"), owner_unit(h) as u:
+        await revise(u, cid, first_id, "correct-size", stale_style)
+
+    # A new read reopens the selected ID after B exists and does not advance anything.
+    assert await read(h, cid) == second_draft
+    assert await read(h, cid, first_id) == revised
+    assert await list_drafts(h, cid) == {
+        "items": [
+            {
+                name: draft[name]
+                for name in ("request_id", "revision", "service_name", "intent_source")
+            }
+            | {"idea": idea}
+            for draft, idea in ((second_draft, "bird"), (revised, "flower"))
+        ]
+    }
+    assert await read(h, cid, first_id) == revised
 
     await worker.execute(await claim_job(h, delivery["send_job_id"]))
     model.values = {}
     model.category = "AMBIGUOUS"
-    _, delivery = await next_turn(h, worker, "I also want a bird and mentioned a size for one")
+    await next_turn(h, worker, "Or 15 cm for one of them, I am unsure which")
     ambiguous = await summary(h, cid)
     assert ambiguous["category"] == "AMBIGUOUS"
     async with rejected("NEEDS_CLARIFICATION"):
         await create(h, cid, "ambiguous", create_body(ambiguous))
-    assert await request_count(h, cid) == 1
-
-    await worker.execute(await claim_job(h, delivery["send_job_id"]))
-    model.values = {"idea": "bird", "placement": "shoulder"}
-    model.category = "NEW_TATTOO"
-    model.switch = True
-    model.correction = False
-    await next_turn(h, worker, "Separate work: a bird on the shoulder")
-    separate = await summary(h, cid)
-    async with rejected("NEEDS_CLARIFICATION"):
-        await create(h, cid, "unclear-association", create_body(separate, selection="UNCLEAR"))
-    second = await create(h, cid, "second-work", create_body(separate))
-    second_draft = await read(h, cid)
-    assert second != first and second_draft["request_id"] == second["request_id"]
-    assert second_draft["service_id"] == first_draft["service_id"]
-    assert {f["value"] for f in second_draft["facts"]} == {"bird", "shoulder"}
-    assert await read(h, cid, first["request_id"]) == first_draft
-    async with rejected("NEEDS_CLARIFICATION"):
-        await create(
-            h,
+    async with rejected("NEEDS_CLARIFICATION"), owner_unit(h) as u:
+        await revise(
+            u,
             cid,
-            "old-anchor-new-facts",
-            create_body(separate, anchor=first_body["intent_source"]),
+            first_id,
+            "ambiguous-correction",
+            revise_body(ambiguous, revised, "approximate_size", source=size["source"]),
         )
+    # The first successful response can be lost while another tab and Intake advance.
+    async with owner_unit(h) as u:
+        assert await revise(u, cid, first_id, "correct-size", size) == first
+    assert await read(h, cid, first_id) == revised
+    assert await read(h, cid, second_id) == second_draft
     assert await request_count(h, cid) == 2
+    receipts = await query(
+        h,
+        "SELECT command_key,effect,accepted_revision FROM platform.service_request_receipts "
+        "WHERE request_id IN (:first,:second)",
+        first=UUID(first_id),
+        second=UUID(second_id),
+    )
+    assert {r["command_key"]: (r["effect"], r["accepted_revision"]) for r in receipts} == {
+        "first-work": ("CREATE", 1),
+        "reopen-empty": ("OPEN", 1),
+        "second-work": ("CREATE", 1),
+        "correct-size": ("REVISE", 2),
+    }
 
 
 async def test_q1_rejects_foreign_scope_and_rechecks_access_for_read_and_replay(service_request_pg):
@@ -257,12 +389,38 @@ async def test_q1_rejects_foreign_scope_and_rechecks_access_for_read_and_replay(
     assert await request_count(h, foreign_cid) == 0
 
     accepted = await create(h, cid, "eligible-owner", body)
+    request_id = accepted["request_id"]
+    draft = await read(h, cid, request_id)
+    change = revise_body(projection, draft, "idea")
+    assert await list_drafts(h, foreign_cid) == {"items": []}
+    async with rejected("STALE_STATE"), owner_unit(h) as u:
+        await revise(
+            u,
+            cid,
+            request_id,
+            "revise-foreign-source",
+            change | {"source": source_pin(foreign["sources"][-1])},
+        )
+    async with rejected("NOT_FOUND"), owner_unit(h) as u:
+        await revise(u, foreign_cid, request_id, "revise-foreign-client", change)
+    async with rejected("NOT_FOUND"), owner_unit(h) as u:
+        await revise(u, cid, request_id, "revise-foreign-business", change, business=BA2)
+    async with rejected("NOT_FOUND"), owner_unit(h, workspace=B, actor=UB) as u:
+        await revise(u, cid, request_id, "revise-foreign-workspace", change, business=BB)
     async with rejected("NOT_FOUND"):
-        await read(h, foreign_cid, accepted["request_id"])
+        await list_drafts(h, cid, business=BA2)
     async with rejected("NOT_FOUND"):
-        await read(h, cid, accepted["request_id"], business=BA2)
+        await list_drafts(h, cid, business=BB, workspace=B, actor=UB)
     async with rejected("NOT_FOUND"):
-        await read(h, cid, accepted["request_id"], business=BB, workspace=B, actor=UB)
+        await read(h, foreign_cid, request_id)
+    async with rejected("NOT_FOUND"):
+        await read(h, cid, request_id, business=BA2)
+    async with rejected("NOT_FOUND"):
+        await read(h, cid, request_id, business=BB, workspace=B, actor=UB)
+    assert await read(h, cid, request_id) == draft
+    async with owner_unit(h) as u:
+        assert await revise(u, cid, request_id, "eligible-correction", change) == accepted
+    assert await read(h, cid, request_id) == draft
     changed = await query(
         h,
         "UPDATE platform.workspace_memberships SET role='ADMIN' "
@@ -272,10 +430,52 @@ async def test_q1_rejects_foreign_scope_and_rechecks_access_for_read_and_replay(
     )
     assert [row["role"] for row in changed] == ["ADMIN"]
     async with rejected("ACCESS_DENIED"):
-        await read(h, cid, accepted["request_id"])
+        await read(h, cid, request_id)
+    async with rejected("ACCESS_DENIED"):
+        await list_drafts(h, cid)
     async with rejected("ACCESS_DENIED"):
         await create(h, cid, "eligible-owner", body)
+    async with rejected("ACCESS_DENIED"), owner_unit(h) as u:
+        await revise(u, cid, request_id, "eligible-correction", change)
     assert await request_count(h, cid) == 1
+    receipts = await query(
+        h,
+        "SELECT command_key FROM platform.service_request_receipts WHERE request_id=:id",
+        id=UUID(request_id),
+    )
+    assert {row["command_key"] for row in receipts} == {"eligible-owner", "eligible-correction"}
+
+
+async def test_q1_rejects_conflicted_fact_even_with_confirmed_work(service_request_pg):
+    h = service_request_pg
+    cid, worker, model, _, delivery = await application(
+        h, {"idea": "flower", "approximate_size": "8 cm"}
+    )
+    initial = await summary(h, cid)
+    result = await create(h, cid, "before-conflict", create_body(initial))
+    request_id = result["request_id"]
+    original = await read(h, cid, request_id)
+    await worker.execute(await claim_job(h, delivery["send_job_id"]))
+
+    model.values = {"approximate_size": "12 cm"}
+    await next_turn(h, worker, "A possible size is 12 cm")
+    projection = await summary(h, cid)
+    assert projection["conflicts"] == ["approximate_size"]
+    async with rejected("NEEDS_CLARIFICATION"), owner_unit(h) as u:
+        await revise(
+            u,
+            cid,
+            request_id,
+            "conflicted-fact",
+            revise_body(projection, original, "approximate_size"),
+        )
+    assert await read(h, cid, request_id) == original
+    receipt = await scalar(
+        h,
+        "SELECT count(*) FROM platform.service_request_receipts WHERE request_id=:id",
+        id=UUID(request_id),
+    )
+    assert receipt == 1
 
 
 @pytest.mark.parametrize("mutation", ["EDIT", "DELETE"])
@@ -345,8 +545,22 @@ async def test_q1_observed_fact_retains_current_analysis_identity(service_reques
     await run_turn(h, worker, source_job)
     projection = await summary(h, cid)
     assert len(projection["facts"]) == 1
-    result = await create(h, cid, "observed-request", create_body(projection))
+    result = await create(h, cid, "observed-request", create_body(projection, fields=[]))
+    empty = await read(h, cid, result["request_id"])
+    assert empty["facts"] == []
+    async with owner_unit(h) as u:
+        assert (
+            await revise(
+                u,
+                cid,
+                result["request_id"],
+                "observed-revision",
+                revise_body(projection, empty, "idea"),
+            )
+            == result
+        )
     draft = await read(h, cid, result["request_id"])
+    assert draft["revision"] == "2"
     assert "idea" in draft["missing"]
     assert draft["facts"] == projection["facts"]
     fact = draft["facts"][0]
@@ -378,6 +592,11 @@ async def test_0025_upgrade_preserves_0024_intake_and_rejects_downgrade_with_req
     assert not await scalar(
         h, "SELECT has_table_privilege('asm_runtime','platform.service_request_receipts','INSERT')"
     )
+    assert not await scalar(
+        h,
+        "SELECT has_function_privilege('asm_runtime',"
+        "'platform.service_request_command(app.conversations,text,text,uuid,jsonb)','EXECUTE')",
+    )
     result = await create(h, cid, "0025-data", create_body(prior, fields=[]))
     with pytest.raises(AssertionError, match="SERVICE_REQUEST_DURABLE_DATA"):
         await _migrate("downgrade", "0024")
@@ -385,3 +604,13 @@ async def test_0025_upgrade_preserves_0024_intake_and_rejects_downgrade_with_req
     draft = await read(h, cid)
     assert draft["request_id"] == result["request_id"]
     assert draft["facts"] == [] and "idea" in draft["missing"]
+    old_question = draft["question"]
+    async with owner_unit(h) as u:
+        assert (
+            await revise(
+                u, cid, draft["request_id"], "supply-first-field", revise_body(prior, draft, "idea")
+            )
+            == result
+        )
+    updated = await read(h, cid, draft["request_id"])
+    assert "idea" not in updated["missing"] and updated["question"] != old_question

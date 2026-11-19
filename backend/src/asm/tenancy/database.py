@@ -207,6 +207,32 @@ class TenantUnitOfWork:
             {"business": business, "conversation": conversation, "request_id": request_id},
         )
 
+    async def service_request_owner_list(self, business: UUID, conversation: UUID) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.service_request_owner_list(:business,:conversation)",
+            {"business": business, "conversation": conversation},
+        )
+
+    async def service_request_owner_revise(
+        self,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        key: str,
+        body: dict[str, object],
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.service_request_owner_revise(:business,:conversation,:request_id,:key,"
+            "CAST(:body AS jsonb))",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request_id": request_id,
+                "key": key,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
     async def configuration_owner_read(self, business: UUID) -> Any:
         return await self._configuration_execute(
             "SELECT platform.configuration_owner_read(:business)", {"business": business}

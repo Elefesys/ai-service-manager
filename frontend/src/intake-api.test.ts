@@ -1,7 +1,7 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
 import {parseIntake,parseCases,parseDraft,intakeApi,IntakeError} from './intake-api';
-import type {DraftCommand} from './intake-api';
-import {draft,intake,scope,example,w,b,c} from './intake-fixtures.test-helper';
+import type {DraftCommand,DraftRevisionCommand} from './intake-api';
+import {draft,intake,scope,example,listItem,w,b,c} from './intake-fixtures.test-helper';
 afterEach(()=>vi.unstubAllGlobals());
 describe('closed intake projections',()=>{
  it('rejects another Client, Workspace and extra owner-only data',()=>{
@@ -52,5 +52,26 @@ describe('scoped draft requests',()=>{
   expect(JSON.parse(post[1].body)).toEqual(body);
   expect(read[0]).toBe(`${url}?request_id=${value.request_id}`);
   expect(latest[0]).toBe(url);
+ });
+ it('reads a closed card list and sends the exact one-field PATCH for the selected ID',async()=>{
+  const value=draft(),item=listItem(value);
+  const result=(body:unknown)=>new Response(JSON.stringify(body),{status:200});
+  const fetch=vi.fn().mockResolvedValueOnce(result({items:[item]})).mockResolvedValueOnce(result({request_id:value.request_id}))
+   .mockResolvedValueOnce(result({items:[item,item]})).mockResolvedValueOnce(result({request_id:c}));
+  vi.stubGlobal('fetch',fetch);
+  const body:DraftRevisionCommand={expected_revision:'1',expected_version:'3',expected_fingerprint:intake().fingerprint,
+   field:'approximate_size',source:value.intent_source,selection:'ONE_WORK'};
+  expect(await intakeApi.drafts(scope)).toEqual([item]);
+  expect(await intakeApi.reviseDraft(scope,value.request_id,body,'key','csrf')).toEqual({request_id:value.request_id});
+  const url=`/api/v1/workspaces/${w}/businesses/${b}/intake/conversations/${c}/service-requests`;
+  const [index,revision]=fetch.mock.calls;
+  expect(index[0]).toBe(`${url}/cards`);
+  expect(index[1]).toMatchObject({credentials:'include',cache:'no-store'});
+  expect(index[1].method).toBeUndefined();
+  expect(revision[0]).toBe(`${url}/${value.request_id}`);
+  expect(revision[1]).toMatchObject({method:'PATCH',credentials:'include',headers:{'X-CSRF-Token':'csrf','Idempotency-Key':'key'}});
+  expect(JSON.parse(revision[1].body)).toEqual(body);
+  await expect(intakeApi.drafts(scope)).rejects.toThrow(IntakeError);
+  await expect(intakeApi.reviseDraft(scope,value.request_id,body,'key','csrf')).rejects.toThrow(IntakeError);
  });
 });

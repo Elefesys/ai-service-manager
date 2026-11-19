@@ -11,6 +11,21 @@ export type DraftCommand = {
  fields: FieldId[];
  selection: 'ONE_WORK'|'UNCLEAR';
 };
+export type DraftRevisionCommand = {
+ expected_revision: string;
+ expected_version: string;
+ expected_fingerprint: string;
+ field: FieldId;
+ source: IntentSource;
+ selection: 'ONE_WORK'|'UNCLEAR';
+};
+export type DraftListItem = {
+ request_id: string;
+ revision: string;
+ service_name: string;
+ intent_source: IntentSource;
+ idea: string|null;
+};
 export type ServiceRequestDraft = {
  request_id: string;
  workspace_id: string;
@@ -66,14 +81,30 @@ function parseFacts(value:unknown):Fact[]{
  if(new Set(facts.map(f=>f.field)).size!==facts.length)invalid();
  return facts;
 }
+function checkIntentSource(value:unknown){
+ const source=object(value,['message_id','source_version']);
+ if(!uuid(source.message_id)||!digest(source.source_version))invalid();
+}
+function parseDraftList(value:unknown):DraftListItem[]{
+ const {items}=object(value,['items']);
+ if(!Array.isArray(items))return invalid();
+ const cards=items.map(raw=>{
+  const card=object(raw,['request_id','revision','service_name','intent_source','idea']);
+  if(!uuid(card.request_id)||!decimal(card.revision,false)||!text(card.service_name,100)||!(card.service_name as string).trim()
+    ||!nullable(card.idea,x=>text(x,300)&&!!(x as string).trim()))invalid();
+  checkIntentSource(card.intent_source);
+  return card as DraftListItem;
+ });
+ if(new Set(cards.map(card=>card.request_id)).size!==cards.length)invalid();
+ return cards;
+}
 export function parseDraft(value:unknown,scope:IntakeScope,requestId?:string):ServiceRequestDraft{
  const v=object(value,['request_id','workspace_id','business_id','conversation_id','client_id','service_id','service_name','release_id',
   'template_revision','revision','state','intent_source','facts','missing','conflicts','question']);
  if(!inConversation(v,scope)||!uuid(v.request_id)||(requestId!==undefined&&v.request_id!==requestId)
    ||!uuid(v.release_id)||!serviceId(v.service_id)||!text(v.service_name,100)||!(v.service_name as string).trim()
    ||v.template_revision!=='tattoo_intake_v1'||!decimal(v.revision,false)||v.state!=='DRAFT'||!nullable(v.question,x=>text(x,300)))invalid();
- const intent=object(v.intent_source,['message_id','source_version']);
- if(!uuid(intent.message_id)||!digest(intent.source_version))invalid();
+ checkIntentSource(v.intent_source);
  const facts=parseFacts(v.facts);
  if(facts.some(f=>f.source.quote!==''||(f.status==='observed'&&f.source.analysis_id===null)))invalid();
  for(const key of ['missing','conflicts']){
@@ -103,14 +134,17 @@ function parseCase(value:unknown):DurationCase{
 export function parseCases(value:unknown,scope:IntakeScope):CasePage{const v=object(value,['workspace_id','business_id','items']);if(v.workspace_id!==scope.workspace||v.business_id!==scope.business)invalid();const items=array(v.items,20).map(parseCase);if(new Set(items.map(i=>i.case_id)).size!==items.length)invalid();return {...v,items} as CasePage;}
 function parseSearch(value:unknown,scope:IntakeScope):CaseSearch{const v=object(value,['workspace_id','business_id','items']);if(v.workspace_id!==scope.workspace||v.business_id!==scope.business)invalid();const items=array(v.items,5).map(raw=>{const m=object(raw,['case','matches','differences','unknown']);const c=parseCase(m.case);if(c.state!=='CONFIRMED'||!c.source_current)invalid();for(const k of ['matches','differences','unknown'])if(!array(m[k],4).every(x=>one(x,['placement','style','detail','fill'])))invalid();return {...m,case:c} as CaseMatch;});return {...v,items} as CaseSearch;}
 function parseReceipt(value:unknown):Receipt{const v=object(value,['outcome','receipt_id','version']);if(!one(v.outcome,['ACCEPTED','REPLAY'])||!uuid(v.receipt_id)||!decimal(v.version,false))invalid();return v as Receipt;}
-function parseDraftReceipt(value:unknown):{request_id:string}{
+function parseDraftReceipt(value:unknown,requestId?:string):{request_id:string}{
  const v=object(value,['request_id']);
- if(!uuid(v.request_id))return invalid();
+ if(!uuid(v.request_id)||(requestId!==undefined&&v.request_id!==requestId))return invalid();
  return {request_id:v.request_id};
 }
-async function request<T>(scope:IntakeScope,path:string,parse:(v:unknown)=>T,signal?:AbortSignal,body?:unknown,key?:string,csrf?:string):Promise<T>{
+function jsonMutation(method:'POST'|'PATCH',body:unknown,key:string,csrf:string):RequestInit{
+ return {method,headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key},body:JSON.stringify(body)};
+}
+async function request<T>(scope:IntakeScope,path:string,parse:(v:unknown)=>T,signal?:AbortSignal,init:RequestInit={}):Promise<T>{
  const controller=new AbortController(),abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();const timer=setTimeout(abort,10000);
- try{const response=await fetch(`/api/v1/workspaces/${encodeURIComponent(scope.workspace)}/businesses/${encodeURIComponent(scope.business)}/intake${path}`,{credentials:'include',cache:'no-store',signal:controller.signal,...(body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf??'','Idempotency-Key':key??''},body:JSON.stringify(body)})});let value:unknown;try{value=await response.json();}catch{return invalid();}if(response.status!==200){const e=object(object(value,['error']).error,['code']);if(typeof e.code!=='string')invalid();throw new IntakeError(response.status,e.code as string);}return parse(value);}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+ try{const response=await fetch(`/api/v1/workspaces/${encodeURIComponent(scope.workspace)}/businesses/${encodeURIComponent(scope.business)}/intake${path}`,{...init,credentials:'include',cache:'no-store',signal:controller.signal});let value:unknown;try{value=await response.json();}catch{return invalid();}if(response.status!==200){const e=object(object(value,['error']).error,['code']);if(typeof e.code!=='string')invalid();throw new IntakeError(response.status,e.code as string);}return parse(value);}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
 }
 const draftPath=(scope:IntakeScope)=>`/conversations/${encodeURIComponent(scope.conversation??'')}/service-requests`;
 export const intakeApi={
@@ -119,10 +153,13 @@ export const intakeApi={
   scope,draftPath(scope)+(requestId===undefined?'':`?${new URLSearchParams({request_id:requestId})}`),
   v=>v===null&&requestId===undefined?null:parseDraft(v,scope,requestId),signal
  ),
+ drafts:(scope:IntakeScope,signal?:AbortSignal)=>request(scope,`${draftPath(scope)}/cards`,parseDraftList,signal),
  saveDraft:(scope:IntakeScope,body:DraftCommand,key:string,csrf:string,signal?:AbortSignal)=>
-  request(scope,draftPath(scope),parseDraftReceipt,signal,body,key,csrf),
+  request(scope,draftPath(scope),parseDraftReceipt,signal,jsonMutation('POST',body,key,csrf)),
+ reviseDraft:(scope:IntakeScope,requestId:string,body:DraftRevisionCommand,key:string,csrf:string,signal?:AbortSignal)=>
+  request(scope,`${draftPath(scope)}/${encodeURIComponent(requestId)}`,v=>parseDraftReceipt(v,requestId),signal,jsonMutation('PATCH',body,key,csrf)),
  cases:(scope:IntakeScope,signal?:AbortSignal)=>request(scope,'/duration-cases',v=>parseCases(v,scope),signal),
  search:(scope:IntakeScope,query:Record<string,string>,signal?:AbortSignal)=>request(scope,`/duration-cases/search?${new URLSearchParams(query)}`,v=>parseSearch(v,scope),signal),
- command:(scope:IntakeScope,operation:string,body:unknown,key:string,csrf:string,signal?:AbortSignal)=>request(scope,operation.startsWith('case-')?`/duration-cases/${operation.slice(5)}`:`/conversations/${encodeURIComponent(scope.conversation??'')}/${operation}`,parseReceipt,signal,body,key,csrf),
+ command:(scope:IntakeScope,operation:string,body:unknown,key:string,csrf:string,signal?:AbortSignal)=>request(scope,operation.startsWith('case-')?`/duration-cases/${operation.slice(5)}`:`/conversations/${encodeURIComponent(scope.conversation??'')}/${operation}`,parseReceipt,signal,jsonMutation('POST',body,key,csrf)),
 };
 export function blankCase():CaseInput{return {description:'',asset:null,width_mm:null,height_mm:null,placement:null,style:null,detail:null,fill:null,provider:null,working_minutes:null,occupied_minutes:null,setup_minutes:null,stencil_minutes:null,break_minutes:null,cleanup_minutes:null,treatment:'UNKNOWN',session_count:null,session_minutes:null,explanation:null};}

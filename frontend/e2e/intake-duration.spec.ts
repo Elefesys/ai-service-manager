@@ -1,4 +1,4 @@
-import {expect,test,type Page,type Route} from '@playwright/test';
+import {expect,test,type Locator,type Page,type Route} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -11,7 +11,8 @@ const fixture=JSON.parse(readFileSync(fixtureFile,'utf8')) as {messaging_fixture
 const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixtures.knowledge;
 
 type Viewport='desktop'|'narrow';
-type IntakeOperation='seed'|'collect'|'complex'|'ambiguous'|'second';
+type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size';
+type IntakeJourney='intake'|'request';
 
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
@@ -26,7 +27,12 @@ async function openConversation(page:Page,conversation:string){
  return inbox;
 }
 
-async function beginIntake(page:Page,variant:Viewport,journey:'intake'|'request'){
+async function refreshIntake(inbox:Locator,intake:Locator){
+ await inbox.getByRole('button',{name:'Обновить сообщения',exact:true}).click();
+ await intake.getByRole('button',{name:'Обновить сводку',exact:true}).click();
+}
+
+async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  const serviceName='Synthetic intake consultation '+variant+' '+randomUUID();
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
@@ -48,8 +54,12 @@ async function beginIntake(page:Page,variant:Viewport,journey:'intake'|'request'
  const seed=await input('seed');expect([seed.model_calls,seed.calls,seed.effects]).toEqual([0,0,0]);
  const inbox=await openConversation(page,seed.conversation_id);
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
- const collected=await input('collect',seed.conversation_id);expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,'CLARIFY']);
- await inbox.getByRole('button',{name:'Обновить сообщения',exact:true}).click();const intake=page.getByRole('region',{name:'Предварительный запрос',exact:true});await intake.getByRole('button',{name:'Обновить сводку',exact:true}).click();await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('flower');await expect(intake.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
+ const collected=await input(journey==='request'?'collect-sized':'collect',seed.conversation_id);expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,'CLARIFY']);
+ const intake=page.getByRole('region',{name:'Предварительный запрос',exact:true});
+ await refreshIntake(inbox,intake);
+ await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('flower');
+ if(journey==='request')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue('8 cm');
+ else await expect(intake.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
  return {input,conversation:seed.conversation_id,collected,intake,inbox,serviceName};
 }
 
@@ -81,31 +91,43 @@ test('@narrow source-backed intake, owner field confirmation, Action Center and 
  await page.getByRole('button',{name:'Выйти',exact:true}).click();await expect(page.getByRole('region',{name:'Предварительный запрос',exact:true})).toHaveCount(0);await expect(page.getByText('Synthetic owner flower '+variant,{exact:true})).toHaveCount(0);
 });
 
-async function chooseWork(page:Page,message:string,idea:string,placement:string){
+async function chooseWork(page:Page,message:string,idea:string,placement:string,size?:string){
  const fields=page.getByRole('group',{name:'Выбор сведений для заявки'});
  const beginning=fields.getByLabel('Начало работы',{exact:true});
  await beginning.selectOption(message);
  await fields.getByRole('checkbox',{name:`Идея: ${idea}`,exact:true}).check();
  await fields.getByRole('checkbox',{name:`Место: ${placement}`,exact:true}).check();
- const create=fields.getByRole('button',{name:'Создать или открыть заявку',exact:true});
+ if(size)await fields.getByRole('checkbox',{name:`Примерный размер: ${size}`,exact:true}).check();
+ const create=fields.getByRole('button',{name:'Создать заявку',exact:true});
  await expect(create).toBeDisabled();
  await fields.getByRole('checkbox',{name:'Начало и выбранные сведения относятся к одной работе',exact:true}).check();
  return create;
 }
 
-type DraftPost={key:string|undefined;body:unknown;requestId:string;status:number};
+type DraftWrite={key:string|undefined;body:unknown;requestId?:string;error?:string;status:number};
 
-async function recordDraftPost(route:Route,posts:DraftPost[],dropFirst=false){
+async function recordDraftWrite(route:Route,writes:DraftWrite[],method:'POST'|'PATCH',dropFirst=false){
  const request=route.request();
- if(request.method()!=='POST')return route.continue();
+ if(request.method()!==method)return route.continue();
  const response=await route.fetch();
- const result=await response.json() as {request_id:string};
- posts.push({key:request.headers()['idempotency-key'],body:request.postDataJSON(),requestId:result.request_id,status:response.status()});
- if(dropFirst&&posts.length===1)return route.abort('failed');
+ const result=await response.json() as {request_id?:string;error?:{code:string}};
+ writes.push({key:request.headers()['idempotency-key'],body:request.postDataJSON(),requestId:result.request_id,error:result.error?.code,status:response.status()});
+ if(dropFirst&&writes.length===1)return route.abort('failed');
  await route.fulfill({response});
 }
 
-test('@narrow service request preserves intake sources across two tabs, lost response and separate work',async({page,context},info)=>{
+async function chooseRevision(page:Page,message:string){
+ const group=page.getByRole('group',{name:'Уточнение заявки',exact:true});
+ await group.getByLabel('Уточняемое сведение',{exact:true}).selectOption('approximate_size');
+ await expect(group.getByRole('link',{name:'Сообщение для уточнения',exact:true})).toHaveAttribute('href',`#message-${message}`);
+ const save=group.getByRole('button',{name:'Сохранить уточнение заявки',exact:true});
+ await expect(save).toBeDisabled();
+ await group.getByRole('checkbox',{name:'Сведение из этого сообщения относится к выбранной заявке',exact:true}).check();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ return save;
+}
+
+test('@narrow service request preserves sources and revises one late fact across two tabs',async({page,context},info)=>{
  test.setTimeout(120000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const {input,conversation,collected,intake,inbox,serviceName}=await beginIntake(page,variant,'request');
@@ -114,20 +136,26 @@ test('@narrow service request preserves intake sources across two tabs, lost res
  await openWorkspace(secondTab);
  await openConversation(secondTab,conversation);
 
- const firstPosts:DraftPost[]=[],secondPosts:DraftPost[]=[];
- const endpoint=`**/intake/conversations/${conversation}/service-requests`;
- await page.route(endpoint,route=>recordDraftPost(route,firstPosts,true));
- await secondTab.route(endpoint,route=>recordDraftPost(route,secondPosts));
+ const firstPosts:DraftWrite[]=[],secondPosts:DraftWrite[]=[],revisions:DraftWrite[]=[],staleWrites:DraftWrite[]=[];
+ const endpoint=`/intake/conversations/${conversation}/service-requests`;
+ const reads:(string|null)[]=[];
+ page.on('request',request=>{
+  const url=new URL(request.url());
+  if(request.method()==='GET'&&url.pathname.endsWith(endpoint))reads.push(url.searchParams.get('request_id'));
+ });
+ await page.route(`**${endpoint}`,route=>recordDraftWrite(route,firstPosts,'POST',true));
+ await secondTab.route(`**${endpoint}`,route=>recordDraftWrite(route,secondPosts,'POST'));
+ await page.route(`**${endpoint}/*`,route=>recordDraftWrite(route,revisions,'PATCH',true));
  const [firstCreate,secondCreate]=await Promise.all([
-  chooseWork(page,collected.message_id,'flower','forearm'),
-  chooseWork(secondTab,collected.message_id,'flower','forearm'),
+  chooseWork(page,collected.message_id,'flower','forearm','8 cm'),
+  chooseWork(secondTab,collected.message_id,'flower','forearm','8 cm'),
  ]);
  await Promise.all([firstCreate.click(),secondCreate.click()]);
- const retry=intake.getByRole('button',{name:'Повторить создание заявки',exact:true});
- await expect(retry).toBeVisible();
- const secondId=secondTab.getByTestId('service-request-id');
- await expect(secondId).toHaveText(/^[0-9a-f-]{36}$/);
- const firstId=(await secondId.textContent())!;
+ const retryCreate=intake.getByRole('button',{name:'Повторить создание заявки',exact:true});
+ await expect(retryCreate).toBeVisible();
+ const competingId=secondTab.getByTestId('service-request-id');
+ await expect(competingId).toHaveText(/^[0-9a-f-]{36}$/);
+ const firstId=(await competingId.textContent())!;
  expect(firstPosts).toHaveLength(1);
  expect(secondPosts).toHaveLength(1);
  expect(firstPosts[0]).toMatchObject({requestId:firstId,status:200});
@@ -137,53 +165,116 @@ test('@narrow service request preserves intake sources across two tabs, lost res
  expect(firstPosts[0].key).not.toBe(secondPosts[0].key);
  expect(firstPosts[0].body).toEqual(secondPosts[0].body);
 
- await retry.click();
+ await retryCreate.click();
  const card=page.getByRole('region',{name:'Черновик заявки',exact:true});
- const cardId=card.getByTestId('service-request-id');
- await expect(cardId).toHaveText(firstId);
+ const id=card.getByTestId('service-request-id'),revision=card.getByTestId('service-request-revision');
+ const picker=page.getByLabel('Сохранённая заявка',{exact:true});
+ await expect(id).toHaveText(firstId);
+ await expect(revision).toHaveText('1');
  expect(firstPosts).toHaveLength(2);
  expect(firstPosts[1]).toEqual(firstPosts[0]);
  await expect(card.getByText(serviceName,{exact:true})).toBeVisible();
  await expect(card.getByText(/flower · Со слов клиента/)).toBeVisible();
  await expect(card.getByText(/forearm · Со слов клиента/)).toBeVisible();
+ await expect(card.getByText(/8 cm · Со слов клиента/)).toBeVisible();
  await expect(card.getByRole('link',{name:'Сообщение для поля Идея',exact:true})).toHaveAttribute('href',`#message-${collected.message_id}`);
  const selection=firstPosts[0].body as {intent_source:{source_version:string};fields:string[]};
- expect(selection.fields).toEqual(['idea','placement']);
+ expect([...selection.fields].sort()).toEqual(['approximate_size','idea','placement']);
  expect(selection.intent_source.source_version).toMatch(/^[0-9a-f]{64}$/);
  await expect(card.getByText(selection.intent_source.source_version,{exact:true}).first()).toBeVisible();
- await expect(card.getByText(/Не хватает/)).toContainText('Примерный размер');
- await expect(card.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
+ await expect(card.getByText(/Не хватает/)).toContainText('Стиль');
+ await expect(card.getByText('Какой стиль вам нравится?',{exact:true})).toBeVisible();
 
- await secondTab.close();
+ const second=await input('second',conversation);
+ expect([second.model_calls,second.calls,second.effects,second.status]).toEqual([1,1,1,'CLARIFY']);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,second.message_id,'swallow','shoulder')).click();
+ await expect(card.getByText(/swallow · Со слов клиента/)).toBeVisible();
+ const secondId=(await id.textContent())!;
+ expect(firstId).not.toBe(secondId);
+ await expect(revision).toHaveText('1');
+ await expect(card.getByText(serviceName,{exact:true})).toBeVisible();
+ expect(firstPosts).toHaveLength(3);
+ expect(firstPosts[2]).toMatchObject({requestId:secondId,status:200});
+ await expect(picker.locator('option')).toHaveCount(3);
+
+ await picker.selectOption(firstId);
+ await expect(id).toHaveText(firstId);
+ await expect(card.getByText(/8 cm · Со слов клиента/)).toBeVisible();
+ await expect(revision).toHaveText('1');
+ await expect(intake.getByRole('group',{name:'Уточнение заявки',exact:true})).toHaveCount(0);
+ expect(firstPosts).toHaveLength(3);
+ expect(revisions).toHaveLength(0);
+
+ const staleTab=secondTab;
+ const staleInbox=staleTab.getByRole('region',{name:'Переписка',exact:true});
+ const staleIntake=staleTab.getByRole('region',{name:'Предварительный запрос',exact:true});
+ const staleCard=staleTab.getByRole('region',{name:'Черновик заявки',exact:true});
+ const stalePicker=staleTab.getByLabel('Сохранённая заявка',{exact:true});
+ await staleTab.route(`**${endpoint}/*`,route=>recordDraftWrite(route,staleWrites,'PATCH'));
+ await expect(staleCard.getByTestId('service-request-id')).toHaveText(firstId);
+ await expect(staleCard.getByTestId('service-request-revision')).toHaveText('1');
+
+ const late=await input('late-size',conversation);
+ expect([late.model_calls,late.calls,late.effects,late.status]).toEqual([1,1,1,'CLARIFY']);
+ await Promise.all([refreshIntake(inbox,intake),refreshIntake(staleInbox,staleIntake)]);
+ await Promise.all([intake,staleIntake].map(panel=>expect(panel.getByLabel('Примерный размер',{exact:true})).toHaveValue('12 cm')));
+ const [save,staleSave]=await Promise.all([chooseRevision(page,late.message_id),chooseRevision(staleTab,late.message_id)]);
+ await save.click();
+ const retry=intake.getByRole('button',{name:'Повторить изменение заявки',exact:true});
+ await expect(retry).toBeVisible();
+ expect(revisions).toHaveLength(1);
+ expect(revisions[0]).toMatchObject({status:200,requestId:firstId});
+ await staleSave.click();
+ await expect(staleIntake.getByRole('alert')).toContainText('Заявка или сводка изменились');
+ await expect(staleCard.getByTestId('service-request-revision')).toHaveText('1');
+ await expect(staleSave).toBeDisabled();
+ expect(staleWrites).toHaveLength(1);
+ expect(staleWrites[0]).toMatchObject({status:409,error:'STALE_STATE',body:revisions[0].body});
+ expect(staleWrites[0].key).not.toBe(revisions[0].key);
+ await retry.click();
+ await expect(revision).toHaveText('2');
+ expect(revisions).toHaveLength(2);
+ expect(revisions[1]).toEqual(revisions[0]);
+ const update=revisions[0].body as {expected_revision:string;field:string;source:{message_id:string;source_version:string}};
+ expect(update).toMatchObject({expected_revision:'1',field:'approximate_size',source:{message_id:late.message_id}});
+ expect(update.source.source_version).toMatch(/^[0-9a-f]{64}$/);
+
+ reads.length=0;
  await page.reload();
  await openWorkspace(page);
  await openConversation(page,conversation);
- await expect(cardId).toHaveText(firstId);
- expect(firstPosts).toHaveLength(2);
+ await expect(id).toHaveText(firstId);
+ await expect(revision).toHaveText('2');
+ expect(reads).toContain(firstId);
+ expect(reads.every(requestId=>requestId===firstId)).toBe(true);
+ await expect(card.getByText(/12 cm · Со слов клиента/)).toBeVisible();
+ await expect(card.getByText(/flower · Со слов клиента/)).toBeVisible();
+ await expect(card.getByText(/forearm · Со слов клиента/)).toBeVisible();
+ await expect(card.getByRole('link',{name:'Сообщение для поля Примерный размер',exact:true})).toHaveAttribute('href',`#message-${late.message_id}`);
+ await expect(card.getByText(update.source.source_version,{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+
+ await staleIntake.getByRole('button',{name:'Обновить карточку заявки',exact:true}).click();
+ await expect(staleCard.getByTestId('service-request-revision')).toHaveText('2');
+ await stalePicker.selectOption(secondId);
+ await expect(staleCard.getByTestId('service-request-id')).toHaveText(secondId);
+ await expect(staleCard.getByTestId('service-request-revision')).toHaveText('1');
+ await expect(staleCard.getByText(/swallow · Со слов клиента/)).toBeVisible();
+ await expect(staleCard.getByText(/shoulder · Со слов клиента/)).toBeVisible();
+ await expect(staleCard.getByText(/8 cm|12 cm/)).toHaveCount(0);
+ await expect(staleCard.getByRole('link',{name:'Сообщение для поля Место',exact:true})).toHaveAttribute('href',`#message-${second.message_id}`);
 
  const ambiguous=await input('ambiguous',conversation);
  expect([ambiguous.model_calls,ambiguous.calls,ambiguous.effects,ambiguous.status]).toEqual([1,1,1,'CLARIFY']);
- await inbox.getByRole('button',{name:'Обновить сообщения',exact:true}).click();
- await intake.getByRole('button',{name:'Обновить сводку',exact:true}).click();
+ await refreshIntake(inbox,intake);
  await expect(intake.getByText('Уточните, к какой услуге или отдельной идее относится сообщение.',{exact:true})).toBeVisible();
- await expect(intake.getByRole('button',{name:'Создать или открыть заявку',exact:true})).toHaveCount(0);
- await expect(cardId).toHaveText(firstId);
- expect(firstPosts).toHaveLength(2);
-
- const separate=await input('second',conversation);
- expect([separate.model_calls,separate.calls,separate.effects,separate.status]).toEqual([1,1,1,'CLARIFY']);
- await inbox.getByRole('button',{name:'Обновить сообщения',exact:true}).click();
- await intake.getByRole('button',{name:'Обновить сводку',exact:true}).click();
- await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('swallow');
- await (await chooseWork(page,separate.message_id,'swallow','shoulder')).click();
- await expect(card.getByText(/swallow · Со слов клиента/)).toBeVisible();
- await expect(card.getByText(/shoulder · Со слов клиента/)).toBeVisible();
- await expect(card.getByText(/flower|forearm/)).toHaveCount(0);
- await expect(card.getByRole('link',{name:'Сообщение для поля Идея',exact:true})).toHaveAttribute('href',`#message-${separate.message_id}`);
- await expect(card.getByText(serviceName,{exact:true})).toBeVisible();
+ await expect(intake.getByRole('button',{name:'Сохранить уточнение заявки',exact:true})).toHaveCount(0);
+ await expect(intake.getByRole('button',{name:'Создать заявку',exact:true})).toHaveCount(0);
+ await expect(id).toHaveText(firstId);
+ await expect(revision).toHaveText('2');
  expect(firstPosts).toHaveLength(3);
- expect(firstPosts[2].status).toBe(200);
- expect(firstPosts[2].requestId).not.toBe(firstId);
- await expect(cardId).toHaveText(firstPosts[2].requestId);
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ expect(secondPosts).toHaveLength(1);
+ expect(revisions).toHaveLength(2);
+ expect(staleWrites).toHaveLength(1);
 });

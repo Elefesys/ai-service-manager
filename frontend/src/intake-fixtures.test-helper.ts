@@ -1,5 +1,5 @@
 import type {Session} from './api';
-import type {Intake,CaseInput,DurationCase,ServiceRequestDraft} from './intake-api';
+import type {Intake,CaseInput,DraftListItem,DurationCase,ServiceRequestDraft} from './intake-api';
 import {blankCase} from './intake-api';
 export const w='018f0000-0000-7000-8000-000000000001',b='018f0000-0000-7000-8000-000000000002',c='018f0000-0000-7000-8000-000000000003',client='018f0000-0000-7000-8000-000000000004',actor='018f0000-0000-7000-8000-000000000005',message='018f0000-0000-7000-8000-000000000006';
 export const scope={workspace:w,business:b,conversation:c,client};
@@ -16,4 +16,16 @@ export function draft():ServiceRequestDraft{
   facts:[{...fact,source:{...fact.source,quote:''}}],missing:['placement','approximate_size','style'],
   conflicts:[],question:value.question,
  };
+}
+export function listItem({request_id,revision,service_name,intent_source,facts}:ServiceRequestDraft):DraftListItem{
+ return {request_id,revision,service_name,intent_source,idea:facts.find(fact=>fact.field==='idea')?.value??null};
+}
+export function lateSize():Intake{
+ const value=intake(),message_id='018f0000-0000-7000-8000-000000000010',source_version='e'.repeat(64);
+ const size={...value.facts[0],field:'approximate_size' as const,value:'12 cm',source:{
+  message_id,source_version,quote:'12 cm',analysis_id:null,analysis_sha256:null,
+ }};
+ return {...value,version:'3',fingerprint:'d'.repeat(64),facts:[size],sources:[
+  ...value.sources,{message_id,source_version,text:'For the first flower, the size is 12 cm.'},
+ ]};
 }

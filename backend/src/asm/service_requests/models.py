@@ -28,8 +28,29 @@ class ServiceRequestCommand(ConfigurationModel):
         return self
 
 
+class ServiceRequestRevisionCommand(ConfigurationModel):
+    expected_revision: PositiveDecimal
+    expected_version: LimitDecimal
+    expected_fingerprint: Digest
+    field: FieldId
+    source: IntentSource
+    selection: Literal["ONE_WORK", "UNCLEAR"]
+
+
 class ServiceRequestReceipt(ConfigurationModel):
     request_id: CanonicalUUID
+
+
+class ServiceRequestCardSummary(ConfigurationModel):
+    request_id: CanonicalUUID
+    revision: PositiveDecimal
+    service_name: Nonblank = Field(max_length=100)
+    intent_source: IntentSource
+    idea: Nonblank | None = Field(max_length=300)
+
+
+class ServiceRequestCards(ConfigurationModel):
+    items: list[ServiceRequestCardSummary]
 
 
 class ServiceRequestDraft(ConfigurationModel):

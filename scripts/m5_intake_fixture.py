@@ -37,13 +37,17 @@ from sqlalchemy.ext.asyncio import create_async_engine
 INPUTS = {
     "seed": "Synthetic intake seed",
     "collect": "Synthetic intake flower forearm",
+    "collect-sized": "Synthetic intake flower forearm 8 cm",
     "complex": "Synthetic intake cover up",
     "ambiguous": "Synthetic intake flower and swallow, shared size unclear",
     "second": "Synthetic intake separate swallow shoulder",
+    "late-size": "Synthetic intake for the first work, flower size 12 cm",
 }
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
+    "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
     "second": (("idea", "swallow"), ("placement", "shoulder")),
+    "late-size": (("approximate_size", "12 cm"),),
 }
 CATEGORIES = {"complex": "COVER_UP", "ambiguous": "AMBIGUOUS"}
 

@@ -832,7 +832,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0022", "portfolio_delivery_schema_profile", 303, 302),
         ("0023", "intake_schema_profile", 318, 317),
         ("0024", "intake_v7_schema_profile", 321, 320),
-        ("0025", "service_request_schema_profile", 325, 324),
+        ("0025", "service_request_schema_profile", 330, 329),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])

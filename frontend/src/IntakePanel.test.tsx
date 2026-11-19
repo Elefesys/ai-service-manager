@@ -1,11 +1,16 @@
 import {afterEach,beforeEach,it,expect,vi} from 'vitest';
+import {randomUUID,webcrypto} from 'node:crypto';
 import {render,screen,waitFor,cleanup} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {IntakePanel} from './IntakePanel';
 import {intakeApi,IntakeError} from './intake-api';
-import {draft,intake,scope,session,message} from './intake-fixtures.test-helper';
-beforeEach(()=>{vi.spyOn(intakeApi,'draft').mockResolvedValue(null);});
-afterEach(()=>{cleanup();vi.restoreAllMocks();});
+import {draft,intake,scope,session,message,listItem,lateSize} from './intake-fixtures.test-helper';
+beforeEach(()=>{
+ vi.stubGlobal('crypto',{randomUUID,subtle:webcrypto.subtle});
+ vi.spyOn(intakeApi,'draft').mockResolvedValue(null);
+ vi.spyOn(intakeApi,'drafts').mockResolvedValue([]);
+});
+afterEach(()=>{cleanup();sessionStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('shows one missing question, a source link and confirms only the selected field',async()=>{
  const value=intake(),owner=session();vi.spyOn(intakeApi,'summary').mockResolvedValue(value);const command=vi.spyOn(intakeApi,'command').mockResolvedValue({outcome:'ACCEPTED',receipt_id:message,version:'2'});
  render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);expect(await screen.findByText(value.question!)).toBeVisible();expect(screen.getByRole('link',{name:'сообщение клиента'})).toHaveAttribute('href',`#message-${message}`);
@@ -36,7 +41,7 @@ it('repeats the exact draft command after a lost response and opens and verifies
  render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);
  await userEvent.selectOptions(await screen.findByLabelText('Начало работы'),message);
  await userEvent.click(screen.getByRole('checkbox',{name:'Идея: flower'}));
- const create=screen.getByRole('button',{name:'Создать или открыть заявку'});
+ const create=screen.getByRole('button',{name:'Создать заявку'});
  expect(create).toBeDisabled();
  await userEvent.click(screen.getByRole('checkbox',{name:'Начало и выбранные сведения относятся к одной работе'}));
  await userEvent.click(create);
@@ -68,7 +73,7 @@ it('offers only facts from the selected beginning forward and clears a previous 
  await userEvent.selectOptions(beginning,newMessage);
  expect(screen.queryByRole('checkbox',{name:'Идея: flower'})).not.toBeInTheDocument();
  expect(screen.getByRole('checkbox',{name:'Место: shoulder'})).not.toBeChecked();
- expect(screen.getByRole('button',{name:'Создать или открыть заявку'})).toBeDisabled();
+ expect(screen.getByRole('button',{name:'Создать заявку'})).toBeDisabled();
 });
 
 it('suppresses a delayed draft when the client context is replaced',async()=>{
@@ -78,9 +83,66 @@ it('suppresses a delayed draft when the client context is replaced',async()=>{
  const read=vi.mocked(intakeApi.draft);
  read.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
  const view=render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);
- expect(read).toHaveBeenCalledWith(scope,undefined,expect.any(AbortSignal));
+ await waitFor(()=>expect(read).toHaveBeenCalledWith(scope,undefined,expect.any(AbortSignal)));
  view.rerender(<IntakePanel session={owner} scope={{...scope,client:value.request_id}} expired={vi.fn()}/>);
  finish(value);
  await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
  expect(screen.queryByTestId('service-request-id')).not.toBeInTheDocument();
+});
+
+it('opens a selected card with GET after reload, retaining the exact scope and revision',async()=>{
+ const owner=session(),a=draft(),b={...draft(),request_id:'018f0000-0000-7000-8000-000000000011'};
+ b.facts[0].value='swallow';
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ vi.mocked(intakeApi.drafts).mockResolvedValue([listItem(b),listItem(a)]);
+ const read=vi.mocked(intakeApi.draft).mockImplementation(async (_scope,id)=>id===a.request_id?a:b);
+ const create=vi.spyOn(intakeApi,'saveDraft'),revise=vi.spyOn(intakeApi,'reviseDraft');
+ const panel=(session=owner)=><IntakePanel session={session} scope={scope} expired={vi.fn()}/>;
+ const first=render(panel());
+ const picker=await screen.findByLabelText('Сохранённая заявка');
+ await userEvent.selectOptions(picker,a.request_id);
+ await waitFor(()=>expect(screen.getByTestId('service-request-id')).toHaveTextContent(a.request_id));
+ expect(screen.getByTestId('service-request-revision')).toHaveTextContent('1');
+ expect(JSON.stringify(sessionStorage)).toContain(a.request_id);
+ expect(JSON.stringify(sessionStorage)).not.toContain(owner.csrf_token);
+ first.unmount();
+ read.mockClear();
+
+ const reopened=render(panel());
+ expect(await screen.findByTestId('service-request-id')).toHaveTextContent(a.request_id);
+ expect(read).toHaveBeenCalledExactlyOnceWith(scope,a.request_id,expect.any(AbortSignal));
+ expect(screen.getByText(/flower · Со слов клиента/)).toBeVisible();
+ expect(screen.getByTestId('service-request-revision')).toHaveTextContent('1');
+ reopened.rerender(panel({...owner,csrf_token:'next-session'}));
+ expect(screen.queryByTestId('service-request-id')).not.toBeInTheDocument();
+ expect(await screen.findByTestId('service-request-id')).toHaveTextContent(b.request_id);
+ expect(create).not.toHaveBeenCalled();
+ expect(revise).not.toHaveBeenCalled();
+});
+
+it('uses the chosen late source and loaded revision in an exact replay of one field',async()=>{
+ const summary=lateSize(),a=draft(),fact=summary.facts[0];
+ const revised={...a,revision:'2',facts:[...a.facts,{...fact,source:{...fact.source,quote:''}}]};
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(summary);
+ vi.mocked(intakeApi.draft).mockResolvedValueOnce(a).mockResolvedValueOnce(revised);
+ vi.mocked(intakeApi.drafts).mockResolvedValue([listItem(a)]);
+ const revise=vi.spyOn(intakeApi,'reviseDraft').mockRejectedValueOnce(new TypeError('connection lost')).mockResolvedValueOnce({request_id:a.request_id});
+ const create=vi.spyOn(intakeApi,'saveDraft');
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()}/>);
+ await userEvent.selectOptions(await screen.findByLabelText('Уточняемое сведение'),'approximate_size');
+ expect(screen.getByRole('link',{name:'Сообщение для уточнения'})).toHaveAttribute('href',`#message-${fact.source.message_id}`);
+ const send=screen.getByRole('button',{name:'Сохранить уточнение заявки'});
+ expect(send).toBeDisabled();
+ await userEvent.click(screen.getByRole('checkbox',{name:'Сведение из этого сообщения относится к выбранной заявке'}));
+ await userEvent.click(send);
+ await userEvent.click(await screen.findByRole('button',{name:'Повторить изменение заявки'}));
+ await waitFor(()=>expect(screen.getByTestId('service-request-revision')).toHaveTextContent('2'));
+ expect(revise.mock.calls[0].slice(0,5)).toEqual(revise.mock.calls[1].slice(0,5));
+ expect(revise.mock.calls[0].slice(0,3)).toEqual([scope,a.request_id,{
+  expected_revision:'1',expected_version:summary.version,expected_fingerprint:summary.fingerprint,
+  field:'approximate_size',source:{message_id:fact.source.message_id,source_version:fact.source.source_version},selection:'ONE_WORK',
+ }]);
+ expect(screen.getByText(/12 cm · Со слов клиента/)).toBeVisible();
+ expect(screen.getByText(/flower · Со слов клиента/)).toBeVisible();
+ expect(create).not.toHaveBeenCalled();
 });

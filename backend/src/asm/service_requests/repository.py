@@ -6,9 +6,11 @@ from pydantic import ValidationError
 
 from asm.service_requests.errors import ServiceRequestCode, ServiceRequestError
 from asm.service_requests.models import (
+    ServiceRequestCards,
     ServiceRequestCommand,
     ServiceRequestDraft,
     ServiceRequestReceipt,
+    ServiceRequestRevisionCommand,
 )
 from asm.tenancy import TenantUnitOfWork
 
@@ -38,13 +40,40 @@ class ServiceRequestRepository:
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
         return draft
 
+    async def list_cards(self, business: UUID, conversation: UUID) -> ServiceRequestCards:
+        raw = await self.unit.service_request_owner_list(business, conversation)
+        try:
+            return ServiceRequestCards.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+
     async def create(
         self, business: UUID, conversation: UUID, key: str, body: ServiceRequestCommand
     ) -> ServiceRequestReceipt:
         raw = await self.unit.service_request_owner_create(
             business, conversation, key, body.model_dump(mode="json")
         )
-        try:
-            return ServiceRequestReceipt.model_validate(raw)
-        except ValidationError:
-            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        return receipt_from_database(raw)
+
+    async def revise(
+        self,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        key: str,
+        body: ServiceRequestRevisionCommand,
+    ) -> ServiceRequestReceipt:
+        raw = await self.unit.service_request_owner_revise(
+            business, conversation, request_id, key, body.model_dump(mode="json")
+        )
+        receipt = receipt_from_database(raw)
+        if receipt.request_id != str(request_id):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return receipt
+
+
+def receipt_from_database(raw: object) -> ServiceRequestReceipt:
+    try:
+        return ServiceRequestReceipt.model_validate(raw)
+    except ValidationError:
+        raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
