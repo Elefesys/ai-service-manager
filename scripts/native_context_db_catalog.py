@@ -502,7 +502,7 @@ def source_catalog(root, revision="0013"):
             "0022": 303,
             "0023": 318,
             "0024": 321,
-            "0025": 330,
+            "0025": 331,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -741,7 +741,7 @@ def compare_embedded_profile(expected):
             "0022": 302,
             "0023": 317,
             "0024": 320,
-            "0025": 329,
+            "0025": 330,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",

@@ -171,6 +171,23 @@ FUNCTIONS = {
       END;
       RETURN jsonb_build_object('missing',missing,'conflicts',conflicts,'question',question);
     END $$""",
+    "platform.service_request_fact_available(app.conversations,uuid,jsonb)": r"""CREATE FUNCTION platform.service_request_fact_available(
+      p_scope app.conversations,p_target uuid,p_fact jsonb
+    ) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    SELECT NOT EXISTS(
+      SELECT 1 FROM app.service_requests other_draft
+      WHERE (other_draft.workspace_id,other_draft.business_id,other_draft.conversation_id,other_draft.client_id)
+        =(p_scope.workspace_id,p_scope.business_id,p_scope.id,p_scope.client_id)
+        AND other_draft.id IS DISTINCT FROM p_target
+        AND (other_draft.intent_message_id=(p_fact->'source'->>'message_id')::uuid OR EXISTS(
+          SELECT 1 FROM jsonb_array_elements(other_draft.facts) stored(value)
+          WHERE stored.value->'field'=p_fact->'field'
+            AND stored.value->'source'->'message_id'=p_fact->'source'->'message_id'
+            AND stored.value->'source'->'source_version'=p_fact->'source'->'source_version'
+        ))
+    )
+    $$""",
     "platform.service_request_owner_create(uuid,uuid,text,jsonb)": r"""CREATE FUNCTION platform.service_request_owner_create(
       p_business uuid,p_conversation uuid,p_key text,p_request jsonb
     ) RETURNS jsonb
@@ -249,15 +266,15 @@ FUNCTIONS = {
           FROM jsonb_array_elements(projection->'facts') f(value)
           WHERE fields ? (f.value->>'field');
         IF jsonb_array_length(facts)<>jsonb_array_length(fields) THEN
-            RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
-          END IF;
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+        END IF;
         FOR fact IN SELECT value FROM jsonb_array_elements(facts) LOOP
           IF platform.intake_source_current(
             scope.workspace_id,scope.business_id,scope.id,scope.client_id,fact->'source'
           ) IS NOT TRUE THEN
             RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
           END IF;
-          IF NOT EXISTS (
+          IF platform.service_request_fact_available(scope,NULL,fact) IS NOT TRUE OR NOT EXISTS (
             SELECT 1 FROM app.messages m
             WHERE (m.workspace_id,m.conversation_id,m.id)
               =(scope.workspace_id,scope.id,(fact->'source'->>'message_id')::uuid)
@@ -341,18 +358,8 @@ FUNCTIONS = {
       END IF;
       -- The owner assigns late evidence to the selected draft. A source already
       -- assigned to another work contradicts that assignment regardless of time.
-      IF fact->>'conflict' IS DISTINCT FROM 'false' OR EXISTS(
-        SELECT 1 FROM app.service_requests other_draft
-        WHERE (other_draft.workspace_id,other_draft.business_id,other_draft.conversation_id,other_draft.client_id)
-          =(scope.workspace_id,scope.business_id,scope.id,scope.client_id)
-          AND other_draft.id<>draft.id
-          AND (other_draft.intent_message_id=(requested_source->>'message_id')::uuid OR EXISTS(
-            SELECT 1 FROM jsonb_array_elements(other_draft.facts) stored(value)
-            WHERE stored.value->>'field'=selected_field
-              AND stored.value->'source'->'message_id'=requested_source->'message_id'
-              AND stored.value->'source'->'source_version'=requested_source->'source_version'
-          ))
-      ) THEN
+      IF fact->>'conflict' IS DISTINCT FROM 'false'
+        OR platform.service_request_fact_available(scope,draft.id,fact) IS NOT TRUE THEN
         RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
       END IF;
 
@@ -855,11 +862,12 @@ PROFILE = r"""CREATE FUNCTION platform.service_request_schema_profile() RETURNS 
 ('platform.published_knowledge_schema_profile()','93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5','sql',true,'s',false),
 ('platform.resolve_workspace_membership(uuid,uuid)','8ce9bdd67c17bc83442bea3a5e7a15337a51074e0ea6408855b10542e39ceb39','sql',true,'v',true),
 ('platform.service_request_command(app.conversations,text,text,uuid,jsonb)','0888dee140c0e7f35cf2a95a15709a9f040ce9447ca2f402be1ffa340858623f','plpgsql',true,'v',false),
+('platform.service_request_fact_available(app.conversations,uuid,jsonb)','63e601011da084f50e8774622a3355b1d1decc5d25662826596dc327696bf688','sql',true,'s',false),
 ('platform.service_request_intake(app.conversations,jsonb)','3f61b1943c618871b3448bce6d5a35df1bc11cfe0f2ba622fbe0844e3c6c1365','plpgsql',true,'s',false),
-('platform.service_request_owner_create(uuid,uuid,text,jsonb)','bbd60a6ff2dec3ac8216fa2286fab560841bc89991072785dc7a61bba4edf70d','plpgsql',true,'v',true),
+('platform.service_request_owner_create(uuid,uuid,text,jsonb)','46eac255bb1f430a5a3d389ef64399e15c487a5df2472ec25ce925b78ae6d69e','plpgsql',true,'v',true),
 ('platform.service_request_owner_list(uuid,uuid)','54c403414b2ca804d89c0dcc5322a50424ffe1a66f361063190752b505ca9434','plpgsql',true,'v',true),
 ('platform.service_request_owner_read(uuid,uuid,uuid)','4d7a6b09b54341176b12f315c6c08d21c654f891403bb93216070890cf3b6ea3','plpgsql',true,'v',true),
-('platform.service_request_owner_revise(uuid,uuid,uuid,text,jsonb)','4d0b29efeb971216c712b012415864caa053c4534469b76612230008503fddfb','plpgsql',true,'v',true),
+('platform.service_request_owner_revise(uuid,uuid,uuid,text,jsonb)','e2f57ea5a2ee40a2dae3eae4fa00b69b386a54269184019438890d96dd7c79be','plpgsql',true,'v',true),
 ('platform.service_request_owner_scope(uuid,uuid)','68d56b048f60af95d6cc0280d2219ac18f467cb18403f5e252157533c1e26a8a','plpgsql',true,'v',false),
 ('platform.service_request_summary(jsonb,jsonb,text)','69b1c509de00d7e8b7c6efed748390c9f973fade292e4d91b2d5cec2df7e76d4','plpgsql',false,'i',false),
 ('platform.telegram_begin_send(uuid,uuid,bigint,bigint,jsonb)','c8f15c23837fa40b86451574ee3e04cc4292dd91b2929a891424e0d8acec556d','plpgsql',true,'v',true),
@@ -982,7 +990,7 @@ PROFILE = r"""CREATE FUNCTION platform.service_request_schema_profile() RETURNS 
         JOIN pg_attribute a ON a.attrelid=r.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname IN ('app','platform') AND r.relkind='r'
         GROUP BY r.oid,n.nspname,r.relname,r.relowner,r.relrowsecurity,r.relforcerowsecurity,r.relacl),
       validity AS MATERIALIZED (SELECT
-        (SELECT count(*) FROM functions)=330 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=329
+        (SELECT count(*) FROM functions)=331 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=330
         AND NOT EXISTS(SELECT 1 FROM expected e LEFT JOIN functions f ON f.oid=to_regprocedure(e.signature)
           WHERE f.oid IS NULL OR encode(sha256(convert_to(f.prosrc,'UTF8')),'hex')<>e.body_hash OR f.lanname<>e.language
             OR f.prosecdef<>e.security_definer OR f.provolatile::text<>e.volatility OR f.proowner<>'asm_migrator'::regrole

@@ -144,10 +144,13 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
   }catch(failure){
    if(signal.aborted)return;
    if(failure instanceof IntakeError&&[400,401,403,404,409,422].includes(failure.status)){
+    const clarifyCreate=attempt?.operation==='create'&&!attempt.acceptedId&&failure.status===409&&failure.code==='NEEDS_CLARIFICATION';
     pending.current=null;
-    setChoice(null);
+    setChoice(selected=>clarifyCreate&&selected?{...selected,confirmed:false}:null);
     setRevisionChoice(null);
-    setError(draftError(failure));
+    setError(clarifyCreate
+     ?'Проверьте, к какой работе относятся выбранные сведения. Снимите отметку со спорного поля и подтвердите выбор ещё раз.'
+     :draftError(failure));
     if(attempt?.operation==='revise'&&failure.code==='STALE_STATE')setRevisionNeedsRead(true);
     if([401,403,404].includes(failure.status)){
      setDraft(null);setCards([]);setReadable(false);

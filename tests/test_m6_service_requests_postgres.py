@@ -366,6 +366,106 @@ async def test_q1_late_correction_revises_only_selected_work_and_field(service_r
     }
 
 
+async def test_q1_delayed_creation_rejects_size_already_saved_for_another_work(service_request_pg):
+    h = service_request_pg
+    cid, worker, model, _, delivery = await application(
+        h, {"idea": "flower", "approximate_size": "8 cm"}
+    )
+    initial = await summary(h, cid)
+    first = await create(h, cid, "first-work", create_body(initial))
+    first_id = first["request_id"]
+    original = await read(h, cid, first_id)
+    assert original["revision"] == "1"
+    assert {f["value"] for f in original["facts"]} == {"flower", "8 cm"}
+    await worker.execute(await claim_job(h, delivery["send_job_id"]))
+
+    model.values = {"idea": "bird", "placement": "shoulder"}
+    model.switch = True
+    _, delivery = await next_turn(h, worker, "Separate work: a bird on the shoulder")
+    separate = await summary(h, cid)
+    second_start = create_body(separate)["intent_source"]
+    await worker.execute(await claim_job(h, delivery["send_job_id"]))
+
+    model.values = {"approximate_size": "12 cm"}
+    model.switch = False
+    model.correction = True
+    await next_turn(h, worker, "12 cm only for the first flower")
+    corrected = await summary(h, cid)
+    assert {f["field"]: f["value"] for f in corrected["facts"]} == {
+        "idea": "bird",
+        "placement": "shoulder",
+        "approximate_size": "12 cm",
+    }
+    size = revise_body(corrected, original, "approximate_size")
+    assert size["source"] == source_pin(corrected["sources"][-1])
+    assert size["source"]["message_id"] != second_start["message_id"]
+    async with owner_unit(h) as u:
+        assert await revise(u, cid, first_id, "correct-first-size", size) == first
+    revised = await read(h, cid, first_id)
+    revised_size = next(f for f in revised["facts"] if f["field"] == "approximate_size")
+    assert revised_size["value"] == "12 cm" and source_pin(revised_size["source"]) == size["source"]
+    assert revised["revision"] == "2" and revised["intent_source"] == original["intent_source"]
+    assert await request_count(h, cid) == 1
+
+    disputed = create_body(corrected, anchor=second_start)
+    key = "second-with-first-size"
+    async with rejected("NEEDS_CLARIFICATION"):
+        await create(h, cid, key, disputed)
+    assert await request_count(h, cid) == 1
+    assert await read(h, cid, first_id) == revised
+    assert not await scalar(
+        h,
+        "SELECT EXISTS(SELECT 1 FROM platform.service_request_receipts "
+        "WHERE (workspace_id,actor_user_account_id,command_key)=(:ws,:actor,:key))",
+        ws=A,
+        actor=UA,
+        key=key,
+    )
+
+    second = await create(
+        h,
+        cid,
+        "second-own-fields",
+        create_body(corrected, anchor=second_start, fields=["idea", "placement"]),
+    )
+    assert second != first
+    second_draft = await read(h, cid, second["request_id"])
+    assert second_draft["revision"] == "1" and second_draft["intent_source"] == second_start
+    assert {f["field"]: f["value"] for f in second_draft["facts"]} == {
+        "idea": "bird",
+        "placement": "shoulder",
+    }
+    assert "approximate_size" in second_draft["missing"]
+    assert await request_count(h, cid) == 2
+    assert await read(h, cid, first_id) == revised
+
+
+async def test_q1_separate_sources_can_support_the_same_size(service_request_pg):
+    h = service_request_pg
+    cid, worker, model, _, delivery = await application(
+        h, {"idea": "flower", "approximate_size": "8 cm"}
+    )
+    initial = await summary(h, cid)
+    first = await create(h, cid, "first-work", create_body(initial))
+    original = await read(h, cid, first["request_id"])
+    await worker.execute(await claim_job(h, delivery["send_job_id"]))
+
+    model.values = {"idea": "bird", "approximate_size": "8 cm"}
+    model.switch = True
+    await next_turn(h, worker, "Separate work: a bird, 8 cm")
+    separate = await summary(h, cid)
+    second = await create(h, cid, "second-work", create_body(separate))
+    second_draft = await read(h, cid, second["request_id"])
+    assert second != first
+    first_size = next(f for f in original["facts"] if f["field"] == "approximate_size")
+    second_size = next(f for f in second_draft["facts"] if f["field"] == "approximate_size")
+    assert first_size["value"] == second_size["value"] == "8 cm"
+    assert source_pin(first_size["source"]) == original["intent_source"]
+    assert source_pin(second_size["source"]) == second_draft["intent_source"]
+    assert first_size["source"]["message_id"] != second_size["source"]["message_id"]
+    assert await request_count(h, cid) == 2
+
+
 async def test_q1_rejects_foreign_scope_and_rechecks_access_for_read_and_replay(service_request_pg):
     h = service_request_pg
     cid, _, _, _, _ = await application(h, {"idea": "flower"})
@@ -596,6 +696,11 @@ async def test_0025_upgrade_preserves_0024_intake_and_rejects_downgrade_with_req
         h,
         "SELECT has_function_privilege('asm_runtime',"
         "'platform.service_request_command(app.conversations,text,text,uuid,jsonb)','EXECUTE')",
+    )
+    assert not await scalar(
+        h,
+        "SELECT has_function_privilege('asm_runtime',"
+        "'platform.service_request_fact_available(app.conversations,uuid,jsonb)','EXECUTE')",
     )
     result = await create(h, cid, "0025-data", create_body(prior, fields=[]))
     with pytest.raises(AssertionError, match="SERVICE_REQUEST_DURABLE_DATA"):

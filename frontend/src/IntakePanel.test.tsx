@@ -57,6 +57,43 @@ it('repeats the exact draft command after a lost response and opens and verifies
  expect(screen.getByRole('link',{name:'Сообщение для поля Идея'})).toHaveAttribute('href',`#message-${message}`);
 });
 
+it('keeps the beginning and chosen facts after clarification and creates with a changed selection and new key',async()=>{
+ const summary=lateSize(),card=draft();
+ summary.facts.unshift(...intake().facts);
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(summary);
+ vi.mocked(intakeApi.draft).mockResolvedValueOnce(null).mockResolvedValueOnce(card);
+ const create=vi.spyOn(intakeApi,'saveDraft').mockRejectedValueOnce(new IntakeError(409,'NEEDS_CLARIFICATION'))
+  .mockResolvedValueOnce({request_id:card.request_id});
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()}/>);
+ const beginning=await screen.findByLabelText('Начало работы');
+ await userEvent.selectOptions(beginning,message);
+ const idea=screen.getByRole('checkbox',{name:'Идея: flower'});
+ const size=screen.getByRole('checkbox',{name:'Примерный размер: 12 cm'});
+ const confirmed=screen.getByRole('checkbox',{name:'Начало и выбранные сведения относятся к одной работе'});
+ const send=screen.getByRole('button',{name:'Создать заявку'});
+ for(const checkbox of [idea,size,confirmed])await userEvent.click(checkbox);
+ await userEvent.click(send);
+
+ expect(await screen.findByRole('alert')).toHaveTextContent('Снимите отметку со спорного поля');
+ expect(beginning).toHaveValue(message);
+ expect(idea).toBeChecked();
+ expect(size).toBeChecked();
+ expect(confirmed).not.toBeChecked();
+ expect(send).toBeDisabled();
+ expect(screen.queryByRole('button',{name:'Повторить создание заявки'})).not.toBeInTheDocument();
+ await userEvent.click(size);
+ await userEvent.click(confirmed);
+ await userEvent.click(send);
+ expect(await screen.findByTestId('service-request-id')).toHaveTextContent(card.request_id);
+
+ expect(create).toHaveBeenCalledTimes(2);
+ const [,original,key]=create.mock.calls[0];
+ const [,edited,newKey]=create.mock.calls[1];
+ expect(original.fields).toEqual(['idea','approximate_size']);
+ expect(edited).toEqual({...original,fields:['idea']});
+ expect(newKey).not.toBe(key);
+});
+
 it('offers only facts from the selected beginning forward and clears a previous work selection',async()=>{
  const value=intake(),newMessage='018f0000-0000-7000-8000-000000000010',newVersion='e'.repeat(64);
  value.sources.push({message_id:newMessage,source_version:newVersion,text:'another work on the shoulder'});

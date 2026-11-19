@@ -315,7 +315,9 @@ def main():
         parser = PrivateArgumentParser()
         parser.add_argument("--operation", choices=tuple(INPUTS), required=True)
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
-        parser.add_argument("--journey", choices=("intake", "request"), default="intake")
+        parser.add_argument(
+            "--journey", choices=("intake", "request", "request-deferred"), default="intake"
+        )
         for name in ("actor", "workspace", "business"):
             parser.add_argument("--" + name, required=True)
         parser.add_argument("--conversation")
