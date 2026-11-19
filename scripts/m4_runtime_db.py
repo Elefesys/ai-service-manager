@@ -291,6 +291,24 @@ M5_PLAN_PATHS = {
     "scripts/m4_runtime_db.py",
     "tests/test_m4_runtime_db_runner.py",
 }
+# PR55 carries the M5 closure and planning documents on the accepted 0024 tree.
+M6_PLAN_BASE = "aee17b90ca2283688904da0d07992d9504f4dc33"
+M6_PLAN_TREE = "cf2710c69fdd3823ed0a8b12b89d139b509ea13f"
+M6_PLAN_INITIAL = "65471bc23ec4ceb69fa603237d0b2a4b51dc271c"
+M6_PLAN_BRANCH = "c0/m6-pilot-plan-20261119"
+M6_PLAN_REVIEW_PATHS = {
+    "docs/TASK_REGISTER.md",
+    "docs/tasks/M6_HANDOFF.md",
+    "docs/decisions/IMPL-006-m6-pilot-agreement.md",
+    "scripts/m4_runtime_db.py",
+    "tests/test_m4_runtime_db_runner.py",
+}
+M6_PLAN_PATHS = M6_PLAN_REVIEW_PATHS | {
+    "AGENTS.md",
+    "README.md",
+    "docs/tasks/M5_HANDOFF.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+}
 # C0's bounded M5.1A implementation assignment; not a general M5 allowance.
 M5_CONFIGURATION_BASE = "49d3e25968507ac41037f369fce5bd7080475a8f"
 M5_CONFIGURATION_TREE = "699bd90777771c5d22d37029336c3e0f8909fb5c"
@@ -1040,11 +1058,14 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    m6_plan = value.get("branch") == M6_PLAN_BRANCH
     v7_fix = value.get("branch") == M5_V7_FIX_BRANCH
     intake = value.get("branch") == M5_INTAKE_BRANCH
     delivery = value.get("branch") == M5_DELIVERY_BRANCH
     if v7_fix:
         keys.update({"v7_fix_assignment", "v7_fix_candidate"})
+    if m6_plan:
+        keys.add("m6_plan_candidate")
     if intake:
         keys.add("intake_assignment")
         keys.add("intake_scope_amendment")
@@ -1057,16 +1078,19 @@ def source_tree_from_evidence(path=None):
             value["v7_fix_assignment"] == v7_fix_assignment_proof(),
             "SOURCE_IDENTITY_V7_FIX_ASSIGNMENT",
         )
-        candidate = value["v7_fix_candidate"]
+    if m6_plan or v7_fix:
+        candidate = value["m6_plan_candidate" if m6_plan else "v7_fix_candidate"]
+        candidate_base = M6_PLAN_BASE if m6_plan else M5_V7_FIX_BASE
+        initial = M6_PLAN_INITIAL if m6_plan else M5_V7_FIX_ASSIGNMENT
         require(
             type(candidate) is dict
             and set(candidate) == {"sha", "tree", "merge_parents"}
             and type(candidate["sha"]) is str
             and re.fullmatch(r"[0-9a-f]{40}", candidate["sha"])
-            and candidate["sha"] not in (M5_V7_FIX_BASE, M5_V7_FIX_ASSIGNMENT, value["source"])
+            and candidate["sha"] not in (candidate_base, initial, value["source"])
             and candidate["tree"] == value["tree"]
-            and candidate["merge_parents"] == [M5_V7_FIX_BASE, candidate["sha"]],
-            "SOURCE_IDENTITY_V7_FIX_CANDIDATE",
+            and candidate["merge_parents"] == [candidate_base, candidate["sha"]],
+            "SOURCE_IDENTITY_M6_PLAN_CANDIDATE" if m6_plan else "SOURCE_IDENTITY_V7_FIX_CANDIDATE",
         )
     if intake:
         require(
@@ -1097,7 +1121,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
+        (M6_PLAN_BASE, M6_PLAN_TREE)
+        if m6_plan
+        else (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
         if v7_fix
         else (M5_INTAKE_BASE, M5_INTAKE_TREE)
         if intake
@@ -1158,7 +1184,7 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
-            or (intake or v7_fix)
+            or (intake or v7_fix or m6_plan)
             and value["event"] in {"pull_request", "push"}
             or delivery
             and value["event"] in {"pull_request", "push"}
@@ -1185,7 +1211,9 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if v7_fix:
+    if m6_plan:
+        require(set(paths) <= M6_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif v7_fix:
         require(M5_V7_FIX_DOCS <= set(paths) <= M5_V7_FIX_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif intake:
         require(set(paths) <= M5_INTAKE_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -1662,28 +1690,67 @@ def v7_fix_event(event):
     return result.returncode == 0
 
 
-def v7_fix_candidate(event):
+def merge_candidate(event, base, branch, initial, prefix):
     require(
         event["event"] == "pull_request"
-        and event.get("head_ref") == M5_V7_FIX_BRANCH
-        and event.get("base_sha") == M5_V7_FIX_BASE
+        and event.get("head_ref") == branch
+        and event.get("base_sha") == base
         or event["event"] == "push"
         and event["ref"] == "refs/heads/main",
-        "V7_FIX_EVENT",
+        prefix + "_EVENT",
     )
     parents = commit_parents("HEAD")
-    require(len(parents) == 2 and parents[0] == M5_V7_FIX_BASE, "V7_FIX_MERGE_PARENTS")
+    require(len(parents) == 2 and parents[0] == base, prefix + "_MERGE_PARENTS")
     candidate = parents[1]
     if event["event"] == "pull_request":
-        require(candidate == event["head_sha"], "V7_FIX_MERGE_CANDIDATE")
+        require(candidate == event["head_sha"], prefix + "_MERGE_CANDIDATE")
     require(
-        candidate != M5_V7_FIX_ASSIGNMENT
-        and capture(["git", "merge-base", M5_V7_FIX_ASSIGNMENT, candidate]) == M5_V7_FIX_ASSIGNMENT,
-        "V7_FIX_ASSIGNMENT_ANCESTRY",
+        candidate != initial and capture(["git", "merge-base", initial, candidate]) == initial,
+        prefix + "_ASSIGNMENT_ANCESTRY",
     )
     candidate_tree = capture(["git", "rev-parse", candidate + "^{tree}"])
-    require(candidate_tree == event["tree"], "V7_FIX_MERGE_TREE")
+    require(candidate_tree == event["tree"], prefix + "_MERGE_TREE")
     return {"sha": candidate, "tree": candidate_tree, "merge_parents": parents}
+
+
+def v7_fix_candidate(event):
+    return merge_candidate(event, M5_V7_FIX_BASE, M5_V7_FIX_BRANCH, M5_V7_FIX_ASSIGNMENT, "V7_FIX")
+
+
+def m6_plan_event(event):
+    return event.get("head_ref") == M6_PLAN_BRANCH or (
+        event.get("event") == "push"
+        and event["ref"] == "refs/heads/main"
+        and commit_parents("HEAD")[:1] == [M6_PLAN_BASE]
+    )
+
+
+def m6_plan_candidate(event):
+    return merge_candidate(event, M6_PLAN_BASE, M6_PLAN_BRANCH, M6_PLAN_INITIAL, "M6_PLAN")
+
+
+def admit_m6_plan_source(event, evidence):
+    require(event["attempt"] == "1", "RUN_ATTEMPT")
+    require(event["event"] != "pull_request" or event["pr_number"] == 55, "M6_PLAN_PR_NUMBER")
+    require(capture(["git", "rev-parse", M6_PLAN_BASE + "^{tree}"]) == M6_PLAN_TREE, "BASE_TREE")
+    candidate = m6_plan_candidate(event)
+    diff = ["git", "diff", "--no-renames", "--name-only"]
+    review_paths = capture([*diff, M6_PLAN_INITIAL, candidate["sha"]]).splitlines()
+    require(set(review_paths) <= M6_PLAN_REVIEW_PATHS, "M6_PLAN_REVIEW_WRITE_SET")
+    paths = capture([*diff, M6_PLAN_BASE, "HEAD"]).splitlines()
+    require(bool(paths) and set(paths) <= M6_PLAN_PATHS, "M6_PLAN_WRITE_SET")
+    write(
+        evidence / "source-admission.json",
+        {
+            "base": M6_PLAN_BASE,
+            "base_tree": M6_PLAN_TREE,
+            "source": event["head"],
+            "tree": event["tree"],
+            "paths": paths,
+            "result": "PASS",
+            "m6_plan_candidate": candidate,
+        },
+    )
 
 
 def admit_v7_fix_source(event, manifest, evidence):
@@ -1985,6 +2052,9 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    if m6_plan_event(event):
+        admit_m6_plan_source(event, evidence)
+        return event, manifest
     if v7_fix_event(event):
         return admit_v7_fix_source(event, manifest, evidence)
     if intake_event(event):
@@ -2976,7 +3046,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            v7_fix_event(event)
+            m6_plan_event(event)
+            or v7_fix_event(event)
             or intake_event(event)
             or delivery_event(event)
             or foundation_budget_event(event)
@@ -3004,9 +3075,10 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    v7_fix = v7_fix_event(event)
-    intake = not v7_fix and intake_event(event)
-    intake_carrier = intake or v7_fix
+    m6_plan = m6_plan_event(event)
+    v7_fix = not m6_plan and v7_fix_event(event)
+    intake = not (m6_plan or v7_fix) and intake_event(event)
+    intake_carrier = intake or v7_fix or m6_plan
     delivery = not intake_carrier and delivery_event(event)
     foundation_budget = not (intake_carrier or delivery) and foundation_budget_event(event)
     portfolio = not (intake_carrier or delivery or foundation_budget) and portfolio_event(event)
@@ -3044,7 +3116,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
+        (M6_PLAN_BASE, M6_PLAN_TREE)
+        if m6_plan
+        else (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
         if v7_fix
         else (M5_INTAKE_BASE, M5_INTAKE_TREE)
         if intake
@@ -3081,6 +3155,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M6_PLAN_BRANCH
+            if m6_plan
             else M5_V7_FIX_BRANCH
             if v7_fix
             else M5_INTAKE_BRANCH
@@ -3104,6 +3180,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if m6_plan:
+        source["m6_plan_candidate"] = m6_plan_candidate(event)
     if v7_fix:
         source["v7_fix_assignment"] = v7_fix_assignment_proof()
         source["v7_fix_candidate"] = v7_fix_candidate(event)
@@ -3271,7 +3349,13 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             )
             if module == "preflight":
                 current_revision = (
-                    "0024" if v7_fix else "0023" if intake else "0022" if delivery else "0021"
+                    "0024"
+                    if m6_plan or v7_fix
+                    else "0023"
+                    if intake
+                    else "0022"
+                    if delivery
+                    else "0021"
                 )
                 sql_phase(
                     group,
