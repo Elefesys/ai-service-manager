@@ -2,7 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5 INTEGRATED / VERIFIED · передача к M6 · 2026-11-19
+## CURRENT — M6: план REVIEW, реализация TODO · 2026-11-19
+
+Подготовлен [план M6](tasks/M6_HANDOFF.md) и [решение по пилоту IMPL-006](decisions/IMPL-006-m6-pilot-agreement.md) для приёмки C0. Текущая работа — рассмотрение документации; поручения на код пока нет. Первая предлагаемая выдача после интеграции — **M6.1A, C1 с C2**: один черновик из актуального intake с источниками и безопасным повтором, доступный мастеру. Базой кода станет фактический принятый main после слияния плана. Полный следующий этап заканчивается заказом и одной сессией без даты; слоты и платежи относятся к M7/M8.
+
+Вход: [приёмка M5](tasks/M5_HANDOFF.md#7-передача-m6), PR #54, схема 0024, main `aee17b90ca2283688904da0d07992d9504f4dc33`, [CI 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/44436805054). Сохранён docs-only receipt `d0e4de817ac04d67e007c8ef880f2cb251309858`. Границы live остаются прежними. Детали выдачи вести в M6_HANDOFF, результаты — ссылками на PR/CI.
+
+## История — M5 INTEGRATED / VERIFIED · передача к M6 · 2026-11-19
 
 **M5 завершён в synthetic LOCAL/TEST.** Владелец слил PR #54, C0 принял фактический `main` `aee17b90ca2283688904da0d07992d9504f4dc33`, tree `cf2710c69fdd3823ed0a8b12b89d139b509ea13f`. Родители слияния — `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba` и проверенный head `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455`. Последняя принятая миграция — 0024. Все 12 jobs `push/main` прошли с первой попытки. [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) · [CI 44436805054](https://github.com/Elefesys/ai-service-manager/actions/runs/44436805054).
 

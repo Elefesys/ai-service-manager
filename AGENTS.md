@@ -14,78 +14,17 @@
 
 Изоляция клиентов/Workspace, право владельца на управление, защита от повторных отправок и достоверность результатов проверок сохраняются. Упрощение архитектуры не означает скрытое отключение этих гарантий.
 
-## Итог пилотного M5 и база для следующего этапа
+## Текущий этап — M6: от заявки до согласованного заказа
 
-Технические зависимости M4 для начала M5 выполнены. PR #44 слит; accepted main
-c9d42878ebfaf6def59d24cf7f95b1f74646eb83, push/main CI43157266312 — 12/12 SUCCESS.
-Финальный receipt C0 из98136c33 сохранён в [M4_HANDOFF](docs/tasks/M4_HANDOFF.md).
-Общий live VERIFIED не заявляется: receiver ACK/fence и единый HUMAN/Resume
-сценарий остаются отдельно OPEN_OPERATIONAL, без блокировки разработки M5.
-Старые UNKNOWN/holds сохраняются; автономная сеть DEFERRED, development через ПК.
+Порядок чтения: CURRENT в [TASK_REGISTER](docs/TASK_REGISTER.md), [план и действующее поручение M6](docs/tasks/M6_HANDOFF.md), [IMPL-006](docs/decisions/IMPL-006-m6-pilot-agreement.md), затем [контракты M5 §7](docs/tasks/M5_HANDOFF.md#7-передача-m6), принятое [IMPL-005](docs/decisions/IMPL-005-m5-pilot-knowledge.md) и применимые ADR. Текущее состояние решения указано в IMPL-006. Планирование само по себе не выдаёт задачу на код.
 
-Перед работой читать [M5_HANDOFF](docs/tasks/M5_HANDOFF.md),
-[IMPL-005](docs/decisions/IMPL-005-m5-pilot-knowledge.md), CURRENT в
-[TASK_REGISTER](docs/TASK_REGISTER.md), затем применимые исходные ADR.
-Решение IMPL-005 — ACCEPTED / LOCKED C0; PR #45 интегрирован. M5.1A/PR #46 и
-M5.1B/PR #47 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST, accepted
-main6942150e. M5.2A functional capability принят C0 на owner-reported assisted
-synthetic evidence: три Vision samples и embedding relevance/1536/cosine,
-провайдер OpenAI подтверждён history того же запроса. Отсутствующий
-completion_tokens у установленного embedding request — NOT_APPLICABLE;
-исходное ABSENT сохраняется, чатовые проверки не ослаблены. Точное решение —
-в IMPL-005, подробные observations — в PR48.
+M5 принят в synthetic LOCAL/TEST на `aee17b90ca2283688904da0d07992d9504f4dc33`, схема `0024`. [Проверка после слияния PR #54](https://github.com/Elefesys/ai-service-manager/actions/runs/44436805054) — 12/12, attempt 1. Пять замечаний C8 закрыты, K01–K12 приняты. Финальный [receipt C0](https://github.com/Elefesys/ai-service-manager/commit/d0e4de817ac04d67e007c8ef880f2cb251309858) сохранён. Не назначать повторную приёмку M5 как входной gate.
 
-M5.2A/PR48 — INTEGRATED / VERIFIED: code/CI LOCAL/TEST, capability
-ASSISTED_SYNTHETIC. Accepted main8eeeede1, post-merge CI43600856660 —
-итог12/12 SUCCESS; первый Docker service setup failure устранён повтором одной
-job на том же SHA, остальные результаты attempt1 сохранены.
-M5.2B/PR49 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST: accepted main
-`70804866f6838f77c12bd281febae47887559d75`, tree `a6ee68b5` совпадает с принятым
-кандидатом `3a82973c`; post-merge CI43693059853 — 12/12 SUCCESS, attempt1.
-M5.2C/PR50 и foundation CI fix/PR51 — INTEGRATED / VERIFIED в synthetic
-LOCAL/TEST. Accepted main `8d98593bc739666176968c5d76b9c01a2a711686`,
-tree `a14ed9b69e3529ac060bc015b9a24dcea515ef9b` совпадает с reviewed candidate.
-Post-merge CI43818223732 — 12/12 SUCCESS, attempt 1; прежний timeout
-CI43800096544 остаётся в истории CANCELLED.
-M5.2D/PR52 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST. Accepted main
-`220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
-`d15f9a75346ab881449010745cbe0216081b78cf` совпадает с reviewed candidate.
-Post-merge CI43894664260 — 12/12 SUCCESS, attempt 1; прежний failed run
-сохраняет исходный результат. Ссылка на post-merge CI M5.2D есть в README.
-M5.3A/PR53 — INTEGRATED / VERIFIED в synthetic LOCAL/TEST. Accepted main
-`c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
-`11c987fb12e4f88d27da3737911c468d520269b8`; post-merge CI44018352191 —
-12/12 SUCCESS, attempt1. Preliminary intake, owner Action Center и private
-DurationCase интегрированы в пределах проверенных сценариев. M5 и M5.3B
-получили INTEGRATED / VERIFIED в synthetic LOCAL/TEST. Владелец слил PR #54.
-Принятый main `aee17b90ca2283688904da0d07992d9504f4dc33`, tree `cf2710c69fdd3823ed0a8b12b89d139b509ea13f`.
-C0 подтвердил родителей, совпадение дерева и CI фактического push/main —
-12/12 SUCCESS с первой попытки. C8 закрыл все пять замечаний, K01–K12 приняты.
-Поручения M5 завершены. Контракты для M6 и первый предлагаемый срез
-приведены в [M5_HANDOFF §7](docs/tasks/M5_HANDOFF.md#7-передача-m6).
-C6 HOLD. [CI после слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/44436805054).
+Первый результат M6 — отдельная заявка из актуального intake со ссылками на источники; повтор возвращает ту же заявку. Далее — оценка, расчёт или решение мастера, неизменяемое предложение, явное согласие клиента и заказ с одной следующей сессией без даты. Обычный ответ мастера в текущем Action Center ещё не задаёт сумму. Для пилота не нужны workflow engine, произвольные исполнимые формулы, календарные слоты, checkout или fiscal/billing изменения.
 
-Проверенная область M5 — synthetic LOCAL/TEST с default OFF/FAKE/EVAL_ONLY.
-Исходные UNKNOWN, receipts, holds, ограничения реальных данных и live-проверок
-сохраняются.
+C0 ведёт одну выдачу с конкретным принятым SHA, путями и критериями. C0/C2 выделяют свободную additive migration по актуальному head; уже применённые миграции не переписывать. При несовпадении инструкций/кода указать конфликт и явно принять более подходящий вариант, сохраняя действующие гарантии. Решения человека и структурированное состояние определяют коммерческие факты.
 
-M5 делает подтверждённые настройки и знания полезными в разговоре, затем Vision,
-портфолио и предварительный intake. Не строить universal workflow engine,
-OnboardingAgent, массовый импорт чатов, генерацию изображений или pricing/booking
-заранее. Приёмка IMPL-005 явно фиксирует эти изменения порядка/scope.
-Не считать text-only M4 допуском к изображениям или embeddings.
-Нельзя создавать фиктивные conversations/messages ради owner upload/индексации
-либо обходить guards через ручную отправку. Один исходящий portfolio photo
-реализован отдельным guarded путём M5.2D;
-он не разрешает альбомы, произвольные media sends или реальные TEST отправки.
-
-C0 выдаёт одну задачу с точным принятым main SHA, write-set и результатом.
-На принятом main действует миграция 0024 с родителем 0023. Применённые
-миграции 0001–0024 сохраняются. Следующую выделяют C0 и C2 по актуальной базе.
-Статус — один CURRENT в реестре; поручение — один CURRENT в M5_HANDOFF.
-При обновлении заменять актуальный блок и ссылаться на историю PR/CI,
-не размножать длинные receipts между документами.
-Новых paid/live/VM допусков этот план не создаёт. Merge — отдельное действие.
+Действуют DEFAULT_OFF/FAKE/EVAL_ONLY, существующие UNKNOWN/holds и пределы доступа к фото и данным. Receiver ACK/fence, полный live HUMAN/Resume и production data route отдельно открыты; для synthetic разработки это не блокеры. Автономный транспорт остаётся отложенным. C6 подключается только для конкретной необходимости. Merge, реальные данные, ВМ и платные вызовы не разрешаются задачей планирования.
 
 ## Источники и границы
 

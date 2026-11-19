@@ -1,7 +1,7 @@
 # AI Service Manager
 
 Modular monolith; architecture v0.28. Stack decision: `docs/decisions/IMPL-001-stack.md`.
-M5 is integrated and verified in synthetic LOCAL/TEST. The [task register](docs/TASK_REGISTER.md) records the accepted main commit. The [M5 handoff](docs/tasks/M5_HANDOFF.md#7-передача-m6) lists the contracts and limits that carry into M6.
+M5 is integrated and verified in synthetic LOCAL/TEST. [M5 handoff §7](docs/tasks/M5_HANDOFF.md#7-передача-m6) records the accepted contracts and live limits. The [M6 plan](docs/tasks/M6_HANDOFF.md) covers the path from preliminary intake to a client-accepted order and its next unscheduled session. Start with the [task register](docs/TASK_REGISTER.md) for current execution status.
 All eleven canonical architecture documents are in `docs/architecture/`, byte-identical to the approved project attachments. Their historical pre-implementation/Freeze-pending wording is preserved; current implementation status belongs in the task register, not in a rewritten historical snapshot.
 
 ## Scope
@@ -52,6 +52,6 @@ Reproducibility means locked dependencies/image inputs and matching wheel/static
 
 ## Architecture and work distribution
 
-Read `AGENTS.md`, the current M5 handoff and IMPL-005, the accepted M4 boundaries in IMPL-004, then applicable canonical architecture/ADRs and `09_IMPLEMENTATION_PLAN.md` before changing code. Verify all source hashes with the command above. Do not change manifest hashes to hide an accidental source modification; current architecture revisions require an explicit reviewed decision; they do not silently rewrite the imported historical source baseline.
+Read `AGENTS.md`, the [M6 handoff](docs/tasks/M6_HANDOFF.md), [IMPL-006](docs/decisions/IMPL-006-m6-pilot-agreement.md), the accepted M5/M4 boundaries in IMPL-005/004, then applicable canonical architecture/ADRs and `09_IMPLEMENTATION_PLAN.md` before changing code. Verify all source hashes with the command above. Do not change manifest hashes to hide an accidental source modification; current architecture revisions require an explicit reviewed decision; they do not silently rewrite the imported historical source baseline.
 
-C0 owns the single task register and integration. [`M5_HANDOFF`](docs/tasks/M5_HANDOFF.md) records C8’s verdict, C0’s verification of the actual merge and the contracts available to M6. M6 awaits a separate assignment. M1–M4 handoffs retain acceptance/history and explicit live limitations. C0 assigns each task an actual accepted full main commit and bounded file/migration scope. A repository merge does not update the existing VM; historical operator commands are not current deployment instructions. Do not prebuild future milestones or assume separate chats share a checkout.
+C0 owns the single task register and integration. [`M5_HANDOFF`](docs/tasks/M5_HANDOFF.md) records C8’s verdict, C0’s verification of the actual merge and the contracts available to M6. The M6 plan is now available; C0 assigns only the next slice after accepting the plan and verifying its integrated base. Planning does not implement M6 or authorize deployment. M1–M4 handoffs retain acceptance/history and explicit live limitations. C0 assigns each task an actual accepted full main commit and bounded file/migration scope. A repository merge does not update the existing VM; historical operator commands are not current deployment instructions. Do not prebuild future milestones or assume separate chats share a checkout.
