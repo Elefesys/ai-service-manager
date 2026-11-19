@@ -4,25 +4,21 @@
 Решение по объёму — [IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md),
 ACCEPTED / LOCKED C0.
 
-## CURRENT — C8-M5.3B-ACCEPTANCE-R3 / REVIEW / 2026-11-19
+## CURRENT — M5.3B / C0 ACCEPTED · READY FOR OWNER MERGE / 2026-11-19
 
-**C0 → C8. Проверь два исправления в [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) и верни решение по готовности кандидата к интеграции.** При одновременной работе бота и мастера операции с одной карточкой должны завершаться в согласованном порядке. При конфликте двух опубликованных ответов FAQ мастер должен получить вопрос клиента и уже собранные сведения в одной карточке.
+**C0 принял кандидата. Следующее действие владельца — слить [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) в `main` через `Create a merge commit`.** Независимая приёмка C8 завершена. Все пять замечаний закрыты. K01–K12 прошли в согласованных пределах synthetic LOCAL/TEST. [Заключение C8 R3](https://github.com/Elefesys/ai-service-manager/blob/06d77019ca3d4a59e3a3b25787a98bab0a37f22d/docs/tasks/M5_HANDOFF.md#L27) · [матрица K01–K12](https://github.com/Elefesys/ai-service-manager/blob/06d77019ca3d4a59e3a3b25787a98bab0a37f22d/docs/tasks/M5_HANDOFF.md#L328).
 
-**Решение C0.** Кандидат C1 принят для независимого review. Между проверенным C8 коммитом и новым head один коммит на пяти разрешённых путях. GitHub проверил дерево нового head в полном CI, все 12 jobs прошли с первой попытки. В core C0 сверил фазы setup/call/teardown восьми целевых тестов PostgreSQL. В runtime сверены установленные тела SQL, права и профиль 0024. Оба архива исходников совпали с Git по всем 483 файлам и их режимам. C8-M5-01–03 закрыты в R2. C8 даёт независимый вердикт по 04 и 05. [Поручение C1](https://github.com/Elefesys/ai-service-manager/blob/58635c6d3bb650c8145ca69b5f47845c12d27b9c/docs/tasks/M5_HANDOFF.md#L7) · [вердикт R2](https://github.com/Elefesys/ai-service-manager/blob/d2af1c5f8d51590ff354ee21db2b4648a9042d04/docs/tasks/M5_HANDOFF.md#L37) · [дельта C1](https://github.com/Elefesys/ai-service-manager/compare/9ead66496b37d78d35654c9a7b32ee66d1b30a7a...7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455) · [CI 44359814084](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084).
-
-| Назначение | Точная версия |
+| Объект | Проверенная версия |
 |---|---|
-| Принятый application base в `main` (PR #53) | `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba` · tree `11c987fb12e4f88d27da3737911c468d520269b8` |
-| Предыдущий application head (проверка C8 R2) | `9ead66496b37d78d35654c9a7b32ee66d1b30a7a` |
-| **Проверяемый application head PR #54** | **`7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455`** · tree **`cf2710c69fdd3823ed0a8b12b89d139b509ea13f`** |
-| GitHub test merge | `5244a3be1caeb4ed1ebbe2ec368e9511ec876958` · родители `main` и проверяемый head в этом порядке · то же дерево |
-| Рабочая ветка C8 | `c8/m5-3b-acceptance-r3`. Стартовый документационный коммит этой ветки — непосредственный потомок проверяемого application head. |
+| Принятый `main` до слияния | `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba` |
+| Head PR #54 · `c1/m5-3b-v7-fixes-r1` | `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455` |
+| Дерево кандидата и тестового слияния | `cf2710c69fdd3823ed0a8b12b89d139b509ea13f` |
+| GitHub test merge | `5244a3be1caeb4ed1ebbe2ec368e9511ec876958` · родители в порядке `main`, head PR |
+| CI кандидата | [44359814084](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084) · 12/12 SUCCESS с первой попытки |
 
-1. **C8-M5-04 / K10 — параллельная работа.** Сверь порядок `CONFIGURATION_V1` и строки диалога у worker, `intake_owner` и RESOLVE intake-карточки. В трёх тестах с READ, CONFIRM и RESOLVE проверь, что фактические транзакции пересеклись и наблюдалось ожидание нужной блокировки. READ и worker видят одну версию. При PENDING устаревшая работа отклоняется, действие мастера применяется один раз к карточке с теми же ID и адресатом. Сохраняются отклонение устаревшего CAS, проверка источника, повтор команды и прежние полномочия, включая обычные карточки. [Три конкурентных сценария](https://github.com/Elefesys/ai-service-manager/blob/7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455/tests/test_m5_intake_postgres.py#L318) · [команда RESOLVE](https://github.com/Elefesys/ai-service-manager/blob/7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455/migrations/versions/0024_intake_v7_repair.py#L465).
-2. **C8-M5-05 / K03 — конфликт FAQ.** Проследи путь от двух противоречивых опубликованных источников и валидного `FAQ_ONLY / service_id=null` до Action Center. При начатом intake сохраняются действующая услуга, факты и их источники. Карточка содержит вопрос текущего хода, принадлежит нужным клиенту, диалогу и мастеру. На этот ход приходится одна PENDING-карточка и ноль отправок клиенту, в том числе после повтора. Сверь пустой intake, обычный FAQ, отзыв публикации и отказ при чужом диалоге. Проверь, что показ текста вопроса учитывает актуальность и область доступа через существующие list/read и Console. [Сценарии worker](https://github.com/Elefesys/ai-service-manager/blob/7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455/tests/test_m5_intake_v7_integration_postgres.py#L272) · [отказы COMMIT](https://github.com/Elefesys/ai-service-manager/blob/7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455/tests/test_m5_intake_v7_integration_postgres.py#L331) · [представление карточки](https://github.com/Elefesys/ai-service-manager/blob/7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455/migrations/versions/0024_intake_v7_repair.py#L700).
-3. **Вердикт.** Используй завершённый CI. Историю остальных строк K01–K12 бери из R2 с указанием исходного head. Укажи, влияет ли дельта на ранее проверенное поведение. Сверь только связанные проверки, включая сохранность PENDING/UNKNOWN и профиля 0024. Обнови K03/K10 и итог матрицы §4, а в §7 статус передачи с учётом этих двух замечаний. Точечная локальная проверка уместна, если результат нельзя установить из кода и CI. [Core PostgreSQL/MinIO](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084/artifacts/14459173205) · [runtime и каталог 0024](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084/artifacts/14454976346).
+В трёх конкурентных проверках PostgreSQL мастер прочитал или обработал карточку в том же диалоге, где работал бот. При конфликте двух опубликованных ответов FAQ мастер получил одну карточку с текущим вопросом и уже собранными фактами. Повтор сохранил тот же ID, число автономных отправок клиенту за этот ход — ноль. Пять случаев FAQ включают обычный ответ, пустой intake и отказы при устаревшей публикации или чужом диалоге. [Проверки PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084/artifacts/14459173205).
 
-**Ведущий и возврат.** Единственная активная задача у C8. Разрешённый путь для записи — `docs/tasks/M5_HANDOFF.md` в `c8/m5-3b-acceptance-r3`. Размести под CURRENT краткий вердикт **PASS для C0** или **CHANGES_REQUESTED**, укажи head/tree/tested merge, отдельно CLOSED/OPEN по 04 и 05, ссылку на evidence и границы проверки. Верни C0 ссылку на коммит отчёта. Исходники приложения проверяй на указанном head. Допуск действует в synthetic LOCAL/TEST с default OFF/FAKE/EVAL_ONLY. C6 на паузе. Для слияния требуется отдельное решение владельца после review, для завершения M5 — проверенный push/main CI.
+После слияния C0 сверит фактический SHA `main`, обоих родителей и дерево с принятым кандидатом, затем проверит штатный CI события `push` на этом SHA. Успешная проверка завершит приёмку M5 в synthetic LOCAL/TEST и откроет передачу по §7. Обычный merge commit сохраняет родителей, которых проверяет допуск исходников. [Проверка родителей и дерева](https://github.com/Elefesys/ai-service-manager/blob/7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455/scripts/m4_runtime_db.py#L1665).
 
 ### Возврат C8 — PASS для C0
 
@@ -318,7 +314,7 @@ C8 проверяет весь интегрируемый scope по матри�
 authority, private media и конкуренции publish/send. Авторские тесты остаются
 обязанностью исполнителя. Targeted review одного fix не выдаётся за review всего M5.
 
-В R2 C8 закрыл C8-M5-01–03 и вернул C1 замечания по K03 и K10. C1 внёс два исправления. CI и целевые проверки C0 на `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455` прошли. C8 проводит независимую проверку дельты. После её приёмки C0 сообщает владельцу о готовности PR. Владелец отдельно разрешает merge, а C0 проверяет фактический push/main CI перед завершением M5 и выдачей M6. [Вердикт R2](https://github.com/Elefesys/ai-service-manager/blob/d2af1c5f8d51590ff354ee21db2b4648a9042d04/docs/tasks/M5_HANDOFF.md#L37) · [CI нового кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084).
+C8 закрыл 01–03 в R2, затем проверил исправления 04 и 05 на `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455`. C0 принял итог R3 по K01–K12. PR #54 готов к слиянию владельцем. Завершение M5 и передача M6 следуют за проверкой фактического `push/main`. [Итог C8](https://github.com/Elefesys/ai-service-manager/blob/06d77019ca3d4a59e3a3b25787a98bab0a37f22d/docs/tasks/M5_HANDOFF.md#L27) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084).
 
 Отдельно перечислить, какие реальные Vision/embedding/Telegram проверки выполнены,
 какие требуют владельца. LOCAL/TEST VERIFIED не равен готовности реального бизнеса.
@@ -369,7 +365,7 @@ fixtures. Согласованные режимы и unknown подтвержд�
 одного ведущего, exact write-set, dependency, критерии и что оставлено за границей.
 Не выдавать весь этот документ C1/C4 как одно задание «реализовать M5».
 
-M5.1A–M5.3A интегрированы. На принятом main действует 0023. В рассматриваемом PR #54 добавлена 0024 с родителем 0023. В R3 C8 проверяет исправления на указанном application head и записывает заключение в M5_HANDOFF своей ветки.
+M5.1A–M5.3A интегрированы. На принятом main действует 0023. В рассматриваемом PR #54 добавлена 0024 с родителем 0023. Итоговое заключение C8 принято C0 по проверенному head PR #54.
 
 Не менять applied0001–0023, роли/гранты всех старых модулей, исторические schema
 checks, native context или `.github/workflows` ради удобства новой функции.
@@ -392,7 +388,7 @@ harness/locale отделяется от production SQL. Не подгонять
 
 ## 6. Действия владельца
 
-Сейчас владелец передаёт C8 ссылку на CURRENT. C8 возвращает C0 ссылку на своё заключение по двум исправлениям PR #54. Затем C0 сообщает владельцу решение о готовности к слиянию.
+Владелец сливает [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) через `Create a merge commit`. C0 проверяет фактический `main` и его штатный CI после слияния.
 
 Позже — только конкретное действие по готовому результату:
 1. Если понадобится дополнительный real synthetic smoke — отдельные route,
@@ -407,8 +403,8 @@ harness/locale отделяется от production SQL. Не подгонять
 
 Контракты R2 сверены с дельтой PR #54 head `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455`.
 Независимое review R3 завершено **PASS для C0**, C8-M5-04 и C8-M5-05 закрыты.
-Выдача M6 следует за решением C0, слиянием владельцем и приёмкой M5
-по push/main CI.
+C0 принял это заключение по текущему кандидату. Передача M6 следует за слиянием
+владельцем и приёмкой M5 по фактическому `push/main` CI.
 
 - `configuration` и owner API `/configuration` возвращают `ActiveProjection`
   schema v1. `Service.id`, `Rule.id` и `Rule.service_id` принадлежат bundle

@@ -2,13 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.3B REVIEW · повторная проверка двух исправлений PR #54 · 2026-11-19
+## CURRENT — M5.3B REVIEW · C0 ACCEPTED / READY FOR OWNER MERGE · 2026-11-19
 
-**Единственная активная задача — C8-M5.3B-ACCEPTANCE-R3, ведущий C8.** C0 проверил возврат C1 и передал C8 два исправления. C8-M5-04 касается одновременной работы бота и мастера в одном диалоге. C8-M5-05 касается передачи противоречивого FAQ мастеру с сохранением ранее собранных сведений. C8-M5-01–03 закрыты в R2. Ветка C8 — `c8/m5-3b-acceptance-r3`, путь для возврата — `docs/tasks/M5_HANDOFF.md`. [Поручение C8](tasks/M5_HANDOFF.md) · [предыдущее заключение](https://github.com/Elefesys/ai-service-manager/blob/d2af1c5f8d51590ff354ee21db2b4648a9042d04/docs/tasks/M5_HANDOFF.md#L37).
+**Текущий шаг — слияние PR #54 владельцем через `Create a merge commit`.** Задание C8-M5.3B-ACCEPTANCE-R3 завершено. C0 принял K01–K12 для synthetic LOCAL/TEST. Замечания C8-M5-01–03 закрыты в R2, 04 и 05 — в R3. [Решение C0](tasks/M5_HANDOFF.md) · [заключение C8](https://github.com/Elefesys/ai-service-manager/blob/06d77019ca3d4a59e3a3b25787a98bab0a37f22d/docs/tasks/M5_HANDOFF.md#L27).
 
-Принятый main — `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`. Проверяемый application head PR #54 — `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455`, tree `cf2710c69fdd3823ed0a8b12b89d139b509ea13f`. GitHub test merge `5244a3be1caeb4ed1ebbe2ec368e9511ec876958` имеет то же дерево. Все 12 jobs прошли с первой попытки, включая три случая конкурентных транзакций и пять сценариев FAQ на PostgreSQL. [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) · [CI 44359814084](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084).
+Принятый `main` — `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`. Head PR #54 — `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455`, tree `cf2710c69fdd3823ed0a8b12b89d139b509ea13f`. GitHub test merge `5244a3be1caeb4ed1ebbe2ec368e9511ec876958` имеет то же дерево и ожидаемых родителей. Все 12 jobs прошли с первой попытки. [PR #54](https://github.com/Elefesys/ai-service-manager/pull/54) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/44359814084).
 
-M5.1A–M5.3A приняты в synthetic LOCAL/TEST, M5.2A capability — ASSISTED_SYNTHETIC. На main действует 0023, в PR #54 — 0024. IMPL-005 ACCEPTED / LOCKED. Сохраняются default OFF/FAKE/EVAL_ONLY, прежние UNKNOWN/NOT_PROVEN, подтверждённые 0.50229415 RUB и holds 11.75 RUB, receiver ACK/fence, полный live HUMAN/Resume и ограничения реальных данных. C6 HOLD. C0 решает вопрос о готовности PR после возврата C8. Merge требует отдельного решения владельца. Для завершения M5 и выдачи M6 нужен фактический успешный push/main CI.
+M5.1A–M5.3A приняты в synthetic LOCAL/TEST, M5.2A capability — ASSISTED_SYNTHETIC. На main действует 0023, в кандидате — 0024. Решение IMPL-005 ACCEPTED / LOCKED. После слияния C0 сверит родителей и дерево нового `main` и проверит его `push` CI перед отметкой M5 INTEGRATED / VERIFIED. Передача M6 следует за этой проверкой. Default OFF/FAKE/EVAL_ONLY, прежние UNKNOWN/NOT_PROVEN, подтверждённые 0.50229415 RUB и holds 11.75 RUB, receiver ACK/fence и полный live HUMAN/Resume учтены в §7. C6 HOLD.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 
