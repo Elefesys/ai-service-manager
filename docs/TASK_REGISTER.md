@@ -2,11 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.1A IN_PROGRESS · 2026-11-19
+## CURRENT — M6.1A REVIEW · 2026-11-19
 
 M6.0 INTEGRATED / VERIFIED. Владелец слил [PR #55](https://github.com/Elefesys/ai-service-manager/pull/55) в `main` на `67129e43a5947f6eadea88b268b603fec5f22949`. Его родители — прежний `main` `aee17b90ca2283688904da0d07992d9504f4dc33` и принятый кандидат `af8cd8424cb9f20ec0e73d738b061f393ba81060`. Дерево `2c235f6551524450a27bb7cd01959228ec06ac3c` совпало с деревом кандидата. [Push/main CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44460213131) — 12/12 SUCCESS, attempt 1. Принято [решение IMPL-006](decisions/IMPL-006-m6-pilot-agreement.md) для synthetic LOCAL/TEST.
 
-**Единственная активная задача — M6.1A.** C1 ведёт команду создания черновика из intake и owner API, C2 отвечает за транзакцию и миграцию 0025 от 0024, C5 — за минимальную карточку с источниками. Рабочая ветка `c1/m6-1a-request-draft`, база реализации `67129e43a5947f6eadea88b268b603fec5f22949`. [Поручение C0 и демонстрация Q1](tasks/M6_HANDOFF.md#L3).
+**Единственная активная задача — независимая приёмка M6.1A, ведущий C8.** C0 закрыл Q1-01, Q1-02 и Q1-03. В [PR #56](https://github.com/Elefesys/ai-service-manager/pull/56) проверяется head `1368060d1b38e9fc1a2c57e471dc630bb9b1715d` ветки `c1/m6-1a-request-draft` на принятой базе `67129e43a5947f6eadea88b268b603fec5f22949`. [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/44542188962) прошёл 12/12 с первой попытки. Слияние ожидает вердикта C8 и отдельного решения владельца. [Поручение C8 и критерии Q1](tasks/M6_HANDOFF.md#L3).
 
 ## История — M5 INTEGRATED / VERIFIED · передача к M6 · 2026-11-19
 
