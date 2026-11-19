@@ -473,8 +473,10 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     rights = catalog.source_catalog(catalog.ROOT, "0017")
     previous = catalog.source_catalog(catalog.ROOT, "0020")
     intake = catalog.source_catalog(catalog.ROOT, "0023")
-    current = catalog.source_catalog(catalog.ROOT, "0024")
+    v7_repair = catalog.source_catalog(catalog.ROOT, "0024")
+    current = catalog.source_catalog(catalog.ROOT, "0025")
     assert (len(intake["functions"]), len(intake["columns"])) == (318, 73)
+    assert (len(v7_repair["functions"]), len(v7_repair["columns"])) == (321, 73)
     assert (
         len(old["functions"]),
         len(middle["functions"]),
@@ -486,7 +488,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         175,
         194,
         233,
-        321,
+        325,
     )
     assert (
         len(old["columns"]),
@@ -494,16 +496,20 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         len(rights["columns"]),
         len(previous["columns"]),
         len(current["columns"]),
-    ) == (45, 47, 49, 59, 73)
+    ) == (45, 47, 49, 59, 75)
     assert (
         current["functions"]["platform.intake_schema_profile()"]
         == intake["functions"]["platform.intake_schema_profile()"]
     )
-    body = current["functions"]["platform.intake_v7_schema_profile()"]["body"]
+    assert (
+        current["functions"]["platform.intake_v7_schema_profile()"]
+        == v7_repair["functions"]["platform.intake_v7_schema_profile()"]
+    )
+    body = current["functions"]["platform.service_request_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 320,
-        "tables": 73,
+        "other_functions": 324,
+        "tables": 75,
         "result": "PASS",
     }
     assert (

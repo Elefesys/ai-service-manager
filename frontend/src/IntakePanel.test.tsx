@@ -1,9 +1,10 @@
-import {afterEach,it,expect,vi} from 'vitest';
+import {afterEach,beforeEach,it,expect,vi} from 'vitest';
 import {render,screen,waitFor,cleanup} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {IntakePanel} from './IntakePanel';
 import {intakeApi,IntakeError} from './intake-api';
-import {intake,scope,session,message} from './intake-fixtures.test-helper';
+import {draft,intake,scope,session,message} from './intake-fixtures.test-helper';
+beforeEach(()=>{vi.spyOn(intakeApi,'draft').mockResolvedValue(null);});
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('shows one missing question, a source link and confirms only the selected field',async()=>{
  const value=intake(),owner=session();vi.spyOn(intakeApi,'summary').mockResolvedValue(value);const command=vi.spyOn(intakeApi,'command').mockResolvedValue({outcome:'ACCEPTED',receipt_id:message,version:'2'});
@@ -24,4 +25,62 @@ it('keeps owner comparisons scoped to the exact visible summary and hides delaye
  const view=render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);await screen.findByText('Со слов клиента');await userEvent.click(screen.getByRole('button',{name:'Сравнить с примерами мастера'}));
  expect(search).toHaveBeenCalledWith(scope,{},expect.any(AbortSignal));
  view.rerender(<IntakePanel session={null} scope={null} expired={vi.fn()}/>);finish({workspace_id:scope.workspace,business_id:scope.business,items:[]});await waitFor(()=>expect(screen.queryByLabelText('Сравнение примеров мастера')).not.toBeInTheDocument());
+});
+
+it('repeats the exact draft command after a lost response and opens and verifies the stored sources',async()=>{
+ const value=draft(),owner=session();
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ const read=vi.mocked(intakeApi.draft);
+ read.mockResolvedValueOnce(null).mockResolvedValueOnce(value);
+ const save=vi.spyOn(intakeApi,'saveDraft').mockRejectedValueOnce(new TypeError('connection lost')).mockResolvedValueOnce({request_id:value.request_id});
+ render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);
+ await userEvent.selectOptions(await screen.findByLabelText('Начало работы'),message);
+ await userEvent.click(screen.getByRole('checkbox',{name:'Идея: flower'}));
+ const create=screen.getByRole('button',{name:'Создать или открыть заявку'});
+ expect(create).toBeDisabled();
+ await userEvent.click(screen.getByRole('checkbox',{name:'Начало и выбранные сведения относятся к одной работе'}));
+ await userEvent.click(create);
+ expect(await screen.findByRole('alert')).toHaveTextContent('Результат создания неизвестен');
+ await userEvent.click(screen.getByRole('button',{name:'Повторить создание заявки'}));
+ expect(await screen.findByTestId('service-request-id')).toHaveTextContent(value.request_id);
+ expect(save).toHaveBeenCalledTimes(2);
+ expect(save.mock.calls[1].slice(0,4)).toEqual(save.mock.calls[0].slice(0,4));
+ expect(save.mock.calls[0][1]).toEqual({
+  expected_version:'1',expected_fingerprint:intake().fingerprint,intent_source:value.intent_source,fields:['idea'],selection:'ONE_WORK',
+ });
+ expect(read).toHaveBeenLastCalledWith(scope,value.request_id,expect.any(AbortSignal));
+ expect(screen.getByRole('link',{name:'Сообщение для поля Идея'})).toHaveAttribute('href',`#message-${message}`);
+});
+
+it('offers only facts from the selected beginning forward and clears a previous work selection',async()=>{
+ const value=intake(),newMessage='018f0000-0000-7000-8000-000000000010',newVersion='e'.repeat(64);
+ value.sources.push({message_id:newMessage,source_version:newVersion,text:'another work on the shoulder'});
+ value.facts.push({
+  ...value.facts[0],field:'placement',value:'shoulder',
+  source:{...value.facts[0].source,message_id:newMessage,source_version:newVersion,quote:'shoulder'},
+ });
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(value);
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()}/>);
+ const beginning=await screen.findByLabelText('Начало работы');
+ await userEvent.selectOptions(beginning,message);
+ await userEvent.click(screen.getByRole('checkbox',{name:'Идея: flower'}));
+ await userEvent.click(screen.getByRole('checkbox',{name:'Начало и выбранные сведения относятся к одной работе'}));
+ await userEvent.selectOptions(beginning,newMessage);
+ expect(screen.queryByRole('checkbox',{name:'Идея: flower'})).not.toBeInTheDocument();
+ expect(screen.getByRole('checkbox',{name:'Место: shoulder'})).not.toBeChecked();
+ expect(screen.getByRole('button',{name:'Создать или открыть заявку'})).toBeDisabled();
+});
+
+it('suppresses a delayed draft when the client context is replaced',async()=>{
+ const owner=session(),value=draft();
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ let finish!:(value:ReturnType<typeof draft>)=>void;
+ const read=vi.mocked(intakeApi.draft);
+ read.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const view=render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);
+ expect(read).toHaveBeenCalledWith(scope,undefined,expect.any(AbortSignal));
+ view.rerender(<IntakePanel session={owner} scope={{...scope,client:value.request_id}} expired={vi.fn()}/>);
+ finish(value);
+ await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
+ expect(screen.queryByTestId('service-request-id')).not.toBeInTheDocument();
 });

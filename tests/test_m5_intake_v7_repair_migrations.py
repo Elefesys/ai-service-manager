@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import text
@@ -89,9 +90,22 @@ async def checked_profile(c, revision):
     return digest
 
 
+@pytest_asyncio.fixture
+async def at_0024(db):
+    runtime, _ = db
+    await runtime.engine.dispose()
+    await _migrate("downgrade", "0024")
+    try:
+        yield
+    finally:
+        await _migrate("upgrade", "0025")
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_actual_unused_downgrade_verified_0023_repeat_upgrade_and_reject_grant_drift(db):
+async def test_actual_unused_downgrade_verified_0023_repeat_upgrade_and_reject_grant_drift(
+    db, at_0024
+):
     _, migrator = db
     async with migrator.connect() as c:
         outer = await c.begin()
@@ -152,7 +166,7 @@ async def retained(h):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_actual_populated_0023_upgrade_preserves_pending_unknown_and_fact_provenance(
-    intake_pg,
+    intake_pg, at_0024
 ):
     h = intake_pg
     await _migrate("downgrade", "0023")
@@ -211,6 +225,7 @@ async def test_actual_populated_0023_upgrade_preserves_pending_unknown_and_fact_
         finally:
             await transaction.rollback()
     assert await retained(h) == before
+    await _migrate("upgrade", "0025")
     await h.runtime.check()
     from asm.messaging.errors import MessagingError
 

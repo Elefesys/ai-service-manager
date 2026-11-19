@@ -790,6 +790,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0022", "portfolio_delivery_schema_profile"),
         ("0023", "intake_schema_profile"),
         ("0024", "intake_v7_schema_profile"),
+        ("0025", "service_request_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -831,6 +832,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0022", "portfolio_delivery_schema_profile", 303, 302),
         ("0023", "intake_schema_profile", 318, 317),
         ("0024", "intake_v7_schema_profile", 321, 320),
+        ("0025", "service_request_schema_profile", 325, 324),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -840,7 +842,7 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
     predicate = {
         "functions": f"(SELECT count(*) FROM functions)={functions}",
         "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
-        "tables": f"(SELECT count(*) FROM tables)={73 if revision in {'0023', '0024'} else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
+        "tables": f"(SELECT count(*) FROM tables)={75 if revision == '0025' else 73 if revision in {'0023', '0024'} else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
     }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
@@ -865,11 +867,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
-    profile_name = (
-        "platform.intake_v7_schema_profile()"
-        if DATABASE_SCHEMA_REVISION == "0024"
-        else "platform.portfolio_schema_profile()"
-    )
+    profile_name = "platform.service_request_schema_profile()"
     if not body_matches:
         expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
@@ -3668,3 +3666,70 @@ def test_m6_plan_rejects_unapproved_source(r11_event, monkeypatch, route, damage
     with pytest.raises(carrier.Refusal, match=reason):
         r11_event["run"]()
     assert not r11_event["boundary"]
+
+
+def prepare_m6_request_event(r, monkeypatch, route, *, protected=False):
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M6_REQUEST_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M6_REQUEST_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    monkeypatch.setattr(carrier, "M5_V7_FIX_BASE", r["base"])
+    for document in sorted(carrier.M6_REQUEST_DOCS):
+        path = f.root / document
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("C0 request assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "assign M6.1A")
+    monkeypatch.setattr(carrier, "M6_REQUEST_ASSIGNMENT", f.git("rev-parse", "HEAD"))
+    monkeypatch.setattr(carrier, "M6_REQUEST_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    migration = f.root / carrier.M6_REQUEST_MIGRATION
+    migration.parent.mkdir(parents=True, exist_ok=True)
+    migration.write_text("revision = '0025'\n")
+    if protected:
+        (f.root / "docs/tasks/M6_HANDOFF.md").write_text("changed assignment\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "request draft")
+    head = f.git("rev-parse", "HEAD")
+    merge = capability_checkout(r, monkeypatch, route, head, branch=carrier.M6_REQUEST_BRANCH)
+    return head, merge
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m6_request_admits_exact_assignment_and_selects_0025_runtime(
+    aggregate_driver, monkeypatch, route
+):
+    r = aggregate_driver["r"]
+    head, merge = prepare_m6_request_event(r, monkeypatch, route)
+    r["run"]()
+    evidence = r["root"] / "evidence"
+    admitted = json.loads((evidence / "source-admission.json").read_text())
+    source = json.loads((evidence / "source.json").read_text())
+    tree = r["f"].git("rev-parse", head + "^{tree}")
+    assert admitted["m6_request_assignment"] == source["m6_request_assignment"]
+    assert admitted["m6_request_candidate"] == source["m6_request_candidate"] == {
+        "tree": tree,
+        "sha": head,
+        "merge_parents": [r["source"], head],
+    }
+    assert set(source["paths"]) == carrier.M6_REQUEST_DOCS | {carrier.M6_REQUEST_MIGRATION}
+    for key, val in {
+        "SOURCE_SHA": merge,
+        "SOURCE_TREE": tree,
+        "RUN_ID": "123",
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, val)
+    assert carrier.source_tree_from_evidence(evidence / "source.json") == tree
+    phases = {label for _, label, _ in aggregate_driver["calls"]}
+    assert {"schema-0025", "catalog-0025", "readiness"} <= phases
+    source["m6_request_candidate"]["merge_parents"].reverse()
+    carrier.write(evidence / "source.json", source)
+    with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_M6_REQUEST_CANDIDATE"):
+        carrier.source_tree_from_evidence(evidence / "source.json")
+
+
+def test_m6_request_cannot_change_the_protected_assignment(r11_event, monkeypatch):
+    r = r11_event
+    prepare_m6_request_event(r, monkeypatch, "same-repository-pr-merge", protected=True)
+    with pytest.raises(carrier.Refusal, match="M6_REQUEST_WRITE_SET"):
+        r["run"]()
+    assert not r["boundary"]

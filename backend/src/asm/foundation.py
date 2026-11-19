@@ -55,9 +55,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0024"
-NATIVE_CONTEXT_PROFILE_SHA256 = "33fbfcc9e3c09021ea7bc38de857706a8f23270d7c1dcd79d55ed20f3a5b63c0"
-NATIVE_PROFILE_BODY_SHA256 = "ab79bb829f4c2262557732cd4bfff38145231038c5504d0edfca58845a98ceac"
+DATABASE_SCHEMA_REVISION = "0025"
+NATIVE_CONTEXT_PROFILE_SHA256 = "e5d65d316fcb7e49d3eea7aa6333dd5fc21eb4b5ae48dc78fed01664166af26d"
+NATIVE_PROFILE_BODY_SHA256 = "861c38be5d7129474b846f6b4584a6dfa2d3b44ad2a7a562f2a1eea5b25b930e"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -94,7 +94,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.intake_v7_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.service_request_schema_profile()')
             """)
             )
         )
@@ -294,6 +294,7 @@ def create_app(
     from asm.messaging.http import install_messaging
     from asm.portfolio.http import install_portfolio
     from asm.portfolio.service import PortfolioService
+    from asm.service_requests.http import install_service_requests
     from asm.telegram.adapter import TelegramRefresher
     from asm.telegram.client import TelegramClient
     from asm.telegram.config import TelegramSettings
@@ -371,6 +372,7 @@ def create_app(
     install_billing(app, auth, config)
     install_configuration(app, auth, config)
     install_intake(app, auth, config)
+    install_service_requests(app, auth, config)
     install_knowledge(app, auth, config, embeddings=knowledge_embeddings)
     app.state.portfolio_service = portfolio
     install_portfolio(app, portfolio, config)

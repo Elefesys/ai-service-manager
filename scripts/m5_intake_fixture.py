@@ -1,7 +1,7 @@
 """Finite TEST browser input through real ingest/claim/owner/runtime capabilities.
 
-Only the existing CONTROLLED knowledge fixture, two named viewports and three
-fixed text events are supported. No arbitrary messages, SQL state writes, paid
+Only the existing CONTROLLED knowledge fixture, two named viewports and fixed
+text events are supported. No arbitrary messages, SQL state writes, paid
 provider, private photo read or real channel adapter is constructed.
 """
 
@@ -34,6 +34,19 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
+INPUTS = {
+    "seed": "Synthetic intake seed",
+    "collect": "Synthetic intake flower forearm",
+    "complex": "Synthetic intake cover up",
+    "ambiguous": "Synthetic intake flower and swallow, shared size unclear",
+    "second": "Synthetic intake separate swallow shoulder",
+}
+VALUES = {
+    "collect": (("idea", "flower"), ("placement", "forearm")),
+    "second": (("idea", "swallow"), ("placement", "shoulder")),
+}
+CATEGORIES = {"complex": "COVER_UP", "ambiguous": "AMBIGUOUS"}
+
 
 class DescriptionOnlyStorage:
     async def get(self, key):
@@ -54,38 +67,32 @@ class IntakeModel(FakeAdapter):
         contexts = [json.loads(m.text) for m in request.request.messages if m.role == "context"]
         current = next(c for c in contexts if c.get("revision") == "conversation_intake_v1")
         source = current["sources"][-1]
-        if (
-            self.operation == "collect" and source["text"] != "Synthetic intake flower forearm"
-        ) or (self.operation == "complex" and source["text"] != "Synthetic intake cover up"):
+        if source["text"] != INPUTS[self.operation]:
             raise ProvisioningError("Current finite source required")
-        facts = (
-            [
-                dict(
-                    field=field,
-                    value=value,
-                    status="client-stated",
-                    source=dict(
-                        message_id=source["message_id"],
-                        source_version=source["source_version"],
-                        quote=value,
-                        analysis_id=None,
-                        analysis_sha256=None,
-                    ),
-                    explicit_correction=False,
-                )
-                for field, value in (("idea", "flower"), ("placement", "forearm"))
-            ]
-            if self.operation == "collect"
-            else []
-        )
+        facts = [
+            dict(
+                field=field,
+                value=value,
+                status="client-stated",
+                source=dict(
+                    message_id=source["message_id"],
+                    source_version=source["source_version"],
+                    quote=value,
+                    analysis_id=None,
+                    analysis_sha256=None,
+                ),
+                explicit_correction=False,
+            )
+            for field, value in VALUES.get(self.operation, ())
+        ]
         result = dict(
             kind="reply",
             text="Untrusted synthetic wording",
             reason=None,
             intake=dict(
                 service_id=self.service,
-                category="NEW_TATTOO" if self.operation == "collect" else "COVER_UP",
-                switch_request=False,
+                category=CATEGORIES.get(self.operation, "NEW_TATTOO"),
+                switch_request=self.operation == "second",
                 facts=facts,
             ),
         )
@@ -197,17 +204,14 @@ async def run(args):
             )
         async with engine.connect() as c:
             cutoff = (await c.execute(text("SELECT clock_timestamp()"))).scalar_one()
+        scenario = f"{args.journey}-{args.variant}"
         value = replace(
             event(
                 "knowledge",
-                f"intake-{args.variant}-{args.operation}",
-                conversation=f"intake-{args.variant}",
+                f"{scenario}-{args.operation}",
+                conversation=scenario,
             ),
-            text={
-                "seed": "Synthetic intake seed",
-                "collect": "Synthetic intake flower forearm",
-                "complex": "Synthetic intake cover up",
-            }[args.operation],
+            text=INPUTS[args.operation],
         )
         incoming = await kernel.ingest_event(adapter.source(bot("knowledge")), value, uuid4())
         if incoming.code != "ACCEPTED" or incoming.workspace_id != workspace:
@@ -281,14 +285,15 @@ async def run(args):
                         not isinstance(receipt, IntakeRuntimeReceipt)
                         or len(model.requests) != 1
                         or receipt.result.kind
-                        != ("reply" if args.operation == "collect" else "handoff")
+                        != ("handoff" if args.operation == "complex" else "reply")
                     ):
                         raise ProvisioningError("One durable bounded v7 result required")
-                expected = 1 if args.operation == "collect" else 0
+                expected = 0 if args.operation in {"seed", "complex"} else 1
                 if adapter.calls != expected or adapter.effects != expected:
                     raise ProvisioningError("Unexpected finite external effect count")
                 return dict(
                     conversation_id=str(cid),
+                    message_id=str(kernel.question_message_id),
                     model_calls=0 if args.operation == "seed" else 1,
                     calls=adapter.calls,
                     effects=adapter.effects,
@@ -304,8 +309,9 @@ async def run(args):
 def main():
     try:
         parser = PrivateArgumentParser()
-        parser.add_argument("--operation", choices=("seed", "collect", "complex"), required=True)
+        parser.add_argument("--operation", choices=tuple(INPUTS), required=True)
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
+        parser.add_argument("--journey", choices=("intake", "request"), default="intake")
         for name in ("actor", "workspace", "business"):
             parser.add_argument("--" + name, required=True)
         parser.add_argument("--conversation")

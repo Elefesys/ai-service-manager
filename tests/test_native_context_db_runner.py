@@ -172,8 +172,8 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    # 0024 adds three private function ACL statements to the closed predecessor.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1150
+    # 0025 adds its draft/receipt relation DDL and capability grants.
+    assert len(journal.catalog["nonfunction_ddl"]) == 1167
     journal.start(node)
     append = store.append
 
@@ -1437,7 +1437,7 @@ def test_foundation_durable_completeness_requires_current_six_lane_receipts(
     source = {
         "source_sha": head,
         "parents": [],
-        "expected_revision": "0024",
+        "expected_revision": "0025",
         "images": {k: {} for k in ("api", "worker", "scheduler", "fixture")},
     }
     if fault == "missing-lifecycle":

@@ -2002,17 +2002,21 @@ SCHEMA_TABLES["0023"] = SCHEMA_TABLES["0022"] | {
 }
 
 SCHEMA_TABLES["0024"] = SCHEMA_TABLES["0023"]
+SCHEMA_TABLES["0025"] = SCHEMA_TABLES["0024"] | {
+    "app.service_requests",
+    "platform.service_request_receipts",
+}
 
 
 def native_source_profile():
-    """Current 0024 inventory; the historical0012/0013 inventories stay closed."""
+    """Current 0025 inventory with the two service request relations."""
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT, "0024")
-    schema_inventory("0024", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0025")
+    schema_inventory("0025", profile["columns"])
     require(
-        len(profile["functions"]) == 321 and sum(map(len, profile["columns"].values())) == 1060,
+        len(profile["functions"]) == 325 and sum(map(len, profile["columns"].values())) == 1087,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -2040,7 +2044,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0024",
+            "schema_revision": "0025",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

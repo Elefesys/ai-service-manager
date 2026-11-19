@@ -309,6 +309,68 @@ M6_PLAN_PATHS = M6_PLAN_REVIEW_PATHS | {
     "docs/tasks/M5_HANDOFF.md",
     "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
 }
+M6_REQUEST_BASE = "67129e43a5947f6eadea88b268b603fec5f22949"
+M6_REQUEST_TREE = "2c235f6551524450a27bb7cd01959228ec06ac3c"
+M6_REQUEST_ASSIGNMENT = "5c5c1b07ba34d37d8ef1486fbbba18efd93fad77"
+M6_REQUEST_ASSIGNMENT_TREE = "097ae6fb66d4d95f5348cac280a68d5ab6fd97a9"
+M6_REQUEST_BRANCH = "c1/m6-1a-request-draft"
+M6_REQUEST_DOCS = {"docs/TASK_REGISTER.md", "docs/tasks/M6_HANDOFF.md"}
+M6_REQUEST_MIGRATION = "migrations/versions/0025_service_requests.py"
+M6_REQUEST_IMPLEMENTATION_PATHS = {
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/service_requests/__init__.py",
+    "backend/src/asm/service_requests/errors.py",
+    "backend/src/asm/service_requests/http.py",
+    "backend/src/asm/service_requests/models.py",
+    "backend/src/asm/service_requests/repository.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/e2e/service-requests.spec.ts",
+    "frontend/src/IntakePanel.test.tsx",
+    "frontend/src/IntakePanel.tsx",
+    "frontend/src/intake-api.test.ts",
+    "frontend/src/intake-api.ts",
+    "frontend/src/intake-fixtures.test-helper.ts",
+    M6_REQUEST_MIGRATION,
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/m6_service_requests_fixtures.py",
+    "tests/test_foundation.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_service_requests_api_postgres.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
 # C0's bounded M5.1A implementation assignment; not a general M5 allowance.
 M5_CONFIGURATION_BASE = "49d3e25968507ac41037f369fce5bd7080475a8f"
 M5_CONFIGURATION_TREE = "699bd90777771c5d22d37029336c3e0f8909fb5c"
@@ -1058,6 +1120,7 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    m6_request = value.get("branch") == M6_REQUEST_BRANCH
     m6_plan = value.get("branch") == M6_PLAN_BRANCH
     v7_fix = value.get("branch") == M5_V7_FIX_BRANCH
     intake = value.get("branch") == M5_INTAKE_BRANCH
@@ -1066,6 +1129,8 @@ def source_tree_from_evidence(path=None):
         keys.update({"v7_fix_assignment", "v7_fix_candidate"})
     if m6_plan:
         keys.add("m6_plan_candidate")
+    if m6_request:
+        keys.update({"m6_request_assignment", "m6_request_candidate"})
     if intake:
         keys.add("intake_assignment")
         keys.add("intake_scope_amendment")
@@ -1073,6 +1138,22 @@ def source_tree_from_evidence(path=None):
         keys.add("scope_amendment")
         keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    if m6_request:
+        require(
+            value["m6_request_assignment"] == m6_request_assignment_proof(),
+            "SOURCE_IDENTITY_M6_REQUEST_ASSIGNMENT",
+        )
+        candidate = value["m6_request_candidate"]
+        require(
+            type(candidate) is dict
+            and set(candidate) == {"sha", "tree", "merge_parents"}
+            and type(candidate["sha"]) is str
+            and re.fullmatch(r"[0-9a-f]{40}", candidate["sha"])
+            and candidate["sha"] not in (M6_REQUEST_BASE, M6_REQUEST_ASSIGNMENT, value["source"])
+            and candidate["tree"] == value["tree"]
+            and candidate["merge_parents"] == [M6_REQUEST_BASE, candidate["sha"]],
+            "SOURCE_IDENTITY_M6_REQUEST_CANDIDATE",
+        )
     if v7_fix:
         require(
             value["v7_fix_assignment"] == v7_fix_assignment_proof(),
@@ -1121,7 +1202,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M6_PLAN_BASE, M6_PLAN_TREE)
+        (M6_REQUEST_BASE, M6_REQUEST_TREE)
+        if m6_request
+        else (M6_PLAN_BASE, M6_PLAN_TREE)
         if m6_plan
         else (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
         if v7_fix
@@ -1184,7 +1267,7 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
-            or (intake or v7_fix or m6_plan)
+            or (intake or v7_fix or m6_plan or m6_request)
             and value["event"] in {"pull_request", "push"}
             or delivery
             and value["event"] in {"pull_request", "push"}
@@ -1211,7 +1294,14 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if m6_plan:
+    if m6_request:
+        require(
+            M6_REQUEST_DOCS | {M6_REQUEST_MIGRATION}
+            <= set(paths)
+            <= M6_REQUEST_DOCS | M6_REQUEST_IMPLEMENTATION_PATHS,
+            "SOURCE_IDENTITY_WRITE_SET",
+        )
+    elif m6_plan:
         require(set(paths) <= M6_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif v7_fix:
         require(M5_V7_FIX_DOCS <= set(paths) <= M5_V7_FIX_PATHS, "SOURCE_IDENTITY_WRITE_SET")
@@ -1725,6 +1815,67 @@ def m6_plan_event(event):
     )
 
 
+def m6_request_event(event):
+    return event.get("head_ref") == M6_REQUEST_BRANCH or (
+        event.get("event") == "push"
+        and event["ref"] == "refs/heads/main"
+        and commit_parents("HEAD")[:1] == [M6_REQUEST_BASE]
+    )
+
+
+def m6_request_assignment_proof():
+    return {
+        "sha": M6_REQUEST_ASSIGNMENT,
+        "tree": M6_REQUEST_ASSIGNMENT_TREE,
+        "parent": M6_REQUEST_BASE,
+        "paths": sorted(M6_REQUEST_DOCS),
+    }
+
+
+def m6_request_candidate(event):
+    return merge_candidate(
+        event, M6_REQUEST_BASE, M6_REQUEST_BRANCH, M6_REQUEST_ASSIGNMENT, "M6_REQUEST"
+    )
+
+
+def admit_m6_request_source(event, evidence):
+    require(event["attempt"] == "1", "RUN_ATTEMPT")
+    require(capture(["git", "rev-parse", M6_REQUEST_BASE + "^{tree}"]) == M6_REQUEST_TREE, "BASE_TREE")
+    assignment = m6_request_assignment_proof()
+    require(
+        capture(["git", "rev-parse", M6_REQUEST_ASSIGNMENT + "^{tree}"]) == assignment["tree"]
+        and commit_parents(M6_REQUEST_ASSIGNMENT) == [assignment["parent"]],
+        "M6_REQUEST_ASSIGNMENT_IDENTITY",
+    )
+    diff = ["git", "diff", "--no-renames", "--name-only"]
+    require(
+        set(capture([*diff, M6_REQUEST_BASE, M6_REQUEST_ASSIGNMENT]).splitlines()) == M6_REQUEST_DOCS,
+        "M6_REQUEST_ASSIGNMENT_WRITE_SET",
+    )
+    candidate = m6_request_candidate(event)
+    implementation = set(capture([*diff, M6_REQUEST_ASSIGNMENT, candidate["sha"]]).splitlines())
+    require(
+        M6_REQUEST_MIGRATION in implementation
+        and implementation <= M6_REQUEST_IMPLEMENTATION_PATHS,
+        "M6_REQUEST_WRITE_SET",
+    )
+    paths = capture([*diff, M6_REQUEST_BASE, "HEAD"]).splitlines()
+    require(set(paths) == M6_REQUEST_DOCS | implementation, "M6_REQUEST_MERGE_WRITE_SET")
+    write(
+        evidence / "source-admission.json",
+        {
+            "base": M6_REQUEST_BASE,
+            "base_tree": M6_REQUEST_TREE,
+            "source": event["head"],
+            "tree": event["tree"],
+            "paths": paths,
+            "result": "PASS",
+            "m6_request_assignment": assignment,
+            "m6_request_candidate": candidate,
+        },
+    )
+
+
 def m6_plan_candidate(event):
     return merge_candidate(event, M6_PLAN_BASE, M6_PLAN_BRANCH, M6_PLAN_INITIAL, "M6_PLAN")
 
@@ -2052,6 +2203,9 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    if m6_request_event(event):
+        admit_m6_request_source(event, evidence)
+        return event, manifest
     if m6_plan_event(event):
         admit_m6_plan_source(event, evidence)
         return event, manifest
@@ -2490,7 +2644,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.intake_v7_schema_profile()"
+        "platform.service_request_schema_profile()"
+        if revision == "0025"
+        else "platform.intake_v7_schema_profile()"
         if revision == "0024"
         else "platform.intake_schema_profile()"
         if revision == "0023"
@@ -2514,6 +2670,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0024":
+        profile_pin = "33fbfcc9e3c09021ea7bc38de857706a8f23270d7c1dcd79d55ed20f3a5b63c0"
+        body_pin = "ab79bb829f4c2262557732cd4bfff38145231038c5504d0edfca58845a98ceac"
     if revision == "0023":
         profile_pin = "4732ea9f9b0039b8616daf081f78e0ce4731a63884605eb88fe22bfb5851179d"
         body_pin = "87197672ba2e5476ec2657e5c1d96c49ef78eff6892c26258f0fb3eb8c07e899"
@@ -2579,14 +2738,14 @@ def stock_catalog():
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
         require(
-            revision in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"},
+            revision in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"},
             "CATALOG_REVISION",
         )
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision in {"0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024"}:
+        if revision in {"0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"}:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -2633,7 +2792,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.intake_v7_schema_profile()"
+            "platform.service_request_schema_profile()"
+            if revision == "0025"
+            else "platform.intake_v7_schema_profile()"
             if revision == "0024"
             else "platform.intake_schema_profile()"
             if revision == "0023"
@@ -3046,7 +3207,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            m6_plan_event(event)
+            m6_request_event(event)
+            or m6_plan_event(event)
             or v7_fix_event(event)
             or intake_event(event)
             or delivery_event(event)
@@ -3075,10 +3237,11 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    m6_plan = m6_plan_event(event)
-    v7_fix = not m6_plan and v7_fix_event(event)
-    intake = not (m6_plan or v7_fix) and intake_event(event)
-    intake_carrier = intake or v7_fix or m6_plan
+    m6_request = m6_request_event(event)
+    m6_plan = not m6_request and m6_plan_event(event)
+    v7_fix = not (m6_request or m6_plan) and v7_fix_event(event)
+    intake = not (m6_request or m6_plan or v7_fix) and intake_event(event)
+    intake_carrier = intake or v7_fix or m6_plan or m6_request
     delivery = not intake_carrier and delivery_event(event)
     foundation_budget = not (intake_carrier or delivery) and foundation_budget_event(event)
     portfolio = not (intake_carrier or delivery or foundation_budget) and portfolio_event(event)
@@ -3116,7 +3279,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M6_PLAN_BASE, M6_PLAN_TREE)
+        (M6_REQUEST_BASE, M6_REQUEST_TREE)
+        if m6_request
+        else (M6_PLAN_BASE, M6_PLAN_TREE)
         if m6_plan
         else (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
         if v7_fix
@@ -3155,6 +3320,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M6_REQUEST_BRANCH
+            if m6_request
             else M6_PLAN_BRANCH
             if m6_plan
             else M5_V7_FIX_BRANCH
@@ -3180,6 +3347,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if m6_request:
+        source["m6_request_assignment"] = m6_request_assignment_proof()
+        source["m6_request_candidate"] = m6_request_candidate(event)
     if m6_plan:
         source["m6_plan_candidate"] = m6_plan_candidate(event)
     if v7_fix:
@@ -3349,7 +3519,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             )
             if module == "preflight":
                 current_revision = (
-                    "0024"
+                    "0025"
+                    if m6_request
+                    else "0024"
                     if m6_plan or v7_fix
                     else "0023"
                     if intake
