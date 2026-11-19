@@ -17,8 +17,11 @@ accepted main `220606193208a1ef082732e4dfcdf1f2ffbea857`, tree
 12/12 SUCCESS, attempt1. M5.3A/PR53 — INTEGRATED / VERIFIED в synthetic
 LOCAL/TEST: main `c0641147fb9bf703afb69ecd6a7ce6bb6e7c5cba`, tree
 `11c987fb12e4f88d27da3737911c468d520269b8`, post-merge CI44018352191 —
-12/12 SUCCESS, attempt1. Общая приёмка M5 получила CHANGES_REQUESTED.
-C1 ведёт C1-M5.3B-V7-FIX-R1 по четырём замечаниям C8. M6 ждёт отдельной выдачи.
+12/12 SUCCESS, attempt1. На `9ead66496b37d78d35654c9a7b32ee66d1b30a7a` C8 закрыл 01–03 и вернул два замечания.
+C1 исправил порядок блокировок и передачу противоречивого FAQ при начатом intake.
+C0 проверил восемь целевых сценариев в CI на `7e5cbc1f5caeaafa507de0c4cfd7dee7c4ee6455`.
+C8 закрыл 04 и 05, K01–K12 приняты. M5 INTEGRATED / VERIFIED в synthetic LOCAL/TEST.
+PR #54 слит в `main` `aee17b90ca2283688904da0d07992d9504f4dc33`. Дерево `cf2710c69fdd3823ed0a8b12b89d139b509ea13f` совпало с принятым кандидатом. На фактическом `push/main` все 12 jobs прошли с первой попытки. Проверена миграция 0024. [Заключение C8](https://github.com/Elefesys/ai-service-manager/blob/06d77019ca3d4a59e3a3b25787a98bab0a37f22d/docs/tasks/M5_HANDOFF.md#L27) · [CI после слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/44436805054) · [передача к M6](../tasks/M5_HANDOFF.md#7-передача-m6).
 Scope решения не расширен: preliminary intake с provenance/deterministic
 transitions, новая закрытая Action Center projection с сохранением legacy,
 owner-only DurationCase; без M6 request/assessment, клиентского обещания

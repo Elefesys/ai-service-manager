@@ -3577,3 +3577,94 @@ def test_v7_fix_refuses_other_pr_branch(r11_event, monkeypatch):
     with pytest.raises(carrier.Refusal, match="POLZA_RUNTIME_EVENT_BRANCH"):
         r["run"]()
     assert not r["boundary"]
+
+
+def prepare_m6_plan_event(r, monkeypatch, route, *, damage=None):
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M6_PLAN_BASE", r["source"])
+    monkeypatch.setattr(carrier, "M6_PLAN_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    # An earlier M5 route also matches the ancestry of a real post-merge main.
+    monkeypatch.setattr(carrier, "M5_V7_FIX_BASE", r["base"])
+    plan = f.root / "docs/tasks/M6_HANDOFF.md"
+    plan.parent.mkdir(parents=True)
+    plan.write_text("M6 plan\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "initial plan")
+    initial = f.git("rev-parse", "HEAD")
+    monkeypatch.setattr(carrier, "M6_PLAN_INITIAL", initial)
+    if damage == "lineage":
+        f.git("checkout", "--detach", r["source"])
+    changed = {
+        "application": "backend/src/asm/ai/runtime.py",
+        "migration": "migrations/versions/0025_future.py",
+        "history": "docs/tasks/M5_HANDOFF.md",
+    }.get(damage, "scripts/m4_runtime_db.py")
+    path = f.root / changed
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("review delta\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "reviewed plan")
+    head = f.git("rev-parse", "HEAD")
+    branch = "c0/m6-other" if damage == "branch" else carrier.M6_PLAN_BRANCH
+    merge = capability_checkout(
+        r, monkeypatch, route, head, branch=branch, wrong_base=damage == "base"
+    )
+    if route == "same-repository-pr-merge" and damage != "pr_number":
+        r["payload"]["number"] = r["payload"]["pull_request"]["number"] = 55
+        monkeypatch.setenv("GITHUB_REF", "refs/pull/55/merge")
+    return head, merge
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m6_plan_uses_reviewed_merge_and_0024_runtime(aggregate_driver, monkeypatch, route):
+    r = aggregate_driver["r"]
+    head, merge = prepare_m6_plan_event(r, monkeypatch, route)
+    r["run"]()
+    evidence = r["root"] / "evidence"
+    admitted = json.loads((evidence / "source-admission.json").read_text())
+    source = json.loads((evidence / "source.json").read_text())
+    tree = r["f"].git("rev-parse", head + "^{tree}")
+    candidate = {"sha": head, "tree": tree, "merge_parents": [r["source"], head]}
+    assert admitted["m6_plan_candidate"] == source["m6_plan_candidate"] == candidate
+    assert (
+        admitted["paths"]
+        == source["paths"]
+        == ["docs/tasks/M6_HANDOFF.md", "scripts/m4_runtime_db.py"]
+    )
+    assert admitted["base"] == source["base"] == r["source"]
+    assert source["branch"] == carrier.M6_PLAN_BRANCH and source["source"] == merge
+    for key, val in {
+        "SOURCE_SHA": merge,
+        "SOURCE_TREE": tree,
+        "RUN_ID": "123",
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, val)
+    assert carrier.source_tree_from_evidence(evidence / "source.json") == tree
+    source["m6_plan_candidate"]["merge_parents"].reverse()
+    carrier.write(evidence / "source.json", source)
+    with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_M6_PLAN_CANDIDATE"):
+        carrier.source_tree_from_evidence(evidence / "source.json")
+    phases = [label for _, label, _ in aggregate_driver["calls"]]
+    assert "schema-0024" in phases and "catalog-0024" in phases and "readiness" in phases
+    summary = json.loads((evidence / "summary.json").read_text())
+    assert summary["result"] == "PASS" and summary["sql_test_budget_seconds"] == 900
+
+
+@pytest.mark.parametrize(
+    "route,damage,reason",
+    [
+        ("same-repository-pr-merge", "branch", "POLZA_RUNTIME_EVENT_BRANCH"),
+        ("same-repository-pr-merge", "pr_number", "M6_PLAN_PR_NUMBER"),
+        ("same-repository-pr-merge", "base", "M6_PLAN_EVENT"),
+        ("same-repository-pr-merge", "application", "M6_PLAN_REVIEW_WRITE_SET"),
+        ("main-push", "migration", "M6_PLAN_REVIEW_WRITE_SET"),
+        ("main-push", "history", "M6_PLAN_REVIEW_WRITE_SET"),
+        ("main-push", "lineage", "M6_PLAN_ASSIGNMENT_ANCESTRY"),
+    ],
+)
+def test_m6_plan_rejects_unapproved_source(r11_event, monkeypatch, route, damage, reason):
+    prepare_m6_plan_event(r11_event, monkeypatch, route, damage=damage)
+    with pytest.raises(carrier.Refusal, match=reason):
+        r11_event["run"]()
+    assert not r11_event["boundary"]
