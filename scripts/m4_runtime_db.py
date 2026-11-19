@@ -344,6 +344,7 @@ M6_REQUEST_IMPLEMENTATION_PATHS = {
     "tests/m5_knowledge_search_fixtures.py",
     "tests/m5_portfolio_fixtures.py",
     "tests/m6_service_requests_fixtures.py",
+    "tests/test_auth_contract.py",
     "tests/test_foundation.py",
     "tests/test_m2_3_db_postgres.py",
     "tests/test_m2_3_schema_postgres.py",
