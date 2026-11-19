@@ -442,6 +442,10 @@ async def test_cancellation_rolls_back_and_releases_pooled_connection(seeded):
 
 async def test_runtime_roles_policies_functions_and_platform_surface(db):
     runtime, migrator = db
+    async with migrator.connect() as connection:
+        revision = (
+            await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+        ).scalar_one()
     async with runtime.engine.begin() as connection:
         role = (
             (await connection.execute(text("SELECT * FROM pg_roles WHERE rolname=current_user")))
@@ -478,7 +482,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             .mappings()
             .all()
         )
-        assert {row["tablename"] for row in tables} == set(TABLES) | {
+        expected_tables = set(TABLES) | {
             "audit_events",
             "channel_connections",
             "clients",
@@ -490,8 +494,10 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "escalations",
             "messages",
             "outbox_events",
-            "service_requests",
         }
+        if revision == "0025":
+            expected_tables.add("service_requests")
+        assert {row["tablename"] for row in tables} == expected_tables
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
         for table in TABLES:
             assert (
@@ -729,9 +735,6 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
         }
         # Separate exact 0013 profile. The accepted 0012 names/signatures and
         # their assertions above remain unchanged; no wildcard/private grants.
-        revision = (
-            await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-        ).scalar_one()
         native_profiles = {}
         if revision in {
             "0013",
