@@ -490,6 +490,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "escalations",
             "messages",
             "outbox_events",
+            "service_requests",
         }
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
         for table in TABLES:
