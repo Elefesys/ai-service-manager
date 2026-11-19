@@ -442,6 +442,10 @@ async def test_cancellation_rolls_back_and_releases_pooled_connection(seeded):
 
 async def test_runtime_roles_policies_functions_and_platform_surface(db):
     runtime, migrator = db
+    async with migrator.connect() as connection:
+        revision = (
+            await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+        ).scalar_one()
     async with runtime.engine.begin() as connection:
         role = (
             (await connection.execute(text("SELECT * FROM pg_roles WHERE rolname=current_user")))
@@ -478,7 +482,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             .mappings()
             .all()
         )
-        assert {row["tablename"] for row in tables} == set(TABLES) | {
+        expected_tables = set(TABLES) | {
             "audit_events",
             "channel_connections",
             "clients",
@@ -491,6 +495,9 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "messages",
             "outbox_events",
         }
+        if revision == "0025":
+            expected_tables.add("service_requests")
+        assert {row["tablename"] for row in tables} == expected_tables
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
         for table in TABLES:
             assert (
@@ -728,9 +735,6 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
         }
         # Separate exact 0013 profile. The accepted 0012 names/signatures and
         # their assertions above remain unchanged; no wildcard/private grants.
-        revision = (
-            await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-        ).scalar_one()
         native_profiles = {}
         if revision in {
             "0013",
@@ -744,6 +748,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0022",
             "0023",
             "0024",
+            "0025",
         }:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
@@ -811,6 +816,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0022",
             "0023",
             "0024",
+            "0025",
         }:
             from scripts import native_context_db_catalog as catalog
 
@@ -821,27 +827,29 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                         function["security_definer"],
                         function["runtime_execute"],
                     )
-            if revision in {"0018", "0019", "0020", "0021", "0022", "0023", "0024"}:
+            if revision in {"0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"}:
                 for signature, function in source["functions"].items():
                     if (
                         signature.startswith("platform.configuration_")
                         or signature == "platform.business_configuration_schema_profile()"
                         or signature == "platform.published_knowledge_schema_profile()"
                         or (
-                            revision in {"0020", "0021", "0022", "0023", "0024"}
+                            revision in {"0020", "0021", "0022", "0023", "0024", "0025"}
                             and signature.startswith("platform.knowledge_")
                         )
                         or (
-                            revision in {"0021", "0022", "0023", "0024"}
+                            revision in {"0021", "0022", "0023", "0024", "0025"}
                             and (
                                 signature.startswith("platform.portfolio_")
                                 or signature.startswith("platform.vision_")
                             )
                         )
                         or (
-                            revision in {"0023", "0024"}
+                            revision in {"0023", "0024", "0025"}
                             and signature.startswith(("platform.intake_", "platform.duration_"))
                         )
+                        or revision == "0025"
+                        and signature.startswith("platform.service_request_")
                     ):
                         native_profiles[signature] = (
                             function["security_definer"],

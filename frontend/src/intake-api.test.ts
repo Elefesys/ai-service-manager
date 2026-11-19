@@ -1,6 +1,7 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
-import {parseIntake,parseCases,intakeApi,IntakeError} from './intake-api';
-import {intake,scope,example,w,b,c} from './intake-fixtures.test-helper';
+import {parseIntake,parseCases,parseDraft,intakeApi,IntakeError} from './intake-api';
+import type {DraftCommand,DraftRevisionCommand} from './intake-api';
+import {draft,intake,scope,example,listItem,w,b,c} from './intake-fixtures.test-helper';
 afterEach(()=>vi.unstubAllGlobals());
 describe('closed intake projections',()=>{
  it('rejects another Client, Workspace and extra owner-only data',()=>{
@@ -19,5 +20,58 @@ describe('closed intake projections',()=>{
   const fetch=vi.fn().mockResolvedValue(new Response(JSON.stringify({outcome:'ACCEPTED',receipt_id:c,version:'2'}),{status:200}));vi.stubGlobal('fetch',fetch);
   const value=intake(),fact=value.facts[0],body={expected_version:value.version,expected_fingerprint:value.fingerprint,field:fact.field,value:fact.value,source:fact.source};
   await intakeApi.command(scope,'confirm',body,'one-key','one-csrf');const [url,init]=fetch.mock.calls[0];expect(url).toContain(`/intake/conversations/${c}/confirm`);expect(init.credentials).toBe('include');expect(init.headers['X-CSRF-Token']).toBe('one-csrf');expect(init.headers['Idempotency-Key']).toBe('one-key');expect(JSON.parse(init.body)).toEqual(body);
+ });
+});
+
+describe('scoped draft requests',()=>{
+ it('requires the requested ID and exact conversation scope for a card',()=>{
+  const value=draft();
+  expect(parseDraft(value,scope,value.request_id)).toEqual(value);
+  for(const field of ['workspace_id','business_id','conversation_id','client_id'])
+   expect(()=>parseDraft({...value,[field]:value.request_id},scope)).toThrow(IntakeError);
+  expect(()=>parseDraft(value,scope,c)).toThrow(IntakeError);
+  const source=value.facts[0].source;
+  value.facts[0].status='observed';
+  expect(()=>parseDraft(value,scope)).toThrow(IntakeError);
+  source.analysis_id=b;source.analysis_sha256='f'.repeat(64);
+  expect(parseDraft(value,scope).facts[0].source.analysis_id).toBe(b);
+ });
+ it('sends only the selection and CAS, then reads the specific card',async()=>{
+  const value=draft();
+  const result=(body:unknown)=>new Response(JSON.stringify(body),{status:200});
+  const fetch=vi.fn().mockResolvedValueOnce(result({request_id:value.request_id})).mockResolvedValueOnce(result(value)).mockResolvedValueOnce(result(null));
+  vi.stubGlobal('fetch',fetch);
+  const body:DraftCommand={expected_version:'1',expected_fingerprint:intake().fingerprint,intent_source:value.intent_source,fields:['idea'],selection:'ONE_WORK'};
+  const receipt=await intakeApi.saveDraft(scope,body,'draft-key','draft-csrf');
+  expect(await intakeApi.draft(scope,receipt.request_id)).toEqual(value);
+  expect(await intakeApi.draft(scope)).toBeNull();
+  const url=`/api/v1/workspaces/${w}/businesses/${b}/intake/conversations/${c}/service-requests`;
+  const [post,read,latest]=fetch.mock.calls;
+  expect(post[0]).toBe(url);
+  expect(post[1]).toMatchObject({method:'POST',credentials:'include',headers:{'X-CSRF-Token':'draft-csrf','Idempotency-Key':'draft-key'}});
+  expect(JSON.parse(post[1].body)).toEqual(body);
+  expect(read[0]).toBe(`${url}?request_id=${value.request_id}`);
+  expect(latest[0]).toBe(url);
+ });
+ it('reads a closed card list and sends the exact one-field PATCH for the selected ID',async()=>{
+  const value=draft(),item=listItem(value);
+  const result=(body:unknown)=>new Response(JSON.stringify(body),{status:200});
+  const fetch=vi.fn().mockResolvedValueOnce(result({items:[item]})).mockResolvedValueOnce(result({request_id:value.request_id}))
+   .mockResolvedValueOnce(result({items:[item,item]})).mockResolvedValueOnce(result({request_id:c}));
+  vi.stubGlobal('fetch',fetch);
+  const body:DraftRevisionCommand={expected_revision:'1',expected_version:'3',expected_fingerprint:intake().fingerprint,
+   field:'approximate_size',source:value.intent_source,selection:'ONE_WORK'};
+  expect(await intakeApi.drafts(scope)).toEqual([item]);
+  expect(await intakeApi.reviseDraft(scope,value.request_id,body,'key','csrf')).toEqual({request_id:value.request_id});
+  const url=`/api/v1/workspaces/${w}/businesses/${b}/intake/conversations/${c}/service-requests`;
+  const [index,revision]=fetch.mock.calls;
+  expect(index[0]).toBe(`${url}/cards`);
+  expect(index[1]).toMatchObject({credentials:'include',cache:'no-store'});
+  expect(index[1].method).toBeUndefined();
+  expect(revision[0]).toBe(`${url}/${value.request_id}`);
+  expect(revision[1]).toMatchObject({method:'PATCH',credentials:'include',headers:{'X-CSRF-Token':'csrf','Idempotency-Key':'key'}});
+  expect(JSON.parse(revision[1].body)).toEqual(body);
+  await expect(intakeApi.drafts(scope)).rejects.toThrow(IntakeError);
+  await expect(intakeApi.reviseDraft(scope,value.request_id,body,'key','csrf')).rejects.toThrow(IntakeError);
  });
 });
