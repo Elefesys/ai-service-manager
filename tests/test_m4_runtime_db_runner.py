@@ -3705,11 +3705,15 @@ def test_m6_request_admits_exact_assignment_and_selects_0025_runtime(
     source = json.loads((evidence / "source.json").read_text())
     tree = r["f"].git("rev-parse", head + "^{tree}")
     assert admitted["m6_request_assignment"] == source["m6_request_assignment"]
-    assert admitted["m6_request_candidate"] == source["m6_request_candidate"] == {
-        "tree": tree,
-        "sha": head,
-        "merge_parents": [r["source"], head],
-    }
+    assert (
+        admitted["m6_request_candidate"]
+        == source["m6_request_candidate"]
+        == {
+            "tree": tree,
+            "sha": head,
+            "merge_parents": [r["source"], head],
+        }
+    )
     assert set(source["paths"]) == carrier.M6_REQUEST_DOCS | {carrier.M6_REQUEST_MIGRATION}
     for key, val in {
         "SOURCE_SHA": merge,

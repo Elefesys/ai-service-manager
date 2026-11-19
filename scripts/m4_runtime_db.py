@@ -1840,7 +1840,9 @@ def m6_request_candidate(event):
 
 def admit_m6_request_source(event, evidence):
     require(event["attempt"] == "1", "RUN_ATTEMPT")
-    require(capture(["git", "rev-parse", M6_REQUEST_BASE + "^{tree}"]) == M6_REQUEST_TREE, "BASE_TREE")
+    require(
+        capture(["git", "rev-parse", M6_REQUEST_BASE + "^{tree}"]) == M6_REQUEST_TREE, "BASE_TREE"
+    )
     assignment = m6_request_assignment_proof()
     require(
         capture(["git", "rev-parse", M6_REQUEST_ASSIGNMENT + "^{tree}"]) == assignment["tree"]
@@ -1849,7 +1851,8 @@ def admit_m6_request_source(event, evidence):
     )
     diff = ["git", "diff", "--no-renames", "--name-only"]
     require(
-        set(capture([*diff, M6_REQUEST_BASE, M6_REQUEST_ASSIGNMENT]).splitlines()) == M6_REQUEST_DOCS,
+        set(capture([*diff, M6_REQUEST_BASE, M6_REQUEST_ASSIGNMENT]).splitlines())
+        == M6_REQUEST_DOCS,
         "M6_REQUEST_ASSIGNMENT_WRITE_SET",
     )
     candidate = m6_request_candidate(event)
@@ -2738,7 +2741,8 @@ def stock_catalog():
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
         require(
-            revision in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"},
+            revision
+            in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"},
             "CATALOG_REVISION",
         )
         destination = evidence_path() / ("catalog-" + revision)

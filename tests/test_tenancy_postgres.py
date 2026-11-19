@@ -844,7 +844,8 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                             revision in {"0023", "0024", "0025"}
                             and signature.startswith(("platform.intake_", "platform.duration_"))
                         )
-                        or revision == "0025" and signature.startswith("platform.service_request_")
+                        or revision == "0025"
+                        and signature.startswith("platform.service_request_")
                     ):
                         native_profiles[signature] = (
                             function["security_definer"],

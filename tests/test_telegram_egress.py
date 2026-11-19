@@ -2078,7 +2078,7 @@ def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
     approval = provisioning.NativeHostApproval.model_validate(approved)
     if damage is None:
         _, profile = provisioning.native_host_source(approval)
-        assert len(profile["functions"]) == 321 and len(profile["columns"]) == 73
+        assert len(profile["functions"]) == 325 and len(profile["columns"]) == 75
     else:
         with pytest.raises(provisioning.ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
             provisioning.native_host_source(approval)
@@ -2151,9 +2151,10 @@ def durable_fingerprint_connection(revision="0025", tables=None):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "damage", (None, "0012", "0014", "0020", "missing-native", "extra-native", "replace-native")
+    "damage",
+    (None, "0012", "0014", "0020", "0024", "missing-native", "extra-native", "replace-native"),
 )
-async def test_current_durable_fingerprint_requires_exact0021_and_all68_tables(damage):
+async def test_current_durable_fingerprint_requires_0025_and_all_current_tables(damage):
     from test_telegram_egress_postgres import current_durable_fingerprint
 
     tables = set(egress.SCHEMA_TABLES["0025"])
@@ -2163,7 +2164,7 @@ async def test_current_durable_fingerprint_requires_exact0021_and_all68_tables(d
     if damage in {"extra-native", "replace-native"}:
         tables.add("platform.unapproved_native")
     connection, rows, reads = durable_fingerprint_connection(
-        damage if damage in {"0012", "0014", "0020"} else "0025", tables
+        damage if damage in {"0012", "0014", "0020", "0024"} else "0025", tables
     )
     if damage == "replace-native":
         # run_path executes the actual helper in a separate module namespace.
@@ -2178,7 +2179,7 @@ async def test_current_durable_fingerprint_requires_exact0021_and_all68_tables(d
         assert reads == []
     else:
         fingerprint = await current_durable_fingerprint(connection)
-        assert set(fingerprint) == tables and len(reads) == len(set(reads)) == 73
+        assert set(fingerprint) == tables and len(reads) == len(set(reads)) == 75
         for name in tables:
             expected = "\n".join(
                 sorted(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows[name])
@@ -2205,7 +2206,7 @@ async def test_historical_fingerprint_still_refuses0013_before_any_row_acceptanc
     assert reads == []
 
 
-def test_all_current_durable_before_seeded_cleanup_and_snapshot_routes_are0021():
+def test_all_current_durable_before_seeded_cleanup_and_snapshot_routes_are_0025():
     import ast
     import inspect
 

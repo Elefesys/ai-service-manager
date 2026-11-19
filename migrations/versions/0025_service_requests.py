@@ -898,11 +898,14 @@ def upgrade():
         op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO asm_runtime")
 
     op.execute(PROFILE)
-    op.execute("REVOKE ALL ON FUNCTION platform.service_request_schema_profile() FROM PUBLIC,asm_runtime")
+    op.execute(
+        "REVOKE ALL ON FUNCTION platform.service_request_schema_profile() FROM PUBLIC,asm_runtime"
+    )
     for sql in SCHEMA_GATES_0024:
         op.execute(
-            sql.replace("platform.intake_v7_schema_profile()", "platform.service_request_schema_profile()")
-            .replace("'0024'", "'0025'")
+            sql.replace(
+                "platform.intake_v7_schema_profile()", "platform.service_request_schema_profile()"
+            ).replace("'0024'", "'0025'")
         )
 
 

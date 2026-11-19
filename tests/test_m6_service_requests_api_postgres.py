@@ -38,9 +38,7 @@ async def test_q1_http_validates_inputs_and_reauthorizes_read_and_receipt_replay
     mutation = headers(auth.client, signed_in.json()["csrf_token"])
 
     async def create(body, key="request-one"):
-        return await auth.client.post(
-            url, json=body, headers=mutation | {"Idempotency-Key": key}
-        )
+        return await auth.client.post(url, json=body, headers=mutation | {"Idempotency-Key": key})
 
     assert (await auth.client.get(url)).json() is None
     missing_csrf = await auth.client.post(
@@ -61,7 +59,10 @@ async def test_q1_http_validates_inputs_and_reauthorizes_read_and_receipt_replay
     assert (await create(proposal)).json() == receipt
     assert (await create(proposal, key="another-tab")).json() == receipt
     conflict = await create(proposal | {"fields": []})
-    assert conflict.status_code == 409 and conflict.json()["error"]["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    assert (
+        conflict.status_code == 409
+        and conflict.json()["error"]["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    )
     assert await request_count(h, conversation) == 1
     by_id = {"request_id": receipt["request_id"]}
     card = await auth.client.get(url, params=by_id)
@@ -71,12 +72,16 @@ async def test_q1_http_validates_inputs_and_reauthorizes_read_and_receipt_replay
         (await summary(h, conversation))["facts"][0]["source"] | {"quote": ""}
     )
     assert (await auth.client.get(route(other_conversation), params=by_id)).status_code == 404
-    assert (await auth.client.get(route(conversation, business=BA2), params=by_id)).status_code == 404
+    assert (
+        await auth.client.get(route(conversation, business=BA2), params=by_id)
+    ).status_code == 404
     assert (await auth.client.get(url, params=list(by_id.items()) * 2)).status_code == 422
 
     async with h.migrator.begin() as connection:
         await connection.execute(
-            text("UPDATE platform.workspace_memberships SET role='ADMIN' WHERE workspace_id=:w AND user_account_id=:a"),
+            text(
+                "UPDATE platform.workspace_memberships SET role='ADMIN' WHERE workspace_id=:w AND user_account_id=:a"
+            ),
             {"w": A, "a": UA},
         )
     try:
@@ -86,6 +91,8 @@ async def test_q1_http_validates_inputs_and_reauthorizes_read_and_receipt_replay
     finally:
         async with h.migrator.begin() as connection:
             await connection.execute(
-                text("UPDATE platform.workspace_memberships SET role='OWNER' WHERE workspace_id=:w AND user_account_id=:a"),
+                text(
+                    "UPDATE platform.workspace_memberships SET role='OWNER' WHERE workspace_id=:w AND user_account_id=:a"
+                ),
                 {"w": A, "a": UA},
             )

@@ -109,7 +109,9 @@ PORTFOLIO_DELIVERY_NONFUNCTION_SHA256 = (
     "6890bd1d959ef3e6c05c0ca8f7e203586035e3a2f46c4e343e4e64dbf38bf210"
 )
 INTAKE_NONFUNCTION_SHA256 = "37c156d07431b688aa99e8afca2a83f09e8082f5a4b2d28f4ac5292286158d32"
-SERVICE_REQUEST_NONFUNCTION_SHA256 = "421339b8ed8e33f168a087f1e2b1ca8f8f719a7f8be9efe2eb0ec7e2bedbedd2"
+SERVICE_REQUEST_NONFUNCTION_SHA256 = (
+    "421339b8ed8e33f168a087f1e2b1ca8f8f719a7f8be9efe2eb0ec7e2bedbedd2"
+)
 PROFILE = "platform.human_context_schema_profile()"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -882,7 +884,20 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
     require(actual_columns == expected_columns, "Missing/extra/reordered table columns")
     require(
         revision
-        in {"0013", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"}
+        in {
+            "0013",
+            "0015",
+            "0016",
+            "0017",
+            "0018",
+            "0019",
+            "0020",
+            "0021",
+            "0022",
+            "0023",
+            "0024",
+            "0025",
+        }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
             {
