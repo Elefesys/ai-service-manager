@@ -2,11 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.1A REVIEW · 2026-11-19
+## CURRENT — M6.1A REVIEW · проверка после слияния · 2026-11-19
 
 M6.0 INTEGRATED / VERIFIED. Владелец слил [PR #55](https://github.com/Elefesys/ai-service-manager/pull/55) в `main` на `67129e43a5947f6eadea88b268b603fec5f22949`. Его родители — прежний `main` `aee17b90ca2283688904da0d07992d9504f4dc33` и принятый кандидат `af8cd8424cb9f20ec0e73d738b061f393ba81060`. Дерево `2c235f6551524450a27bb7cd01959228ec06ac3c` совпало с деревом кандидата. [Push/main CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44460213131) — 12/12 SUCCESS, attempt 1. Принято [решение IMPL-006](decisions/IMPL-006-m6-pilot-agreement.md) для synthetic LOCAL/TEST.
 
-**M6.1A ожидает разрешения владельца на слияние.** C0 и C8 приняли Q1 в synthetic LOCAL/TEST. [PR #56](https://github.com/Elefesys/ai-service-manager/pull/56) выведен из Draft. Проверены head `1368060d1b38e9fc1a2c57e471dc630bb9b1715d` и база `main` `67129e43a5947f6eadea88b268b603fec5f22949`. Q1-01, Q1-02 и Q1-03 закрыты. После слияния C0 проверяет фактический `main` и его push CI. [Вердикт C8](https://github.com/Elefesys/ai-service-manager/pull/56#pullrequestreview-5977981196) · [CI кандидата, 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/44542188962) · [итог C0](tasks/M6_HANDOFF.md#L3).
+**Единственная задача C0 — завершить проверку M6.1A на фактическом `main`.** Владелец слил [PR #56](https://github.com/Elefesys/ai-service-manager/pull/56) на `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. Дерево совпадает с принятым Q1. В первой попытке push/main job `connect5-migration (normal, state)` завершился ошибкой при подтверждении очистки тестовых ресурсов. C0 проверяет результат одного адресного повтора. [Приёмка C8](https://github.com/Elefesys/ai-service-manager/pull/56#pullrequestreview-5977981196) · [первый сбой](https://github.com/Elefesys/ai-service-manager/actions/runs/44555989757/job/135672050094) · [отчёт C0](tasks/M6_HANDOFF.md#L3).
 
 ## История — M5 INTEGRATED / VERIFIED · передача к M6 · 2026-11-19
 

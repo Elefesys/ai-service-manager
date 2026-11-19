@@ -1,8 +1,12 @@
 # M6 — от сведений в диалоге до согласованного заказа
 
-## CURRENT — M6.1A REVIEW · ожидает разрешения владельца на слияние
+## CURRENT — M6.1A REVIEW · проверка после слияния
 
-**Решение C0.** Приёмка Q1 завершена в synthetic LOCAL/TEST. C8 дал `PASS` на проверенном head. Все три замечания закрыты, PR #56 выведен из Draft. Для слияния в `main` обычным merge-коммитом требуется решение владельца. После слияния C0 проверяет родителей, дерево и push CI фактического `main`. [Вердикт C8](https://github.com/Elefesys/ai-service-manager/pull/56#pullrequestreview-5977981196).
+Владелец слил [PR #56](https://github.com/Elefesys/ai-service-manager/pull/56) на `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. Родители слияния по порядку — `67129e43a5947f6eadea88b268b603fec5f22949` и принятый head `1368060d1b38e9fc1a2c57e471dc630bb9b1715d`. Дерево — `3b993281f8864022ddba461beb94285ee145dda1`, совпадает с проверенным кандидатом. [Коммит слияния](https://github.com/Elefesys/ai-service-manager/commit/54350ddb3a8fc00076f7e065acb19c733e4f29a8) · [приёмка C8](https://github.com/Elefesys/ai-service-manager/pull/56#pullrequestreview-5977981196).
+
+В первой попытке push/main в `connect5-migration (normal, state)` прошёл сценарий с ожидаемым таймаутом. В следующем сценарии `full_retained_export` сохранилась резервная копия, но проверка очистки ресурсов теста завершилась с `CONTROL_RETAINED_CLEANUP_REQUIRED`. В `control-full-retained-export.json` записаны `RUNNING` и `EGRESS_COMMAND_FAILED`; конкретная команда Docker и её stderr в отчёте отсутствуют. У того же дерева на PR эта проверка прошла. C0 сохраняет первый результат и проверяет только упавший job на новом раннере. Для выдачи M6.1B нужен успешный итог этого push/main. [Журнал](https://github.com/Elefesys/ai-service-manager/actions/runs/44555989757/job/135672050094) · [артефакт первой попытки](https://github.com/Elefesys/ai-service-manager/actions/runs/44555989757/artifacts/14545664708) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/44542188962/job/135623174833).
+
+## Приёмка Q1 до слияния
 
 **Кандидат.** `Elefesys/ai-service-manager`, ветка `c1/m6-1a-request-draft`, цель `main`. Принятая база `67129e43a5947f6eadea88b268b603fec5f22949`. Проверяемый head `1368060d1b38e9fc1a2c57e471dc630bb9b1715d`, дерево `3b993281f8864022ddba461beb94285ee145dda1`. CI `44542188962` прошёл 12/12 с первой попытки на пробном слиянии `95e9a1065a45b507aa9715f8d9dd8caf446d922b` с тем же деревом. [PR #56](https://github.com/Elefesys/ai-service-manager/pull/56) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44542188962) · [правило принадлежности фактов](https://github.com/Elefesys/ai-service-manager/blob/1368060d1b38e9fc1a2c57e471dc630bb9b1715d/docs/decisions/IMPL-006-m6-pilot-agreement.md#L28).
 
