@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.1B IN_PROGRESS · R2 после приёмки C0 · 2026-11-20
+## CURRENT — M6.1B REVIEW · приёмка C8 · 2026-11-20
 
-**Единственная активная задача — M6.1B-R2, ведущий C1.** На `ee754c8e5f3aba01bdf6ae4da5997c69e6701b65` три сценария R1 приняты. Для позднего `COVER_UP` или `OTHER_COMPLEX` без изменения обычных полей мастер не может привязать реплику к уже выбранной A. C0 воспроизвёл оба варианта на PostgreSQL 18.6. У A остаются прежний ID оценки и 65 актуальных минут. C2 и C5 добавляют явную привязку такого источника через текущие транзакцию и карточку. База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`, тот же [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57). Штатный CI кандидата 12/12, прошёл адресный повтор `browser`. [Результаты и поручение C0](tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44665100246).
+**Единственная активная задача — независимая приёмка M6.1B, ведущий C8.** C0 принял R2 на `2abfef3f6b4be924668b2d4fe4e110aa0510959a` в [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57). База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`, схема кандидата `0026`. Обе категории сложности без правки полей дают «Решает мастер» с источником, повтор возвращает ту же оценку, прежние 65 минут видны в архиве. Если сообщение отнесено к отдельной B, у A сохраняются исходный ID оценки и 65 минут. Штатный CI — 12/12 SUCCESS, один повтор `connect5-migration (docker29, state)`. Задача ожидает заключения C8 о выполнимости и длительности. [Поручение C8 и проверка C0](tasks/M6_HANDOFF.md#L3) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/44678632933).
+
+## История — M6.1B-R2 · 2026-11-20
+
+**Доработку R2 получил C1.** На `ee754c8e5f3aba01bdf6ae4da5997c69e6701b65` три сценария R1 приняты. Для позднего `COVER_UP` или `OTHER_COMPLEX` без изменения обычных полей мастер не может привязать реплику к уже выбранной A. C0 воспроизвёл оба варианта на PostgreSQL 18.6. У A остаются прежний ID оценки и 65 актуальных минут. C2 и C5 добавляют явную привязку такого источника через текущие транзакцию и карточку. База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`, тот же [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57). Штатный CI кандидата 12/12, прошёл адресный повтор `browser`. [Результаты до R2 и поручение C0](https://github.com/Elefesys/ai-service-manager/blob/49ce38af83c93debfb44a37466362c2f6d9e8208/docs/tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44665100246).
 
 ## История — M6.1B-R1 · 2026-11-20
 
