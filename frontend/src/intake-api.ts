@@ -185,7 +185,8 @@ export function parsePrice(value:unknown,requestId:string,revision?:string):Pric
   ||(revision!==undefined&&v.request_revision!==revision)||!nullable(v.release_id,uuid)||!decimal(v.activation_version)
   ||v.currency!=='RUB'||typeof v.current!=='boolean'||!one(v.outcome,priceOutcomes)||!one(v.reason,priceReasons)
   ||!nullable(v.amount_minor,money)||!nullable(v.lower_minor,money)||!nullable(v.upper_minor,money)
-  ||!nullable(v.size_mm,x=>positiveWithin(x,1000))||!nullable(v.steps,x=>positiveWithin(x,1000)))invalid();
+  ||!nullable(v.size_mm,x=>positiveWithin(x,v.reason==='SIZE_OUTSIDE_RULE'?99999:1000))
+  ||!nullable(v.steps,x=>positiveWithin(x,1000)))invalid();
  if(v.outcome==='EXACT'?(v.authority!=='CONFIRMED'||v.amount_minor===null||v.lower_minor!==null||v.upper_minor!==null)
    :v.outcome==='RANGE'?(v.authority!=='PROVISIONAL'||v.amount_minor!==null||v.lower_minor===null||v.upper_minor===null||Number(v.lower_minor)>=Number(v.upper_minor))
    :(v.authority!==null||v.amount_minor!==null||v.lower_minor!==null||v.upper_minor!==null))invalid();

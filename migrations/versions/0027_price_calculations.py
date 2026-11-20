@@ -19,7 +19,7 @@ TABLE = r"""CREATE TABLE app.price_calculations (
     currency text NOT NULL DEFAULT 'RUB' CHECK(currency='RUB'),
     policy jsonb CHECK(policy IS NULL OR jsonb_typeof(policy)='object'),
     size_fact jsonb CHECK(size_fact IS NULL OR jsonb_typeof(size_fact)='object'),
-    size_mm integer CHECK(size_mm BETWEEN 1 AND 1000),
+    size_mm integer CHECK(size_mm BETWEEN 1 AND 99999),
     steps integer CHECK(steps BETWEEN 1 AND 1000),
     outcome text NOT NULL,
     authority text,
@@ -49,6 +49,7 @@ TABLE = r"""CREATE TABLE app.price_calculations (
         ('SIZE_OUTSIDE_RULE','OWNER_QUOTE','PRICE_UNPUBLISHED','SERVICE_UNAVAILABLE')
       ELSE false END) IS TRUE),
     CHECK((size_mm IS NULL)=(size_fact IS NULL)),
+    CHECK(size_mm<=1000 OR reason='SIZE_OUTSIDE_RULE'),
     CHECK((steps IS NOT NULL)=(reason='SIZE_FORMULA'))
 )"""
 
@@ -87,7 +88,7 @@ FUNCTIONS = {
         mm:=mm*10+coalesce(parts[2]::integer,0);
       ELSIF parts[2] IS NOT NULL THEN RETURN NULL;
       END IF;
-      RETURN CASE WHEN mm BETWEEN 1 AND 1000 THEN mm END;
+      RETURN CASE WHEN mm>0 THEN mm END;
     END $$""",
     "platform.price_material(app.service_requests)": r"""CREATE FUNCTION platform.price_material(p_draft app.service_requests)
     RETURNS jsonb LANGUAGE plpgsql STABLE SET search_path=pg_catalog,pg_temp AS $$
@@ -813,7 +814,7 @@ PROFILE = r"""CREATE FUNCTION platform.price_schema_profile() RETURNS jsonb
 ('platform.price_history(uuid,uuid,uuid,uuid)','2079f35617b90cc005abe3886efa309244866782716993434018a7798984eca6','plpgsql',true,'v',true),
 ('platform.price_material(app.service_requests)','a9b53d2bfd12753994f8a25157a92a7b5981909ff3d1bcf66d024c701c5c4a06','plpgsql',false,'s',false),
 ('platform.price_result(app.price_calculations,boolean)','6381f7bc947ab584f5e606049f6b5ab2652ad77837ea4db8157fcc272a8cd21e','sql',false,'s',false),
-('platform.price_size_mm(text)','e2f7cd468265ef11e69dd3fec7da71d0b2bd751da68eb9aa6541cfff258e9cef','plpgsql',false,'i',false),
+('platform.price_size_mm(text)','e0393c004439cedd55091f61509fd1fec009e7ebecc99670067a31b2d48b2525','plpgsql',false,'i',false),
 ('platform.published_knowledge_schema_profile()','93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5','sql',true,'s',false),
 ('platform.resolve_workspace_membership(uuid,uuid)','8ce9bdd67c17bc83442bea3a5e7a15337a51074e0ea6408855b10542e39ceb39','sql',true,'v',true),
 ('platform.service_assessment_immutable()','bb7b369ae4c8eff6280b650ddf07efaab07e6a93ef775825115377f9a3156873','plpgsql',false,'v',false),
@@ -992,7 +993,7 @@ PROFILE = r"""CREATE FUNCTION platform.price_schema_profile() RETURNS jsonb
         'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,e.extversion,n.nspname) ORDER BY e.extname)
           FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname IN ('vector','btree_gist'))) AS value)
       SELECT jsonb_build_object('schema_revision','0027','valid',coalesce(v.valid,false)
-        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='f2566c2abac8c652e498b59ae76180ea2e29e6b3c8b8d090c6c008b120e88e5c',
+        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='622564dba896c803db7612f461324d921c61385618121331dfc1460443d86914',
         'profile_sha256',encode(sha256(convert_to(E'asm:m3:native_schema:v1\n'||c.value::text,'UTF8')),'hex')) FROM validity v CROSS JOIN catalog c $$"""
 
 

@@ -1,6 +1,6 @@
 """Owner-facing internal results from the published price policy and saved facts."""
 
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -36,7 +36,7 @@ class PriceCalculation(ConfigurationModel):
     amount_minor: PriceMinor | None
     lower_minor: PriceMinor | None
     upper_minor: PriceMinor | None
-    size_mm: SizeMillimetres | None
+    size_mm: Annotated[int, Field(ge=1, le=99_999)] | None
     steps: SizeMillimetres | None
     size_fact: Fact | None
 

@@ -383,26 +383,57 @@ async def test_pricing_per_service_independent_of_approved_duration(pricing_pg, 
 
 
 @pytest.mark.parametrize(
-    ("measurement", "result"),
+    ("limit", "measurement", "millimetres", "reason", "amount"),
     [
-        (None, "SIZE_REQUIRED"),
-        ("-20 mm", "SIZE_REQUIRED"),
-        ("20 m", "SIZE_REQUIRED"),
-        ("101 mm", "SIZE_OUTSIDE_RULE"),
+        (1000, None, None, "SIZE_REQUIRED", None),
+        (100, "-20 mm", None, "SIZE_REQUIRED", None),
+        (100, "20 m", None, "SIZE_REQUIRED", None),
+        (100, "101 mm", 101, "SIZE_OUTSIDE_RULE", None),
+        (1000, "1000 mm", 1000, "SIZE_FORMULA", 5_250_000),
+        (1000, "1001 mm", 1001, "SIZE_OUTSIDE_RULE", None),
+        (1000, "100,1 cm", 1001, "SIZE_OUTSIDE_RULE", None),
     ],
 )
-async def test_pricing_rejects_missing_invalid_and_out_of_bounds_size(
-    pricing_pg, auth, measurement, result
+async def test_pricing_distinguishes_missing_size_from_exceeding_the_limit(
+    pricing_pg, auth, limit, measurement, millimetres, reason, amount
 ):
     h = pricing_pg
-    await publish(h, pricing_bundle(formula_price()))
+    await publish(h, pricing_bundle(formula_price(max_size_mm=limit)))
     mutation = await sign_in(auth)
     cid, _, _, _, request_id = await draft_for_size(h, auth, mutation, measurement)
     endpoint = f"{route(cid)}/{request_id}/pricing"
     calculated = await price(auth, endpoint, mutation)
-    assert calculated["reason"] == result and calculated["amount_minor"] is None
-    assert calculated["outcome"] == ("NEEDS_INPUT" if result == "SIZE_REQUIRED" else "NEEDS_HUMAN")
-    assert calculated["authority"] is None
+    assert (
+        calculated["size_mm"],
+        calculated["reason"],
+        calculated["amount_minor"],
+        calculated["lower_minor"],
+        calculated["upper_minor"],
+    ) == (millimetres, reason, amount, None, None)
+    assert (
+        calculated["outcome"]
+        == {
+            "SIZE_REQUIRED": "NEEDS_INPUT",
+            "SIZE_OUTSIDE_RULE": "NEEDS_HUMAN",
+            "SIZE_FORMULA": "EXACT",
+        }[reason]
+    )
+    assert calculated["authority"] == ("CONFIRMED" if amount is not None else None)
+    assert calculated["steps"] == (100 if amount is not None else None)
+    if millimetres is None:
+        assert calculated["size_fact"] is None
+    else:
+        fact = calculated["size_fact"]
+        assert fact["value"] == measurement
+        original = next(
+            fact for fact in (await summary(h, cid))["facts"] if fact["field"] == "approximate_size"
+        )
+        assert (fact["source"]["message_id"], fact["source"]["source_version"]) == (
+            original["source"]["message_id"],
+            original["source"]["source_version"],
+        )
+    assert await price(auth, endpoint, mutation) == calculated
+    assert await history(auth, endpoint) == [calculated]
 
 
 async def test_pricing_legacy_note_and_invalid_publication_parameters(pricing_pg, auth):

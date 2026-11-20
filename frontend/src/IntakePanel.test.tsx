@@ -1,9 +1,10 @@
 import {afterEach,beforeEach,it,expect,vi} from 'vitest';
 import {randomUUID,webcrypto} from 'node:crypto';
-import {render,screen,waitFor,cleanup,within} from '@testing-library/react';
+import {act,render,screen,waitFor,cleanup,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {IntakePanel} from './IntakePanel';
 import {intakeApi,IntakeError} from './intake-api';
+import type {PriceCalculation,PriceHistory,ServiceRequestDraft} from './intake-api';
 import {assessment,draft,intake,scope,session,message,listItem,lateSize} from './intake-fixtures.test-helper';
 beforeEach(()=>{
  vi.stubGlobal('crypto',{randomUUID,subtle:webcrypto.subtle});
@@ -156,6 +157,38 @@ it('opens a selected card with GET after reload, retaining the exact scope and r
  expect(await screen.findByTestId('service-request-id')).toHaveTextContent(b.request_id);
  expect(create).not.toHaveBeenCalled();
  expect(revise).not.toHaveBeenCalled();
+});
+
+it('hides the price during summary refresh and discards its read after selecting another request',async()=>{
+ const a=draft(),b={...draft(),request_id:'018f0000-0000-7000-8000-000000000011'};
+ const price=(card:ServiceRequestDraft,amount:number):PriceCalculation=>({
+  calculation_id:card.request_id,request_id:card.request_id,request_revision:card.revision,
+  release_id:card.release_id,activation_version:'1',currency:'RUB',current:true,
+  policy:null,outcome:'EXACT',authority:'CONFIRMED',reason:'FIXED_PRICE',
+  amount_minor:amount,lower_minor:null,upper_minor:null,size_mm:null,steps:null,size_fact:null,
+ });
+ const first={items:[price(a,350000)],next_before_id:null},second={items:[price(b,400000)],next_before_id:null};
+ let finish!:(value:PriceHistory)=>void;
+ const priceRead=vi.spyOn(intakeApi,'priceHistory').mockResolvedValueOnce(first)
+  .mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValueOnce(second);
+ const calculate=vi.spyOn(intakeApi,'calculatePrice');
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ vi.mocked(intakeApi.drafts).mockResolvedValue([listItem(a),listItem(b)]);
+ vi.mocked(intakeApi.draft).mockImplementation(async (_scope,id)=>id===b.request_id?b:a);
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()}/>);
+ expect(await screen.findByText('3 500 ₽')).toBeVisible();
+ await userEvent.click(screen.getByRole('button',{name:'Обновить сводку'}));
+ await waitFor(()=>expect(priceRead).toHaveBeenCalledTimes(2));
+ const [firstScope,firstId,before,signal]=priceRead.mock.calls[1];
+ expect([firstScope,firstId,before]).toEqual([scope,a.request_id,undefined]);
+ expect(screen.queryByRole('article',{name:'Текущий расчёт цены'})).not.toBeInTheDocument();
+ await userEvent.selectOptions(screen.getByLabelText('Сохранённая заявка'),b.request_id);
+ expect(await screen.findByText('4 000 ₽')).toBeVisible();
+ expect(signal?.aborted).toBe(true);
+ await act(async()=>finish(first));
+ expect(screen.getByRole('article',{name:'Текущий расчёт цены'})).toHaveTextContent('4 000 ₽');
+ expect(screen.queryByText('3 500 ₽')).not.toBeInTheDocument();
+ expect(calculate).not.toHaveBeenCalled();
 });
 
 it('uses the chosen late source and loaded revision in an exact replay of one field',async()=>{

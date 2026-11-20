@@ -8001,7 +8001,7 @@
           "size_mm": {
             "anyOf": [
               {
-                "maximum": 1000.0,
+                "maximum": 99999.0,
                 "minimum": 1.0,
                 "type": "integer"
               },

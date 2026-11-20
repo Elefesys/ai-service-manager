@@ -49,6 +49,7 @@ INPUTS = {
     "price-first": "Synthetic price flower forearm 20 mm linework",
     "price-second": "Synthetic price separate swallow shoulder linework",
     "price-size": "The swallow will be 21 mm",
+    "price-oversize": "The swallow will be 100,1 cm",
 }
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
@@ -71,6 +72,7 @@ VALUES = {
     ),
     "price-second": (("idea", "swallow"), ("placement", "shoulder"), ("style", "linework")),
     "price-size": (("approximate_size", "21 mm"),),
+    "price-oversize": (("approximate_size", "100,1 cm"),),
 }
 CATEGORIES = {
     "complex": "COVER_UP",
@@ -113,7 +115,7 @@ class IntakeModel(FakeAdapter):
                     analysis_id=None,
                     analysis_sha256=None,
                 ),
-                explicit_correction=self.operation == "late-cover-up",
+                explicit_correction=self.operation in {"late-cover-up", "price-oversize"},
             )
             for field, value in VALUES.get(self.operation, ())
         ]

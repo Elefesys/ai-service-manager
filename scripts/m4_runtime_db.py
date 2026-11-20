@@ -394,6 +394,7 @@ M6_PRICING_IMPLEMENTATION_PATHS = {
     "contracts/openapi.json",
     "frontend/e2e/intake-duration.spec.ts",
     "frontend/src/ConfigurationPanel.tsx",
+    "frontend/src/IntakePanel.test.tsx",
     "frontend/src/IntakePanel.tsx",
     "frontend/src/configuration-api.ts",
     "frontend/src/intake-api.ts",
