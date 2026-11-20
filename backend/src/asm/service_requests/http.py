@@ -11,6 +11,7 @@ from asm.auth.service import AuthService
 from asm.billing.validation import CanonicalUUID
 from asm.configuration.http import body_as, command_key, command_schema, no_options
 from asm.configuration.permissions import require_owner
+from asm.service_requests.assessment import AssessmentCommand, ServiceAssessment
 from asm.service_requests.errors import ServiceRequestCode, ServiceRequestError
 from asm.service_requests.models import (
     ServiceRequestCards,
@@ -117,6 +118,47 @@ def install_service_requests(app: FastAPI, auth: AuthService, settings: AuthSett
             await require_owner(unit)
             return await ServiceRequestRepository(unit).revise(
                 UUID(business_id), UUID(conversation_id), UUID(request_id), key, command
+            )
+
+    @router.get("/{request_id}/assessment", response_model=ServiceAssessment | None)
+    async def read_assessment(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+    ) -> ServiceAssessment | None:
+        no_options(request)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            await require_owner(unit)
+            return await ServiceRequestRepository(unit).read_assessment(
+                UUID(business_id), UUID(conversation_id), UUID(request_id)
+            )
+
+    @router.post(
+        "/{request_id}/assessment",
+        response_model=ServiceAssessment,
+        openapi_extra={"requestBody": command_schema(AssessmentCommand)["requestBody"]},
+    )
+    async def assess(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+    ) -> ServiceAssessment:
+        no_options(request)
+        token = mutation_token(request, settings)
+        command = await body_as(request, AssessmentCommand)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            await require_owner(unit)
+            return await ServiceRequestRepository(unit).assess(
+                UUID(business_id), UUID(conversation_id), UUID(request_id), command
             )
 
     app.include_router(router)

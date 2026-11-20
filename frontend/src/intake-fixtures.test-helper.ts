@@ -1,5 +1,5 @@
 import type {Session} from './api';
-import type {Intake,CaseInput,DraftListItem,DurationCase,ServiceRequestDraft} from './intake-api';
+import type {Intake,CaseInput,DraftListItem,DurationCase,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 import {blankCase} from './intake-api';
 export const w='018f0000-0000-7000-8000-000000000001',b='018f0000-0000-7000-8000-000000000002',c='018f0000-0000-7000-8000-000000000003',client='018f0000-0000-7000-8000-000000000004',actor='018f0000-0000-7000-8000-000000000005',message='018f0000-0000-7000-8000-000000000006';
 export const scope={workspace:w,business:b,conversation:c,client};
@@ -19,6 +19,15 @@ export function draft():ServiceRequestDraft{
 }
 export function listItem({request_id,revision,service_name,intent_source,facts}:ServiceRequestDraft):DraftListItem{
  return {request_id,revision,service_name,intent_source,idea:facts.find(fact=>fact.field==='idea')?.value??null};
+}
+export function assessment():ServiceAssessment{
+ const value=draft();
+ return {
+  assessment_id:'018f0000-0000-7000-8000-000000000014',request_id:value.request_id,
+  request_revision:value.revision,release_id:value.release_id,activation_version:'1',current:true,
+  outcome:'FEASIBLE',reason:'FIXED_DURATION',field:null,rule_id:null,limit:null,size_mm:null,
+  occupied_minutes:65,duration_policy:{mode:'FIXED',minutes:65,rule_note:null},evidence:value.facts,
+ };
 }
 export function lateSize():Intake{
  const value=intake(),message_id='018f0000-0000-7000-8000-000000000010',source_version='e'.repeat(64);

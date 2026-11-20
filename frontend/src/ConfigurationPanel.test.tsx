@@ -21,6 +21,24 @@ const setup=()=>{const props={session:session(),workspace,business:business(),re
 const ready=async()=>{await waitFor(()=>expect(screen.getByLabelText('Название услуги 1')).toBeEnabled());};
 async function editFAQ(text='Новый подтверждённый ответ'){await ready();fireEvent.change(screen.getByLabelText('Ответ FAQ 1'),{target:{value:text}});fireEvent.submit(screen.getByRole('button',{name:'Сохранить черновик'}).closest('form')!);await screen.findByText('Команда подтверждена. Текущее состояние получено.');}
 describe('business configuration owner flow',()=>{
+  it('edits and previews a typed size duration rule while keeping price independent',async()=>{
+    setup();await ready();
+    fireEvent.change(screen.getByLabelText('Режим длительности 1'),{target:{value:'CONFIGURED_RULE'}});
+    fireEvent.change(screen.getByLabelText('Порог размера, мм 1'),{target:{value:'80'}});
+    fireEvent.change(screen.getByLabelText('Минуты до порога включительно 1'),{target:{value:'55'}});
+    fireEvent.change(screen.getByLabelText('Минуты свыше порога 1'),{target:{value:'95'}});
+    expect(screen.getByText('До 80 мм включительно — 55 мин. Свыше 80 мм — 95 мин.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Добавить правило'}));
+    fireEvent.change(screen.getByLabelText('Тип правила 2'),{target:{value:'MAX_SIZE_MM'}});
+    fireEvent.change(screen.getByLabelText('Максимальный размер, мм 2'),{target:{value:'100'}});
+    fireEvent.submit(screen.getByRole('button',{name:'Сохранить черновик'}).closest('form')!);
+    await screen.findByText('Команда подтверждена. Текущее состояние получено.');
+    expect(vi.mocked(configurationApi.command).mock.calls[0][3]).toMatchObject({bundle:{
+      services:[expect.objectContaining({price:bundle().services[0].price,duration:{mode:'CONFIGURED_RULE',minutes:null,rule_note:null,
+        size_rule:{threshold_mm:80,at_or_below_minutes:55,above_minutes:95}}})],
+      rules:[bundle().rules[0],expect.objectContaining({kind:'MAX_SIZE_MM',value:100})],
+    }});
+  });
   it('attaches settings only to selected Business and propagates live owner denial in Console',async()=>{vi.spyOn(api,'session').mockResolvedValue(session());vi.spyOn(api,'businesses').mockResolvedValue([business()]);vi.spyOn(api,'business').mockResolvedValue(business());render(<App/>);await screen.findByRole('button',{name:/Тестовая мастерская/});expect(configurationApi.draft).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:/Тестовая мастерская/}));await ready();expect(configurationApi.draft).toHaveBeenCalledWith(workspace,businessId,expect.any(AbortSignal));vi.mocked(configurationApi.active).mockRejectedValueOnce(new ConfigurationError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить настройки'}));await screen.findByText('Нет доступа к данным владельца');expect(screen.queryByRole('region',{name:'Настройки бизнеса'})).toBeNull();});
   it('renders draft/active separately and saves FAQ while preserving independent nullable policies/intake/rule provenance',async()=>{setup();await ready();expect(screen.getByText('Публикации ещё нет. AI не получает сведения черновика.')).toBeVisible();await editFAQ();expect(configurationApi.command).toHaveBeenCalledTimes(1);const [_w,_b,op,body]=vi.mocked(configurationApi.command).mock.calls[0];expect(op).toBe('EDIT');expect(body).toEqual({expected_draft_version:'1',bundle:{...bundle(),faqs:[{...bundle().faqs[0],answer:'Новый подтверждённый ответ'}]}});expect(screen.getByLabelText('Цена, копейки 1')).toHaveValue(null);expect(screen.getByLabelText('Длительность, минуты 1')).toHaveValue(90);expect(screen.getByLabelText('Предоплата, процент 1')).toHaveValue(30);expect(screen.getByText('Публикации ещё нет. AI не получает сведения черновика.')).toBeVisible();});
   it('publishes only saved validated preview and shows active revision/source after a real response',async()=>{setup();await editFAQ();fireEvent.click(screen.getByRole('button',{name:'Опубликовать черновик'}));await screen.findByText(/Активация 1 · из черновика 2/);const region=within(screen.getByRole('region',{name:'Опубликованные сведения'}));expect(region.getByText('Новый подтверждённый ответ')).toBeVisible();expect(region.getByText(/Источник: Памятка владельца/)).toBeVisible();expect(vi.mocked(configurationApi.command).mock.calls[1][3]).toEqual({expected_draft_version:'2',expected_activation_version:'0'});});

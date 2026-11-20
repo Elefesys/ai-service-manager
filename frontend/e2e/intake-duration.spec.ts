@@ -4,7 +4,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake} from '../src/intake-api';
+import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,ServiceAssessment} from '../src/intake-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
 if(!fixtureFile||!passwordFile)throw new Error('E2E_INTAKE_PRIVATE_FIXTURES_REQUIRED');
@@ -12,8 +12,8 @@ const fixture=JSON.parse(readFileSync(fixtureFile,'utf8')) as {messaging_fixture
 const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixtures.knowledge;
 
 type Viewport='desktop'|'narrow';
-type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size';
-type IntakeJourney='intake'|'request'|'request-deferred';
+type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source';
 
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
@@ -33,7 +33,7 @@ async function refreshIntake(inbox:Locator,intake:Locator){
  await intake.getByRole('button',{name:'Обновить сводку',exact:true}).click();
 }
 
-async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
+async function configureIntakeService(page:Page,variant:Viewport){
  const serviceName='Synthetic intake consultation '+variant+' '+randomUUID();
  await page.goto('/');await page.getByLabel('Логин',{exact:true}).fill(owner.login);await page.getByLabel('Пароль',{exact:true}).fill(password);await page.getByRole('button',{name:'Войти',exact:true}).click();await openWorkspace(page);
  await page.getByRole('button',{name:/Synthetic business/}).click();
@@ -42,8 +42,17 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  if(await settings.getByLabel('Название услуги 1',{exact:true}).count()===0)await settings.getByRole('button',{name:'Добавить услугу',exact:true}).click();
  await settings.getByLabel('Название услуги 1',{exact:true}).fill(serviceName);const description=settings.getByLabel('Описание услуги 1');await expect(description).toHaveCount(1);await description.fill('Synthetic browser template '+variant+', owner review required.');
  await settings.getByRole('button',{name:'Применить шаблон новой татуировки v1',exact:true}).first().click();
+ return {settings,serviceName};
+}
+
+async function publishIntakeService(settings:Locator,serviceName:string){
  await settings.getByRole('button',{name:'Сохранить черновик',exact:true}).click();await expect(settings.getByText('Команда подтверждена. Текущее состояние получено.',{exact:true})).toBeVisible();
  await settings.getByRole('button',{name:'Проверить и показать предпросмотр',exact:true}).click();await expect(settings.getByRole('button',{name:'Опубликовать черновик',exact:true})).toBeEnabled();await settings.getByRole('button',{name:'Опубликовать черновик',exact:true}).click();await expect(settings.getByRole('region',{name:'Опубликованные сведения'}).getByRole('heading',{name:serviceName+' · Активна',exact:true})).toBeVisible();
+}
+
+async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ await publishIntakeService(settings,serviceName);
  return {...await collectIntake(page,variant,journey),serviceName};
 }
 
@@ -59,7 +68,10 @@ async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  const seed=await input('seed');expect([seed.model_calls,seed.calls,seed.effects]).toEqual([0,0,0]);
  const inbox=await openConversation(page,seed.conversation_id);
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
- const collected=await input(journey==='intake'?'collect':'collect-sized',seed.conversation_id);expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,'CLARIFY']);
+ const assessment=journey.startsWith('assessment');
+ const operation=journey==='intake'?'collect':assessment?'assess-first':'collect-sized';
+ const collected=await input(operation,seed.conversation_id);
+ expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment?'PRELIMINARILY_COMPLETE':'CLARIFY']);
  const intake=page.getByRole('region',{name:'Предварительный запрос',exact:true});
  await refreshIntake(inbox,intake);
  await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('flower');
@@ -73,7 +85,10 @@ test('@narrow source-backed intake, owner field confirmation, Action Center and 
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const {input,conversation,intake}=await beginIntake(page,variant,'intake');
  const source=intake.getByRole('link',{name:'сообщение клиента',exact:true}).first();const anchor=await source.getAttribute('href');expect(anchor).toMatch(/^#message-[0-9a-f-]+$/);await source.click();await expect(page.locator(anchor!)).toContainText('Synthetic intake flower forearm');
+ const readCases=page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname.endsWith('/intake/duration-cases'));
  await page.getByRole('button',{name:'Открыть примеры длительности',exact:true}).click();const cases=page.getByRole('region',{name:'Примеры длительности',exact:true});
+ expect((await readCases).status()).toBe(200);
+ await expect(cases.getByLabel('Описание работы',{exact:true})).toBeEnabled();
  await cases.getByLabel('Описание работы',{exact:true}).fill('Synthetic owner flower '+variant);await cases.getByLabel('Место',{exact:true}).fill('forearm');await cases.getByLabel('Рабочее время, мин',{exact:true}).fill('35');await cases.getByRole('button',{name:'Создать пример',exact:true}).click();
  const example=cases.locator('article').filter({has:page.getByRole('heading',{name:'Synthetic owner flower '+variant,exact:true})}).first();await expect(example.getByText('Работа: 35 · занято: неизвестно мин',{exact:true})).toBeVisible();await example.getByRole('button',{name:'Подтвердить пример',exact:true}).click();await expect(example.getByText(/Подтверждено · версия 2/)).toBeVisible();
  await intake.getByRole('button',{name:'Сравнить с примерами мастера',exact:true}).click();await expect(intake.getByRole('heading',{name:'Synthetic owner flower '+variant,exact:true})).toBeVisible();await expect(intake.getByText(/Рабочее время: 35, занятое: неизвестно/).first()).toBeVisible();
@@ -96,13 +111,14 @@ test('@narrow source-backed intake, owner field confirmation, Action Center and 
  await page.getByRole('button',{name:'Выйти',exact:true}).click();await expect(page.getByRole('region',{name:'Предварительный запрос',exact:true})).toHaveCount(0);await expect(page.getByText('Synthetic owner flower '+variant,{exact:true})).toHaveCount(0);
 });
 
-async function chooseWork(page:Page,message:string,idea:string,placement:string,size?:string){
+async function chooseWork(page:Page,message:string,idea:string,placement:string,size?:string,style?:string){
  const fields=page.getByRole('group',{name:'Выбор сведений для заявки'});
  const beginning=fields.getByLabel('Начало работы',{exact:true});
  await beginning.selectOption(message);
  await fields.getByRole('checkbox',{name:`Идея: ${idea}`,exact:true}).check();
  await fields.getByRole('checkbox',{name:`Место: ${placement}`,exact:true}).check();
  if(size)await fields.getByRole('checkbox',{name:`Примерный размер: ${size}`,exact:true}).check();
+ if(style)await fields.getByRole('checkbox',{name:`Стиль: ${style}`,exact:true}).check();
  const create=fields.getByRole('button',{name:'Создать заявку',exact:true});
  await expect(create).toBeDisabled();
  await fields.getByRole('checkbox',{name:'Начало и выбранные сведения относятся к одной работе',exact:true}).check();
@@ -374,3 +390,224 @@ test('@narrow service request preserves sources across tabs and rejects an assig
  await secondTab.close();
  await test.step('Reject a previously assigned size and create B with its own facts',()=>createSecondAfterRevision(page,variant));
 });
+
+test('@narrow assesses the selected request against published duration and size limits',async({page},info)=>{
+ test.setTimeout(120000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ const published=settings.getByRole('region',{name:'Опубликованные сведения',exact:true});
+ const mode=settings.getByLabel('Режим длительности 1',{exact:true});
+ const price=settings.getByLabel('Режим цены 1',{exact:false});
+ // The shared CONTROLLED fixture can carry synthetic FAQ/rules from earlier journeys.
+ for(const name of [/^Удалить FAQ \d+$/,/^Удалить правило \d+$/]){
+  const buttons=settings.getByRole('button',{name});
+  for(let index=await buttons.count()-1;index>=0;index--)await buttons.nth(index).click();
+ }
+ await price.selectOption('OWNER_QUOTE');
+ await settings.getByLabel('Цена, копейки 1',{exact:true}).fill('');
+ await settings.getByLabel('Пояснение формулы 1',{exact:true}).fill('');
+ await mode.selectOption('FIXED');
+ await settings.getByLabel('Длительность, минуты 1',{exact:true}).fill('65');
+ await publishIntakeService(settings,serviceName);
+ await expect(published.getByText(/Цена: Решение владельца/)).toBeVisible();
+
+ const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,'assessment');
+ const card=intake.getByRole('region',{name:'Черновик заявки',exact:true});
+ const panel=card.getByRole('region',{name:'Оценка заявки',exact:true});
+ const picker=intake.getByLabel('Сохранённая заявка',{exact:true});
+ const evaluate=panel.getByRole('button',{name:/^(Оценить заявку|Пересчитать оценку)$/});
+ const clock=panel.getByText(/Занято на следующий сеанс/);
+ const refresh=panel.getByRole('button',{name:'Обновить оценку заявки',exact:true});
+ const endpoint=`/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/intake/conversations/${conversation}/service-requests`;
+ async function readAssessment(id:string):Promise<ServiceAssessment>{
+  const response=await page.request.get(`${endpoint}/${id}/assessment`);
+  expect(response.status()).toBe(200);
+  return await response.json() as ServiceAssessment;
+ }
+ await intake.getByRole('button',{name:'Подтвердить поле Примерный размер',exact:true}).click();
+ await expect(intake.getByText('Подтверждено мастером',{exact:true})).toBeVisible();
+ await (await chooseWork(page,collected.message_id,'flower','forearm','8 cm','linework')).click();
+ await expect(card.getByTestId('service-request-id')).toHaveText(/^[0-9a-f-]{36}$/);
+ const firstId=(await card.getByTestId('service-request-id').textContent())!;
+ await evaluate.click();
+ await expect(clock).toContainText('65 мин');
+ await expect(panel.getByText('Выполнимо',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Фиксированная длительность из опубликованных настроек.',{exact:true})).toBeVisible();
+ const fixed=await readAssessment(firstId);
+ expect(fixed).toMatchObject({current:true,outcome:'FEASIBLE',reason:'FIXED_DURATION',occupied_minutes:65});
+ const repeated=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`${endpoint}/${firstId}/assessment`);
+ await evaluate.click();
+ expect(await (await repeated).json()).toEqual(fixed);
+ await expect(clock).toContainText('65 мин');
+
+ await mode.selectOption('CONFIGURED_RULE');
+ await settings.getByLabel('Порог размера, мм 1',{exact:true}).fill('80');
+ await settings.getByLabel('Минуты до порога включительно 1',{exact:true}).fill('55');
+ await settings.getByLabel('Минуты свыше порога 1',{exact:true}).fill('95');
+ const ruleText='До 80 мм включительно — 55 мин. Свыше 80 мм — 95 мин.';
+ await expect(settings.locator('form').first().getByText(ruleText,{exact:true})).toBeVisible();
+ await publishIntakeService(settings,serviceName);
+ await expect(published.getByText(ruleText)).toBeVisible();
+ await refresh.click();
+ const staleAssessment=panel.getByText('Архивная оценка. Для актуального результата выполните пересчёт.',{exact:true});
+ await expect(staleAssessment).toBeVisible();
+ await expect(clock).toHaveCount(0);
+ await expect(panel.getByText(fixed.release_id!,{exact:true})).toBeVisible();
+ expect(await readAssessment(firstId)).toMatchObject({assessment_id:fixed.assessment_id,release_id:fixed.release_id,current:false});
+ await evaluate.click();
+ await expect(clock).toContainText('55 мин');
+ await expect(panel.getByText('Порог опубликованного правила 80 мм.',{exact:true})).toBeVisible();
+ await expect(panel.getByRole('link',{name:'Источник оценки для поля Примерный размер',exact:true})).toHaveAttribute('href',`#message-${collected.message_id}`);
+ const configured=await readAssessment(firstId);
+ expect(configured).toMatchObject({
+  request_revision:fixed.request_revision,current:true,outcome:'FEASIBLE',reason:'SIZE_DURATION_RULE',size_mm:80,occupied_minutes:55,
+  archived_duration:{
+   assessment_id:fixed.assessment_id,request_revision:fixed.request_revision,
+   release_id:fixed.release_id,activation_version:fixed.activation_version,occupied_minutes:65,
+  },
+ });
+ expect(configured.assessment_id).not.toBe(fixed.assessment_id);
+ const archive=panel.getByText('Архивная оценка',{exact:true});
+ const oldDuration=panel.getByText('Ревизия 1 · ранее было утверждено 65 мин.',{exact:true});
+ await expect(archive).toBeVisible();
+ await expect(oldDuration).toBeHidden();
+ await archive.click();
+ await expect(oldDuration).toBeVisible();
+ await expect(clock).toContainText('55 мин');
+ await refresh.click();
+ await expect(refresh).toBeEnabled();
+ await expect(oldDuration).toBeVisible();
+ await expect(clock).toContainText('55 мин');
+ expect(await readAssessment(firstId)).toEqual(configured);
+
+ const second=await input('assess-second',conversation);
+ expect([second.model_calls,second.calls,second.effects,second.status]).toEqual([1,1,1,'CLARIFY']);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,second.message_id,'swallow','shoulder',undefined,'linework')).click();
+ await expect(card.getByText(/swallow · Со слов клиента/)).toBeVisible();
+ const secondId=(await card.getByTestId('service-request-id').textContent())!;
+ expect(secondId).not.toBe(firstId);
+ await evaluate.click();
+ await expect(panel.getByText('Нужны данные',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
+ await expect(clock).toHaveCount(0);
+ const missing=await readAssessment(secondId);
+ expect(missing).toMatchObject({outcome:'NEEDS_DATA',field:'approximate_size',occupied_minutes:null});
+ expect(missing.evidence.every(fact=>fact.source.message_id===second.message_id)).toBe(true);
+
+ const late=await input('late-size',conversation);
+ expect([late.model_calls,late.calls,late.effects,late.status]).toEqual([1,1,1,'PRELIMINARILY_COMPLETE']);
+ await refreshIntake(inbox,intake);
+ await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue('12 cm');
+ await picker.selectOption(firstId);
+ await expect(card.getByTestId('service-request-id')).toHaveText(firstId);
+ await (await chooseRevision(page,late.message_id)).click();
+ await expect(card.getByTestId('service-request-revision')).toHaveText('2');
+ await expect(staleAssessment).toBeVisible();
+ await expect(clock).toHaveCount(0);
+ await evaluate.click();
+ await expect(clock).toContainText('95 мин');
+ await expect(panel.getByRole('link',{name:'Источник оценки для поля Примерный размер',exact:true})).toHaveAttribute('href',`#message-${late.message_id}`);
+ expect(await readAssessment(firstId)).toMatchObject({request_revision:'2',outcome:'FEASIBLE',size_mm:120,occupied_minutes:95});
+
+ await settings.getByRole('button',{name:'Добавить правило',exact:true}).click();
+ await settings.getByLabel('Тип правила 1',{exact:false}).selectOption('MAX_SIZE_MM');
+ await settings.getByLabel('Максимальный размер, мм 1',{exact:true}).fill('100');
+ await publishIntakeService(settings,serviceName);
+ await expect(published.getByText(/Максимальный размер: 100 мм/)).toBeVisible();
+ await evaluate.click();
+ await expect(panel.getByText('Отказ',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Размер 120 мм превышает опубликованный предел 100 мм.',{exact:true})).toBeVisible();
+ await expect(clock).toHaveCount(0);
+ expect(await readAssessment(firstId)).toMatchObject({outcome:'DECLINED',reason:'SIZE_LIMIT_EXCEEDED',limit:100,size_mm:120});
+
+ const removeRule=settings.getByRole('button',{name:'Удалить правило 1',exact:true});
+ await removeRule.click();
+ await settings.getByRole('button',{name:'Добавить правило',exact:true}).click();
+ await settings.getByLabel('Значение правила 1',{exact:true}).fill('18');
+ await publishIntakeService(settings,serviceName);
+ await expect(published.getByText(/Минимальный возраст: 18/)).toBeVisible();
+ await evaluate.click();
+ await expect(panel.getByText('Нужны данные',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Уточните возраст для проверки опубликованного ограничения.',{exact:true})).toBeVisible();
+ await expect(clock).toHaveCount(0);
+ expect(await readAssessment(firstId)).toMatchObject({outcome:'NEEDS_DATA',reason:'MIN_AGE_UNCONFIRMED',limit:18,occupied_minutes:null});
+
+ await removeRule.click();
+ await mode.selectOption('OWNER_DEFINED');
+ await price.selectOption('FIXED');
+ await settings.getByLabel('Цена, копейки 1',{exact:true}).fill('15000');
+ await publishIntakeService(settings,serviceName);
+ await expect(published.getByText(/Цена: Задано владельцем · 150 ₽/)).toBeVisible();
+ await evaluate.click();
+ await expect(panel.getByText('Решает мастер',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Мастер задаёт длительность следующего сеанса.',{exact:true})).toBeVisible();
+ await expect(clock).toHaveCount(0);
+ expect(await readAssessment(firstId)).toMatchObject({outcome:'NEEDS_OWNER',reason:'OWNER_DURATION',occupied_minutes:null});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+});
+
+for(const [journey,operation,description] of [
+ ['assessment-complex','late-cover-up','with an updated field'],
+ ['assessment-complex-source','complex-message','without changing fields'],
+] as const){
+test(`@narrow late cover-up moves approved minutes to the archive in the owner card ${description}`,async({page},info)=>{
+ test.setTimeout(90000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
+ for(let index=await rules.count()-1;index>=0;index--)await rules.nth(index).click();
+ await settings.getByLabel('Режим длительности 1',{exact:true}).selectOption('FIXED');
+ await settings.getByLabel('Длительность, минуты 1',{exact:true}).fill('65');
+ await publishIntakeService(settings,serviceName);
+
+ const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,journey);
+ const card=intake.getByRole('region',{name:'Черновик заявки',exact:true});
+ const panel=card.getByRole('region',{name:'Оценка заявки',exact:true});
+ const clock=panel.getByText(/Занято на следующий сеанс/);
+ const evaluate=panel.getByRole('button',{name:/^(Оценить заявку|Пересчитать оценку)$/});
+ await (await chooseWork(page,collected.message_id,'flower','forearm','8 cm','linework')).click();
+ await expect(card.getByTestId('service-request-id')).toHaveText(/^[0-9a-f-]{36}$/);
+ const requestId=(await card.getByTestId('service-request-id').textContent())!;
+ await evaluate.click();
+ await expect(clock).toContainText('65 мин');
+
+ const late=await input(operation,conversation);
+ expect([late.model_calls,late.calls,late.effects,late.status]).toEqual([1,0,0,'OWNER_HANDOFF']);
+ await refreshIntake(inbox,intake);
+ if(operation==='complex-message'){
+  await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue('8 cm');
+  const group=page.getByRole('group',{name:'Уточнение заявки',exact:true});
+  await group.getByLabel('Уточняемое сведение',{exact:true}).selectOption('complex_work');
+  await group.getByLabel('Сообщение о сложности',{exact:true}).selectOption(late.message_id);
+  await expect(group.getByRole('link',{name:'Сообщение для уточнения',exact:true})).toHaveAttribute('href',`#message-${late.message_id}`);
+  const save=group.getByRole('button',{name:'Сохранить уточнение заявки',exact:true});
+  await expect(save).toBeDisabled();
+  await group.getByRole('checkbox',{name:'Сообщение о сложности относится к выбранной заявке',exact:true}).check();
+  const patch=page.waitForRequest(request=>request.method()==='PATCH'&&new URL(request.url()).pathname.endsWith(`/service-requests/${requestId}`));
+  await save.click();
+  const body=(await patch).postDataJSON() as DraftRevisionCommand;
+  expect(body).not.toHaveProperty('field');
+  expect(body.source).toMatchObject({message_id:late.message_id,source_version:expect.stringMatching(/^[0-9a-f]{64}$/)});
+ }else{
+  await (await chooseRevision(page,late.message_id)).click();
+ }
+ await expect(card.getByTestId('service-request-id')).toHaveText(requestId);
+ await expect(card.getByTestId('service-request-revision')).toHaveText('2');
+ if(operation==='complex-message')await expect(card.getByText('Примерный размер · 8 cm · Со слов клиента',{exact:true})).toBeVisible();
+ await expect(panel.getByText(/Архивная оценка\. Для актуального результата/)).toBeVisible();
+ await expect(panel.getByText('Ранее было утверждено 65 мин.',{exact:true})).toBeVisible();
+ await expect(clock).toHaveCount(0);
+
+ await evaluate.click();
+ await expect(panel.getByText('Решает мастер',{exact:true})).toBeVisible();
+ await expect(panel.getByText(/Перекрытие старой татуировки\./)).toBeVisible();
+ await expect(panel.getByRole('link',{name:'Сообщение с уточнением',exact:true})).toHaveAttribute('href',`#message-${late.message_id}`);
+ await expect(clock).toHaveCount(0);
+ const oldDuration=panel.getByText('Ревизия 1 · ранее было утверждено 65 мин.',{exact:true});
+ await expect(oldDuration).toBeHidden();
+ await panel.getByText('Архивная оценка',{exact:true}).click();
+ await expect(oldDuration).toBeVisible();
+ await expect(clock).toHaveCount(0);
+});
+}

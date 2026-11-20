@@ -375,6 +375,78 @@ M6_REQUEST_IMPLEMENTATION_PATHS = {
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
 }
+M6_ASSESSMENT_BASE = "54350ddb3a8fc00076f7e065acb19c733e4f29a8"
+M6_ASSESSMENT_TREE = "3b993281f8864022ddba461beb94285ee145dda1"
+M6_ASSESSMENT_ASSIGNMENT = "add308854ddde3f5dd648dfd32216d4b7a0f9e8f"
+M6_ASSESSMENT_ASSIGNMENT_TREE = "5c3cabc468129ac9549688390fc84e81eb39c457"
+M6_ASSESSMENT_BRANCH = "c1/m6-1b-assessment-duration"
+M6_ASSESSMENT_DOCS = M6_REQUEST_DOCS
+M6_ASSESSMENT_MIGRATION = "migrations/versions/0026_service_assessments.py"
+M6_ASSESSMENT_IMPLEMENTATION_PATHS = {
+    "backend/src/asm/configuration/models.py",
+    "backend/src/asm/configuration/validation.py",
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/service_requests/assessment.py",
+    "backend/src/asm/service_requests/http.py",
+    "backend/src/asm/service_requests/models.py",
+    "backend/src/asm/service_requests/repository.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/src/ConfigurationPanel.test.tsx",
+    "frontend/src/ConfigurationPanel.tsx",
+    "frontend/src/IntakePanel.test.tsx",
+    "frontend/src/IntakePanel.tsx",
+    "frontend/src/configuration-api.test.ts",
+    "frontend/src/configuration-api.ts",
+    "frontend/src/intake-api.test.ts",
+    "frontend/src/intake-api.ts",
+    "frontend/src/intake-fixtures.test-helper.ts",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_service_assessment.py",
+    "tests/test_m6_service_assessments_api_postgres.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+    M6_ASSESSMENT_MIGRATION,
+}
+
 # C0's bounded M5.1A implementation assignment; not a general M5 allowance.
 M5_CONFIGURATION_BASE = "49d3e25968507ac41037f369fce5bd7080475a8f"
 M5_CONFIGURATION_TREE = "699bd90777771c5d22d37029336c3e0f8909fb5c"
@@ -1124,6 +1196,7 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    m6_assessment = value.get("branch") == M6_ASSESSMENT_BRANCH
     m6_request = value.get("branch") == M6_REQUEST_BRANCH
     m6_plan = value.get("branch") == M6_PLAN_BRANCH
     v7_fix = value.get("branch") == M5_V7_FIX_BRANCH
@@ -1133,6 +1206,8 @@ def source_tree_from_evidence(path=None):
         keys.update({"v7_fix_assignment", "v7_fix_candidate"})
     if m6_plan:
         keys.add("m6_plan_candidate")
+    if m6_assessment:
+        keys.update({"m6_assessment_assignment", "m6_assessment_candidate"})
     if m6_request:
         keys.update({"m6_request_assignment", "m6_request_candidate"})
     if intake:
@@ -1142,21 +1217,25 @@ def source_tree_from_evidence(path=None):
         keys.add("scope_amendment")
         keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
-    if m6_request:
-        require(
-            value["m6_request_assignment"] == m6_request_assignment_proof(),
-            "SOURCE_IDENTITY_M6_REQUEST_ASSIGNMENT",
+    if m6_assessment or m6_request:
+        prefix = "m6_assessment" if m6_assessment else "m6_request"
+        assignment = (
+            m6_assessment_assignment_proof() if m6_assessment else m6_request_assignment_proof()
         )
-        candidate = value["m6_request_candidate"]
+        require(
+            value[prefix + "_assignment"] == assignment,
+            f"SOURCE_IDENTITY_{prefix.upper()}_ASSIGNMENT",
+        )
+        candidate = value[prefix + "_candidate"]
         require(
             type(candidate) is dict
             and set(candidate) == {"sha", "tree", "merge_parents"}
             and type(candidate["sha"]) is str
             and re.fullmatch(r"[0-9a-f]{40}", candidate["sha"])
-            and candidate["sha"] not in (M6_REQUEST_BASE, M6_REQUEST_ASSIGNMENT, value["source"])
+            and candidate["sha"] not in (assignment["parent"], assignment["sha"], value["source"])
             and candidate["tree"] == value["tree"]
-            and candidate["merge_parents"] == [M6_REQUEST_BASE, candidate["sha"]],
-            "SOURCE_IDENTITY_M6_REQUEST_CANDIDATE",
+            and candidate["merge_parents"] == [assignment["parent"], candidate["sha"]],
+            f"SOURCE_IDENTITY_{prefix.upper()}_CANDIDATE",
         )
     if v7_fix:
         require(
@@ -1206,7 +1285,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M6_REQUEST_BASE, M6_REQUEST_TREE)
+        (M6_ASSESSMENT_BASE, M6_ASSESSMENT_TREE)
+        if m6_assessment
+        else (M6_REQUEST_BASE, M6_REQUEST_TREE)
         if m6_request
         else (M6_PLAN_BASE, M6_PLAN_TREE)
         if m6_plan
@@ -1271,7 +1352,7 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
-            or (intake or v7_fix or m6_plan or m6_request)
+            or (intake or v7_fix or m6_plan or m6_request or m6_assessment)
             and value["event"] in {"pull_request", "push"}
             or delivery
             and value["event"] in {"pull_request", "push"}
@@ -1298,7 +1379,14 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if m6_request:
+    if m6_assessment:
+        require(
+            M6_ASSESSMENT_DOCS | {M6_ASSESSMENT_MIGRATION}
+            <= set(paths)
+            <= M6_ASSESSMENT_DOCS | M6_ASSESSMENT_IMPLEMENTATION_PATHS,
+            "SOURCE_IDENTITY_WRITE_SET",
+        )
+    elif m6_request:
         require(
             M6_REQUEST_DOCS | {M6_REQUEST_MIGRATION}
             <= set(paths)
@@ -1842,43 +1930,70 @@ def m6_request_candidate(event):
     )
 
 
-def admit_m6_request_source(event, evidence):
-    require(event["attempt"] == "1", "RUN_ATTEMPT")
-    require(
-        capture(["git", "rev-parse", M6_REQUEST_BASE + "^{tree}"]) == M6_REQUEST_TREE, "BASE_TREE"
+def m6_assessment_event(event):
+    return event.get("head_ref") == M6_ASSESSMENT_BRANCH or (
+        event.get("event") == "push"
+        and event["ref"] == "refs/heads/main"
+        and commit_parents("HEAD")[:1] == [M6_ASSESSMENT_BASE]
     )
-    assignment = m6_request_assignment_proof()
+
+
+def m6_assessment_assignment_proof():
+    return {
+        "sha": M6_ASSESSMENT_ASSIGNMENT,
+        "tree": M6_ASSESSMENT_ASSIGNMENT_TREE,
+        "parent": M6_ASSESSMENT_BASE,
+        "paths": sorted(M6_ASSESSMENT_DOCS),
+    }
+
+
+def m6_assessment_candidate(event):
+    return merge_candidate(
+        event, M6_ASSESSMENT_BASE, M6_ASSESSMENT_BRANCH, M6_ASSESSMENT_ASSIGNMENT, "M6_ASSESSMENT"
+    )
+
+
+def admit_m6_slice_source(event, evidence, *, assessment):
+    require(event["attempt"] == "1", "RUN_ATTEMPT")
+    if assessment:
+        prefix, base_tree = "m6_assessment", M6_ASSESSMENT_TREE
+        migration, allowed = M6_ASSESSMENT_MIGRATION, M6_ASSESSMENT_IMPLEMENTATION_PATHS
+        assignment = m6_assessment_assignment_proof()
+        candidate = m6_assessment_candidate(event)
+    else:
+        prefix, base_tree = "m6_request", M6_REQUEST_TREE
+        migration, allowed = M6_REQUEST_MIGRATION, M6_REQUEST_IMPLEMENTATION_PATHS
+        assignment = m6_request_assignment_proof()
+        candidate = m6_request_candidate(event)
+    base, assignment_sha, docs = assignment["parent"], assignment["sha"], set(assignment["paths"])
+    require(capture(["git", "rev-parse", base + "^{tree}"]) == base_tree, "BASE_TREE")
     require(
-        capture(["git", "rev-parse", M6_REQUEST_ASSIGNMENT + "^{tree}"]) == assignment["tree"]
-        and commit_parents(M6_REQUEST_ASSIGNMENT) == [assignment["parent"]],
-        "M6_REQUEST_ASSIGNMENT_IDENTITY",
+        capture(["git", "rev-parse", assignment_sha + "^{tree}"]) == assignment["tree"]
+        and commit_parents(assignment_sha) == [base],
+        f"{prefix.upper()}_ASSIGNMENT_IDENTITY",
     )
     diff = ["git", "diff", "--no-renames", "--name-only"]
     require(
-        set(capture([*diff, M6_REQUEST_BASE, M6_REQUEST_ASSIGNMENT]).splitlines())
-        == M6_REQUEST_DOCS,
-        "M6_REQUEST_ASSIGNMENT_WRITE_SET",
+        set(capture([*diff, base, assignment_sha]).splitlines()) == docs,
+        f"{prefix.upper()}_ASSIGNMENT_WRITE_SET",
     )
-    candidate = m6_request_candidate(event)
-    implementation = set(capture([*diff, M6_REQUEST_ASSIGNMENT, candidate["sha"]]).splitlines())
+    implementation = set(capture([*diff, assignment_sha, candidate["sha"]]).splitlines())
     require(
-        M6_REQUEST_MIGRATION in implementation
-        and implementation <= M6_REQUEST_IMPLEMENTATION_PATHS,
-        "M6_REQUEST_WRITE_SET",
+        migration in implementation and implementation <= allowed, f"{prefix.upper()}_WRITE_SET"
     )
-    paths = capture([*diff, M6_REQUEST_BASE, "HEAD"]).splitlines()
-    require(set(paths) == M6_REQUEST_DOCS | implementation, "M6_REQUEST_MERGE_WRITE_SET")
+    paths = capture([*diff, base, "HEAD"]).splitlines()
+    require(set(paths) == docs | implementation, f"{prefix.upper()}_MERGE_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
-            "base": M6_REQUEST_BASE,
-            "base_tree": M6_REQUEST_TREE,
+            "base": base,
+            "base_tree": base_tree,
             "source": event["head"],
             "tree": event["tree"],
             "paths": paths,
             "result": "PASS",
-            "m6_request_assignment": assignment,
-            "m6_request_candidate": candidate,
+            prefix + "_assignment": assignment,
+            prefix + "_candidate": candidate,
         },
     )
 
@@ -2210,8 +2325,9 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
-    if m6_request_event(event):
-        admit_m6_request_source(event, evidence)
+    assessment = m6_assessment_event(event)
+    if assessment or m6_request_event(event):
+        admit_m6_slice_source(event, evidence, assessment=assessment)
         return event, manifest
     if m6_plan_event(event):
         admit_m6_plan_source(event, evidence)
@@ -2651,7 +2767,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.service_request_schema_profile()"
+        "platform.service_assessment_schema_profile()"
+        if revision == "0026"
+        else "platform.service_request_schema_profile()"
         if revision == "0025"
         else "platform.intake_v7_schema_profile()"
         if revision == "0024"
@@ -2677,6 +2795,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0025":
+        profile_pin = "98be26f6a296c95d4e9a489d0a63db6f1c0e8b36df391c6cb7ab6b32058c6bde"
+        body_pin = "b6fb012dec5fcc2e74b1ed83ff11a3c2d02ac82cdb819a7062a6d70abdbd95a0"
     if revision == "0024":
         profile_pin = "33fbfcc9e3c09021ea7bc38de857706a8f23270d7c1dcd79d55ed20f3a5b63c0"
         body_pin = "ab79bb829f4c2262557732cd4bfff38145231038c5504d0edfca58845a98ceac"
@@ -2746,14 +2867,37 @@ def stock_catalog():
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
         require(
             revision
-            in {"0013", "0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"},
+            in {
+                "0013",
+                "0017",
+                "0018",
+                "0019",
+                "0020",
+                "0021",
+                "0022",
+                "0023",
+                "0024",
+                "0025",
+                "0026",
+            },
             "CATALOG_REVISION",
         )
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision in {"0017", "0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025"}:
+        if revision in {
+            "0017",
+            "0018",
+            "0019",
+            "0020",
+            "0021",
+            "0022",
+            "0023",
+            "0024",
+            "0025",
+            "0026",
+        }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -2800,7 +2944,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.service_request_schema_profile()"
+            "platform.service_assessment_schema_profile()"
+            if revision == "0026"
+            else "platform.service_request_schema_profile()"
             if revision == "0025"
             else "platform.intake_v7_schema_profile()"
             if revision == "0024"
@@ -3215,7 +3361,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            m6_request_event(event)
+            m6_assessment_event(event)
+            or m6_request_event(event)
             or m6_plan_event(event)
             or v7_fix_event(event)
             or intake_event(event)
@@ -3245,11 +3392,12 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    m6_request = m6_request_event(event)
-    m6_plan = not m6_request and m6_plan_event(event)
-    v7_fix = not (m6_request or m6_plan) and v7_fix_event(event)
-    intake = not (m6_request or m6_plan or v7_fix) and intake_event(event)
-    intake_carrier = intake or v7_fix or m6_plan or m6_request
+    m6_assessment = m6_assessment_event(event)
+    m6_request = not m6_assessment and m6_request_event(event)
+    m6_plan = not (m6_assessment or m6_request) and m6_plan_event(event)
+    v7_fix = not (m6_assessment or m6_request or m6_plan) and v7_fix_event(event)
+    intake = not (m6_assessment or m6_request or m6_plan or v7_fix) and intake_event(event)
+    intake_carrier = intake or v7_fix or m6_plan or m6_request or m6_assessment
     delivery = not intake_carrier and delivery_event(event)
     foundation_budget = not (intake_carrier or delivery) and foundation_budget_event(event)
     portfolio = not (intake_carrier or delivery or foundation_budget) and portfolio_event(event)
@@ -3287,7 +3435,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M6_REQUEST_BASE, M6_REQUEST_TREE)
+        (M6_ASSESSMENT_BASE, M6_ASSESSMENT_TREE)
+        if m6_assessment
+        else (M6_REQUEST_BASE, M6_REQUEST_TREE)
         if m6_request
         else (M6_PLAN_BASE, M6_PLAN_TREE)
         if m6_plan
@@ -3328,6 +3478,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M6_ASSESSMENT_BRANCH
+            if m6_assessment
             else M6_REQUEST_BRANCH
             if m6_request
             else M6_PLAN_BRANCH
@@ -3355,6 +3507,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if m6_assessment:
+        source["m6_assessment_assignment"] = m6_assessment_assignment_proof()
+        source["m6_assessment_candidate"] = m6_assessment_candidate(event)
     if m6_request:
         source["m6_request_assignment"] = m6_request_assignment_proof()
         source["m6_request_candidate"] = m6_request_candidate(event)
@@ -3527,7 +3682,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             )
             if module == "preflight":
                 current_revision = (
-                    "0025"
+                    "0026"
+                    if m6_assessment
+                    else "0025"
                     if m6_request
                     else "0024"
                     if m6_plan or v7_fix

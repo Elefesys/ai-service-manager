@@ -233,6 +233,40 @@ class TenantUnitOfWork:
             },
         )
 
+    async def service_assessment_prepare(
+        self, business: UUID, conversation: UUID, request_id: UUID, expected_revision: str
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.service_assessment_prepare(:business,:conversation,:request_id,:revision)",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request_id": request_id,
+                "revision": expected_revision,
+            },
+        )
+
+    async def service_assessment_record(
+        self, business: UUID, conversation: UUID, request_id: UUID, body: dict[str, object]
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.service_assessment_record(:business,:conversation,:request_id,CAST(:body AS jsonb))",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request_id": request_id,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
+    async def service_assessment_read(
+        self, business: UUID, conversation: UUID, request_id: UUID
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.service_assessment_read(:business,:conversation,:request_id)",
+            {"business": business, "conversation": conversation, "request_id": request_id},
+        )
+
     async def configuration_owner_read(self, business: UUID) -> Any:
         return await self._configuration_execute(
             "SELECT platform.configuration_owner_read(:business)", {"business": business}

@@ -61,12 +61,12 @@ def validate_bundle(value: object) -> ValidationResult:
             duration.mode != "FIXED"
             and duration.minutes is not None
             or duration.mode != "CONFIGURED_RULE"
-            and duration.rule_note is not None
+            and (duration.rule_note is not None or duration.size_rule is not None)
             or duration.minutes is not None
             and not 1 <= duration.minutes <= 10080
         ):
             issue("INVALID_POLICY", prefix + ".duration")
-        elif duration.mode != "FIXED" or duration.minutes is None:
+        elif duration.minutes is None and duration.size_rule is None:
             issue("OWNER_HANDOFF", prefix + ".duration", True)
         if deposit.mode not in {"NONE", "FIXED_DEPOSIT", "PERCENT_DEPOSIT", "FULL_PREPAYMENT"}:
             issue("INVALID_MODE", prefix + ".deposit")
@@ -94,11 +94,13 @@ def validate_bundle(value: object) -> ValidationResult:
         if rule.service_id is not None and rule.service_id not in service_ids:
             issue("INVALID_REFERENCE", path + ".service_id")
         if (
-            rule.kind not in {"MIN_AGE", "OWNER_HANDOFF"}
+            rule.kind not in {"MIN_AGE", "OWNER_HANDOFF", "MAX_SIZE_MM"}
             or rule.kind == "MIN_AGE"
             and not (type(rule.value) is int and 1 <= rule.value <= 120)
             or rule.kind == "OWNER_HANDOFF"
             and type(rule.value) is not bool
+            or rule.kind == "MAX_SIZE_MM"
+            and not (type(rule.value) is int and 1 <= rule.value <= 1000)
         ):
             issue("INVALID_RULE", path)
     if any(

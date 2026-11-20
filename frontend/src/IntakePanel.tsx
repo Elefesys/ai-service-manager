@@ -1,7 +1,8 @@
 import {useEffect,useId,useRef,useState} from 'react';
+import type {ReactNode} from 'react';
 import {Session} from './api';
 import {IntakeError,intakeApi,labels} from './intake-api';
-import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,ServiceRequestDraft} from './intake-api';
+import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 
 export function IntakePanel({session,scope,expired,refresh=0}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number}){
  const key=scope?JSON.stringify({...scope,refresh}):'',current=useRef({key,session,epoch:0});
@@ -27,7 +28,9 @@ export function IntakePanel({session,scope,expired,refresh=0}:{session:Session|n
 }
 
 type DraftChoice={fingerprint:string;messageId:string;fields:FieldId[];confirmed:boolean};
-type RevisionChoice={fingerprint:string;field:FieldId;confirmed:boolean};
+type RevisionChoice={fingerprint:string;confirmed:boolean}&(
+ {field:FieldId}|{field:'complex_work';messageId:string}
+);
 type DraftAttempt={key:string;acceptedId?:string}&(
  {operation:'create';body:DraftCommand}|{operation:'revise';target:string;body:DraftRevisionCommand}
 );
@@ -65,7 +68,7 @@ function factStatus(fact:Fact){
  return fact.status==='observed'?'Наблюдение изображения':'Со слов клиента';
 }
 
-function DraftCard({draft}:{draft:ServiceRequestDraft}){
+function DraftCard({draft,children}:{draft:ServiceRequestDraft;children:ReactNode}){
  return <section aria-label="Черновик заявки">
   <h4>Черновик заявки</h4>
   <article>
@@ -86,6 +89,111 @@ function DraftCard({draft}:{draft:ServiceRequestDraft}){
    {draft.conflicts.length>0&&<p>Противоречия: {draft.conflicts.map(field=>labels[field]).join(', ')}</p>}
    {draft.question&&<p>{draft.question}</p>}
   </article>
+  {children}
+ </section>;
+}
+
+const assessmentLabels:Record<ServiceAssessment['outcome'],string>={
+ FEASIBLE:'Выполнимо',NEEDS_DATA:'Нужны данные',NEEDS_OWNER:'Решает мастер',DECLINED:'Отказ',
+};
+
+function assessmentReason(value:ServiceAssessment):string{
+ const field=value.field?` «${labels[value.field]}»`:'';
+ switch(value.reason){
+  case 'FIXED_DURATION':return 'Фиксированная длительность из опубликованных настроек.';
+  case 'SIZE_DURATION_RULE':return 'Опубликованное правило длительности по размеру.';
+  case 'MISSING_FACT':return value.field==='approximate_size'?'Какой примерный размер вы представляете, в сантиметрах?':`Уточните сведение${field}.`;
+  case 'CONFLICTING_FACT':return `Уточните противоречивое сведение${field}.`;
+  case 'SOURCE_CHANGED':return `Проверьте текущий источник сведения${field} и обновите заявку.`;
+  case 'SIZE_NEEDS_CONFIRMATION':return 'Подтвердите размер в сантиметрах или миллиметрах.';
+  case 'MIN_AGE_UNCONFIRMED':return 'Уточните возраст для проверки опубликованного ограничения.';
+  case 'SIZE_LIMIT_EXCEEDED':return value.size_mm!==null&&value.limit!==null
+   ?`Размер ${value.size_mm} мм превышает опубликованный предел ${value.limit} мм.`:'Размер превышает опубликованный предел.';
+  case 'OWNER_HANDOFF':return 'Мастер проверяет возможность выполнения этой работы.';
+  case 'OWNER_DURATION':return 'Мастер задаёт длительность следующего сеанса.';
+  case 'SERVICE_UNAVAILABLE':return 'Опубликованная услуга для этой заявки недоступна.';
+  case 'DURATION_UNPUBLISHED':return 'Опубликуйте настройку длительности или передайте выбор мастеру.';
+ }
+}
+
+function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;locked:boolean;expired:()=>void}){
+ const [value,setValue]=useState<ServiceAssessment|null>(null);
+ const [busy,setBusy]=useState(true);
+ const [error,setError]=useState('');
+ const [retry,setRetry]=useState(false);
+ const [blocked,setBlocked]=useState(false);
+ const active=useRef<AbortController|null>(null);
+
+ async function load(evaluate:boolean){
+  if(active.current)return;
+  const controller=new AbortController(),{signal}=controller;
+  active.current=controller;
+  setBusy(true);setError('');setRetry(false);
+  try{
+   const result=evaluate
+    ?await intakeApi.assess(scope,draft.request_id,draft.revision,csrf,signal)
+    :await intakeApi.assessment(scope,draft.request_id,signal);
+   if(signal.aborted)return;
+   setValue(result);setBlocked(false);
+  }catch(failure){
+   if(signal.aborted)return;
+   setValue(previous=>previous?{...previous,current:false}:previous);
+   if(failure instanceof IntakeError&&[401,403,404].includes(failure.status)){
+    setValue(null);setBlocked(true);setError('Оценка заявки недоступна.');
+    if(failure.status===401)expired();
+   }else if(failure instanceof IntakeError&&failure.code==='STALE_STATE'){
+    setBlocked(true);setError('Заявка изменилась. Обновите карточку заявки и пересчитайте оценку.');
+   }else{
+    setRetry(evaluate);setError(evaluate?'Результат оценки неизвестен. Повторите оценку заявки.':'Не удалось получить оценку заявки.');
+   }
+  }finally{
+   if(active.current===controller){active.current=null;if(!signal.aborted)setBusy(false);}
+  }
+ }
+
+ useEffect(()=>{
+  void load(false);
+  return ()=>{active.current?.abort();active.current=null;};
+ },[draft]);
+
+ const current=!!value&&value.current&&value.request_revision===draft.revision&&!busy
+  &&(activation===undefined||BigInt(activation)<=BigInt(value.activation_version));
+ return <section aria-label="Оценка заявки" style={{overflowWrap:'anywhere'}}>
+  <h4>Оценка заявки</h4>
+  {error&&<p role="alert">{error}</p>}
+  {value&&<article>
+   <p>{current?assessmentLabels[value.outcome]:busy?'Проверяем актуальность оценки':'Архивная оценка. Для актуального результата выполните пересчёт.'}</p>
+   {current&&<p>{assessmentReason(value)}</p>}
+   {current&&value.occupied_minutes!==null&&<>
+    <p>Занято на следующий сеанс <strong>{value.occupied_minutes} мин</strong>.</p>
+    <p>Занятость включает подготовку внутри сеанса. Внешние буферы учитываются отдельно.</p>
+   </>}
+   {!current&&!busy&&value.occupied_minutes!==null&&<p>Ранее было утверждено {value.occupied_minutes} мин.</p>}
+   {current&&value.complex_work&&<p>
+    {value.complex_work.category==='COVER_UP'?'Перекрытие старой татуировки.':'Работа требует индивидуальной оценки.'}{' '}
+    <a href={`#message-${value.complex_work.source.message_id}`}>Сообщение с уточнением</a> · версия <code>{value.complex_work.source.source_version}</code>
+    {!value.complex_work.source_current&&' · источник изменился, проверьте уточнение.'}
+   </p>}
+   {value.release_id&&<p>Публикация <code>{value.release_id}</code> · версия активации {value.activation_version}</p>}
+   {current&&value.duration_policy?.size_rule&&<p>Порог опубликованного правила {value.duration_policy.size_rule.threshold_mm} мм.</p>}
+   {current&&value.size_mm!==null&&value.reason!=='SIZE_LIMIT_EXCEEDED'&&<p>Размер для оценки {value.size_mm} мм.</p>}
+   {value.rule_id&&<p>Правило <code>{value.rule_id}</code></p>}
+   {value.evidence.length>0&&<ul>
+    {value.evidence.map(fact=><li key={fact.field}>
+     {labels[fact.field]} · {fact.value} · {factStatus(fact)}{fact.conflict?' · есть противоречие':''} · <a href={`#message-${fact.source.message_id}`}>Источник оценки для поля {labels[fact.field]}</a> · версия <code>{fact.source.source_version}</code>
+     {fact.source.analysis_id&&<> · анализ <code>{fact.source.analysis_id}</code> · SHA-256 <code>{fact.source.analysis_sha256}</code></>}
+    </li>)}
+   </ul>}
+   {value.archived_duration&&<details>
+    <summary>Архивная оценка</summary>
+    <p>Ревизия {value.archived_duration.request_revision} · ранее было утверждено {value.archived_duration.occupied_minutes} мин.</p>
+    {value.archived_duration.release_id&&<p>Публикация <code>{value.archived_duration.release_id}</code> · версия активации {value.archived_duration.activation_version}</p>}
+   </details>}
+  </article>}
+  <div className="control-actions">
+   <button type="button" disabled={busy||locked||blocked} onClick={()=>void load(true)}>{retry?'Повторить оценку заявки':value?'Пересчитать оценку':'Оценить заявку'}</button>
+   <button type="button" className="secondary" disabled={busy||locked} onClick={()=>void load(false)}>Обновить оценку заявки</button>
+  </div>
  </section>;
 }
 
@@ -97,6 +205,7 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
  const sourceId=useId();
  const cardId=useId();
  const revisionFieldId=useId();
+ const revisionMessageId=useId();
  const [draft,setDraft]=useState<ServiceRequestDraft|null>(null);
  const [cards,setCards]=useState<DraftListItem[]>([]);
  const [choice,setChoice]=useState<DraftChoice|null>(null);
@@ -191,13 +300,17 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
  const source=beginnings.find(item=>item.message_id===selected?.messageId);
  const eligible=source&&data?data.facts.filter(fact=>data.sources.findIndex(item=>
   item.message_id===fact.source.message_id&&item.source_version===fact.source.source_version)>=sourceIndex):[];
- const revisionFacts=canChoose&&data&&draft?.service_id===data.service_id&&draft.template_revision===data.template_revision
-  ?data.facts.filter(fact=>!fact.conflict&&!data.conflicts.includes(fact.field)
-   &&!cards.some(card=>card.request_id!==draft.request_id&&card.intent_source.message_id===fact.source.message_id)
-   &&data.sources.some(item=>item.message_id===fact.source.message_id&&item.source_version===fact.source.source_version)):[];
+ const canRevise=canChoose&&data&&draft?.service_id===data.service_id&&draft.template_revision===data.template_revision;
+ const revisionSources=canRevise?data.sources.filter(item=>!cards.some(card=>
+  card.request_id!==draft.request_id&&card.intent_source.message_id===item.message_id)):[];
+ const revisionFacts=canRevise?data.facts.filter(fact=>!fact.conflict&&!data.conflicts.includes(fact.field)
+  &&revisionSources.some(item=>item.message_id===fact.source.message_id&&item.source_version===fact.source.source_version)):[];
+ const hasComplexity=data?.category==='COVER_UP'||data?.category==='OTHER_COMPLEX';
  const revision=revisionChoice?.fingerprint===data?.fingerprint?revisionChoice:null;
  const revisionFact=revisionFacts.find(fact=>fact.field===revision?.field);
- const revisionSource=data?.sources.find(item=>item.message_id===revisionFact?.source.message_id&&item.source_version===revisionFact?.source.source_version);
+ const revisionSource=revision?.field==='complex_work'
+  ?revisionSources.find(item=>item.message_id===revision.messageId)
+  :revisionSources.find(item=>item.message_id===revisionFact?.source.message_id&&item.source_version===revisionFact?.source.source_version);
  const waiting=pending.current;
  const locked=busy||!!waiting;
 
@@ -215,10 +328,11 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
  }
 
  function startRevision(){
-  if(!data||!draft||!revisionFact||!revisionSource||!revision?.confirmed||locked||revisionNeedsRead||pending.current)return;
+  if(!data||!draft||!revisionSource||!revision?.confirmed||locked||revisionNeedsRead||pending.current)return;
   const attempt:DraftAttempt={operation:'revise',target:draft.request_id,key:crypto.randomUUID(),body:{
    expected_revision:draft.revision,expected_version:data.version,expected_fingerprint:data.fingerprint,
-   field:revisionFact.field,source:{message_id:revisionSource.message_id,source_version:revisionSource.source_version},selection:'ONE_WORK',
+   ...(revisionFact?{field:revisionFact.field}:{}),
+   source:{message_id:revisionSource.message_id,source_version:revisionSource.source_version},selection:'ONE_WORK',
   }};
   pending.current=attempt;
   void open(draft.request_id,attempt);
@@ -237,27 +351,42 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
     </option>)}
    </select>
   </section>}
-  {draft&&<DraftCard draft={draft}/>}
+  {draft&&<DraftCard draft={draft}>
+   <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired}/>
+  </DraftCard>}
   {error&&<p role="alert">{error}</p>}
   {waiting&&!busy&&<button type="button" onClick={()=>void open(desiredCard.current,waiting)}>
    {waiting.acceptedId?'Открыть сохранённую заявку':waiting.operation==='create'?'Повторить создание заявки':'Повторить изменение заявки'}
   </button>}
   {!locked&&(draft||error)&&<button type="button" className="secondary" onClick={()=>void open(desiredCard.current)}>Обновить карточку заявки</button>}
-  {revisionFacts.length>0&&data&&draft&&<fieldset aria-label="Уточнение заявки" disabled={locked||revisionNeedsRead} style={{minWidth:0}}>
+  {(revisionFacts.length>0||hasComplexity&&revisionSources.length>0)&&data&&draft&&<fieldset aria-label="Уточнение заявки" disabled={locked||revisionNeedsRead} style={{minWidth:0}}>
    <label htmlFor={revisionFieldId}>Уточняемое сведение</label>
-   <select id={revisionFieldId} value={revisionFact?.field??''} onChange={event=>setRevisionChoice({
-    fingerprint:data.fingerprint,field:event.target.value as FieldId,confirmed:false,
-   })}>
+   <select id={revisionFieldId} value={revision?.field??''} onChange={event=>{
+    const field=event.target.value;
+    const next={fingerprint:data.fingerprint,confirmed:false};
+    setRevisionChoice(field==='complex_work'?{...next,field,messageId:''}:
+     field?{...next,field:field as FieldId}:null);
+   }}>
     <option value="">Выберите одно сведение</option>
     {revisionFacts.map(fact=><option key={fact.field} value={fact.field}>{labels[fact.field]}: {fact.value}</option>)}
+    <option value="complex_work">Сообщение о сложности</option>
    </select>
+   {revision?.field==='complex_work'&&<>
+    <label htmlFor={revisionMessageId}>Сообщение о сложности</label>
+    <select id={revisionMessageId} value={revision.messageId} style={{maxWidth:'100%'}} onChange={event=>setRevisionChoice({
+     ...revision,messageId:event.target.value,confirmed:false,
+    })}>
+     <option value="">Выберите сообщение о сложности</option>
+     {revisionSources.map(item=><option key={item.message_id} value={item.message_id}>{sourceLabel(item)}</option>)}
+    </select>
+   </>}
    {revisionSource&&revision&&<>
     <p style={{overflowWrap:'anywhere'}}>
      <a href={`#message-${revisionSource.message_id}`}>Сообщение для уточнения</a> · {sourceLabel(revisionSource)} · версия <code>{revisionSource.source_version}</code>
     </p>
     <label style={{display:'block'}}>
      <input type="checkbox" checked={revision.confirmed} onChange={event=>setRevisionChoice({...revision,confirmed:event.target.checked})}/>
-     Сведение из этого сообщения относится к выбранной заявке
+     {revision.field==='complex_work'?'Сообщение о сложности относится к выбранной заявке':'Сведение из этого сообщения относится к выбранной заявке'}
     </label>
    </>}
    <button type="button" onClick={startRevision} disabled={!revisionSource||!revision?.confirmed}>Сохранить уточнение заявки</button>

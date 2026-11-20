@@ -7,6 +7,18 @@ describe('configuration owner wire',()=>{
     expect(parseBundle(bundle())).toEqual(bundle());expect(parseDraft(draft())).toEqual(draft());expect(parseActive(active())).toEqual(active());expect(parsePreview(preview())).toEqual(preview());expect(parseCommand(command())).toEqual(command());expect(parseActive(active(bundle(),'1'))).toEqual(active(bundle(),'1'));
   });
   it('keeps shape-valid invalid modes for server validation, without changing them',()=>{const b=bundle();b.services[0].price.mode='OTHER';expect(parseBundle(b).services[0].price.mode).toBe('OTHER');});
+  it('keeps legacy duration notes and accepts only the bounded optional size rule shape',()=>{
+    const base=bundle(),rule={threshold_mm:80,at_or_below_minutes:55,above_minutes:95};
+    base.services[0].duration={mode:'CONFIGURED_RULE',minutes:null,rule_note:'Заметка мастера'};
+    expect(parseBundle(base).services[0].duration).toEqual(base.services[0].duration);
+    base.services[0].duration.size_rule=rule;
+    expect(parseBundle(base).services[0].duration.size_rule).toEqual(rule);
+    expect(()=>parseBundle({...base,services:[{...base.services[0],duration:{...base.services[0].duration,mode:'FIXED'}}]})).toThrow(ConfigurationError);
+    for(const size_rule of [{...rule,threshold_mm:0},{...rule,threshold_mm:1000},{...rule,above_minutes:10081},{...rule,at_or_below_minutes:1.5}]){
+      base.services[0].duration.size_rule=size_rule;
+      expect(()=>parseBundle(base)).toThrow(ConfigurationError);
+    }
+  });
   it.each([
     ()=>({...draft(),extra:'private'}),()=>({...draft(),draft_version:1}),()=>({...draft(),draft_version:'01'}),()=>({...draft(),activation_version:'9223372036854775808'}),()=>({...draft(),activation_version:'1'}),()=>({...draft(),bundle:null}),()=>({...draft(),business_id:'forged'}),()=>({...draft(),schema_version:true}),
   ])('rejects malformed or incoherent draft %#',factory=>expect(()=>parseDraft(factory())).toThrow('INVALID_RESPONSE'));

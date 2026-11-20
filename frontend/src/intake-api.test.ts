@@ -1,7 +1,7 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
-import {parseIntake,parseCases,parseDraft,intakeApi,IntakeError} from './intake-api';
+import {parseIntake,parseCases,parseDraft,parseAssessment,intakeApi,IntakeError} from './intake-api';
 import type {DraftCommand,DraftRevisionCommand} from './intake-api';
-import {draft,intake,scope,example,listItem,w,b,c} from './intake-fixtures.test-helper';
+import {assessment,draft,intake,scope,example,listItem,w,b,c} from './intake-fixtures.test-helper';
 afterEach(()=>vi.unstubAllGlobals());
 describe('closed intake projections',()=>{
  it('rejects another Client, Workspace and extra owner-only data',()=>{
@@ -21,6 +21,41 @@ describe('closed intake projections',()=>{
   const value=intake(),fact=value.facts[0],body={expected_version:value.version,expected_fingerprint:value.fingerprint,field:fact.field,value:fact.value,source:fact.source};
   await intakeApi.command(scope,'confirm',body,'one-key','one-csrf');const [url,init]=fetch.mock.calls[0];expect(url).toContain(`/intake/conversations/${c}/confirm`);expect(init.credentials).toBe('include');expect(init.headers['X-CSRF-Token']).toBe('one-csrf');expect(init.headers['Idempotency-Key']).toBe('one-key');expect(JSON.parse(init.body)).toEqual(body);
  });
+});
+
+it('reads and evaluates just the selected request revision on the assessment endpoint',async()=>{
+ const value=assessment(),result=(body:unknown)=>new Response(JSON.stringify(body),{status:200});
+ const fetch=vi.fn().mockResolvedValueOnce(result(null)).mockResolvedValueOnce(result(value));
+ vi.stubGlobal('fetch',fetch);
+ expect(await intakeApi.assessment(scope,value.request_id)).toBeNull();
+ expect(await intakeApi.assess(scope,value.request_id,value.request_revision,'csrf')).toEqual(value);
+ const url=`/api/v1/workspaces/${w}/businesses/${b}/intake/conversations/${c}/service-requests/${value.request_id}/assessment`;
+ expect(fetch.mock.calls.map(call=>call[0])).toEqual([url,url]);
+ expect(fetch.mock.calls[0][1]).toMatchObject({credentials:'include',cache:'no-store'});
+ expect(fetch.mock.calls[0][1].method).toBeUndefined();
+ const write=fetch.mock.calls[1][1];
+ expect(write).toMatchObject({method:'POST',credentials:'include',headers:{'X-CSRF-Token':'csrf','Content-Type':'application/json'}});
+ expect(write.headers['Idempotency-Key']).toBeUndefined();
+ expect(JSON.parse(write.body)).toEqual({expected_revision:value.request_revision});
+ expect(()=>parseAssessment(value,c)).toThrow(IntakeError);
+ expect(()=>parseAssessment(value,value.request_id,'2')).toThrow(IntakeError);
+ expect(()=>parseAssessment({...value,outcome:'NEEDS_DATA'},value.request_id)).toThrow(IntakeError);
+});
+
+it('accepts a preceding duration in the same request revision',()=>{
+ const value=assessment();
+ const archive={
+  assessment_id:'018f0000-0000-7000-8000-000000000015',request_revision:value.request_revision,
+  release_id:value.release_id,activation_version:value.activation_version,occupied_minutes:65,
+ };
+ const recalculated={
+  ...value,activation_version:'2',occupied_minutes:55,duration_policy:{mode:'FIXED',minutes:55,rule_note:null},
+  archived_duration:archive,
+ };
+ expect(parseAssessment(recalculated,value.request_id,value.request_revision)).toEqual(recalculated);
+ for(const invalid of [{...archive,assessment_id:value.assessment_id},{...archive,request_revision:'2'}]){
+  expect(()=>parseAssessment({...recalculated,archived_duration:invalid},value.request_id)).toThrow(IntakeError);
+ }
 });
 
 describe('scoped draft requests',()=>{

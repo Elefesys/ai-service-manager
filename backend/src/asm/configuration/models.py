@@ -37,6 +37,8 @@ Identifier = Annotated[
 Number = Annotated[int, Field(ge=0, le=100000000000)]
 Mode = Annotated[Nonblank, Field(max_length=32)]
 Note = Annotated[Text, Field(max_length=160)]
+OccupiedMinutes = Annotated[int, Field(ge=1, le=10080)]
+SizeMillimetres = Annotated[int, Field(ge=1, le=1000)]
 
 
 class ConfigurationModel(BaseModel):
@@ -66,10 +68,17 @@ class PricePolicy(ConfigurationModel):
     formula_note: Note | None
 
 
+class SizeDurationRule(ConfigurationModel):
+    threshold_mm: Annotated[int, Field(ge=1, le=999)]
+    at_or_below_minutes: OccupiedMinutes
+    above_minutes: OccupiedMinutes
+
+
 class DurationPolicy(ConfigurationModel):
     mode: Mode
     minutes: Number | None
     rule_note: Note | None
+    size_rule: SizeDurationRule | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class DepositPolicy(ConfigurationModel):
