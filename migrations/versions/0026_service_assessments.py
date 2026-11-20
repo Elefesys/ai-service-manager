@@ -195,9 +195,9 @@ FUNCTIONS = {
             'release_id',a.release_id,'activation_version',a.activation_version::text,
             'occupied_minutes',a.occupied_minutes)
           FROM app.service_assessments a
-          WHERE p_assessment.complex_work IS NOT NULL
-            AND (a.workspace_id,a.request_id)=(p_assessment.workspace_id,p_assessment.request_id)
-            AND a.request_revision<p_assessment.request_revision AND a.outcome='FEASIBLE'
+          WHERE (a.workspace_id,a.request_id)=(p_assessment.workspace_id,p_assessment.request_id)
+            AND (a.created_at,a.id)<(p_assessment.created_at,p_assessment.id)
+            AND a.outcome='FEASIBLE'
           ORDER BY a.created_at DESC,a.id DESC LIMIT 1))
     $$""",
     "platform.service_assessment_prepare(uuid,uuid,uuid,text)": r"""CREATE FUNCTION platform.service_assessment_prepare(
@@ -1368,7 +1368,7 @@ PROFILE = r"""CREATE FUNCTION platform.service_assessment_schema_profile() RETUR
 ('platform.service_assessment_prepare(uuid,uuid,uuid,text)','f1093e5b02baef993686df197d29100c6d0a36093a2897c3f204d9da45a81f32','plpgsql',true,'v',true),
 ('platform.service_assessment_read(uuid,uuid,uuid)','044364ffbd44f3c2b742dfed17186d66cdb5f9b998bad88a1fe04f69a9050f37','plpgsql',true,'v',true),
 ('platform.service_assessment_record(uuid,uuid,uuid,jsonb)','1dea30e785de3c9ab6218149b9aeb04a0cb81409fdd41d2e6268f1844df0c29d','plpgsql',true,'v',true),
-('platform.service_assessment_result(app.service_assessments,boolean)','9e975a7c18c74fd7f8869688bf531eaf18078c3660381c60696f0ed07f1337d9','sql',false,'s',false),
+('platform.service_assessment_result(app.service_assessments,boolean)','3497b9c9d3d63bcd3362a523550479c28303c4b1124158e1f608cbeb6a9d3985','sql',false,'s',false),
 ('platform.service_assessment_scope(uuid,uuid,uuid)','b72a864f00155d155619709b948da072b15f72902c4c899c9229043ddbffba16','plpgsql',true,'v',false),
 ('platform.service_request_command(app.conversations,text,text,uuid,jsonb)','0888dee140c0e7f35cf2a95a15709a9f040ce9447ca2f402be1ffa340858623f','plpgsql',true,'v',false),
 ('platform.service_request_complex_work(app.conversations,uuid,text,jsonb)','9a9db2ad05f6a6001fd822bfff5360ed0843e87f5ab49e40b7559a6fdea023db','plpgsql',true,'s',false),

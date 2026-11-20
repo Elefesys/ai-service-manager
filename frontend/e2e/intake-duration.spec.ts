@@ -449,7 +449,8 @@ test('@narrow assesses the selected request against published duration and size 
  await publishIntakeService(settings,serviceName);
  await expect(published.getByText(ruleText)).toBeVisible();
  await refresh.click();
- await expect(panel.getByText(/Архивная оценка/)).toBeVisible();
+ const staleAssessment=panel.getByText('Архивная оценка. Для актуального результата выполните пересчёт.',{exact:true});
+ await expect(staleAssessment).toBeVisible();
  await expect(clock).toHaveCount(0);
  await expect(panel.getByText(fixed.release_id!,{exact:true})).toBeVisible();
  expect(await readAssessment(firstId)).toMatchObject({assessment_id:fixed.assessment_id,release_id:fixed.release_id,current:false});
@@ -457,7 +458,27 @@ test('@narrow assesses the selected request against published duration and size 
  await expect(clock).toContainText('55 мин');
  await expect(panel.getByText('Порог опубликованного правила 80 мм.',{exact:true})).toBeVisible();
  await expect(panel.getByRole('link',{name:'Источник оценки для поля Примерный размер',exact:true})).toHaveAttribute('href',`#message-${collected.message_id}`);
- expect(await readAssessment(firstId)).toMatchObject({outcome:'FEASIBLE',reason:'SIZE_DURATION_RULE',size_mm:80,occupied_minutes:55});
+ const configured=await readAssessment(firstId);
+ expect(configured).toMatchObject({
+  request_revision:fixed.request_revision,current:true,outcome:'FEASIBLE',reason:'SIZE_DURATION_RULE',size_mm:80,occupied_minutes:55,
+  archived_duration:{
+   assessment_id:fixed.assessment_id,request_revision:fixed.request_revision,
+   release_id:fixed.release_id,activation_version:fixed.activation_version,occupied_minutes:65,
+  },
+ });
+ expect(configured.assessment_id).not.toBe(fixed.assessment_id);
+ const archive=panel.getByText('Архивная оценка',{exact:true});
+ const oldDuration=panel.getByText('Ревизия 1 · ранее было утверждено 65 мин.',{exact:true});
+ await expect(archive).toBeVisible();
+ await expect(oldDuration).toBeHidden();
+ await archive.click();
+ await expect(oldDuration).toBeVisible();
+ await expect(clock).toContainText('55 мин');
+ await refresh.click();
+ await expect(refresh).toBeEnabled();
+ await expect(oldDuration).toBeVisible();
+ await expect(clock).toContainText('55 мин');
+ expect(await readAssessment(firstId)).toEqual(configured);
 
  const second=await input('assess-second',conversation);
  expect([second.model_calls,second.calls,second.effects,second.status]).toEqual([1,1,1,'CLARIFY']);
@@ -482,7 +503,7 @@ test('@narrow assesses the selected request against published duration and size 
  await expect(card.getByTestId('service-request-id')).toHaveText(firstId);
  await (await chooseRevision(page,late.message_id)).click();
  await expect(card.getByTestId('service-request-revision')).toHaveText('2');
- await expect(panel.getByText(/Архивная оценка/)).toBeVisible();
+ await expect(staleAssessment).toBeVisible();
  await expect(clock).toHaveCount(0);
  await evaluate.click();
  await expect(clock).toContainText('95 мин');

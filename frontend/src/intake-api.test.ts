@@ -42,6 +42,22 @@ it('reads and evaluates just the selected request revision on the assessment end
  expect(()=>parseAssessment({...value,outcome:'NEEDS_DATA'},value.request_id)).toThrow(IntakeError);
 });
 
+it('accepts a preceding duration in the same request revision',()=>{
+ const value=assessment();
+ const archive={
+  assessment_id:'018f0000-0000-7000-8000-000000000015',request_revision:value.request_revision,
+  release_id:value.release_id,activation_version:value.activation_version,occupied_minutes:65,
+ };
+ const recalculated={
+  ...value,activation_version:'2',occupied_minutes:55,duration_policy:{mode:'FIXED',minutes:55,rule_note:null},
+  archived_duration:archive,
+ };
+ expect(parseAssessment(recalculated,value.request_id,value.request_revision)).toEqual(recalculated);
+ for(const invalid of [{...archive,assessment_id:value.assessment_id},{...archive,request_revision:'2'}]){
+  expect(()=>parseAssessment({...recalculated,archived_duration:invalid},value.request_id)).toThrow(IntakeError);
+ }
+});
+
 describe('scoped draft requests',()=>{
  it('requires the requested ID and exact conversation scope for a card',()=>{
   const value=draft();

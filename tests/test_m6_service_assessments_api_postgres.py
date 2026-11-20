@@ -8,8 +8,11 @@ from m5_intake_fixtures import intake_bundle
 from m5_knowledge_search_fixtures import ControlledEmbeddings, owner_unit
 from test_auth_postgres import auth as auth
 from test_auth_postgres import headers, login
+from test_m2_1_postgres import query
 from test_m3_1_native_context_postgres import claim_job, scalar
+from test_m3_1_provenance_postgres import process, raw
 from test_m4_delivery_postgres import run_turn
+from test_m4_runtime_postgres import COUNTER
 from test_m5_intake_postgres import application, next_turn, summary
 from test_m5_intake_v7_integration_postgres import compose
 from test_m5_portfolio_runtime_postgres import analyse, source_image
@@ -70,6 +73,94 @@ async def request_assessment(auth, url, mutation, revision="1"):
     assert response.status_code == 200, response.text
     assert response.headers["Cache-Control"] == "no-store"
     return response.json()
+
+
+def archived_duration(assessment):
+    return {
+        key: assessment[key]
+        for key in (
+            "assessment_id",
+            "request_revision",
+            "occupied_minutes",
+            "release_id",
+            "activation_version",
+        )
+    }
+
+
+@pytest.mark.parametrize("change", ["RULE", "EDIT", "DELETE"])
+async def test_assessment_owner_api_keeps_previous_duration_after_recalculation(
+    assessment_pg, auth, change
+):
+    h = assessment_pg
+    fixed = await publish(h, {"mode": "FIXED", "minutes": 65, "rule_note": None})
+    cid, _, _, _, _ = await application(
+        h,
+        {"idea": "flower", "placement": "forearm", "approximate_size": "8 cm", "style": "linework"},
+        telegram=True,
+    )
+    signed_in = await login(auth)
+    assert signed_in.status_code == 200
+    mutation = headers(auth.client, signed_in.json()["csrf_token"])
+    request_id = await create_draft(auth, cid, mutation, await summary(h, cid))
+    endpoint = f"{route(cid)}/{request_id}/assessment"
+    original = await request_assessment(auth, endpoint, mutation)
+    assert (original["current"], original["outcome"], original["occupied_minutes"]) == (
+        True,
+        "FEASIBLE",
+        65,
+    )
+    assert original["release_id"] == fixed["release_id"]
+    assert original.get("archived_duration") is None
+    assert (await auth.client.get(endpoint)).json() == original
+
+    if change == "RULE":
+        published = await publish(
+            h,
+            {
+                "mode": "CONFIGURED_RULE",
+                "minutes": None,
+                "rule_note": None,
+                "size_rule": SIZE_RULE | {"at_or_below_minutes": 55},
+            },
+        )
+        expected = ("FEASIBLE", "SIZE_DURATION_RULE", 55, published["release_id"])
+    else:
+        source = (
+            await query(
+                h,
+                "SELECT provider_message_id,provider_chat_id FROM app.messages WHERE id=:id",
+                id=UUID(original["evidence"][0]["source"]["message_id"]),
+            )
+        )[0]
+        _, _, changed = await process(
+            h,
+            raw(
+                900000 + next(COUNTER),
+                int(source["provider_message_id"]),
+                kind=change,
+                value="Synthetic corrected size 12 cm",
+                chat=source["provider_chat_id"],
+                sender=source["provider_chat_id"],
+                date=40,
+            ),
+        )
+        assert changed.code == "MATERIAL_PROCESSED"
+        expected = ("NEEDS_DATA", "SOURCE_CHANGED", None, fixed["release_id"])
+
+    assert (await auth.client.get(endpoint)).json() == original | {"current": False}
+    current = await request_assessment(auth, endpoint, mutation)
+    assert (
+        current["outcome"],
+        current["reason"],
+        current["occupied_minutes"],
+        current["release_id"],
+    ) == expected
+    assert current["current"] is True and current["request_revision"] == "1"
+    assert current["assessment_id"] != original["assessment_id"]
+    assert current.get("archived_duration") == archived_duration(original)
+    assert await request_assessment(auth, endpoint, mutation) == current
+    assert (await auth.client.get(endpoint)).json() == current
 
 
 @pytest.mark.parametrize(
@@ -358,6 +449,7 @@ async def test_assessment_owner_api_isolates_work_and_refreshes_revision_and_rel
         fixed["release_id"],
     )
     assert left["duration_policy"] == {"mode": "FIXED", "minutes": 65, "rule_note": None}
+    assert left.get("archived_duration") is None
     assert (await auth.client.get(endpoint)).json() == left
     assert (
         await auth.client.get(f"{route(cid, business=BA2)}/{first_id}/assessment")
@@ -375,6 +467,7 @@ async def test_assessment_owner_api_isolates_work_and_refreshes_revision_and_rel
         configured["release_id"],
     )
     assert at_boundary["duration_policy"]["size_rule"] == SIZE_RULE
+    assert at_boundary.get("archived_duration") == archived_duration(left)
     size_source = next(
         f["source"] for f in at_boundary["evidence"] if f["field"] == "approximate_size"
     )
@@ -387,6 +480,7 @@ async def test_assessment_owner_api_isolates_work_and_refreshes_revision_and_rel
     second = await request_assessment(auth, f"{route(cid)}/{second_id}/assessment", mutation)
     assert second_id != first_id and second["outcome"] == "NEEDS_DATA"
     assert (second["field"], second["occupied_minutes"]) == ("approximate_size", None)
+    assert second.get("archived_duration") is None
     assert {fact["value"] for fact in second["evidence"]} == {"bird", "shoulder", "linework"}
     assert all(
         fact["source"]["message_id"] != size_source["message_id"] for fact in second["evidence"]
@@ -415,6 +509,7 @@ async def test_assessment_owner_api_isolates_work_and_refreshes_revision_and_rel
         above_boundary["request_revision"] == "2"
         and above_boundary["assessment_id"] != at_boundary["assessment_id"]
     )
+    assert above_boundary.get("archived_duration") == archived_duration(at_boundary)
     assert (await auth.client.get(f"{route(cid)}/{second_id}/assessment")).json() == second
     assert (
         await scalar(

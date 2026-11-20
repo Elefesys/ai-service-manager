@@ -162,8 +162,8 @@ export function parseAssessment(value:unknown,requestId:string,expectedRevision?
  }
  if(v.archived_duration!==undefined){
   const archive=object(v.archived_duration,['assessment_id','request_revision','release_id','activation_version','occupied_minutes']);
-  if(!v.complex_work||!uuid(archive.assessment_id)||archive.assessment_id===v.assessment_id
-    ||!decimal(archive.request_revision,false)||BigInt(archive.request_revision as string)>=BigInt(v.request_revision as string)
+  if(!uuid(archive.assessment_id)||archive.assessment_id===v.assessment_id
+    ||!decimal(archive.request_revision,false)||BigInt(archive.request_revision as string)>BigInt(v.request_revision as string)
     ||!nullable(archive.release_id,uuid)||!decimal(archive.activation_version)||!positiveWithin(archive.occupied_minutes,10080))invalid();
  }
  return v as ServiceAssessment;
