@@ -439,6 +439,7 @@ M6_ASSESSMENT_IMPLEMENTATION_PATHS = {
     "tests/test_m6_service_assessments_postgres.py",
     "tests/test_m6_service_requests_postgres.py",
     "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
     "tests/test_telegram_egress.py",
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
