@@ -48,9 +48,7 @@ async def assert_current_schema(c):
         ).all()
     )
     full, nonfunction = (await c.execute(text(_catalog["CATALOG_SQL"]))).one()
-    profile = (
-        await c.execute(text("SELECT platform.price_schema_profile()"))
-    ).scalar_one()
+    profile = (await c.execute(text("SELECT platform.price_schema_profile()"))).scalar_one()
     await c.execute(text("SELECT set_config('search_path',:path,true)"), {"path": original_path})
     _catalog["compare_catalog"](expected, functions, resolved, full, nonfunction, lambda: profile)
     return full

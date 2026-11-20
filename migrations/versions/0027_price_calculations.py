@@ -221,7 +221,7 @@ RUNTIME_FUNCTIONS = (
 
 # Frozen 0026 definitions for exact downgrade.
 CONFIGURATION_0026 = {
-    'platform.configuration_bundle_shape(jsonb)': r"""CREATE OR REPLACE FUNCTION platform.configuration_bundle_shape(p jsonb) RETURNS boolean
+    "platform.configuration_bundle_shape(jsonb)": r"""CREATE OR REPLACE FUNCTION platform.configuration_bundle_shape(p jsonb) RETURNS boolean
       LANGUAGE plpgsql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       DECLARE s jsonb; q jsonb; v jsonb; policy jsonb; name text; field text;
       BEGIN
@@ -291,7 +291,7 @@ CONFIGURATION_0026 = {
         RETURN true;
       EXCEPTION WHEN OTHERS THEN RETURN false;
       END $$""",
-    'platform.configuration_validate(jsonb)': r"""CREATE OR REPLACE FUNCTION platform.configuration_validate(p jsonb) RETURNS jsonb
+    "platform.configuration_validate(jsonb)": r"""CREATE OR REPLACE FUNCTION platform.configuration_validate(p jsonb) RETURNS jsonb
       LANGUAGE plpgsql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       DECLARE issues jsonb:='[]'::jsonb; s jsonb; q jsonb; r jsonb; policy jsonb; name text; path text; mode text; k text;
       BEGIN
