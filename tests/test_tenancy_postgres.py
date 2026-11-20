@@ -495,10 +495,12 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "messages",
             "outbox_events",
         }
-        if revision in {"0025", "0026"}:
+        if revision in {"0025", "0026", "0027"}:
             expected_tables.add("service_requests")
-        if revision == "0026":
+        if revision in {"0026", "0027"}:
             expected_tables.add("service_assessments")
+        if revision == "0027":
+            expected_tables.add("price_calculations")
         assert {row["tablename"] for row in tables} == expected_tables
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
         for table in TABLES:
@@ -752,6 +754,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0024",
             "0025",
             "0026",
+            "0027",
         }:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
@@ -821,6 +824,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0024",
             "0025",
             "0026",
+            "0027",
         }:
             from scripts import native_context_db_catalog as catalog
 
@@ -831,31 +835,45 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                         function["security_definer"],
                         function["runtime_execute"],
                     )
-            if revision in {"0018", "0019", "0020", "0021", "0022", "0023", "0024", "0025", "0026"}:
+            if revision in {
+                "0018",
+                "0019",
+                "0020",
+                "0021",
+                "0022",
+                "0023",
+                "0024",
+                "0025",
+                "0026",
+                "0027",
+            }:
                 for signature, function in source["functions"].items():
                     if (
                         signature.startswith("platform.configuration_")
                         or signature == "platform.business_configuration_schema_profile()"
                         or signature == "platform.published_knowledge_schema_profile()"
                         or (
-                            revision in {"0020", "0021", "0022", "0023", "0024", "0025", "0026"}
+                            revision
+                            in {"0020", "0021", "0022", "0023", "0024", "0025", "0026", "0027"}
                             and signature.startswith("platform.knowledge_")
                         )
                         or (
-                            revision in {"0021", "0022", "0023", "0024", "0025", "0026"}
+                            revision in {"0021", "0022", "0023", "0024", "0025", "0026", "0027"}
                             and (
                                 signature.startswith("platform.portfolio_")
                                 or signature.startswith("platform.vision_")
                             )
                         )
                         or (
-                            revision in {"0023", "0024", "0025", "0026"}
+                            revision in {"0023", "0024", "0025", "0026", "0027"}
                             and signature.startswith(("platform.intake_", "platform.duration_"))
                         )
-                        or revision in {"0025", "0026"}
+                        or revision in {"0025", "0026", "0027"}
                         and signature.startswith("platform.service_request_")
-                        or revision == "0026"
+                        or revision in {"0026", "0027"}
                         and signature.startswith("platform.service_assessment_")
+                        or revision == "0027"
+                        and signature.startswith("platform.price_")
                     ):
                         native_profiles[signature] = (
                             function["security_definer"],

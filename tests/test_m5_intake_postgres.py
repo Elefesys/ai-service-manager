@@ -39,6 +39,7 @@ pytestmark = pytest.mark.integration
 class Extractor(FakeAdapter):
     def __init__(self, route, values, *, category="NEW_TATTOO", correction=False, switch=False):
         super().__init__(route, ("reply",) * 4)
+        self.service_id = "consultation"
         self.values, self.category, self.correction, self.switch = (
             values,
             category,
@@ -56,7 +57,7 @@ class Extractor(FakeAdapter):
         )
         source = context["sources"][-1]
         candidate = {
-            "service_id": "consultation",
+            "service_id": self.service_id,
             "category": self.category,
             "switch_request": self.switch,
             "facts": [
@@ -124,10 +125,17 @@ async def intake_pg(portfolio_runtime_pg):
                 )
 
 
-async def application(h, values, *, category="NEW_TATTOO", execute=True, telegram=False):
-    text_value = "flower forearm 8 cm linework"
+async def application(
+    h,
+    values,
+    *,
+    category="NEW_TATTOO",
+    execute=True,
+    telegram=False,
+    message_text="flower forearm 8 cm linework",
+):
     cid, source, scope = await source_turn(
-        h, native=True, message_text=text_value, telegram=telegram
+        h, native=True, message_text=message_text, telegram=telegram
     )
     telegram_client = None
     if telegram:

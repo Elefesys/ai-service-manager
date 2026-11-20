@@ -7863,6 +7863,235 @@
         "title": "Preview",
         "type": "object"
       },
+      "PriceCalculation": {
+        "additionalProperties": false,
+        "properties": {
+          "activation_version": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Activation Version",
+            "type": "string"
+          },
+          "amount_minor": {
+            "anyOf": [
+              {
+                "maximum": 100000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
+          "authority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CONFIRMED",
+                  "PROVISIONAL"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authority"
+          },
+          "calculation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Calculation Id",
+            "type": "string"
+          },
+          "currency": {
+            "const": "RUB",
+            "title": "Currency",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "lower_minor": {
+            "anyOf": [
+              {
+                "maximum": 100000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower Minor"
+          },
+          "outcome": {
+            "enum": [
+              "EXACT",
+              "RANGE",
+              "NEEDS_INPUT",
+              "NEEDS_HUMAN"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PricePolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "enum": [
+              "FIXED_PRICE",
+              "SIZE_FORMULA",
+              "SIZE_REQUIRED",
+              "SIZE_OUTSIDE_RULE",
+              "OWNER_QUOTE",
+              "PRICE_UNPUBLISHED",
+              "SERVICE_UNAVAILABLE"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "request_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "request_revision": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Request Revision",
+            "type": "string"
+          },
+          "size_fact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "size_mm": {
+            "anyOf": [
+              {
+                "maximum": 99999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Mm"
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          },
+          "upper_minor": {
+            "anyOf": [
+              {
+                "maximum": 100000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upper Minor"
+          }
+        },
+        "required": [
+          "calculation_id",
+          "request_id",
+          "request_revision",
+          "release_id",
+          "activation_version",
+          "currency",
+          "current",
+          "policy",
+          "outcome",
+          "authority",
+          "reason",
+          "amount_minor",
+          "lower_minor",
+          "upper_minor",
+          "size_mm",
+          "steps",
+          "size_fact"
+        ],
+        "title": "PriceCalculation",
+        "type": "object"
+      },
+      "PriceHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PriceCalculation"
+            },
+            "maxItems": 10,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          }
+        },
+        "required": [
+          "items",
+          "next_before_id"
+        ],
+        "title": "PriceHistory",
+        "type": "object"
+      },
       "PricePolicy": {
         "additionalProperties": false,
         "properties": {
@@ -7896,6 +8125,16 @@
             "maxLength": 32,
             "title": "Mode",
             "type": "string"
+          },
+          "size_formula": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SizePriceFormula"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -9495,6 +9734,81 @@
           "above_minutes"
         ],
         "title": "SizeDurationRule",
+        "type": "object"
+      },
+      "SizePriceFormula": {
+        "additionalProperties": false,
+        "properties": {
+          "base_minor": {
+            "maximum": 100000000000.0,
+            "minimum": 0.0,
+            "title": "Base Minor",
+            "type": "integer"
+          },
+          "currency": {
+            "const": "RUB",
+            "title": "Currency",
+            "type": "string"
+          },
+          "input_unit": {
+            "const": "MM",
+            "title": "Input Unit",
+            "type": "string"
+          },
+          "kind": {
+            "const": "SIZE_STEPS_V1",
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_size_mm": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Size Mm",
+            "type": "integer"
+          },
+          "range_add_minor": {
+            "anyOf": [
+              {
+                "maximum": 100000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range Add Minor"
+          },
+          "rounding": {
+            "const": "CEILING",
+            "title": "Rounding",
+            "type": "string"
+          },
+          "step_minor": {
+            "maximum": 100000000000.0,
+            "minimum": 1.0,
+            "title": "Step Minor",
+            "type": "integer"
+          },
+          "step_mm": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Step Mm",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "currency",
+          "input_unit",
+          "rounding",
+          "base_minor",
+          "step_minor",
+          "step_mm",
+          "max_size_mm",
+          "range_add_minor"
+        ],
+        "title": "SizePriceFormula",
         "type": "object"
       },
       "Source": {
@@ -13256,6 +13570,200 @@
           }
         },
         "summary": "Assess",
+        "tags": [
+          "service-requests"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/service-requests/{request_id}/pricing": {
+      "get": {
+        "operationId": "read_price_history_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__pricing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Price History",
+        "tags": [
+          "service-requests"
+        ]
+      },
+      "post": {
+        "operationId": "calculate_price_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__pricing_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_revision": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Revision",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_revision"
+                ],
+                "title": "PriceCommand",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceCalculation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Calculate Price",
         "tags": [
           "service-requests"
         ]

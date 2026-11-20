@@ -272,6 +272,32 @@ class TenantUnitOfWork:
             "SELECT platform.configuration_owner_read(:business)", {"business": business}
         )
 
+    async def price_calculate(
+        self, business: UUID, conversation: UUID, request_id: UUID, expected_revision: str
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.price_calculate(:business,:conversation,:request_id,:revision)",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request_id": request_id,
+                "revision": expected_revision,
+            },
+        )
+
+    async def price_history(
+        self, business: UUID, conversation: UUID, request_id: UUID, before_id: UUID | None
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.price_history(:business,:conversation,:request_id,:before_id)",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request_id": request_id,
+                "before_id": before_id,
+            },
+        )
+
     async def configuration_active_read(self, business: UUID) -> Any:
         return await self._configuration_execute(
             "SELECT platform.configuration_active_read(:business)", {"business": business}

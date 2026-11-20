@@ -122,7 +122,7 @@ def downgrade_to_intake_schema(connection):
     from test_m5_intake_v7_repair_migrations import execute_repair
 
     scripts = ScriptDirectory("migrations")
-    for revision, predecessor in (("0026", "0025"), ("0025", "0024")):
+    for revision, predecessor in (("0027", "0026"), ("0026", "0025"), ("0025", "0024")):
         script = scripts.get_revision(revision)
         with Operations.context(MigrationContext.configure(connection)):
             script.module.downgrade()

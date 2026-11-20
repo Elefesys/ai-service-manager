@@ -112,6 +112,7 @@ INTAKE_NONFUNCTION_SHA256 = "37c156d07431b688aa99e8afca2a83f09e8082f5a4b2d28f4ac
 SERVICE_ASSESSMENT_NONFUNCTION_SHA256 = (
     "75ad504d42f1c8e511d59152d77c594e5d3a5da00367348ac016f36fbe8b758c"
 )
+PRICE_NONFUNCTION_SHA256 = "622564dba896c803db7612f461324d921c61385618121331dfc1460443d86914"
 SERVICE_REQUEST_NONFUNCTION_SHA256 = (
     "421339b8ed8e33f168a087f1e2b1ca8f8f719a7f8be9efe2eb0ec7e2bedbedd2"
 )
@@ -296,6 +297,7 @@ def capture_source(root, revision="0013"):
             "0024",
             "0025",
             "0026",
+            "0027",
         },
         "Unsupported catalog revision",
     )
@@ -508,6 +510,7 @@ def source_catalog(root, revision="0013"):
             "0024": 321,
             "0025": 331,
             "0026": 340,
+            "0027": 348,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -531,6 +534,7 @@ def source_catalog(root, revision="0013"):
             "0024": 73,
             "0025": 75,
             "0026": 76,
+            "0027": 77,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -599,6 +603,7 @@ def source_catalog(root, revision="0013"):
                 else set()
             )
             | ({"app.service_assessments"} if revision >= "0026" else set())
+            | ({"app.price_calculations"} if revision >= "0027" else set())
         ),
         "Independent source column replay differs",
     )
@@ -704,11 +709,14 @@ def compare_embedded_profile(expected):
             "0024",
             "0025",
             "0026",
+            "0027",
         },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.service_assessment_schema_profile()"
+        "platform.price_schema_profile()"
+        if revision == "0027"
+        else "platform.service_assessment_schema_profile()"
         if revision == "0026"
         else "platform.service_request_schema_profile()"
         if revision == "0025"
@@ -765,6 +773,7 @@ def compare_embedded_profile(expected):
             "0024": 320,
             "0025": 330,
             "0026": 339,
+            "0027": 347,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -809,6 +818,7 @@ def compare_embedded_profile(expected):
             "0024": 73,
             "0025": 75,
             "0026": 76,
+            "0027": 77,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -922,6 +932,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0024",
             "0025",
             "0026",
+            "0027",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -939,6 +950,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0024": INTAKE_NONFUNCTION_SHA256,
                 "0025": SERVICE_REQUEST_NONFUNCTION_SHA256,
                 "0026": SERVICE_ASSESSMENT_NONFUNCTION_SHA256,
+                "0027": PRICE_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3055,7 +3067,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0026"),
+            source_catalog(ROOT, "0027"),
         )
 
     def persist_partition(self, work):
@@ -3239,7 +3251,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0026"
+            and source["expected_revision"] == "0027"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

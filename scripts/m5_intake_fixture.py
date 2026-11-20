@@ -46,6 +46,10 @@ INPUTS = {
     "complex-message": "I forgot to say, this flower will cover an old tattoo",
     "assess-first": "Synthetic assessment flower forearm 8 cm linework",
     "assess-second": "Synthetic assessment separate swallow shoulder linework",
+    "price-first": "Synthetic price flower forearm 20 mm linework",
+    "price-second": "Synthetic price separate swallow shoulder linework",
+    "price-size": "The swallow will be 21 mm",
+    "price-oversize": "The swallow will be 100,1 cm",
 }
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
@@ -60,6 +64,15 @@ VALUES = {
         ("style", "linework"),
     ),
     "assess-second": (("idea", "swallow"), ("placement", "shoulder"), ("style", "linework")),
+    "price-first": (
+        ("idea", "flower"),
+        ("placement", "forearm"),
+        ("approximate_size", "20 mm"),
+        ("style", "linework"),
+    ),
+    "price-second": (("idea", "swallow"), ("placement", "shoulder"), ("style", "linework")),
+    "price-size": (("approximate_size", "21 mm"),),
+    "price-oversize": (("approximate_size", "100,1 cm"),),
 }
 CATEGORIES = {
     "complex": "COVER_UP",
@@ -102,7 +115,7 @@ class IntakeModel(FakeAdapter):
                     analysis_id=None,
                     analysis_sha256=None,
                 ),
-                explicit_correction=self.operation == "late-cover-up",
+                explicit_correction=self.operation in {"late-cover-up", "price-oversize"},
             )
             for field, value in VALUES.get(self.operation, ())
         ]
@@ -113,7 +126,7 @@ class IntakeModel(FakeAdapter):
             intake=dict(
                 service_id=self.service,
                 category=CATEGORIES.get(self.operation, "NEW_TATTOO"),
-                switch_request=self.operation in {"second", "assess-second"},
+                switch_request=self.operation in {"second", "assess-second", "price-second"},
                 facts=facts,
             ),
         )
@@ -341,6 +354,7 @@ def main():
                 "assessment",
                 "assessment-complex",
                 "assessment-complex-source",
+                "pricing",
             ),
             default="intake",
         )

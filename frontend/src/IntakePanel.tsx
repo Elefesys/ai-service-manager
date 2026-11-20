@@ -1,19 +1,21 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import type {ReactNode} from 'react';
 import {Session} from './api';
+import {priceAmount} from './configuration-api';
 import {IntakeError,intakeApi,labels} from './intake-api';
-import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,ServiceAssessment,ServiceRequestDraft} from './intake-api';
+import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,PriceCalculation,PriceHistory,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 
 export function IntakePanel({session,scope,expired,refresh=0}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number}){
  const key=scope?JSON.stringify({...scope,refresh}):'',current=useRef({key,session,epoch:0});
  if(current.current.key!==key||current.current.session!==session)current.current={key,session,epoch:current.current.epoch+1};
  const [view,setView]=useState<{key:string;session:Session|null;value:Intake|null;error:string;busy:boolean}>({key:'',session:null,value:null,error:'',busy:false});
+ const [summaryRefresh,setSummaryRefresh]=useState(0);
  const [comparisons,setComparisons]=useState<{key:string;session:Session|null;fingerprint:string;items:CaseMatch[];busy:boolean;error:string}>({key:'',session:null,fingerprint:'',items:[],busy:false,error:''});
  const [edits,setEdits]=useState<Record<string,string>>({});const controls=useRef(new Set<AbortController>());
  const intent=useRef<{key:string;scope:IntakeScope;operation:string;body:unknown}|null>(null);
  const visible=view.key===key&&view.session===session;const data=visible?view.value:null;
  const permitted=!!session&&!!scope&&session.memberships.some(m=>m.workspace_id===scope.workspace&&m.role==='OWNER');
- async function load(){if(!permitted||!scope)return;const epoch=current.current.epoch,c=new AbortController();controls.current.add(c);setView({key,session,value:null,error:'',busy:true});
+ async function load(){if(!permitted||!scope)return;const epoch=current.current.epoch,c=new AbortController();controls.current.add(c);setSummaryRefresh(n=>n+1);setView({key,session,value:null,error:'',busy:true});
  try{const value=await intakeApi.summary(scope,c.signal);if(c.signal.aborted||epoch!==current.current.epoch)return;setView({key,session,value,error:'',busy:false});setEdits({});}catch(e){if(!c.signal.aborted&&epoch===current.current.epoch){setView({key,session,value:null,error:'Не удалось получить актуальную сводку.',busy:false});if(e instanceof IntakeError&&e.status===401)expired();}}finally{controls.current.delete(c);}}
  useEffect(()=>{intent.current=null;setEdits({});void load();return()=>{current.current.epoch++;controls.current.forEach(c=>c.abort());controls.current.clear();};},[key,session]);
  async function save(fact:Fact){if(!scope||!session||!data||view.busy||intent.current)return;const value=edits[fact.field]??fact.value;intent.current={key:crypto.randomUUID(),scope,operation:value===fact.value?'confirm':'correct',body:{expected_version:data.version,expected_fingerprint:data.fingerprint,field:fact.field,value,source:fact.source}};await send();}
@@ -23,7 +25,7 @@ export function IntakePanel({session,scope,expired,refresh=0}:{session:Session|n
  if(!permitted||!scope||!session)return null;
  const draftScopeKey=JSON.stringify([scope.workspace,scope.business,scope.conversation,scope.client,session.user_account_id,session.csrf_token]);
  return <section className="intake-card" aria-label="Предварительный запрос"><div className="billing-heading"><h3>Предварительный запрос</h3><button className="secondary" onClick={()=>void load()} disabled={visible&&view.busy}>Обновить сводку</button></div><p>Мастер проверяет детали. Цена, длительность и запись ещё не согласованы.</p>{visible&&view.error&&<p role="alert">{view.error}</p>}{intent.current&&visible&&!view.busy&&<button onClick={()=>void send()}>Проверить ту же команду</button>}{data&&<><p role="status">{({NOT_STARTED:'Сбор ещё не начат',CLARIFY:'Нужно уточнение',OWNER_HANDOFF:'Требуется решение мастера',PRELIMINARILY_COMPLETE:'Предварительно собрано'})[data.status]}</p>{data.question&&<p>{data.question}</p>}{data.facts.map(f=><article key={f.field}><label>{labels[f.field]}<input disabled={view.busy||!!intent.current} maxLength={300} value={edits[f.field]??f.value} onChange={e=>setEdits(v=>({...v,[f.field]:e.target.value}))}/></label><p>{f.status==='owner-confirmed'?'Подтверждено мастером':f.status==='observed'?'Наблюдение изображения':'Со слов клиента'}{f.conflict?' · есть противоречие':''}</p><p className="muted">Источник: <a href={`#message-${f.source.message_id}`}>сообщение клиента</a> · {f.source.quote||'текущий анализ изображения'}</p><button disabled={view.busy||!!intent.current||!(edits[f.field]??f.value).trim()} onClick={()=>void save(f)}>Подтвердить поле {labels[f.field]}</button></article>)}{data.missing.length>0&&<p>Неизвестно: {data.missing.map(f=>labels[f]).join(', ')}</p>}<button className="secondary" disabled={compared&&comparisons.busy} onClick={()=>void compare()}>Сравнить с примерами мастера</button>{compared&&<div aria-label="Сравнение примеров мастера"><p>Время прошлых работ видно только мастеру. Это не оценка нового запроса.</p>{comparisons.error&&<p role="alert">{comparisons.error}</p>}{!comparisons.busy&&!comparisons.error&&comparisons.items.length===0&&<p>Подтверждённых текущих примеров нет.</p>}{comparisons.items.map(m=><article key={m.case.case_id}><h4>{m.case.data.description}</h4><p>Совпадает: {m.matches.map(f=>labels[f]??f).join(', ')||'нет'} · различается: {m.differences.map(f=>labels[f]??f).join(', ')||'нет'} · неизвестно: {m.unknown.map(f=>labels[f]??f).join(', ')||'нет'}</p><p>Источник: подтверждённый пример, версия {m.case.version}. Рабочее время: {m.case.data.working_minutes??'неизвестно'}, занятое: {m.case.data.occupied_minutes??'неизвестно'} мин.</p></article>)}</div>}</>}{scope.conversation&&
-  <RequestDraftPanel key={draftScopeKey} selectionScope={draftScopeKey} scope={scope} data={data} csrf={session.csrf_token} expired={expired}/>
+  <RequestDraftPanel key={draftScopeKey} selectionScope={draftScopeKey} scope={scope} data={data} summaryRefresh={summaryRefresh} csrf={session.csrf_token} expired={expired}/>
  }</section>;
 }
 
@@ -197,11 +199,113 @@ function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:Int
  </section>;
 }
 
+const pricingReasons:Record<PriceCalculation['reason'],string>={
+ FIXED_PRICE:'Фиксированная цена из опубликованных настроек.',
+ SIZE_FORMULA:'По опубликованной формуле размера.',
+ SIZE_REQUIRED:'Уточните подтверждённый размер в миллиметрах.',
+ SIZE_OUTSIDE_RULE:'Размер выходит за предел опубликованной формулы.',
+ OWNER_QUOTE:'Режим цены этой услуги задан мастером.',
+ PRICE_UNPUBLISHED:'Для услуги нужна опубликованная цена или поддерживаемая формула.',
+ SERVICE_UNAVAILABLE:'Опубликованная услуга для этой заявки недоступна.',
+};
+function PriceResult({value}:{value:PriceCalculation}){
+ const rule=value.policy?.size_formula;
+ return <>
+  {value.outcome==='EXACT'&&value.amount_minor!==null&&<p>Подтверждённая цена <strong>{priceAmount(value.amount_minor)}</strong></p>}
+  {value.outcome==='RANGE'&&value.lower_minor!==null&&value.upper_minor!==null&&<p>Предварительный диапазон <strong>{priceAmount(value.lower_minor)} – {priceAmount(value.upper_minor)}</strong></p>}
+  {value.outcome==='NEEDS_HUMAN'&&<p>Цену определяет мастер</p>}
+  <p>{value.reason==='SIZE_OUTSIDE_RULE'&&rule
+   ?`Размер превышает опубликованный предел ${rule.max_size_mm} мм.`:pricingReasons[value.reason]}</p>
+  {value.size_fact&&<p>
+   Размер {value.reason==='SIZE_OUTSIDE_RULE'?value.size_fact.value:`${value.size_mm} мм`} · <a href={`#message-${value.size_fact.source.message_id}`}>Источник размера для цены</a>{' '}
+   · версия <code>{value.size_fact.source.source_version}</code>
+  </p>}
+  {rule&&value.steps!==null&&<p>
+   {priceAmount(rule.base_minor)} + {value.steps} × {priceAmount(rule.step_minor)} · шаг {rule.step_mm} мм, округление вверх.
+   {rule.range_add_minor!==null&&` Верхняя граница включает ещё ${priceAmount(rule.range_add_minor)}.`}
+  </p>}
+  {value.release_id&&<p>Публикация <code>{value.release_id}</code> · версия активации {value.activation_version}{rule?' · SIZE_STEPS_V1':''}</p>}
+ </>;
+}
+function PricingPanel({scope,draft,csrf,activation,summaryRefresh,locked,expired}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;summaryRefresh:number;locked:boolean;expired:()=>void}){
+ const [history,setHistory]=useState<PriceHistory>({items:[],next_before_id:null});
+ const [calculation,setCalculation]=useState<PriceCalculation|null>(null);
+ const [checkedRefresh,setCheckedRefresh]=useState<number|null>(null);
+ const [busy,setBusy]=useState(true);
+ const [error,setError]=useState('');
+ const [blocked,setBlocked]=useState(false);
+ const active=useRef<AbortController|null>(null);
+
+ async function load(calculate=false,beforeId?:string){
+  if(active.current)return;
+  const controller=new AbortController(),{signal}=controller;
+  active.current=controller;
+  setBusy(true);setError('');
+  try{
+   if(calculate)await intakeApi.calculatePrice(scope,draft.request_id,draft.revision,csrf,signal);
+   const latest=await intakeApi.priceHistory(scope,draft.request_id,beforeId,signal);
+   if(signal.aborted)return;
+   if(beforeId){
+    setHistory(previous=>({items:[...previous.items,...latest.items],next_before_id:latest.next_before_id}));
+   }else{
+    setCalculation(latest.items.find(item=>item.current)??null);
+    setHistory({items:latest.items.filter(item=>!item.current),next_before_id:latest.next_before_id});
+    setCheckedRefresh(summaryRefresh);
+   }
+   setBlocked(false);
+  }catch(failure){
+   if(signal.aborted)return;
+   if(failure instanceof IntakeError&&[401,403,404].includes(failure.status)){
+    setCalculation(null);setHistory({items:[],next_before_id:null});setBlocked(true);
+    setError('Расчёт цены недоступен.');
+    if(failure.status===401)expired();
+   }else if(failure instanceof IntakeError&&failure.code==='STALE_STATE'){
+    setCalculation(null);setBlocked(true);setError('Заявка изменилась. Обновите карточку перед расчётом цены.');
+   }else{
+    setCalculation(previous=>previous?{...previous,current:false}:previous);
+    setError(calculate?'Не удалось прочитать результат. Повторите расчёт цены.':'Не удалось прочитать историю расчётов.');
+   }
+  }finally{
+   if(active.current===controller){active.current=null;if(!signal.aborted)setBusy(false);}
+  }
+ }
+
+ useEffect(()=>{
+  void load();
+  return ()=>{active.current?.abort();active.current=null;};
+ },[draft,summaryRefresh]);
+
+ const checked=checkedRefresh===summaryRefresh;
+ const current=checked&&calculation?.current&&calculation.request_revision===draft.revision
+  &&(activation===undefined||BigInt(activation)<=BigInt(calculation.activation_version));
+ const archived=checked&&calculation&&!current?[calculation,...history.items]:history.items;
+ return <section aria-label="Расчёт цены" style={{overflowWrap:'anywhere'}}>
+  <h4>Расчёт цены</h4>
+  {error&&<p role="alert">{error}</p>}
+  {current&&calculation&&<article aria-label="Текущий расчёт цены"><PriceResult value={calculation}/></article>}
+  {!current&&archived.length>0&&<p>Обновите расчёт, чтобы получить актуальную цену.</p>}
+  {archived.length>0&&<details>
+   <summary>История расчётов цены</summary>
+   {archived.map(item=><article key={item.calculation_id} aria-label="Архивный расчёт цены">
+    <p>Архив · ревизия заявки {item.request_revision}</p>
+    <PriceResult value={item}/>
+   </article>)}
+   {history.next_before_id&&<button type="button" className="secondary" disabled={busy||locked} onClick={()=>void load(false,history.next_before_id!)}>Показать предыдущие расчёты</button>}
+  </details>}
+  <div className="control-actions">
+   <button type="button" disabled={busy||locked||blocked} onClick={()=>void load(true)}>
+    {current||archived.length>0?'Пересчитать цену':'Рассчитать цену'}
+   </button>
+   <button type="button" className="secondary" disabled={busy||locked} onClick={()=>void load()}>Обновить расчёт цены</button>
+  </div>
+ </section>;
+}
+
 function sourceLabel(source:Intake['sources'][number]){
  return `${Array.from(source.text.trim()).slice(0,100).join('')||'Входящее фото'} · #${source.message_id.slice(-6)}`;
 }
 
-function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:IntakeScope;selectionScope:string;data:Intake|null;csrf:string;expired:()=>void}){
+function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expired}:{scope:IntakeScope;selectionScope:string;data:Intake|null;summaryRefresh:number;csrf:string;expired:()=>void}){
  const sourceId=useId();
  const cardId=useId();
  const revisionFieldId=useId();
@@ -353,6 +457,7 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
   </section>}
   {draft&&<DraftCard draft={draft}>
    <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired}/>
+   <PricingPanel key={`price:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} summaryRefresh={summaryRefresh} locked={locked} expired={expired}/>
   </DraftCard>}
   {error&&<p role="alert">{error}</p>}
   {waiting&&!busy&&<button type="button" onClick={()=>void open(desiredCard.current,waiting)}>

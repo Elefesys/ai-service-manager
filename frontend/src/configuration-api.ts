@@ -2,7 +2,12 @@
 export type IntakeField = { id: string; label: string; required: boolean };
 export type SizeDurationRule = { threshold_mm: number; at_or_below_minutes: number; above_minutes: number };
 export type DurationPolicy = { mode: string; minutes: number | null; rule_note: string | null; size_rule?: SizeDurationRule | null };
-export type Service = { id: string; name: string; description: string; active: boolean; intake_fields: IntakeField[]; price: { mode: string; amount_minor: number | null; formula_note: string | null }; duration: DurationPolicy; deposit: { mode: string; amount_minor: number | null; percent: number | null } };
+export type SizePriceFormula = {
+  kind:'SIZE_STEPS_V1'; currency:'RUB'; input_unit:'MM'; rounding:'CEILING';
+  base_minor:number; step_minor:number; step_mm:number; max_size_mm:number; range_add_minor:number|null;
+};
+export type PricePolicy = { mode:string; amount_minor:number|null; formula_note:string|null; size_formula?:SizePriceFormula|null };
+export type Service = { id: string; name: string; description: string; active: boolean; intake_fields: IntakeField[]; price: PricePolicy; duration: DurationPolicy; deposit: { mode: string; amount_minor: number | null; percent: number | null } };
 export type Rule = { id: string; service_id: string | null; kind: string; value: number | boolean };
 export type FAQ = { id: string; service_id: string | null; question: string; answer: string; source: string; confirmed: boolean; rule_ids: string[] };
 export type Bundle = { schema_version: 1; communication_style: string; services: Service[]; rules: Rule[]; faqs: FAQ[] };
@@ -31,6 +36,33 @@ const nullable = (v: unknown, check: (x: unknown) => boolean) => v === null || c
 function items(v: unknown, n: number): unknown[] { if (!Array.isArray(v) || v.length > n) invalid(); return v as unknown[]; }
 function timestamp(v: unknown): v is string { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$(?![\s\S])/.test(v) && !v.startsWith('0000') && !Number.isNaN(new Date(v).valueOf()) && new Date(v).toISOString() === v.slice(0, 23) + 'Z'; }
 const positiveWithin = (v:unknown,max:number):v is number => number(v)&&v>=1&&v<=max;
+const MAX_PRICE_MINOR=100000000000;
+const rubles=new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2});
+export const priceAmount=(minor:number)=>rubles.format(minor/100);
+export function priceExample(rule:SizePriceFormula,mm:number|null){
+  if(!number(rule.base_minor)||!positiveWithin(rule.step_minor,MAX_PRICE_MINOR)
+    ||!positiveWithin(rule.step_mm,1000)||!positiveWithin(rule.max_size_mm,1000)
+    ||!nullable(rule.range_add_minor,value=>positiveWithin(value,MAX_PRICE_MINOR)))return null;
+  const total=(size:number)=>rule.base_minor+Math.floor((size+rule.step_mm-1)/rule.step_mm)*rule.step_minor;
+  const extra=rule.range_add_minor??0;
+  if(total(rule.max_size_mm)+extra>MAX_PRICE_MINOR||!positiveWithin(mm,rule.max_size_mm))return null;
+  const lower=total(mm);
+  return {lower,upper:lower+extra};
+}
+export function parsePricePolicy(value:unknown):PricePolicy{
+  const keys=['mode','amount_minor','formula_note'];
+  if(typeof value==='object'&&value!==null&&Object.hasOwn(value,'size_formula'))keys.push('size_formula');
+  const policy=object(value,keys);
+  if(!text(policy.mode,32,true)||!nullable(policy.amount_minor,number)||!nullable(policy.formula_note,x=>text(x,160)))invalid();
+  if(policy.size_formula!=null){
+    const formula=object(policy.size_formula,[
+      'kind','currency','input_unit','rounding','base_minor','step_minor','step_mm','max_size_mm','range_add_minor',
+    ]);
+    if(formula.kind!=='SIZE_STEPS_V1'||formula.currency!=='RUB'||formula.input_unit!=='MM'||formula.rounding!=='CEILING'
+      ||!number(formula.max_size_mm)||!priceExample(formula as SizePriceFormula,formula.max_size_mm))invalid();
+  }
+  return policy as PricePolicy;
+}
 export function parseDurationPolicy(value:unknown):DurationPolicy{
   const keys=['mode','minutes','rule_note'];
   if(typeof value==='object'&&value!==null&&Object.hasOwn(value,'size_rule'))keys.push('size_rule');
@@ -48,10 +80,9 @@ function service(value: unknown): Service {
   if (!slug(s.id) || !text(s.name,100,true) || !text(s.description,500) || typeof s.active !== 'boolean') invalid();
   for (const field of items(s.intake_fields,6)) { const f=object(field,['id','label','required']); if (!slug(f.id)||!text(f.label,100,true)||typeof f.required!=='boolean') invalid(); }
   parseDurationPolicy(s.duration);
-  for (const [name, keys] of [['price',['mode','amount_minor','formula_note']],['deposit',['mode','amount_minor','percent']]] as const) {
-    const p=object(s[name],[...keys]); if (!text(p.mode,32,true)) invalid();
-    for (const [key,v] of Object.entries(p)) if (key!=='mode' && !nullable(v, key.endsWith('_note') ? x=>text(x,160) : number)) invalid();
-  }
+  parsePricePolicy(s.price);
+  const deposit=object(s.deposit,['mode','amount_minor','percent']);
+  if(!text(deposit.mode,32,true)||!nullable(deposit.amount_minor,number)||!nullable(deposit.percent,number))invalid();
   return s as Service;
 }
 export function parseBundle(value: unknown): Bundle {

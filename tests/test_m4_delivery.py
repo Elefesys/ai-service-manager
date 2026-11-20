@@ -475,7 +475,8 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     intake = catalog.source_catalog(catalog.ROOT, "0023")
     v7_repair = catalog.source_catalog(catalog.ROOT, "0024")
     request = catalog.source_catalog(catalog.ROOT, "0025")
-    current = catalog.source_catalog(catalog.ROOT, "0026")
+    assessment = catalog.source_catalog(catalog.ROOT, "0026")
+    current = catalog.source_catalog(catalog.ROOT, "0027")
     assert (len(request["functions"]), len(request["columns"])) == (331, 75)
     assert (len(intake["functions"]), len(intake["columns"])) == (318, 73)
     assert (len(v7_repair["functions"]), len(v7_repair["columns"])) == (321, 73)
@@ -490,7 +491,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         175,
         194,
         233,
-        340,
+        348,
     )
     assert (
         len(old["columns"]),
@@ -498,7 +499,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         len(rights["columns"]),
         len(previous["columns"]),
         len(current["columns"]),
-    ) == (45, 47, 49, 59, 76)
+    ) == (45, 47, 49, 59, 77)
     assert (
         current["functions"]["platform.intake_schema_profile()"]
         == intake["functions"]["platform.intake_schema_profile()"]
@@ -511,11 +512,15 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         current["functions"]["platform.service_request_schema_profile()"]
         == request["functions"]["platform.service_request_schema_profile()"]
     )
-    body = current["functions"]["platform.service_assessment_schema_profile()"]["body"]
+    assert (
+        current["functions"]["platform.service_assessment_schema_profile()"]
+        == assessment["functions"]["platform.service_assessment_schema_profile()"]
+    )
+    body = current["functions"]["platform.price_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 339,
-        "tables": 76,
+        "other_functions": 347,
+        "tables": 77,
         "result": "PASS",
     }
     assert (
