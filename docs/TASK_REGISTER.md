@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.2 REVIEW · независимая приёмка C8 · 2026-11-20
+## CURRENT — M6.2 REVIEW · PR #58 готов к слиянию · 2026-11-20
 
-**Единственная активная задача — приёмка M6.2 чатом C8.** Кандидат `0682659023e3689a358ddd83aa876756c93a9f13`, база `main` — `82044525485266dfba645c0ed50b681373a8643f`. C0 закрыл оба замечания M6.2-R1, подтвердил цену в архиве после EDIT/DELETE и передачу мастеру размера выше предела с исходным фактом. Штатный CI дал 12/12 SUCCESS, `browser` прошёл после адресного повтора на том же SHA. Ожидается одно независимое заключение C8 в Draft PR #58. [Поручение C8 и приёмка C0](tasks/M6_HANDOFF.md#L3) · [PR #58](https://github.com/Elefesys/ai-service-manager/pull/58) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44748472679/attempts/2).
+**M6.2 ожидает разрешения владельца на слияние.** C8 дал `PASS` на head `0682659023e3689a358ddd83aa876756c93a9f13`, C0 принял кандидата в synthetic LOCAL/TEST и перевёл PR #58 в Ready for review. Оба замечания R1 закрыты. Текущая база `main` — `82044525485266dfba645c0ed50b681373a8643f`, дерево проверенного кандидата и пробного слияния — `6a7628e381c8639f93a37e72fcb63db8b392df36`. CI кандидата — 12/12 SUCCESS после адресного повтора Chromium. После разрешённого слияния C0 проверяет фактический `main` и его CI. [Решение C0](tasks/M6_HANDOFF.md#L3) · [PR #58](https://github.com/Elefesys/ai-service-manager/pull/58) · [C8 PASS](https://github.com/Elefesys/ai-service-manager/pull/58#pullrequestreview-5995284550) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44748472679/attempts/2).
+
+## История — поручение C8 по M6.2 · выполнено
+
+**Поручение было выдано C8.** Кандидат `0682659023e3689a358ddd83aa876756c93a9f13`, база `main` — `82044525485266dfba645c0ed50b681373a8643f`. C0 закрыл оба замечания M6.2-R1, подтвердил цену в архиве после EDIT/DELETE и передачу мастеру размера выше предела с исходным фактом. Штатный CI дал 12/12 SUCCESS, `browser` прошёл после адресного повтора на том же SHA. По этому поручению C8 опубликовал заключение в PR #58. [Поручение C8 и приёмка C0](tasks/M6_HANDOFF.md#L3) · [PR #58](https://github.com/Elefesys/ai-service-manager/pull/58) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44748472679/attempts/2).
 
 ## История — поручение M6.2-R1 · выполнено
 

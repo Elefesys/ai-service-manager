@@ -1,8 +1,16 @@
 # M6 — от сведений в диалоге до согласованного заказа
 
-## CURRENT — M6.2 REVIEW · независимая приёмка C8
+## CURRENT — M6.2 REVIEW · PR #58 готов к слиянию, ожидается разрешение владельца
 
-**Единственное поручение — C8.** Провести независимую приёмку цены выбранной заявки в [PR #58](https://github.com/Elefesys/ai-service-manager/pull/58), `c1/m6-2-pricing` → `main`, synthetic LOCAL/TEST. Проверяемый head `0682659023e3689a358ddd83aa876756c93a9f13`, база `82044525485266dfba645c0ed50b681373a8643f`. Пробное слияние `f865ae56a1e2fbdc0e10bf5587df14f3f7eafdfb` имеет этих двух родителей и то же дерево `6a7628e381c8639f93a37e72fcb63db8b392df36`, что и кандидат. C0 принял M6.2-R1 и закрыл `C0-M6.2-01` и `C0-M6.2-02`. PR находится в Draft, M6.2 — в REVIEW. [Исходное поручение M6.2](https://github.com/Elefesys/ai-service-manager/blob/0682659023e3689a358ddd83aa876756c93a9f13/docs/tasks/M6_HANDOFF.md#L3) · [исходные расхождения](https://github.com/Elefesys/ai-service-manager/blob/ec6ea583ae943c74040aa0fa82c9ee58f660d4f8/docs/tasks/M6_HANDOFF.md#L9).
+**Решение C0 от 2026-11-20.** Кандидат M6.2 принят в synthetic LOCAL/TEST. C8 дал `PASS` на head `0682659023e3689a358ddd83aa876756c93a9f13` и подтвердил закрытие `C0-M6.2-01` и `C0-M6.2-02`. У двух работ в одной переписке свои расчёты и источники. Цена и длительность определяются независимо. После правки или удаления источника прежняя цена видна в архиве, а подтверждённый размер выше предела формулы передаётся мастеру вместе с исходной репликой. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/58#pullrequestreview-5995284550) · [Адресная приёмка C0](https://github.com/Elefesys/ai-service-manager/blob/60d334a3b8660748d84867fba7cb95a181ae502b/docs/tasks/M6_HANDOFF.md#L14).
+
+**Состояние PR.** C0 перевёл [PR #58](https://github.com/Elefesys/ai-service-manager/pull/58) в Ready for review. База `main` — `82044525485266dfba645c0ed50b681373a8643f`. Пробное слияние `f865ae56a1e2fbdc0e10bf5587df14f3f7eafdfb` имеет родителями эту базу и проверенный head. Дерево `6a7628e381c8639f93a37e72fcb63db8b392df36` совпало с деревом кандидата. Итоговый CI — 12/12 SUCCESS. В `foundation` прошли 14 сценариев цены, в Chromium — 83/83 после повтора одного `browser` на том же SHA. [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/44748472679/attempts/2).
+
+**Следующий шаг — решение владельца о слиянии указанного head в `main`.** После слияния C0 сверяет фактический коммит и результат его `push/main` CI. До этого M6.2 остаётся в `REVIEW`.
+
+## История — независимая приёмка C8 · завершена
+
+**Исходное поручение C8.** Провести независимую приёмку цены выбранной заявки в [PR #58](https://github.com/Elefesys/ai-service-manager/pull/58), `c1/m6-2-pricing` → `main`, synthetic LOCAL/TEST. Проверяемый head `0682659023e3689a358ddd83aa876756c93a9f13`, база `82044525485266dfba645c0ed50b681373a8643f`. Пробное слияние `f865ae56a1e2fbdc0e10bf5587df14f3f7eafdfb` имеет этих двух родителей и то же дерево `6a7628e381c8639f93a37e72fcb63db8b392df36`, что и кандидат. C0 принял M6.2-R1 и закрыл `C0-M6.2-01` и `C0-M6.2-02`. PR находится в Draft, M6.2 — в REVIEW. [Исходное поручение M6.2](https://github.com/Elefesys/ai-service-manager/blob/0682659023e3689a358ddd83aa876756c93a9f13/docs/tasks/M6_HANDOFF.md#L3) · [исходные расхождения](https://github.com/Elefesys/ai-service-manager/blob/ec6ea583ae943c74040aa0fa82c9ee58f660d4f8/docs/tasks/M6_HANDOFF.md#L9).
 
 **Что проверяет C8**
 
