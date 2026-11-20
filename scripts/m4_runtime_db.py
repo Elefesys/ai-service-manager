@@ -408,6 +408,7 @@ M6_PRICING_IMPLEMENTATION_PATHS = {
     "tests/m5_portfolio_fixtures.py",
     "tests/test_auth_contract.py",
     "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
     "tests/test_m2_3_db_postgres.py",
     "tests/test_m2_3_schema_postgres.py",
     "tests/test_m2_3_setup.py",
