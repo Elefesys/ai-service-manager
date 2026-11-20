@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.1B IN_PROGRESS · 2026-11-20
+## CURRENT — M6.2 IN_PROGRESS · 2026-11-20
 
-**Единственная активная задача — M6.1B.** C1 ведёт оценку выполнимости конкретной заявки и определение занятых минут следующего сеанса в synthetic LOCAL/TEST. C2 отвечает за PostgreSQL и миграцию 0026 от 0025, C5 — за существующую карточку мастера. Ветка `c1/m6-1b-assessment-duration`, принятая база `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. [Поручение C0 и демонстрация](tasks/M6_HANDOFF.md#L3).
+**Единственная активная задача — M6.2.** Ведущий C1, C2 отвечает за PostgreSQL и новую миграцию `0027` от `0026`, C5 — за параметры и пример перед публикацией и цену в карточке мастера. Цена определяется для выбранной заявки по настройке услуги, независимо от длительности. Ветка `c1/m6-2-pricing`, принятый `main` — `82044525485266dfba645c0ed50b681373a8643f`, synthetic LOCAL/TEST. [Поручение, границы и демонстрация](tasks/M6_HANDOFF.md#L3).
+
+## История — M6.1B INTEGRATED / VERIFIED · 2026-11-20
+
+Владелец слил PR #57 на `82044525485266dfba645c0ed50b681373a8643f`. Родители — `54350ddb3a8fc00076f7e065acb19c733e4f29a8` и `c0ce417b35eae7ac4bfe6481897ec8ba77337ab3`, дерево `c1f4f5f793eef2ba0a3b93b60735be38f3689412` совпало с принятым кандидатом. Схема `0026`. C8 закрыл `C8-M6.1B-01`. Текущая оценка и последняя предшествующая утверждённая длительность остаются привязаны к выбранной заявке, в том числе при пересчёте в той же ревизии. `push/main` — 12/12 SUCCESS с первой попытки. [PR #57](https://github.com/Elefesys/ai-service-manager/pull/57) · [заключение C8](https://github.com/Elefesys/ai-service-manager/pull/57#pullrequestreview-5989621482) · [CI фактического main](https://github.com/Elefesys/ai-service-manager/actions/runs/44703705495).
 
 ## История — M6.1A INTEGRATED / VERIFIED · 2026-11-20
 
