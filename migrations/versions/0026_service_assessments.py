@@ -37,6 +37,11 @@ TABLES = {
       actor_user_account_id uuid NOT NULL,
       correlation_id uuid NOT NULL,
       created_at timestamptz NOT NULL DEFAULT clock_timestamp() CHECK(isfinite(created_at)),
+      complex_work jsonb CHECK(complex_work IS NULL OR (
+        owner_handoff AND outcome='NEEDS_OWNER'
+        AND platform.material_object(complex_work,ARRAY['category','source','source_current']) IS TRUE
+        AND (complex_work->>'category' IN ('COVER_UP','OTHER_COMPLEX')) IS TRUE
+        AND jsonb_typeof(complex_work->'source_current')='boolean')),
       PRIMARY KEY(workspace_id,id),
       UNIQUE(workspace_id,request_id,authority_sha256),
       FOREIGN KEY(workspace_id,request_id)
@@ -50,6 +55,63 @@ TABLES = {
 }
 
 FUNCTIONS = {
+    "platform.service_request_complex_work(app.conversations,uuid,text,jsonb)": r"""CREATE FUNCTION platform.service_request_complex_work(
+      p_scope app.conversations,p_target uuid,p_service text,p_sources jsonb
+    ) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE candidate jsonb; members jsonb; source jsonb; member jsonb;
+    BEGIN
+      -- An owner selection cannot reuse the message already attributed to another work.
+      IF EXISTS(
+        SELECT 1 FROM app.service_requests d
+        CROSS JOIN jsonb_array_elements(p_sources) selected(value)
+        WHERE (d.workspace_id,d.business_id,d.conversation_id,d.client_id)
+          =(p_scope.workspace_id,p_scope.business_id,p_scope.id,p_scope.client_id)
+          AND d.id IS DISTINCT FROM p_target
+          AND d.complex_work->'source'->'message_id'=selected.value->'message_id'
+      ) THEN
+        RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+      END IF;
+      -- Read the accepted intake classification of a selected message's own
+      -- turn. The conversation's latest category can belong to another work.
+      SELECT run.intake,run.members,selected.value INTO candidate,members,source
+        FROM jsonb_array_elements(p_sources) selected(value)
+        JOIN app.conversation_turn_messages tm
+          ON (tm.workspace_id,tm.conversation_id,tm.message_id)
+            =(p_scope.workspace_id,p_scope.id,(selected.value->>'message_id')::uuid)
+        CROSS JOIN LATERAL (
+          SELECT r.result->'intake' AS intake,r.snapshot->'members' AS members,r.selected_at,r.id
+          FROM platform.ai_runs r
+          WHERE (r.workspace_id,r.business_id,r.conversation_id,r.client_id,r.turn_id)
+            =(p_scope.workspace_id,p_scope.business_id,p_scope.id,p_scope.client_id,tm.turn_id)
+            AND r.config->>'prompt_revision'='conversation_v7'
+            AND r.selected_at IS NOT NULL AND r.result->'intake'->>'category'<>'FAQ_ONLY'
+          ORDER BY r.selected_at DESC,r.id DESC LIMIT 1
+        ) run
+        WHERE run.intake->>'category' IN ('COVER_UP','OTHER_COMPLEX')
+        ORDER BY run.selected_at DESC,run.id DESC LIMIT 1;
+      IF NOT FOUND THEN RETURN NULL; END IF;
+      member:=members->0;
+      IF candidate->>'service_id' IS DISTINCT FROM p_service
+        OR jsonb_array_length(members) IS DISTINCT FROM 1
+        OR member->'message_id' IS DISTINCT FROM source->'message_id'
+        OR member->'current'->>'state' IS DISTINCT FROM 'VISIBLE'
+        OR source->>'source_version' IS DISTINCT FROM encode(sha256(convert_to(
+          jsonb_build_array(member->'message_version',member->'current')::text,'UTF8')),'hex')
+        OR EXISTS(
+          SELECT 1 FROM app.service_requests d
+          WHERE (d.workspace_id,d.business_id,d.conversation_id,d.client_id)
+            =(p_scope.workspace_id,p_scope.business_id,p_scope.id,p_scope.client_id)
+            AND d.id IS DISTINCT FROM p_target
+            AND (d.intent_message_id=(source->>'message_id')::uuid OR EXISTS(
+              SELECT 1 FROM jsonb_array_elements(d.facts) fact(value)
+              WHERE fact.value->'source'->'message_id'=source->'message_id'))
+        ) THEN
+        RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+      END IF;
+      RETURN jsonb_build_object('category',candidate->'category','source',jsonb_build_object(
+        'message_id',source->'message_id','source_version',source->'source_version'));
+    END $$""",
     "platform.service_assessment_immutable()": r"""CREATE FUNCTION platform.service_assessment_immutable()
     RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
     BEGIN
@@ -105,22 +167,38 @@ FUNCTIONS = {
         'conversation_id',p_draft.conversation_id,'request_id',p_draft.id,
         'request_revision',p_draft.revision::text,'release_id',release_id,
         'activation_version',coalesce(activation,0)::text,'service',service,'rules',rules,
-        'owner_handoff',coalesce(p_draft.question=owner_question,false),
+        'owner_handoff',p_draft.complex_work IS NOT NULL OR coalesce(p_draft.question=owner_question,false),
         'facts',facts,'unavailable_fields',unavailable_fields);
+      IF p_draft.complex_work IS NOT NULL THEN
+        material:=material||jsonb_build_object('complex_work',
+          p_draft.complex_work||jsonb_build_object('source_current',platform.intake_source_current(
+            p_draft.workspace_id,p_draft.business_id,p_draft.conversation_id,p_draft.client_id,
+            p_draft.complex_work->'source')));
+      END IF;
       RETURN material||jsonb_build_object('authority_sha256',encode(sha256(convert_to(
         jsonb_build_array('service_assessment_v1',p_draft.client_id,material)::text,'UTF8')),'hex'));
     END $$""",
     "platform.service_assessment_result(app.service_assessments,boolean)": r"""CREATE FUNCTION platform.service_assessment_result(
       p_assessment app.service_assessments,p_current boolean
     ) RETURNS jsonb
-    LANGUAGE sql IMMUTABLE SET search_path=pg_catalog,pg_temp AS $$
+    LANGUAGE sql STABLE SET search_path=pg_catalog,pg_temp AS $$
       SELECT jsonb_build_object('assessment_id',p_assessment.id,'request_id',p_assessment.request_id,
         'request_revision',p_assessment.request_revision::text,'release_id',p_assessment.release_id,
         'activation_version',p_assessment.activation_version::text,'current',p_current,
         'outcome',p_assessment.outcome,'reason',p_assessment.reason,'field',p_assessment.field,
         'rule_id',p_assessment.rule_id,'limit',p_assessment.limit_value,'size_mm',p_assessment.size_mm,
-        'occupied_minutes',p_assessment.occupied_minutes,'duration_policy',p_assessment.duration_policy,
-        'evidence',p_assessment.evidence)
+        'occupied_minutes',p_assessment.occupied_minutes,
+        'duration_policy',CASE WHEN p_assessment.complex_work IS NULL THEN p_assessment.duration_policy END,
+        'evidence',p_assessment.evidence,'complex_work',p_assessment.complex_work,
+        'archived_duration',(
+          SELECT jsonb_build_object('assessment_id',a.id,'request_revision',a.request_revision::text,
+            'release_id',a.release_id,'activation_version',a.activation_version::text,
+            'occupied_minutes',a.occupied_minutes)
+          FROM app.service_assessments a
+          WHERE p_assessment.complex_work IS NOT NULL
+            AND (a.workspace_id,a.request_id)=(p_assessment.workspace_id,p_assessment.request_id)
+            AND a.request_revision<p_assessment.request_revision AND a.outcome='FEASIBLE'
+          ORDER BY a.created_at DESC,a.id DESC LIMIT 1))
     $$""",
     "platform.service_assessment_prepare(uuid,uuid,uuid,text)": r"""CREATE FUNCTION platform.service_assessment_prepare(
       p_business uuid,p_conversation uuid,p_request uuid,p_expected_revision text
@@ -188,6 +266,9 @@ FUNCTIONS = {
       IF material->>'authority_sha256' IS DISTINCT FROM p_result->>'authority_sha256' THEN
         RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
       END IF;
+      IF material ? 'complex_work' AND outcome<>'NEEDS_OWNER' THEN
+        RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101';
+      END IF;
 
       duration:=material->'service'->'duration';
       size_rule:=duration->'size_rule';
@@ -214,13 +295,14 @@ FUNCTIONS = {
       INSERT INTO app.service_assessments
         (workspace_id,business_id,request_id,request_revision,service_id,release_id,activation_version,
          authority_sha256,owner_handoff,duration_policy,rules,evidence,unavailable_fields,
-         outcome,reason,field,rule_id,limit_value,size_mm,occupied_minutes,actor_user_account_id,correlation_id)
+         outcome,reason,field,rule_id,limit_value,size_mm,occupied_minutes,actor_user_account_id,
+         correlation_id,complex_work)
         VALUES(draft.workspace_id,draft.business_id,draft.id,draft.revision,draft.service_id,
           (material->>'release_id')::uuid,(material->>'activation_version')::bigint,
           material->>'authority_sha256',(material->>'owner_handoff')::boolean,duration,
           material->'rules',material->'facts',material->'unavailable_fields',outcome,reason,
           field,rule_id,limit_value,size_mm,occupied,nullif(current_setting('asm.actor_id',true),'')::uuid,
-          nullif(current_setting('asm.correlation_id',true),'')::uuid)
+          nullif(current_setting('asm.correlation_id',true),'')::uuid,material->'complex_work')
         RETURNING * INTO saved;
       RETURN platform.service_assessment_result(saved,true);
     END $$""",
@@ -245,6 +327,293 @@ RUNTIME_FUNCTIONS = (
     "platform.service_assessment_record(uuid,uuid,uuid,jsonb)",
     "platform.service_assessment_read(uuid,uuid,uuid)",
 )
+
+# Freeze the two replaced capabilities so downgrade restores the exact 0025 bodies.
+REQUEST_0025 = (
+    r"""CREATE FUNCTION platform.service_request_owner_create(
+      p_business uuid,p_conversation uuid,p_key text,p_request jsonb
+    ) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE
+      scope app.conversations%ROWTYPE; draft app.service_requests%ROWTYPE;
+      anchor app.messages%ROWTYPE; next_anchor app.messages%ROWTYPE; command record;
+      projection jsonb; service jsonb; release_id uuid; fields jsonb; start_source jsonb;
+      fact jsonb; facts jsonb; summary jsonb; effect text;
+    BEGIN
+      scope:=platform.service_request_owner_scope(p_business,p_conversation);
+      SELECT * INTO command FROM platform.service_request_command(scope,p_key,'CREATE',NULL,p_request);
+      IF command.replay_id IS NOT NULL THEN
+        RETURN jsonb_build_object('request_id',command.replay_id);
+      END IF;
+      IF platform.material_object(p_request,ARRAY[
+          'expected_version','expected_fingerprint','intent_source','fields','selection'
+        ]) IS NOT TRUE THEN
+        RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101';
+      END IF;
+      fields:=p_request->'fields';
+      start_source:=p_request->'intent_source';
+      IF jsonb_typeof(fields) IS DISTINCT FROM 'array'
+        OR platform.material_object(start_source,ARRAY['message_id','source_version']) IS NOT TRUE
+        OR platform.human_context_uuid(start_source->'message_id') IS NOT TRUE
+        OR jsonb_typeof(start_source->'source_version') IS DISTINCT FROM 'string'
+        OR (start_source->>'source_version' ~ '^[a-f0-9]{64}$') IS NOT TRUE THEN
+        RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101';
+      END IF;
+      IF jsonb_array_length(fields)>5 OR EXISTS(
+        SELECT 1 FROM jsonb_array_elements(fields) AS f(value)
+        WHERE f.value NOT IN ('"idea"','"placement"','"approximate_size"','"style"','"references"')
+      ) OR (SELECT count(DISTINCT value) FROM jsonb_array_elements(fields))<>jsonb_array_length(fields) THEN
+        RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101';
+      END IF;
+
+      projection:=platform.service_request_intake(scope,p_request);
+      SELECT m.* INTO anchor FROM app.messages m
+        WHERE (m.workspace_id,m.conversation_id,m.connection_id,m.id)
+          =(scope.workspace_id,scope.id,scope.connection_id,(start_source->>'message_id')::uuid)
+          AND m.direction='INBOUND';
+      IF NOT FOUND OR NOT EXISTS(
+        SELECT 1 FROM jsonb_array_elements(projection->'sources') AS s(value)
+        WHERE s.value->'message_id'=start_source->'message_id'
+          AND s.value->'source_version'=start_source->'source_version'
+      ) OR platform.intake_source_current(
+        scope.workspace_id,scope.business_id,scope.id,scope.client_id,start_source
+      ) IS NOT TRUE THEN
+        RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+      END IF;
+      SELECT d.* INTO draft FROM app.service_requests d
+        WHERE (d.workspace_id,d.business_id,d.conversation_id,d.client_id,d.intent_message_id)
+          =(scope.workspace_id,scope.business_id,scope.id,scope.client_id,anchor.id);
+      IF FOUND THEN
+        effect:='OPEN';
+      ELSE
+        release_id:=(projection->>'release_id')::uuid;
+        SELECT s.value INTO service
+          FROM platform.business_configuration_releases published
+          CROSS JOIN LATERAL jsonb_array_elements(published.body->'services') s(value)
+          WHERE (published.workspace_id,published.business_id,published.id)
+              =(scope.workspace_id,scope.business_id,release_id)
+            AND s.value->>'id'=projection->>'service_id' AND s.value->>'active'='true';
+        IF platform.intake_template(service) IS NOT TRUE THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+        END IF;
+        -- A newly created draft takes facts from its own segment of the dialogue.
+        SELECT m.* INTO next_anchor FROM app.service_requests d
+          JOIN app.messages m ON (m.workspace_id,m.id)=(d.workspace_id,d.intent_message_id)
+          WHERE (d.workspace_id,d.business_id,d.conversation_id,d.client_id)
+            =(scope.workspace_id,scope.business_id,scope.id,scope.client_id)
+            AND (m.created_at,m.id)>(anchor.created_at,anchor.id)
+          ORDER BY m.created_at,m.id LIMIT 1;
+
+        SELECT coalesce(jsonb_agg(f.value ORDER BY f.value->>'field'),'[]') INTO facts
+          FROM jsonb_array_elements(projection->'facts') f(value)
+          WHERE fields ? (f.value->>'field');
+        IF jsonb_array_length(facts)<>jsonb_array_length(fields) THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+        END IF;
+        FOR fact IN SELECT value FROM jsonb_array_elements(facts) LOOP
+          IF platform.intake_source_current(
+            scope.workspace_id,scope.business_id,scope.id,scope.client_id,fact->'source'
+          ) IS NOT TRUE THEN
+            RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+          END IF;
+          IF platform.service_request_fact_available(scope,NULL,fact) IS NOT TRUE OR NOT EXISTS (
+            SELECT 1 FROM app.messages m
+            WHERE (m.workspace_id,m.conversation_id,m.id)
+              =(scope.workspace_id,scope.id,(fact->'source'->>'message_id')::uuid)
+              AND (m.created_at,m.id)>=(anchor.created_at,anchor.id)
+              AND (next_anchor.id IS NULL OR (m.created_at,m.id)<(next_anchor.created_at,next_anchor.id))
+          ) THEN
+            RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+          END IF;
+        END LOOP;
+        -- Record the source identity, including image analysis pins, without its quoted text.
+        SELECT coalesce(jsonb_agg(jsonb_set(f.value,'{source,quote}','""') ORDER BY f.ordinal),'[]')
+          INTO facts FROM jsonb_array_elements(facts) WITH ORDINALITY f(value,ordinal);
+        summary:=platform.service_request_summary(service,facts,
+          CASE WHEN projection->>'status'='OWNER_HANDOFF' THEN projection->>'question' END);
+        INSERT INTO app.service_requests
+          (workspace_id,business_id,conversation_id,client_id,intent_message_id,intent_source_version,
+           release_id,service_id,service_name,template_revision,facts,missing,conflicts,question)
+          VALUES(scope.workspace_id,scope.business_id,scope.id,scope.client_id,anchor.id,
+            start_source->>'source_version',release_id,service->>'id',service->>'name',
+            projection->>'template_revision',facts,summary->'missing',summary->'conflicts',summary->>'question')
+          RETURNING * INTO draft;
+        effect:='CREATE';
+      END IF;
+      INSERT INTO platform.service_request_receipts
+        (workspace_id,actor_user_account_id,command_key,correlation_id,request_fingerprint,
+         request_id,accepted_revision,effect)
+        VALUES(scope.workspace_id,command.actor,p_key,
+          nullif(current_setting('asm.correlation_id',true),'')::uuid,
+          command.fingerprint,draft.id,draft.revision,effect);
+      RETURN jsonb_build_object('request_id',draft.id);
+    END $$""",
+    r"""CREATE FUNCTION platform.service_request_owner_revise(
+      p_business uuid,p_conversation uuid,p_target uuid,p_key text,p_request jsonb
+    ) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE
+      scope app.conversations%ROWTYPE; draft app.service_requests%ROWTYPE; command record;
+      projection jsonb; service jsonb; requested_source jsonb; selected_field text;
+      fact jsonb; revised_facts jsonb; summary jsonb; effect text:='OPEN';
+    BEGIN
+      scope:=platform.service_request_owner_scope(p_business,p_conversation);
+      SELECT * INTO command FROM platform.service_request_command(scope,p_key,'REVISE',p_target,p_request);
+      IF command.replay_id IS NOT NULL THEN
+        RETURN jsonb_build_object('request_id',command.replay_id);
+      END IF;
+      requested_source:=p_request->'source';
+      selected_field:=p_request->>'field';
+      IF p_target IS NULL OR platform.material_object(p_request,ARRAY[
+          'expected_revision','expected_version','expected_fingerprint','field','source','selection'
+        ]) IS NOT TRUE
+        OR platform.human_context_decimal(p_request->'expected_revision',true) IS NOT TRUE
+        OR (selected_field IN ('idea','placement','approximate_size','style','references')) IS NOT TRUE
+        OR platform.material_object(requested_source,ARRAY['message_id','source_version']) IS NOT TRUE
+        OR platform.human_context_uuid(requested_source->'message_id') IS NOT TRUE
+        OR jsonb_typeof(requested_source->'source_version') IS DISTINCT FROM 'string'
+        OR (requested_source->>'source_version' ~ '^[a-f0-9]{64}$') IS NOT TRUE THEN
+        RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101';
+      END IF;
+
+      SELECT d.* INTO draft FROM app.service_requests d
+        WHERE (d.workspace_id,d.business_id,d.conversation_id,d.client_id,d.id)
+          =(scope.workspace_id,scope.business_id,scope.id,scope.client_id,p_target)
+        FOR NO KEY UPDATE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'NOT_FOUND' USING ERRCODE='P3101'; END IF;
+      IF draft.revision::text IS DISTINCT FROM p_request->>'expected_revision' THEN
+        RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+      END IF;
+      projection:=platform.service_request_intake(scope,p_request);
+      IF (draft.service_id,draft.template_revision) IS DISTINCT FROM
+        (projection->>'service_id',projection->>'template_revision') THEN
+        RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+      END IF;
+      SELECT f.value INTO fact FROM jsonb_array_elements(projection->'facts') f(value)
+        WHERE f.value->>'field'=selected_field
+          AND f.value->'source'->'message_id'=requested_source->'message_id'
+          AND f.value->'source'->'source_version'=requested_source->'source_version';
+      IF NOT FOUND OR platform.intake_source_current(
+        scope.workspace_id,scope.business_id,scope.id,scope.client_id,fact->'source'
+      ) IS NOT TRUE THEN
+        RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+      END IF;
+      -- The owner assigns late evidence to the selected draft. A source already
+      -- assigned to another work contradicts that assignment regardless of time.
+      IF fact->>'conflict' IS DISTINCT FROM 'false'
+        OR platform.service_request_fact_available(scope,draft.id,fact) IS NOT TRUE THEN
+        RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+      END IF;
+
+      SELECT jsonb_agg(f.value ORDER BY f.value->>'field') INTO revised_facts FROM (
+        SELECT f.value FROM jsonb_array_elements(draft.facts) f(value)
+          WHERE f.value->>'field'<>selected_field
+        UNION ALL SELECT jsonb_set(fact,'{source,quote}','""')
+      ) f(value);
+      IF revised_facts IS DISTINCT FROM draft.facts THEN
+        IF draft.revision=9223372036854775807 THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+        END IF;
+        SELECT s.value INTO service
+          FROM platform.business_configuration_releases published
+          CROSS JOIN LATERAL jsonb_array_elements(published.body->'services') s(value)
+          WHERE (published.workspace_id,published.business_id,published.id)
+              =(draft.workspace_id,draft.business_id,draft.release_id)
+            AND s.value->>'id'=draft.service_id;
+        IF platform.intake_template(service) IS NOT TRUE THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+        END IF;
+        -- Keep an existing handoff for this work. A handoff in the current
+        -- projection may belong to another draft in the same conversation.
+        summary:=platform.service_request_summary(service,revised_facts,CASE
+          WHEN draft.question='Мастер, уточните, можно ли продолжить консультацию по этому запросу.'
+          THEN draft.question END);
+        UPDATE app.service_requests d
+          SET (facts,missing,conflicts,question,revision)=(revised_facts,summary->'missing',
+            summary->'conflicts',summary->>'question',d.revision+1)
+          WHERE (d.workspace_id,d.id)=(draft.workspace_id,draft.id)
+          RETURNING d.* INTO draft;
+        effect:='REVISE';
+      END IF;
+      INSERT INTO platform.service_request_receipts
+        (workspace_id,actor_user_account_id,command_key,correlation_id,request_fingerprint,
+         request_id,accepted_revision,effect)
+        VALUES(scope.workspace_id,command.actor,p_key,
+          nullif(current_setting('asm.correlation_id',true),'')::uuid,
+          command.fingerprint,draft.id,draft.revision,effect);
+      RETURN jsonb_build_object('request_id',draft.id);
+    END $$""",
+)
+
+
+def request_replacements():
+    create, revise = REQUEST_0025
+    create_changes = (
+        (
+            "fact jsonb; facts jsonb; summary jsonb; effect text;",
+            "fact jsonb; facts jsonb; summary jsonb; effect text; complexity jsonb;",
+        ),
+        (
+            """        summary:=platform.service_request_summary(service,facts,
+          CASE WHEN projection->>'status'='OWNER_HANDOFF' THEN projection->>'question' END);
+""",
+            """        complexity:=platform.service_request_complex_work(scope,NULL,projection->>'service_id',
+          jsonb_build_array(start_source)||jsonb_path_query_array(facts,'$[*].source'));
+        summary:=platform.service_request_summary(service,facts,
+          CASE WHEN complexity IS NOT NULL THEN 'Мастер, уточните, можно ли продолжить консультацию по этому запросу.'
+            WHEN projection->>'status'='OWNER_HANDOFF' AND projection->>'category' NOT IN ('COVER_UP','OTHER_COMPLEX')
+            THEN projection->>'question' END);
+""",
+        ),
+        (
+            "release_id,service_id,service_name,template_revision,facts,missing,conflicts,question)",
+            "release_id,service_id,service_name,template_revision,facts,missing,conflicts,question,complex_work)",
+        ),
+        (
+            "projection->>'template_revision',facts,summary->'missing',summary->'conflicts',summary->>'question')",
+            "projection->>'template_revision',facts,summary->'missing',summary->'conflicts',summary->>'question',complexity)",
+        ),
+    )
+    revise_changes = (
+        (
+            "fact jsonb; revised_facts jsonb; summary jsonb; effect text:='OPEN';",
+            "fact jsonb; revised_facts jsonb; summary jsonb; effect text:='OPEN'; complexity jsonb;",
+        ),
+        (
+            "      SELECT jsonb_agg(f.value ORDER BY f.value->>'field') INTO revised_facts",
+            """      complexity:=coalesce(platform.service_request_complex_work(
+        scope,draft.id,draft.service_id,jsonb_build_array(requested_source)),draft.complex_work);
+      SELECT jsonb_agg(f.value ORDER BY f.value->>'field') INTO revised_facts""",
+        ),
+        (
+            "IF revised_facts IS DISTINCT FROM draft.facts THEN",
+            """IF (revised_facts,complexity) IS DISTINCT FROM (draft.facts,draft.complex_work) THEN""",
+        ),
+        (
+            """        -- Keep an existing handoff for this work. A handoff in the current
+        -- projection may belong to another draft in the same conversation.
+        summary:=platform.service_request_summary(service,revised_facts,CASE
+          WHEN draft.question='Мастер, уточните, можно ли продолжить консультацию по этому запросу.'
+          THEN draft.question END);""",
+            """        summary:=platform.service_request_summary(service,revised_facts,CASE
+          WHEN complexity IS NOT NULL OR
+            draft.question='Мастер, уточните, можно ли продолжить консультацию по этому запросу.'
+          THEN 'Мастер, уточните, можно ли продолжить консультацию по этому запросу.' END);""",
+        ),
+        (
+            """SET (facts,missing,conflicts,question,revision)=(revised_facts,summary->'missing',
+            summary->'conflicts',summary->>'question',d.revision+1)""",
+            """SET (facts,missing,conflicts,question,revision,complex_work)=(revised_facts,summary->'missing',
+            summary->'conflicts',summary->>'question',d.revision+1,complexity)""",
+        ),
+    )
+    for sql, changes in ((create, create_changes), (revise, revise_changes)):
+        for old, new in changes:
+            if sql.count(old) != 1:
+                raise ValueError("Unexpected 0025 request capability")
+            sql = sql.replace(old, new, 1)
+        yield sql.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+
 
 CONFIGURATION_0025 = {
     "platform.configuration_bundle_shape(jsonb)": r"""CREATE OR REPLACE FUNCTION platform.configuration_bundle_shape(p jsonb) RETURNS boolean
@@ -938,19 +1307,20 @@ PROFILE = r"""CREATE FUNCTION platform.service_assessment_schema_profile() RETUR
 ('platform.published_knowledge_schema_profile()','93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5','sql',true,'s',false),
 ('platform.resolve_workspace_membership(uuid,uuid)','8ce9bdd67c17bc83442bea3a5e7a15337a51074e0ea6408855b10542e39ceb39','sql',true,'v',true),
 ('platform.service_assessment_immutable()','bb7b369ae4c8eff6280b650ddf07efaab07e6a93ef775825115377f9a3156873','plpgsql',false,'v',false),
-('platform.service_assessment_material(app.service_requests)','d32fc3783dc0c4914a5baa697bc7b7087bd3b9ddb36c1c7f8d583b4a22f6d491','plpgsql',true,'s',false),
+('platform.service_assessment_material(app.service_requests)','1aa629e9c025608366eb7d01e0d6a3450665b176d1aedcf902d4557709a5c825','plpgsql',true,'s',false),
 ('platform.service_assessment_prepare(uuid,uuid,uuid,text)','f1093e5b02baef993686df197d29100c6d0a36093a2897c3f204d9da45a81f32','plpgsql',true,'v',true),
 ('platform.service_assessment_read(uuid,uuid,uuid)','044364ffbd44f3c2b742dfed17186d66cdb5f9b998bad88a1fe04f69a9050f37','plpgsql',true,'v',true),
-('platform.service_assessment_record(uuid,uuid,uuid,jsonb)','91ad703f97d3464491822fcaec99f2ef07b0c2687add1b246bf9fae58e3a8f87','plpgsql',true,'v',true),
-('platform.service_assessment_result(app.service_assessments,boolean)','4707f285ae51a1f8a45ea473b24ce59bc5bbee54e5a8d085e5ed8ef6d18715b5','sql',false,'i',false),
+('platform.service_assessment_record(uuid,uuid,uuid,jsonb)','1dea30e785de3c9ab6218149b9aeb04a0cb81409fdd41d2e6268f1844df0c29d','plpgsql',true,'v',true),
+('platform.service_assessment_result(app.service_assessments,boolean)','9e975a7c18c74fd7f8869688bf531eaf18078c3660381c60696f0ed07f1337d9','sql',false,'s',false),
 ('platform.service_assessment_scope(uuid,uuid,uuid)','b72a864f00155d155619709b948da072b15f72902c4c899c9229043ddbffba16','plpgsql',true,'v',false),
 ('platform.service_request_command(app.conversations,text,text,uuid,jsonb)','0888dee140c0e7f35cf2a95a15709a9f040ce9447ca2f402be1ffa340858623f','plpgsql',true,'v',false),
+('platform.service_request_complex_work(app.conversations,uuid,text,jsonb)','9a9db2ad05f6a6001fd822bfff5360ed0843e87f5ab49e40b7559a6fdea023db','plpgsql',true,'s',false),
 ('platform.service_request_fact_available(app.conversations,uuid,jsonb)','63e601011da084f50e8774622a3355b1d1decc5d25662826596dc327696bf688','sql',true,'s',false),
 ('platform.service_request_intake(app.conversations,jsonb)','3f61b1943c618871b3448bce6d5a35df1bc11cfe0f2ba622fbe0844e3c6c1365','plpgsql',true,'s',false),
-('platform.service_request_owner_create(uuid,uuid,text,jsonb)','46eac255bb1f430a5a3d389ef64399e15c487a5df2472ec25ce925b78ae6d69e','plpgsql',true,'v',true),
+('platform.service_request_owner_create(uuid,uuid,text,jsonb)','881c468683f7024abc34b5a89614aec4c9147c4f2619a4b4c03081f7d95ea691','plpgsql',true,'v',true),
 ('platform.service_request_owner_list(uuid,uuid)','54c403414b2ca804d89c0dcc5322a50424ffe1a66f361063190752b505ca9434','plpgsql',true,'v',true),
 ('platform.service_request_owner_read(uuid,uuid,uuid)','4d7a6b09b54341176b12f315c6c08d21c654f891403bb93216070890cf3b6ea3','plpgsql',true,'v',true),
-('platform.service_request_owner_revise(uuid,uuid,uuid,text,jsonb)','e2f57ea5a2ee40a2dae3eae4fa00b69b386a54269184019438890d96dd7c79be','plpgsql',true,'v',true),
+('platform.service_request_owner_revise(uuid,uuid,uuid,text,jsonb)','48e9404f00b040b5a93ac1dc04627945b9bed0be6c5958da3de16620e3de3a58','plpgsql',true,'v',true),
 ('platform.service_request_owner_scope(uuid,uuid)','68d56b048f60af95d6cc0280d2219ac18f467cb18403f5e252157533c1e26a8a','plpgsql',true,'v',false),
 ('platform.service_request_schema_profile()','b6fb012dec5fcc2e74b1ed83ff11a3c2d02ac82cdb819a7062a6d70abdbd95a0','sql',true,'s',false),
 ('platform.service_request_summary(jsonb,jsonb,text)','69b1c509de00d7e8b7c6efed748390c9f973fade292e4d91b2d5cec2df7e76d4','plpgsql',false,'i',false),
@@ -1006,8 +1376,8 @@ PROFILE = r"""CREATE FUNCTION platform.service_assessment_schema_profile() RETUR
 ('app.locations',ARRAY['workspace_id','id','business_id','name','status','version','created_at']::text[]),
 ('app.messages',ARRAY['workspace_id','id','conversation_id','connection_id','provider_chat_id','provider_message_id','direction','content_type','text','image_file_id','media_group_id','occurred_at','projection_fingerprint','version','created_at']::text[]),
 ('app.outbox_events',ARRAY['workspace_id','id','connection_id','message_id','kind','required_direction','status','attempt_id','provider_message_id','error_code','completed_at','version','created_at']::text[]),
-('app.service_assessments',ARRAY['workspace_id','id','business_id','request_id','request_revision','service_id','release_id','activation_version','authority_sha256','owner_handoff','duration_policy','rules','evidence','unavailable_fields','outcome','reason','field','rule_id','limit_value','size_mm','occupied_minutes','actor_user_account_id','correlation_id','created_at']::text[]),
-('app.service_requests',ARRAY['workspace_id','id','business_id','conversation_id','client_id','intent_message_id','intent_source_version','release_id','service_id','service_name','template_revision','state','revision','facts','missing','conflicts','question','created_at']::text[]),
+('app.service_assessments',ARRAY['workspace_id','id','business_id','request_id','request_revision','service_id','release_id','activation_version','authority_sha256','owner_handoff','duration_policy','rules','evidence','unavailable_fields','outcome','reason','field','rule_id','limit_value','size_mm','occupied_minutes','actor_user_account_id','correlation_id','created_at','complex_work']::text[]),
+('app.service_requests',ARRAY['workspace_id','id','business_id','conversation_id','client_id','intent_message_id','intent_source_version','release_id','service_id','service_name','template_revision','state','revision','facts','missing','conflicts','question','created_at','complex_work']::text[]),
 ('platform.ai_deliveries',ARRAY['workspace_id','job_id','source_job_id','source_claim_hash','connection_id','turn_id','turn_revision','kind','step','run_id','selected_kind','message_id','outbox_id','send_job_id','escalation_id','intent_context_version','created_at','provider_session_id','knowledge_pin','search_pin','portfolio_pin','media_pin']::text[]),
 ('platform.ai_provider_calls',ARRAY['workspace_id','run_id','sequence','claim_hash','attempt_count','budget','completion','reserved_at','completed_at','portfolio_session_id']::text[]),
 ('platform.ai_provider_sessions',ARRAY['id','workspace_id','connection_id','conversation_id','client_id','chat_id','bot_identity','data_profile','starts_at','expires_at','max_calls','max_rub','review_sha256','review_checked_at','config','active','created_at']::text[]),
@@ -1075,7 +1445,7 @@ PROFILE = r"""CREATE FUNCTION platform.service_assessment_schema_profile() RETUR
         JOIN pg_attribute a ON a.attrelid=r.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname IN ('app','platform') AND r.relkind='r'
         GROUP BY r.oid,n.nspname,r.relname,r.relowner,r.relrowsecurity,r.relforcerowsecurity,r.relacl),
       validity AS MATERIALIZED (SELECT
-        (SELECT count(*) FROM functions)=339 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=338
+        (SELECT count(*) FROM functions)=340 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=339
         AND NOT EXISTS(SELECT 1 FROM expected e LEFT JOIN functions f ON f.oid=to_regprocedure(e.signature)
           WHERE f.oid IS NULL OR encode(sha256(convert_to(f.prosrc,'UTF8')),'hex')<>e.body_hash OR f.lanname<>e.language
             OR f.prosecdef<>e.security_definer OR f.provolatile::text<>e.volatility OR f.proowner<>'asm_migrator'::regrole
@@ -1110,11 +1480,15 @@ PROFILE = r"""CREATE FUNCTION platform.service_assessment_schema_profile() RETUR
         'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,e.extversion,n.nspname) ORDER BY e.extname)
           FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname IN ('vector','btree_gist'))) AS value)
       SELECT jsonb_build_object('schema_revision','0026','valid',coalesce(v.valid,false)
-        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='5a29cbdf68c98dcd9628a20cddf8dadd17d6cba5087a6d7c3a259c3218d0aabc',
+        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='75ad504d42f1c8e511d59152d77c594e5d3a5da00367348ac016f36fbe8b758c',
         'profile_sha256',encode(sha256(convert_to(E'asm:m3:native_schema:v1\n'||c.value::text,'UTF8')),'hex')) FROM validity v CROSS JOIN catalog c $$"""
 
 
 def upgrade():
+    op.execute("""ALTER TABLE app.service_requests ADD COLUMN complex_work jsonb
+      CHECK(complex_work IS NULL OR (
+        platform.material_object(complex_work,ARRAY['category','source']) IS TRUE
+        AND (complex_work->>'category' IN ('COVER_UP','OTHER_COMPLEX')) IS TRUE))""")
     for sql in CONFIGURATION_0026.values():
         op.execute(sql)
     for table, sql in TABLES.items():
@@ -1134,6 +1508,8 @@ def upgrade():
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC,asm_runtime")
     for signature in RUNTIME_FUNCTIONS:
         op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO asm_runtime")
+    for sql in request_replacements():
+        op.execute(sql)
     op.execute(
         "CREATE TRIGGER service_assessment_immutable BEFORE UPDATE OR DELETE ON app.service_assessments "
         "FOR EACH ROW EXECUTE FUNCTION platform.service_assessment_immutable()"
@@ -1155,10 +1531,11 @@ def upgrade():
 def downgrade():
     op.execute(
         "LOCK TABLE platform.business_configuration_state,platform.business_configuration_releases,"
-        "app.service_assessments IN ACCESS EXCLUSIVE MODE"
+        "app.service_requests,app.service_assessments IN ACCESS EXCLUSIVE MODE"
     )
     op.execute("""DO $$ BEGIN
-      IF EXISTS(SELECT 1 FROM app.service_assessments) OR EXISTS(
+      IF EXISTS(SELECT 1 FROM app.service_assessments)
+        OR EXISTS(SELECT 1 FROM app.service_requests WHERE complex_work IS NOT NULL) OR EXISTS(
         SELECT 1 FROM (
           SELECT draft_body AS body FROM platform.business_configuration_state
           UNION ALL SELECT body FROM platform.business_configuration_releases
@@ -1174,8 +1551,11 @@ def downgrade():
     op.execute("DROP FUNCTION platform.service_assessment_schema_profile()")
     for sql in CONFIGURATION_0025.values():
         op.execute(sql)
+    for sql in REQUEST_0025:
+        op.execute(sql.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1))
     op.execute("DROP TRIGGER service_assessment_immutable ON app.service_assessments")
     for signature in reversed(FUNCTIONS):
         op.execute(f"DROP FUNCTION {signature}")
     for table in reversed(TABLES):
         op.execute(f"DROP TABLE {table}")
+    op.execute("ALTER TABLE app.service_requests DROP COLUMN complex_work")

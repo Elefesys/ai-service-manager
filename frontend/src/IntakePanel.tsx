@@ -166,6 +166,12 @@ function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:Int
     <p>Занято на следующий сеанс <strong>{value.occupied_minutes} мин</strong>.</p>
     <p>Занятость включает подготовку внутри сеанса. Внешние буферы учитываются отдельно.</p>
    </>}
+   {!current&&!busy&&value.occupied_minutes!==null&&<p>Ранее было утверждено {value.occupied_minutes} мин.</p>}
+   {current&&value.complex_work&&<p>
+    {value.complex_work.category==='COVER_UP'?'Перекрытие старой татуировки.':'Работа требует индивидуальной оценки.'}{' '}
+    <a href={`#message-${value.complex_work.source.message_id}`}>Сообщение с уточнением</a> · версия <code>{value.complex_work.source.source_version}</code>
+    {!value.complex_work.source_current&&' · источник изменился, проверьте уточнение.'}
+   </p>}
    {value.release_id&&<p>Публикация <code>{value.release_id}</code> · версия активации {value.activation_version}</p>}
    {current&&value.duration_policy?.size_rule&&<p>Порог опубликованного правила {value.duration_policy.size_rule.threshold_mm} мм.</p>}
    {current&&value.size_mm!==null&&value.reason!=='SIZE_LIMIT_EXCEEDED'&&<p>Размер для оценки {value.size_mm} мм.</p>}
@@ -176,6 +182,11 @@ function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:Int
      {fact.source.analysis_id&&<> · анализ <code>{fact.source.analysis_id}</code> · SHA-256 <code>{fact.source.analysis_sha256}</code></>}
     </li>)}
    </ul>}
+   {value.archived_duration&&<details>
+    <summary>Архивная оценка</summary>
+    <p>Ревизия {value.archived_duration.request_revision} · ранее было утверждено {value.archived_duration.occupied_minutes} мин.</p>
+    {value.archived_duration.release_id&&<p>Публикация <code>{value.archived_duration.release_id}</code> · версия активации {value.archived_duration.activation_version}</p>}
+   </details>}
   </article>}
   <div className="control-actions">
    <button type="button" disabled={busy||locked||blocked} onClick={()=>void load(true)}>{retry?'Повторить оценку заявки':value?'Пересчитать оценку':'Оценить заявку'}</button>

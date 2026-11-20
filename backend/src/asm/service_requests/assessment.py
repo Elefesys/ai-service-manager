@@ -16,6 +16,7 @@ from asm.configuration.models import (
     SizeMillimetres,
 )
 from asm.intake.models import Digest, Fact, FieldId
+from asm.service_requests.models import IntentSource
 
 Outcome = Literal["FEASIBLE", "NEEDS_DATA", "NEEDS_OWNER", "DECLINED"]
 Reason = Literal[
@@ -39,6 +40,12 @@ class AssessmentCommand(ConfigurationModel):
     expected_revision: PositiveDecimal
 
 
+class ComplexWork(ConfigurationModel):
+    category: Literal["COVER_UP", "OTHER_COMPLEX"]
+    source: IntentSource
+    source_current: bool
+
+
 class AssessmentInputs(ConfigurationModel):
     workspace_id: CanonicalUUID
     business_id: CanonicalUUID
@@ -53,6 +60,7 @@ class AssessmentInputs(ConfigurationModel):
     owner_handoff: bool
     facts: list[Fact] = Field(max_length=5)
     unavailable_fields: list[FieldId] = Field(max_length=5)
+    complex_work: ComplexWork | None = None
 
 
 class AssessmentDecision(ConfigurationModel):
@@ -71,6 +79,14 @@ class AssessmentDecision(ConfigurationModel):
         return self
 
 
+class ArchivedDuration(ConfigurationModel):
+    assessment_id: CanonicalUUID
+    request_revision: PositiveDecimal
+    release_id: CanonicalUUID | None
+    activation_version: LimitDecimal
+    occupied_minutes: OccupiedMinutes
+
+
 class ServiceAssessment(AssessmentDecision):
     assessment_id: CanonicalUUID
     request_id: CanonicalUUID
@@ -80,6 +96,10 @@ class ServiceAssessment(AssessmentDecision):
     current: bool
     duration_policy: DurationPolicy | None
     evidence: list[Fact] = Field(max_length=5)
+    complex_work: ComplexWork | None = Field(default=None, exclude_if=lambda value: value is None)
+    archived_duration: ArchivedDuration | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 def confirmed(fact: Fact | None) -> bool:

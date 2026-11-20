@@ -72,6 +72,126 @@ async def request_assessment(auth, url, mutation, revision="1"):
     return response.json()
 
 
+@pytest.mark.parametrize(
+    ("category", "separate"),
+    [("COVER_UP", False), ("OTHER_COMPLEX", False), ("COVER_UP", True)],
+    ids=["late-cover-up", "late-other-complex", "separate-cover-up"],
+)
+async def test_assessment_complex_work_is_bound_to_owner_selected_request(
+    assessment_pg, auth, category, separate
+):
+    h = assessment_pg
+    await publish(h, {"mode": "FIXED", "minutes": 65, "rule_note": None})
+    cid, worker, model, _, delivery = await application(
+        h,
+        {"idea": "flower", "placement": "forearm", "approximate_size": "8 cm", "style": "linework"},
+    )
+    signed_in = await login(auth)
+    assert signed_in.status_code == 200
+    mutation = headers(auth.client, signed_in.json()["csrf_token"])
+    collection = route(cid)
+    first_id = await create_draft(auth, cid, mutation, await summary(h, cid))
+    first_url = f"{collection}/{first_id}"
+    first_assessment = first_url + "/assessment"
+    original = await request_assessment(auth, first_assessment, mutation)
+    assert (original["current"], original["outcome"], original["occupied_minutes"]) == (
+        True,
+        "FEASIBLE",
+        65,
+    )
+
+    await worker.execute(await claim_job(h, delivery["send_job_id"]))
+    model.category = category
+    model.correction = not separate
+    model.switch = separate
+    if separate:
+        model.values = {"idea": "bird", "placement": "shoulder", "approximate_size": "12 cm"}
+        message = "Separate bird on the shoulder, 12 cm, to cover an old tattoo"
+    else:
+        model.values = {"approximate_size": "12 cm"}
+        detail = "to cover an old tattoo" if category == "COVER_UP" else "around an old scar"
+        message = f"For the first flower, actually 12 cm, {detail}"
+    await next_turn(h, worker, message)
+    projection = await summary(h, cid)
+    assert (projection["status"], projection["category"]) == ("OWNER_HANDOFF", category)
+    first = (await auth.client.get(collection, params={"request_id": first_id})).json()
+    command = revise_body(projection, first, "approximate_size")
+    source = command["source"]
+    assert projection["sources"][-1]["message_id"] == source["message_id"]
+    assert (await auth.client.get(first_assessment)).json() == original
+
+    if separate:
+        second_id = await create_draft(auth, cid, mutation, projection)
+        assert first_id != second_id
+        blocked = await auth.client.patch(
+            first_url, json=command, headers=mutation | {"Idempotency-Key": str(uuid4())}
+        )
+        assert (
+            blocked.status_code == 409 and blocked.json()["error"]["code"] == "NEEDS_CLARIFICATION"
+        )
+        assert await request_assessment(auth, first_assessment, mutation) == original
+        result = await request_assessment(auth, f"{collection}/{second_id}/assessment", mutation)
+        assert (result["request_revision"], result["current"], result["occupied_minutes"]) == (
+            "1",
+            True,
+            None,
+        )
+        assert (result["outcome"], result["reason"]) == ("NEEDS_OWNER", "OWNER_HANDOFF")
+        assert result["complex_work"] == {
+            "category": category,
+            "source": source,
+            "source_current": True,
+        }
+        return
+
+    unclear = await auth.client.patch(
+        first_url,
+        json=command | {"selection": "UNCLEAR"},
+        headers=mutation | {"Idempotency-Key": str(uuid4())},
+    )
+    assert unclear.status_code == 409 and unclear.json()["error"]["code"] == "NEEDS_CLARIFICATION"
+    key = mutation | {"Idempotency-Key": str(uuid4())}
+    for _ in range(2):
+        revised = await auth.client.patch(first_url, json=command, headers=key)
+        assert revised.status_code == 200, revised.text
+        assert revised.json()["request_id"] == first_id
+    assert (await auth.client.get(first_assessment)).json() == original | {"current": False}
+    current = await request_assessment(auth, first_assessment, mutation, revision="2")
+    assert (current["request_revision"], current["current"], current["occupied_minutes"]) == (
+        "2",
+        True,
+        None,
+    )
+    assert (current["outcome"], current["reason"]) == ("NEEDS_OWNER", "OWNER_HANDOFF")
+    assert current["assessment_id"] != original["assessment_id"]
+    assert current["duration_policy"] is None
+    assert current["complex_work"] == {
+        "category": category,
+        "source": source,
+        "source_current": True,
+    }
+    assert current["archived_duration"] == {
+        field: original[field]
+        for field in (
+            "assessment_id",
+            "request_revision",
+            "release_id",
+            "activation_version",
+            "occupied_minutes",
+        )
+    }
+    assert await request_assessment(auth, first_assessment, mutation, revision="2") == current
+    assert (await auth.client.get(first_assessment)).json() == current
+    assert (
+        await scalar(
+            h,
+            "SELECT count(*) FROM app.service_assessments WHERE request_id=:id",
+            id=UUID(first_id),
+        )
+        == 2
+    )
+
+
 async def test_assessment_owner_api_isolates_work_and_refreshes_revision_and_release(
     assessment_pg, auth
 ):

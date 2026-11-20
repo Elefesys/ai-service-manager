@@ -42,6 +42,7 @@ INPUTS = {
     "ambiguous": "Synthetic intake flower and swallow, shared size unclear",
     "second": "Synthetic intake separate swallow shoulder",
     "late-size": "Synthetic intake for the first work, flower size 12 cm",
+    "late-cover-up": "Synthetic intake for the first flower, size 12 cm, covering an old tattoo",
     "assess-first": "Synthetic assessment flower forearm 8 cm linework",
     "assess-second": "Synthetic assessment separate swallow shoulder linework",
 }
@@ -50,6 +51,7 @@ VALUES = {
     "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
     "second": (("idea", "swallow"), ("placement", "shoulder")),
     "late-size": (("approximate_size", "12 cm"),),
+    "late-cover-up": (("approximate_size", "12 cm"),),
     "assess-first": (
         ("idea", "flower"),
         ("placement", "forearm"),
@@ -58,7 +60,7 @@ VALUES = {
     ),
     "assess-second": (("idea", "swallow"), ("placement", "shoulder"), ("style", "linework")),
 }
-CATEGORIES = {"complex": "COVER_UP", "ambiguous": "AMBIGUOUS"}
+CATEGORIES = {"complex": "COVER_UP", "late-cover-up": "COVER_UP", "ambiguous": "AMBIGUOUS"}
 
 
 class DescriptionOnlyStorage:
@@ -94,7 +96,7 @@ class IntakeModel(FakeAdapter):
                     analysis_id=None,
                     analysis_sha256=None,
                 ),
-                explicit_correction=False,
+                explicit_correction=self.operation == "late-cover-up",
             )
             for field, value in VALUES.get(self.operation, ())
         ]
@@ -230,6 +232,7 @@ async def run(args):
         if incoming.code != "ACCEPTED" or incoming.workspace_id != workspace:
             raise ProvisioningError("Fresh canonical finite input required; no retries/resend")
         kernel.question_inbox_id = incoming.inbox_id
+        owner_handoff = CATEGORIES.get(args.operation) == "COVER_UP"
         seen_inbox, seen_observer, ai_claim = False, False, None
         async with asyncio.timeout(25):
             for _ in range(512):
@@ -269,7 +272,7 @@ async def run(args):
                     if args.operation == "seed"
                     else seen_observer
                     and ai_claim is not None
-                    and (args.operation == "complex" or kernel.finalized is not None)
+                    and (owner_handoff or kernel.finalized is not None)
                 )
                 if not done:
                     continue
@@ -297,11 +300,10 @@ async def run(args):
                     if (
                         not isinstance(receipt, IntakeRuntimeReceipt)
                         or len(model.requests) != 1
-                        or receipt.result.kind
-                        != ("handoff" if args.operation == "complex" else "reply")
+                        or receipt.result.kind != ("handoff" if owner_handoff else "reply")
                     ):
                         raise ProvisioningError("One durable bounded v7 result required")
-                expected = 0 if args.operation in {"seed", "complex"} else 1
+                expected = 0 if owner_handoff or args.operation == "seed" else 1
                 if adapter.calls != expected or adapter.effects != expected:
                     raise ProvisioningError("Unexpected finite external effect count")
                 return dict(
@@ -326,7 +328,7 @@ def main():
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
         parser.add_argument(
             "--journey",
-            choices=("intake", "request", "request-deferred", "assessment"),
+            choices=("intake", "request", "request-deferred", "assessment", "assessment-complex"),
             default="intake",
         )
         for name in ("actor", "workspace", "business"):

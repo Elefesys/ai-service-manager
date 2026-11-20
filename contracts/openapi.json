@@ -175,6 +175,59 @@
         "title": "AnalysisResponse",
         "type": "object"
       },
+      "ArchivedDuration": {
+        "additionalProperties": false,
+        "properties": {
+          "activation_version": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Activation Version",
+            "type": "string"
+          },
+          "assessment_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "occupied_minutes": {
+            "maximum": 10080.0,
+            "minimum": 1.0,
+            "title": "Occupied Minutes",
+            "type": "integer"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "request_revision": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Request Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "request_revision",
+          "release_id",
+          "activation_version",
+          "occupied_minutes"
+        ],
+        "title": "ArchivedDuration",
+        "type": "object"
+      },
       "Attributes": {
         "additionalProperties": false,
         "properties": {
@@ -931,6 +984,33 @@
           "code"
         ],
         "title": "CommonErrorDetail",
+        "type": "object"
+      },
+      "ComplexWork": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "COVER_UP",
+              "OTHER_COMPLEX"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/IntentSource"
+          },
+          "source_current": {
+            "title": "Source Current",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "source",
+          "source_current"
+        ],
+        "title": "ComplexWork",
         "type": "object"
       },
       "ConfigurationCode": {
@@ -8917,11 +8997,31 @@
             "title": "Activation Version",
             "type": "string"
           },
+          "archived_duration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArchivedDuration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "assessment_id": {
             "format": "uuid",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             "title": "Assessment Id",
             "type": "string"
+          },
+          "complex_work": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComplexWork"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "current": {
             "title": "Current",

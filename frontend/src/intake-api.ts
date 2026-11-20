@@ -66,6 +66,8 @@ export type ServiceAssessment = {
  occupied_minutes:number|null;
  duration_policy:DurationPolicy|null;
  evidence:Fact[];
+ complex_work?:{category:'COVER_UP'|'OTHER_COMPLEX';source:IntentSource;source_current:boolean};
+ archived_duration?:{assessment_id:string;request_revision:string;release_id:string|null;activation_version:string;occupied_minutes:number};
 };
 export type CaseInput = { description: string; asset: {asset_id:string;asset_version_id:string}|null; width_mm:number|null; height_mm:number|null; placement:string|null; style:string|null; detail:string|null; fill:string|null; provider:string|null; working_minutes:number|null; occupied_minutes:number|null; setup_minutes:number|null; stencil_minutes:number|null; break_minutes:number|null; cleanup_minutes:number|null; treatment:'INCLUDED'|'EXCLUDED'|'UNKNOWN'; session_count:number|null; session_minutes:number[]|null; explanation:string|null };
 export type DurationCase = {case_id:string;version:string;state:'DRAFT'|'CONFIRMED'|'REVOKED';data:CaseInput;confirmed_by:string|null;source_current:boolean};
@@ -138,8 +140,9 @@ export function parseDraft(value:unknown,scope:IntakeScope,requestId?:string):Se
  return v as ServiceRequestDraft;
 }
 export function parseAssessment(value:unknown,requestId:string,expectedRevision?:string):ServiceAssessment{
+ const optional=['complex_work','archived_duration'].filter(key=>typeof value==='object'&&value!==null&&Object.hasOwn(value,key));
  const v=object(value,['assessment_id','request_id','request_revision','release_id','activation_version','current','outcome','reason',
-  'field','rule_id','limit','size_mm','occupied_minutes','duration_policy','evidence']);
+  'field','rule_id','limit','size_mm','occupied_minutes','duration_policy','evidence',...optional]);
  if(!uuid(v.assessment_id)||!uuid(v.request_id)||v.request_id!==requestId||!decimal(v.request_revision,false)
    ||(expectedRevision!==undefined&&v.request_revision!==expectedRevision)||!nullable(v.release_id,uuid)||!decimal(v.activation_version)
    ||typeof v.current!=='boolean'||!one(v.outcome,assessmentOutcomes)||!one(v.reason,assessmentReasons)
@@ -150,6 +153,18 @@ export function parseAssessment(value:unknown,requestId:string,expectedRevision?
  if(facts.some(fact=>fact.source.quote!==''||(fact.status==='observed'&&fact.source.analysis_id===null)))invalid();
  if(v.duration_policy!==null){
   try{parseDurationPolicy(v.duration_policy);}catch{return invalid();}
+ }
+ if(v.complex_work!==undefined){
+  const work=object(v.complex_work,['category','source','source_current']);
+  if(!one(work.category,['COVER_UP','OTHER_COMPLEX'])||typeof work.source_current!=='boolean'
+    ||v.outcome!=='NEEDS_OWNER'||v.duration_policy!==null)invalid();
+  checkIntentSource(work.source);
+ }
+ if(v.archived_duration!==undefined){
+  const archive=object(v.archived_duration,['assessment_id','request_revision','release_id','activation_version','occupied_minutes']);
+  if(!v.complex_work||!uuid(archive.assessment_id)||archive.assessment_id===v.assessment_id
+    ||!decimal(archive.request_revision,false)||BigInt(archive.request_revision as string)>=BigInt(v.request_revision as string)
+    ||!nullable(archive.release_id,uuid)||!decimal(archive.activation_version)||!positiveWithin(archive.occupied_minutes,10080))invalid();
  }
  return v as ServiceAssessment;
 }
