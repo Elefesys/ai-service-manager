@@ -305,6 +305,7 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
   card.request_id!==draft.request_id&&card.intent_source.message_id===item.message_id)):[];
  const revisionFacts=canRevise?data.facts.filter(fact=>!fact.conflict&&!data.conflicts.includes(fact.field)
   &&revisionSources.some(item=>item.message_id===fact.source.message_id&&item.source_version===fact.source.source_version)):[];
+ const hasComplexity=data?.category==='COVER_UP'||data?.category==='OTHER_COMPLEX';
  const revision=revisionChoice?.fingerprint===data?.fingerprint?revisionChoice:null;
  const revisionFact=revisionFacts.find(fact=>fact.field===revision?.field);
  const revisionSource=revision?.field==='complex_work'
@@ -358,7 +359,7 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
    {waiting.acceptedId?'Открыть сохранённую заявку':waiting.operation==='create'?'Повторить создание заявки':'Повторить изменение заявки'}
   </button>}
   {!locked&&(draft||error)&&<button type="button" className="secondary" onClick={()=>void open(desiredCard.current)}>Обновить карточку заявки</button>}
-  {revisionSources.length>0&&data&&draft&&<fieldset aria-label="Уточнение заявки" disabled={locked||revisionNeedsRead} style={{minWidth:0}}>
+  {(revisionFacts.length>0||hasComplexity&&revisionSources.length>0)&&data&&draft&&<fieldset aria-label="Уточнение заявки" disabled={locked||revisionNeedsRead} style={{minWidth:0}}>
    <label htmlFor={revisionFieldId}>Уточняемое сведение</label>
    <select id={revisionFieldId} value={revision?.field??''} onChange={event=>{
     const field=event.target.value;
