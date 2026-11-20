@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.1B REVIEW · повторная приёмка C8 по архиву · 2026-11-20
+## CURRENT — M6.1B REVIEW · PR #57 готов к слиянию · 2026-11-20
 
-**Единственная активная задача — повторная приёмка `C8-M6.1B-01`, ведущий C8.** C0 принял R3 на `c0ce417b35eae7ac4bfe6481897ec8ba77337ab3` в [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57). База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. На PostgreSQL 18.6 C0 подтвердил сохранение прежних 65 минут после пересчёта той же ревизии при новой публикации, правке и удалении источника. Карточка показывает текущий результат и архив выбранной заявки. CI 12/12 SUCCESS, Chromium 81/81 после повтора одного job. [Поручение C8 и проверка C0](tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44692332311).
+**Ожидается разрешение владельца на слияние.** C8 вернул `PASS` на `c0ce417b35eae7ac4bfe6481897ec8ba77337ab3` и закрыл `C8-M6.1B-01`. C0 принял кандидата и перевёл [PR #57](https://github.com/Elefesys/ai-service-manager/pull/57) в Ready for review. База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. CI кандидата — 12/12, Chromium — 81/81 после повтора `browser`. Следующая проверка C0 — фактическое слияние и его `push/main`. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/57#pullrequestreview-5989621482) · [решение C0](tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44692332311).
+
+## История — повторная приёмка C8 по архиву · 2026-11-20
+
+**Повторную приёмку `C8-M6.1B-01` получил C8.** C0 принял R3 на `c0ce417b35eae7ac4bfe6481897ec8ba77337ab3` в [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57). База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. На PostgreSQL 18.6 C0 подтвердил сохранение прежних 65 минут после пересчёта той же ревизии при новой публикации, правке и удалении источника. Карточка показывает текущий результат и архив выбранной заявки. CI 12/12 SUCCESS, Chromium 81/81 после повтора одного job. [Поручение C8 и проверка C0](https://github.com/Elefesys/ai-service-manager/blob/88af3e8be4285245c89ecfd0d1ee304c9e543357/docs/tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44692332311).
 
 ## История — M6.1B-R3 по замечанию C8 · 2026-11-20
 
