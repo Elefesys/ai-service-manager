@@ -28,7 +28,9 @@ export function IntakePanel({session,scope,expired,refresh=0}:{session:Session|n
 }
 
 type DraftChoice={fingerprint:string;messageId:string;fields:FieldId[];confirmed:boolean};
-type RevisionChoice={fingerprint:string;field:FieldId;confirmed:boolean};
+type RevisionChoice={fingerprint:string;confirmed:boolean}&(
+ {field:FieldId}|{field:'complex_work';messageId:string}
+);
 type DraftAttempt={key:string;acceptedId?:string}&(
  {operation:'create';body:DraftCommand}|{operation:'revise';target:string;body:DraftRevisionCommand}
 );
@@ -203,6 +205,7 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
  const sourceId=useId();
  const cardId=useId();
  const revisionFieldId=useId();
+ const revisionMessageId=useId();
  const [draft,setDraft]=useState<ServiceRequestDraft|null>(null);
  const [cards,setCards]=useState<DraftListItem[]>([]);
  const [choice,setChoice]=useState<DraftChoice|null>(null);
@@ -297,13 +300,16 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
  const source=beginnings.find(item=>item.message_id===selected?.messageId);
  const eligible=source&&data?data.facts.filter(fact=>data.sources.findIndex(item=>
   item.message_id===fact.source.message_id&&item.source_version===fact.source.source_version)>=sourceIndex):[];
- const revisionFacts=canChoose&&data&&draft?.service_id===data.service_id&&draft.template_revision===data.template_revision
-  ?data.facts.filter(fact=>!fact.conflict&&!data.conflicts.includes(fact.field)
-   &&!cards.some(card=>card.request_id!==draft.request_id&&card.intent_source.message_id===fact.source.message_id)
-   &&data.sources.some(item=>item.message_id===fact.source.message_id&&item.source_version===fact.source.source_version)):[];
+ const canRevise=canChoose&&data&&draft?.service_id===data.service_id&&draft.template_revision===data.template_revision;
+ const revisionSources=canRevise?data.sources.filter(item=>!cards.some(card=>
+  card.request_id!==draft.request_id&&card.intent_source.message_id===item.message_id)):[];
+ const revisionFacts=canRevise?data.facts.filter(fact=>!fact.conflict&&!data.conflicts.includes(fact.field)
+  &&revisionSources.some(item=>item.message_id===fact.source.message_id&&item.source_version===fact.source.source_version)):[];
  const revision=revisionChoice?.fingerprint===data?.fingerprint?revisionChoice:null;
  const revisionFact=revisionFacts.find(fact=>fact.field===revision?.field);
- const revisionSource=data?.sources.find(item=>item.message_id===revisionFact?.source.message_id&&item.source_version===revisionFact?.source.source_version);
+ const revisionSource=revision?.field==='complex_work'
+  ?revisionSources.find(item=>item.message_id===revision.messageId)
+  :revisionSources.find(item=>item.message_id===revisionFact?.source.message_id&&item.source_version===revisionFact?.source.source_version);
  const waiting=pending.current;
  const locked=busy||!!waiting;
 
@@ -321,10 +327,11 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
  }
 
  function startRevision(){
-  if(!data||!draft||!revisionFact||!revisionSource||!revision?.confirmed||locked||revisionNeedsRead||pending.current)return;
+  if(!data||!draft||!revisionSource||!revision?.confirmed||locked||revisionNeedsRead||pending.current)return;
   const attempt:DraftAttempt={operation:'revise',target:draft.request_id,key:crypto.randomUUID(),body:{
    expected_revision:draft.revision,expected_version:data.version,expected_fingerprint:data.fingerprint,
-   field:revisionFact.field,source:{message_id:revisionSource.message_id,source_version:revisionSource.source_version},selection:'ONE_WORK',
+   ...(revisionFact?{field:revisionFact.field}:{}),
+   source:{message_id:revisionSource.message_id,source_version:revisionSource.source_version},selection:'ONE_WORK',
   }};
   pending.current=attempt;
   void open(draft.request_id,attempt);
@@ -351,21 +358,34 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
    {waiting.acceptedId?'Открыть сохранённую заявку':waiting.operation==='create'?'Повторить создание заявки':'Повторить изменение заявки'}
   </button>}
   {!locked&&(draft||error)&&<button type="button" className="secondary" onClick={()=>void open(desiredCard.current)}>Обновить карточку заявки</button>}
-  {revisionFacts.length>0&&data&&draft&&<fieldset aria-label="Уточнение заявки" disabled={locked||revisionNeedsRead} style={{minWidth:0}}>
+  {revisionSources.length>0&&data&&draft&&<fieldset aria-label="Уточнение заявки" disabled={locked||revisionNeedsRead} style={{minWidth:0}}>
    <label htmlFor={revisionFieldId}>Уточняемое сведение</label>
-   <select id={revisionFieldId} value={revisionFact?.field??''} onChange={event=>setRevisionChoice({
-    fingerprint:data.fingerprint,field:event.target.value as FieldId,confirmed:false,
-   })}>
+   <select id={revisionFieldId} value={revision?.field??''} onChange={event=>{
+    const field=event.target.value;
+    const next={fingerprint:data.fingerprint,confirmed:false};
+    setRevisionChoice(field==='complex_work'?{...next,field,messageId:''}:
+     field?{...next,field:field as FieldId}:null);
+   }}>
     <option value="">Выберите одно сведение</option>
     {revisionFacts.map(fact=><option key={fact.field} value={fact.field}>{labels[fact.field]}: {fact.value}</option>)}
+    <option value="complex_work">Сообщение о сложности</option>
    </select>
+   {revision?.field==='complex_work'&&<>
+    <label htmlFor={revisionMessageId}>Сообщение о сложности</label>
+    <select id={revisionMessageId} value={revision.messageId} style={{maxWidth:'100%'}} onChange={event=>setRevisionChoice({
+     ...revision,messageId:event.target.value,confirmed:false,
+    })}>
+     <option value="">Выберите сообщение о сложности</option>
+     {revisionSources.map(item=><option key={item.message_id} value={item.message_id}>{sourceLabel(item)}</option>)}
+    </select>
+   </>}
    {revisionSource&&revision&&<>
     <p style={{overflowWrap:'anywhere'}}>
      <a href={`#message-${revisionSource.message_id}`}>Сообщение для уточнения</a> · {sourceLabel(revisionSource)} · версия <code>{revisionSource.source_version}</code>
     </p>
     <label style={{display:'block'}}>
      <input type="checkbox" checked={revision.confirmed} onChange={event=>setRevisionChoice({...revision,confirmed:event.target.checked})}/>
-     Сведение из этого сообщения относится к выбранной заявке
+     {revision.field==='complex_work'?'Сообщение о сложности относится к выбранной заявке':'Сведение из этого сообщения относится к выбранной заявке'}
     </label>
    </>}
    <button type="button" onClick={startRevision} disabled={!revisionSource||!revision?.confirmed}>Сохранить уточнение заявки</button>

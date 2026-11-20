@@ -17,7 +17,7 @@ export type DraftRevisionCommand = {
  expected_revision: string;
  expected_version: string;
  expected_fingerprint: string;
- field: FieldId;
+ field?: FieldId;
  source: IntentSource;
  selection: 'ONE_WORK'|'UNCLEAR';
 };

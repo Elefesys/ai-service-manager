@@ -13005,15 +13005,23 @@
                     "type": "string"
                   },
                   "field": {
-                    "enum": [
-                      "idea",
-                      "placement",
-                      "approximate_size",
-                      "style",
-                      "references"
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "idea",
+                          "placement",
+                          "approximate_size",
+                          "style",
+                          "references"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
                     ],
-                    "title": "Field",
-                    "type": "string"
+                    "description": "Omit to attach a source message about complex work.",
+                    "title": "Field"
                   },
                   "selection": {
                     "enum": [
@@ -13031,7 +13039,6 @@
                   "expected_revision",
                   "expected_version",
                   "expected_fingerprint",
-                  "field",
                   "source",
                   "selection"
                 ],

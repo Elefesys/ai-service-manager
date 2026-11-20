@@ -12,8 +12,8 @@ const fixture=JSON.parse(readFileSync(fixtureFile,'utf8')) as {messaging_fixture
 const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixtures.knowledge;
 
 type Viewport='desktop'|'narrow';
-type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'assess-first'|'assess-second';
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex';
+type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source';
 
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
@@ -68,7 +68,7 @@ async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  const seed=await input('seed');expect([seed.model_calls,seed.calls,seed.effects]).toEqual([0,0,0]);
  const inbox=await openConversation(page,seed.conversation_id);
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
- const assessment=journey==='assessment'||journey==='assessment-complex';
+ const assessment=journey.startsWith('assessment');
  const operation=journey==='intake'?'collect':assessment?'assess-first':'collect-sized';
  const collected=await input(operation,seed.conversation_id);
  expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment?'PRELIMINARILY_COMPLETE':'CLARIFY']);
@@ -526,7 +526,11 @@ test('@narrow assesses the selected request against published duration and size 
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 
-test('@narrow late cover-up moves approved minutes to the archive in the owner card',async({page},info)=>{
+for(const [journey,operation,description] of [
+ ['assessment-complex','late-cover-up','with an updated field'],
+ ['assessment-complex-source','complex-message','without changing fields'],
+] as const){
+test(`@narrow late cover-up moves approved minutes to the archive in the owner card ${description}`,async({page},info)=>{
  test.setTimeout(90000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const {settings,serviceName}=await configureIntakeService(page,variant);
@@ -536,7 +540,7 @@ test('@narrow late cover-up moves approved minutes to the archive in the owner c
  await settings.getByLabel('Длительность, минуты 1',{exact:true}).fill('65');
  await publishIntakeService(settings,serviceName);
 
- const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,'assessment-complex');
+ const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,journey);
  const card=intake.getByRole('region',{name:'Черновик заявки',exact:true});
  const panel=card.getByRole('region',{name:'Оценка заявки',exact:true});
  const clock=panel.getByText(/Занято на следующий сеанс/);
@@ -547,12 +551,29 @@ test('@narrow late cover-up moves approved minutes to the archive in the owner c
  await evaluate.click();
  await expect(clock).toContainText('65 мин');
 
- const late=await input('late-cover-up',conversation);
+ const late=await input(operation,conversation);
  expect([late.model_calls,late.calls,late.effects,late.status]).toEqual([1,0,0,'OWNER_HANDOFF']);
  await refreshIntake(inbox,intake);
- await (await chooseRevision(page,late.message_id)).click();
+ if(operation==='complex-message'){
+  await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue('8 cm');
+  const group=page.getByRole('group',{name:'Уточнение заявки',exact:true});
+  await group.getByLabel('Уточняемое сведение',{exact:true}).selectOption('complex_work');
+  await group.getByLabel('Сообщение о сложности',{exact:true}).selectOption(late.message_id);
+  await expect(group.getByRole('link',{name:'Сообщение для уточнения',exact:true})).toHaveAttribute('href',`#message-${late.message_id}`);
+  const save=group.getByRole('button',{name:'Сохранить уточнение заявки',exact:true});
+  await expect(save).toBeDisabled();
+  await group.getByRole('checkbox',{name:'Сообщение о сложности относится к выбранной заявке',exact:true}).check();
+  const patch=page.waitForRequest(request=>request.method()==='PATCH'&&new URL(request.url()).pathname.endsWith(`/service-requests/${requestId}`));
+  await save.click();
+  const body=(await patch).postDataJSON() as DraftRevisionCommand;
+  expect(body).not.toHaveProperty('field');
+  expect(body.source).toMatchObject({message_id:late.message_id,source_version:expect.stringMatching(/^[0-9a-f]{64}$/)});
+ }else{
+  await (await chooseRevision(page,late.message_id)).click();
+ }
  await expect(card.getByTestId('service-request-id')).toHaveText(requestId);
  await expect(card.getByTestId('service-request-revision')).toHaveText('2');
+ if(operation==='complex-message')await expect(card.getByText('Примерный размер · 8 cm · Со слов клиента',{exact:true})).toBeVisible();
  await expect(panel.getByText(/Архивная оценка\. Для актуального результата/)).toBeVisible();
  await expect(panel.getByText('Ранее было утверждено 65 мин.',{exact:true})).toBeVisible();
  await expect(clock).toHaveCount(0);
@@ -568,3 +589,4 @@ test('@narrow late cover-up moves approved minutes to the archive in the owner c
  await expect(oldDuration).toBeVisible();
  await expect(clock).toHaveCount(0);
 });
+}

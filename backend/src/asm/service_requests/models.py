@@ -32,7 +32,9 @@ class ServiceRequestRevisionCommand(ConfigurationModel):
     expected_revision: PositiveDecimal
     expected_version: LimitDecimal
     expected_fingerprint: Digest
-    field: FieldId
+    field: FieldId | None = Field(
+        default=None, description="Omit to attach a source message about complex work."
+    )
     source: IntentSource
     selection: Literal["ONE_WORK", "UNCLEAR"]
 

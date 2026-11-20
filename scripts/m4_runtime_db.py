@@ -388,6 +388,7 @@ M6_ASSESSMENT_IMPLEMENTATION_PATHS = {
     "backend/src/asm/foundation.py",
     "backend/src/asm/service_requests/assessment.py",
     "backend/src/asm/service_requests/http.py",
+    "backend/src/asm/service_requests/models.py",
     "backend/src/asm/service_requests/repository.py",
     "backend/src/asm/telegram/provisioning.py",
     "backend/src/asm/tenancy/database.py",

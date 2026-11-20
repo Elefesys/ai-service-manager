@@ -16,7 +16,7 @@ from test_m5_portfolio_runtime_postgres import analyse, source_image
 from test_m6_service_assessment import SIZE_RULE
 from test_m6_service_assessments_postgres import assessment_pg as assessment_pg
 from test_m6_service_requests_api_postgres import route
-from test_m6_service_requests_postgres import create_body, revise_body
+from test_m6_service_requests_postgres import create_body, revise_body, source_pin
 from test_m6_service_requests_postgres import db as db
 from test_m6_service_requests_postgres import intake_pg as intake_pg
 from test_m6_service_requests_postgres import portfolio_runtime_pg as portfolio_runtime_pg
@@ -190,6 +190,138 @@ async def test_assessment_complex_work_is_bound_to_owner_selected_request(
         )
         == 2
     )
+
+
+@pytest.mark.parametrize(
+    ("category", "separate"),
+    [("COVER_UP", False), ("OTHER_COMPLEX", False), ("COVER_UP", True)],
+    ids=["cover-up-only", "other-complex-only", "separate-work"],
+)
+async def test_assessment_accepts_complexity_message_without_a_field(
+    assessment_pg, auth, category, separate
+):
+    h = assessment_pg
+    await publish(h, {"mode": "FIXED", "minutes": 65, "rule_note": None})
+    cid, worker, model, _, delivery = await application(
+        h,
+        {"idea": "flower", "placement": "forearm", "approximate_size": "8 cm", "style": "linework"},
+    )
+    signed_in = await login(auth)
+    assert signed_in.status_code == 200
+    mutation = headers(auth.client, signed_in.json()["csrf_token"])
+    collection = route(cid)
+    first_id = await create_draft(auth, cid, mutation, await summary(h, cid))
+    first_url = f"{collection}/{first_id}/assessment"
+    first = await request_assessment(auth, first_url, mutation)
+    assert (first["current"], first["outcome"], first["occupied_minutes"]) == (True, "FEASIBLE", 65)
+
+    target_id, original = first_id, first
+    if separate:
+        await worker.execute(await claim_job(h, delivery["send_job_id"]))
+        model.switch = True
+        model.values = {
+            "idea": "bird",
+            "placement": "shoulder",
+            "approximate_size": "5 cm",
+            "style": "linework",
+        }
+        _, delivery = await next_turn(h, worker, "Separate bird, shoulder, 5 cm, linework")
+        target_id = await create_draft(auth, cid, mutation, await summary(h, cid))
+        assert target_id != first_id
+        original = await request_assessment(auth, f"{collection}/{target_id}/assessment", mutation)
+        assert original["occupied_minutes"] == 65
+    target_url = f"{collection}/{target_id}/assessment"
+    draft = (await auth.client.get(collection, params={"request_id": target_id})).json()
+    before = await summary(h, cid)
+
+    await worker.execute(await claim_job(h, delivery["send_job_id"]))
+    model.values = {}
+    model.switch = False
+    model.category = category
+    work = "bird" if separate else "flower"
+    detail = "will cover an old tattoo" if category == "COVER_UP" else "must go around a scar"
+    message = f"I forgot to say, the {work} {detail}"
+    await next_turn(h, worker, message)
+    projection = await summary(h, cid)
+    assert (projection["status"], projection["category"]) == ("OWNER_HANDOFF", category)
+    assert projection["facts"] == before["facts"]
+    latest = projection["sources"][-1]
+    assert latest["text"] == message
+    source = source_pin(latest)
+    assert all(fact["source"]["message_id"] != source["message_id"] for fact in projection["facts"])
+    assert (await auth.client.get(target_url)).json() == original
+    command = {
+        "expected_revision": draft["revision"],
+        "expected_version": projection["version"],
+        "expected_fingerprint": projection["fingerprint"],
+        "selection": "ONE_WORK",
+        "source": source,
+    }
+
+    async def bind(body, *, request_id=target_id, key=None):
+        return await auth.client.patch(
+            f"{collection}/{request_id}",
+            json=body,
+            headers=mutation | {"Idempotency-Key": key or str(uuid4())},
+        )
+
+    for changes, code in (
+        ({"source": source | {"source_version": "0" * 64}}, "STALE_STATE"),
+        ({"source": draft["intent_source"]}, "NEEDS_CLARIFICATION"),
+        ({"selection": "UNCLEAR"}, "NEEDS_CLARIFICATION"),
+    ):
+        rejected = await bind(command | changes)
+        assert (rejected.status_code, rejected.json()) == (409, {"error": {"code": code}})
+    assert (await auth.client.get(target_url)).json() == original
+
+    key = str(uuid4())
+    for _ in range(2):
+        accepted = await bind(command, key=key)
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json() == {"request_id": target_id}
+    original_revision = command["expected_revision"]
+    assert original_revision == "1"
+    stale = await bind(command)
+    assert (stale.status_code, stale.json()) == (409, {"error": {"code": "STALE_STATE"}})
+    same_source = await bind(command | {"expected_revision": "2"})
+    assert same_source.status_code == 200, same_source.text
+    revised = (await auth.client.get(collection, params={"request_id": target_id})).json()
+    assert revised["revision"] == "2"
+    assert revised["facts"] == draft["facts"]
+    assert (await auth.client.get(target_url)).json() == original | {"current": False}
+
+    current = await request_assessment(auth, target_url, mutation, revision="2")
+    assert (current["current"], current["outcome"], current["reason"]) == (
+        True,
+        "NEEDS_OWNER",
+        "OWNER_HANDOFF",
+    )
+    assert (
+        current["request_revision"],
+        current["occupied_minutes"],
+        current["duration_policy"],
+    ) == (
+        "2",
+        None,
+        None,
+    )
+    assert current["complex_work"] == {
+        "category": category,
+        "source": source,
+        "source_current": True,
+    }
+    assert current["assessment_id"] != original["assessment_id"]
+    assert current["archived_duration"]["assessment_id"] == original["assessment_id"]
+    assert current["archived_duration"]["occupied_minutes"] == 65
+    assert await request_assessment(auth, target_url, mutation, revision="2") == current
+    assert (await auth.client.get(target_url)).json() == current
+    if separate:
+        refused = await bind(command, request_id=first_id)
+        assert (refused.status_code, refused.json()) == (
+            409,
+            {"error": {"code": "NEEDS_CLARIFICATION"}},
+        )
+        assert await request_assessment(auth, first_url, mutation) == first
 
 
 async def test_assessment_owner_api_isolates_work_and_refreshes_revision_and_release(

@@ -43,6 +43,7 @@ INPUTS = {
     "second": "Synthetic intake separate swallow shoulder",
     "late-size": "Synthetic intake for the first work, flower size 12 cm",
     "late-cover-up": "Synthetic intake for the first flower, size 12 cm, covering an old tattoo",
+    "complex-message": "I forgot to say, this flower will cover an old tattoo",
     "assess-first": "Synthetic assessment flower forearm 8 cm linework",
     "assess-second": "Synthetic assessment separate swallow shoulder linework",
 }
@@ -60,7 +61,12 @@ VALUES = {
     ),
     "assess-second": (("idea", "swallow"), ("placement", "shoulder"), ("style", "linework")),
 }
-CATEGORIES = {"complex": "COVER_UP", "late-cover-up": "COVER_UP", "ambiguous": "AMBIGUOUS"}
+CATEGORIES = {
+    "complex": "COVER_UP",
+    "late-cover-up": "COVER_UP",
+    "complex-message": "COVER_UP",
+    "ambiguous": "AMBIGUOUS",
+}
 
 
 class DescriptionOnlyStorage:
@@ -328,7 +334,14 @@ def main():
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
         parser.add_argument(
             "--journey",
-            choices=("intake", "request", "request-deferred", "assessment", "assessment-complex"),
+            choices=(
+                "intake",
+                "request",
+                "request-deferred",
+                "assessment",
+                "assessment-complex",
+                "assessment-complex-source",
+            ),
             default="intake",
         )
         for name in ("actor", "workspace", "business"):

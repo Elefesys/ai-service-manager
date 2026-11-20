@@ -580,10 +580,67 @@ def request_replacements():
             "fact jsonb; revised_facts jsonb; summary jsonb; effect text:='OPEN'; complexity jsonb;",
         ),
         (
-            "      SELECT jsonb_agg(f.value ORDER BY f.value->>'field') INTO revised_facts",
-            """      complexity:=coalesce(platform.service_request_complex_work(
-        scope,draft.id,draft.service_id,jsonb_build_array(requested_source)),draft.complex_work);
-      SELECT jsonb_agg(f.value ORDER BY f.value->>'field') INTO revised_facts""",
+            "OR (selected_field IN ('idea','placement','approximate_size','style','references')) IS NOT TRUE",
+            """OR (p_request->'field' IS DISTINCT FROM 'null'::jsonb
+          AND (selected_field IN ('idea','placement','approximate_size','style','references')) IS NOT TRUE)""",
+        ),
+        (
+            """      SELECT f.value INTO fact FROM jsonb_array_elements(projection->'facts') f(value)
+        WHERE f.value->>'field'=selected_field
+          AND f.value->'source'->'message_id'=requested_source->'message_id'
+          AND f.value->'source'->'source_version'=requested_source->'source_version';
+      IF NOT FOUND OR platform.intake_source_current(
+        scope.workspace_id,scope.business_id,scope.id,scope.client_id,fact->'source'
+      ) IS NOT TRUE THEN
+        RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+      END IF;
+      -- The owner assigns late evidence to the selected draft. A source already
+      -- assigned to another work contradicts that assignment regardless of time.
+      IF fact->>'conflict' IS DISTINCT FROM 'false'
+        OR platform.service_request_fact_available(scope,draft.id,fact) IS NOT TRUE THEN
+        RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+      END IF;
+
+      SELECT jsonb_agg(f.value ORDER BY f.value->>'field') INTO revised_facts FROM (
+        SELECT f.value FROM jsonb_array_elements(draft.facts) f(value)
+          WHERE f.value->>'field'<>selected_field
+        UNION ALL SELECT jsonb_set(fact,'{source,quote}','""')
+      ) f(value);""",
+            """      IF selected_field IS NULL THEN
+        IF platform.intake_source_current(
+          scope.workspace_id,scope.business_id,scope.id,scope.client_id,requested_source
+        ) IS NOT TRUE THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+        END IF;
+        revised_facts:=draft.facts;
+      ELSE
+        SELECT f.value INTO fact FROM jsonb_array_elements(projection->'facts') f(value)
+          WHERE f.value->>'field'=selected_field
+            AND f.value->'source'->'message_id'=requested_source->'message_id'
+            AND f.value->'source'->'source_version'=requested_source->'source_version';
+        IF NOT FOUND OR platform.intake_source_current(
+          scope.workspace_id,scope.business_id,scope.id,scope.client_id,fact->'source'
+        ) IS NOT TRUE THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
+        END IF;
+        -- A source assigned to another work contradicts the owner's selection.
+        IF fact->>'conflict' IS DISTINCT FROM 'false'
+          OR platform.service_request_fact_available(scope,draft.id,fact) IS NOT TRUE THEN
+          RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+        END IF;
+        SELECT jsonb_agg(f.value ORDER BY f.value->>'field') INTO revised_facts FROM (
+          SELECT f.value FROM jsonb_array_elements(draft.facts) f(value)
+            WHERE f.value->>'field'<>selected_field
+          UNION ALL SELECT jsonb_set(fact,'{source,quote}','""')
+        ) f(value);
+      END IF;
+
+      complexity:=platform.service_request_complex_work(
+        scope,draft.id,draft.service_id,jsonb_build_array(requested_source));
+      IF selected_field IS NULL AND complexity IS NULL THEN
+        RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+      END IF;
+      complexity:=coalesce(complexity,draft.complex_work);""",
         ),
         (
             "IF revised_facts IS DISTINCT FROM draft.facts THEN",
@@ -1320,7 +1377,7 @@ PROFILE = r"""CREATE FUNCTION platform.service_assessment_schema_profile() RETUR
 ('platform.service_request_owner_create(uuid,uuid,text,jsonb)','881c468683f7024abc34b5a89614aec4c9147c4f2619a4b4c03081f7d95ea691','plpgsql',true,'v',true),
 ('platform.service_request_owner_list(uuid,uuid)','54c403414b2ca804d89c0dcc5322a50424ffe1a66f361063190752b505ca9434','plpgsql',true,'v',true),
 ('platform.service_request_owner_read(uuid,uuid,uuid)','4d7a6b09b54341176b12f315c6c08d21c654f891403bb93216070890cf3b6ea3','plpgsql',true,'v',true),
-('platform.service_request_owner_revise(uuid,uuid,uuid,text,jsonb)','48e9404f00b040b5a93ac1dc04627945b9bed0be6c5958da3de16620e3de3a58','plpgsql',true,'v',true),
+('platform.service_request_owner_revise(uuid,uuid,uuid,text,jsonb)','66e022b02dcf43a07cccd6938bbee76863a2b1a080d03910659f01794e326a7a','plpgsql',true,'v',true),
 ('platform.service_request_owner_scope(uuid,uuid)','68d56b048f60af95d6cc0280d2219ac18f467cb18403f5e252157533c1e26a8a','plpgsql',true,'v',false),
 ('platform.service_request_schema_profile()','b6fb012dec5fcc2e74b1ed83ff11a3c2d02ac82cdb819a7062a6d70abdbd95a0','sql',true,'s',false),
 ('platform.service_request_summary(jsonb,jsonb,text)','69b1c509de00d7e8b7c6efed748390c9f973fade292e4d91b2d5cec2df7e76d4','plpgsql',false,'i',false),
