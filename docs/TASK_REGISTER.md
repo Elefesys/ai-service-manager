@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.1B IN_PROGRESS · 2026-11-20
+## CURRENT — M6.1B IN_PROGRESS · R1 после приёмки C0 · 2026-11-20
 
-**Единственная активная задача — M6.1B.** C1 ведёт оценку выполнимости конкретной заявки и определение занятых минут следующего сеанса в synthetic LOCAL/TEST. C2 отвечает за PostgreSQL и миграцию 0026 от 0025, C5 — за существующую карточку мастера. Ветка `c1/m6-1b-assessment-duration`, принятая база `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. [Поручение C0 и демонстрация](tasks/M6_HANDOFF.md#L3).
+**Единственная активная задача — M6.1B-R1, ведущий C1.** В [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57) исправление CI на `f53976015e261fe2300713496d20587f874cee71` принято. База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. На PostgreSQL 18.6 C0 подтвердил, что при позднем уточнении той же работы как `COVER_UP` или `OTHER_COMPLEX` оценка ревизии 2 всё ещё автоматически утверждает 65 минут. Требуется «Решает мастер» без утверждённых минут. Отдельное перекрытие B в переписке с обычной A проходит правильно. C2 отвечает за привязку к заявке, C5 — за карточку. [Поручение и три результата C0](tasks/M6_HANDOFF.md#L3) · [CI кандидата, 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/44650939358).
 
 ## История — M6.1A INTEGRATED / VERIFIED · 2026-11-20
 
