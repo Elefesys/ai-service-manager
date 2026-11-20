@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.1B IN_PROGRESS · R1 после приёмки C0 · 2026-11-20
+## CURRENT — M6.1B IN_PROGRESS · R2 после приёмки C0 · 2026-11-20
 
-**Единственная активная задача — M6.1B-R1, ведущий C1.** В [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57) исправление CI на `f53976015e261fe2300713496d20587f874cee71` принято. База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. На PostgreSQL 18.6 C0 подтвердил, что при позднем уточнении той же работы как `COVER_UP` или `OTHER_COMPLEX` оценка ревизии 2 всё ещё автоматически утверждает 65 минут. Требуется «Решает мастер» без утверждённых минут. Отдельное перекрытие B в переписке с обычной A проходит правильно. C2 отвечает за привязку к заявке, C5 — за карточку. [Поручение и три результата C0](tasks/M6_HANDOFF.md#L3) · [CI кандидата, 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/44650939358).
+**Единственная активная задача — M6.1B-R2, ведущий C1.** На `ee754c8e5f3aba01bdf6ae4da5997c69e6701b65` три сценария R1 приняты. Для позднего `COVER_UP` или `OTHER_COMPLEX` без изменения обычных полей мастер не может привязать реплику к уже выбранной A. C0 воспроизвёл оба варианта на PostgreSQL 18.6. У A остаются прежний ID оценки и 65 актуальных минут. C2 и C5 добавляют явную привязку такого источника через текущие транзакцию и карточку. База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`, тот же [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57). Штатный CI кандидата 12/12, прошёл адресный повтор `browser`. [Результаты и поручение C0](tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44665100246).
+
+## История — M6.1B-R1 · 2026-11-20
+
+**Первое поручение на доработку было выдано C1.** В [Draft PR #57](https://github.com/Elefesys/ai-service-manager/pull/57) исправление CI на `f53976015e261fe2300713496d20587f874cee71` принято. База `main` — `54350ddb3a8fc00076f7e065acb19c733e4f29a8`. На PostgreSQL 18.6 C0 подтвердил, что при позднем уточнении той же работы как `COVER_UP` или `OTHER_COMPLEX` оценка ревизии 2 всё ещё автоматически утверждает 65 минут. Требуется «Решает мастер» без утверждённых минут. Отдельное перекрытие B в переписке с обычной A проходит правильно. C2 отвечает за привязку к заявке, C5 — за карточку. [Поручение R1 и три результата C0](https://github.com/Elefesys/ai-service-manager/blob/45d9ec57b78f9483b518f806674b939c6a49a990/docs/tasks/M6_HANDOFF.md#L3) · [CI кандидата, 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/44650939358).
 
 ## История — M6.1A INTEGRATED / VERIFIED · 2026-11-20
 
