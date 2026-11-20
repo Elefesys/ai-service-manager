@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { Business, Session } from './api';
 import { ActiveProjection, Bundle, CommandBody, ConfigurationError, DraftState, FAQ, Operation, Preview, Rule, Service, ValidationIssue, configurationApi, validateCommand, KnowledgeState, KnowledgeOperation, KnowledgeBody, KnowledgeSource, SourceInput, SourceRevision, knowledgeApi, validateKnowledgeCommand } from './configuration-api';
-import type { DurationPolicy, SizeDurationRule } from './configuration-api';
+import { priceAmount, priceExample } from './configuration-api';
+import type { DurationPolicy, PricePolicy, SizeDurationRule, SizePriceFormula } from './configuration-api';
 import { PortfolioPanel } from './PortfolioPanel';
 import { OwnerState, PublishPortfolio, portfolioApi } from './portfolio-api';
 
@@ -185,10 +186,10 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
         <h4>Услуги</h4>{form.services.map((s,i)=><fieldset key={i} className="configuration-card"><legend>Услуга {i+1}</legend>
           <label>Название услуги {i+1}<input value={s.name} maxLength={100} required onChange={e=>serviceAt(i,{name:e.target.value})}/></label><label>Описание услуги {i+1}<textarea value={s.description} maxLength={500} rows={2} onChange={e=>serviceAt(i,{description:e.target.value})}/></label><label><input type="checkbox" checked={s.active} onChange={e=>serviceAt(i,{active:e.target.checked})}/>Услуга {i+1} доступна для консультации</label>
           <div className="configuration-policy-grid">
-            <fieldset><legend>Цена</legend><label>Режим цены {i+1}<Choice value={s.price.mode} values={{FIXED:'Заданная цена',CONFIGURED_FORMULA:'Формула владельца',OWNER_QUOTE:'Решение владельца'}} change={mode=>serviceAt(i,{price:{...s.price,mode}})}/></label><NullableNumber label={`Цена, копейки ${i+1}`} value={s.price.amount_minor} change={amount_minor=>serviceAt(i,{price:{...s.price,amount_minor}})}/><label>Пояснение формулы {i+1}<input value={s.price.formula_note??''} maxLength={160} onChange={e=>serviceAt(i,{price:{...s.price,formula_note:e.target.value||null}})}/></label></fieldset>
+            <PriceSettings index={i+1} policy={s.price} change={price=>serviceAt(i,{price})}/>
             <DurationSettings index={i+1} policy={s.duration} change={duration=>serviceAt(i,{duration})}/>
             <fieldset><legend>Предоплата</legend><label>Режим предоплаты {i+1}<Choice value={s.deposit.mode} values={{NONE:'Без предоплаты',FIXED_DEPOSIT:'Фиксированная сумма',PERCENT_DEPOSIT:'Процент',FULL_PREPAYMENT:'Полная предоплата'}} change={mode=>serviceAt(i,{deposit:{...s.deposit,mode}})}/></label><NullableNumber label={`Предоплата, копейки ${i+1}`} value={s.deposit.amount_minor} change={amount_minor=>serviceAt(i,{deposit:{...s.deposit,amount_minor}})}/><NullableNumber label={`Предоплата, процент ${i+1}`} value={s.deposit.percent} change={percent=>serviceAt(i,{deposit:{...s.deposit,percent}})}/></fieldset>
-          </div><p className="muted">Режимы независимы. При смене режима проверьте и очистите неприменимые значения. Формулы и обязательства здесь не исполняются.</p>
+          </div><p className="muted">Режимы независимы. Пример показывает результат черновика. В карточке заявки расчёт использует опубликованное правило.</p>
           <h5>Что уточнить у клиента</h5><button type="button" className="secondary" onClick={()=>serviceAt(i,{intake_fields:[{id:'idea',label:'Идея и сюжет',required:true},{id:'placement',label:'Место на теле',required:true},{id:'approximate_size',label:'Примерный размер со слов клиента',required:true},{id:'style',label:'Стиль',required:true},{id:'references',label:'Референсы, если доступны',required:false}]})}>Применить шаблон новой татуировки v1</button><p className="muted">Меняется только черновик. Сохраните и опубликуйте его явно.</p>{s.intake_fields.map((f,j)=><div key={j}><label>Вопрос {j+1} услуги {i+1}<input required maxLength={100} value={f.label} onChange={e=>serviceAt(i,{intake_fields:s.intake_fields.map((x,k)=>j===k?{...x,label:e.target.value}:x)})}/></label><label><input type="checkbox" checked={f.required} onChange={e=>serviceAt(i,{intake_fields:s.intake_fields.map((x,k)=>j===k?{...x,required:e.target.checked}:x)})}/>Обязательный вопрос {j+1} услуги {i+1}</label><button type="button" className="secondary" onClick={()=>serviceAt(i,{intake_fields:s.intake_fields.filter((_,k)=>j!==k)})}>Удалить вопрос {j+1} услуги {i+1}</button></div>)}<div className="control-actions"><button type="button" className="secondary" disabled={s.intake_fields.length>=6} onClick={()=>serviceAt(i,{intake_fields:[...s.intake_fields,{id:newId('question'),label:'',required:false}]})}>Добавить вопрос услуги {i+1}</button><button type="button" className="danger" onClick={()=>change({services:form.services.filter((_,j)=>i!==j)})}>Удалить услугу {i+1}</button></div>
         </fieldset>)}<button type="button" className="secondary" disabled={form.services.length>=8} onClick={()=>change({services:[...form.services,newService()]})}>Добавить услугу</button>
         <h4>Структурированные правила</h4><p>Эти правила имеют приоритет над поясняющими FAQ.</p>{form.rules.map((r,i)=><fieldset key={i} className="configuration-card"><legend>Правило {i+1}</legend><ServiceChoice label={`Услуга правила ${i+1}`} value={r.service_id} services={form.services} change={service_id=>ruleAt(i,{service_id})}/><label>Тип правила {i+1}<Choice value={r.kind} values={ruleNames} change={kind=>ruleAt(i,{kind,value:kind==='OWNER_HANDOFF'?false:kind==='MAX_SIZE_MM'?0:18})}/></label>{r.kind==='OWNER_HANDOFF'?<label><input type="checkbox" checked={r.value===true} onChange={e=>ruleAt(i,{value:e.target.checked})}/>Нужно решение владельца по правилу {i+1}</label>:<NullableNumber label={r.kind==='MAX_SIZE_MM'?`Максимальный размер, мм ${i+1}`:`Значение правила ${i+1}`} value={typeof r.value==='number'&&(r.kind!=='MAX_SIZE_MM'||r.value!==0)?r.value:null} min={r.kind==='MAX_SIZE_MM'?1:undefined} max={r.kind==='MAX_SIZE_MM'?1000:undefined} change={value=>ruleAt(i,{value:value??0})}/>}<button type="button" className="danger" onClick={()=>change({rules:form.rules.filter((_,j)=>i!==j)})}>Удалить правило {i+1}</button></fieldset>)}<button type="button" className="secondary" disabled={form.rules.length>=12} onClick={()=>change({rules:[...form.rules,{id:newId('rule'),service_id:null,kind:'MIN_AGE',value:18}]})}>Добавить правило</button>
@@ -258,6 +259,43 @@ export function ConfigurationPanel({ session, workspace, business, recover, expi
     {visible&&view.notice&&<p role="status">{view.notice}</p>}{attached&&pending&&<div className="notice" aria-live="polite">{pending.phase==='sending'?<p>Выполняем команду. Повторный submit заблокирован.</p>:pending.phase==='confirmed'?<><p>Команда подтверждена. Нужно повторить только чтение состояния.</p><button onClick={()=>void load(false,true)}>Повторить чтение настроек</button></>:<><p>Результат команды неизвестен. Повтор использует исходные ключ и содержимое.</p><button onClick={recover}>Проверить сессию для команды</button><button onClick={()=>void send(pending)}>Повторить исходную команду</button></>}</div>}
   </section>;
 }
+function PriceSettings({index,policy,change}:{index:number;policy:PricePolicy;change:(policy:PricePolicy)=>void}){
+  const modeId=useId();
+  const [sample,setSample]=useState<number|null>(null);
+  const rule=policy.size_formula;
+  const estimate=rule?priceExample(rule,sample):null;
+  function editFormula(key:'base_minor'|'step_minor'|'step_mm'|'max_size_mm'|'range_add_minor',value:number|null){
+    const formula:SizePriceFormula={
+      kind:'SIZE_STEPS_V1',currency:'RUB',input_unit:'MM',rounding:'CEILING',
+      base_minor:0,step_minor:0,step_mm:0,max_size_mm:0,range_add_minor:null,...rule,
+    };
+    if(key==='range_add_minor')formula.range_add_minor=value;
+    else formula[key]=value??(key==='base_minor'?0:-1);
+    change({...policy,size_formula:formula});
+  }
+  return <fieldset>
+    <legend>Цена</legend>
+    <label htmlFor={modeId}>Режим цены {index}</label>
+    <Choice id={modeId} value={policy.mode} values={{FIXED:'Заданная цена',CONFIGURED_FORMULA:'Формула владельца',OWNER_QUOTE:'Решение владельца'}} change={mode=>change({
+      mode,amount_minor:mode==='FIXED'?policy.amount_minor:null,formula_note:mode==='CONFIGURED_FORMULA'?policy.formula_note:null,
+      ...(mode==='CONFIGURED_FORMULA'&&rule?{size_formula:rule}:{}),
+    })}/>
+    <NullableNumber label={`Цена, копейки ${index}`} value={policy.amount_minor} change={amount_minor=>change({...policy,amount_minor})}/>
+    <label>Пояснение формулы {index}<input value={policy.formula_note??''} maxLength={160} onChange={e=>change({...policy,formula_note:e.target.value||null})}/></label>
+    {policy.mode==='CONFIGURED_FORMULA'&&<>
+      <NullableNumber label={`База, копейки ${index}`} value={rule?.base_minor??null} change={v=>editFormula('base_minor',v)}/>
+      <NullableNumber label={`За начатый шаг, копейки ${index}`} value={rule&&rule.step_minor>0?rule.step_minor:null} min={1} change={v=>editFormula('step_minor',v)}/>
+      <NullableNumber label={`Шаг размера, мм ${index}`} value={rule&&rule.step_mm>0?rule.step_mm:null} min={1} max={1000} change={v=>editFormula('step_mm',v)}/>
+      <NullableNumber label={`Предел размера для цены, мм ${index}`} value={rule&&rule.max_size_mm>0?rule.max_size_mm:null} min={1} max={1000} change={v=>editFormula('max_size_mm',v)}/>
+      <NullableNumber label={`Прибавка к верхней границе, копейки ${index}`} value={rule?.range_add_minor??null} min={1} change={v=>editFormula('range_add_minor',v)}/>
+      <NullableNumber label={`Размер примера, мм ${index}`} value={sample} min={1} max={1000} change={setSample}/>
+      {sample!==null&&<output aria-label={`Пример цены ${index}`}>{estimate
+        ?estimate.lower===estimate.upper?priceAmount(estimate.lower):`Предварительно ${priceAmount(estimate.lower)} – ${priceAmount(estimate.upper)}`
+        :'Проверьте параметры и размер примера.'}</output>}
+      {rule&&<button type="button" className="secondary" onClick={()=>change({mode:policy.mode,amount_minor:policy.amount_minor,formula_note:policy.formula_note})}>Убрать формулу цены {index}</button>}
+    </>}
+  </fieldset>;
+}
 function DurationSettings({index,policy,change}:{index:number;policy:DurationPolicy;change:(policy:DurationPolicy)=>void}){
   const modeId=useId();
   const rule=policy.size_rule;
@@ -290,7 +328,15 @@ function SizeRuleSummary({rule}:{rule:SizeDurationRule}){
 function Choice({id,value,values,change}:{id?:string;value:string;values:Record<string,string>;change:(v:string)=>void}){return <select id={id} value={value} onChange={e=>change(e.target.value)}>{!Object.hasOwn(values,value)&&<option value={value}>Неизвестный режим: {value}</option>}{Object.entries(values).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>;}
 function NullableNumber({label,value,change,min=0,max=100000000000}:{label:string;value:number|null;change:(n:number|null)=>void;min?:number;max?:number}){return <label>{label}<input type="number" min={min} max={max} step={1} value={value??''} onChange={e=>change(e.target.value===''?null:e.target.valueAsNumber)}/></label>;}
 function ServiceChoice({label,value,services,change}:{label:string;value:string|null;services:Service[];change:(v:string|null)=>void}){return <label>{label}<select value={value??''} onChange={e=>change(e.target.value||null)}><option value="">Все услуги</option>{value&&!services.some(s=>s.id===value)&&<option value={value}>Недоступная услуга</option>}{services.map((s,i)=><option key={i} value={s.id}>{s.name||`Услуга ${i+1}`}</option>)}</select></label>;}
-function BundleView({bundle}:{bundle:Bundle}){return <div className="configuration-facts"><p>Стиль: {({NEUTRAL:'Нейтральный',WARM:'Тёплый',CONCISE:'Краткий'} as Record<string,string>)[bundle.communication_style]??bundle.communication_style}</p><h4>Услуги</h4>{bundle.services.map((s,i)=><article key={i}><h5>{s.name} · {s.active?'Активна':'Неактивна'}</h5><p>{s.description}</p><ul><li>Цена: {policyLabel[s.price.mode]??s.price.mode} · {s.price.amount_minor===null?'неизвестна':`${s.price.amount_minor/100} ₽`}{s.price.formula_note?` · ${s.price.formula_note}`:''}</li><li>Длительность: {s.duration.size_rule?<SizeRuleSummary rule={s.duration.size_rule}/>:<>{policyLabel[s.duration.mode]??s.duration.mode} · {s.duration.minutes===null?'неизвестна':`${s.duration.minutes} мин`}</>}{s.duration.rule_note?` · ${s.duration.rule_note}`:''}</li><li>Предоплата: {policyLabel[s.deposit.mode]??s.deposit.mode} · сумма {s.deposit.amount_minor===null?'неизвестна':`${s.deposit.amount_minor/100} ₽`} · процент {s.deposit.percent??'неизвестен'}</li></ul>{s.intake_fields.length>0&&<p>Уточнить: {s.intake_fields.map(f=>`${f.label}${f.required?' (обязательно)':''}`).join('; ')}</p>}</article>)}<h4>Правила</h4><ul>{bundle.rules.map((r,i)=><li key={i}>{ruleLabel(r,bundle)}</li>)}</ul><h4>FAQ</h4>{bundle.faqs.map((f,i)=><article key={i}><strong>{f.question}</strong><p className="message-text">{f.answer}</p><p className="muted">Источник: {f.source||'не указан'} · {f.confirmed?'подтверждено владельцем':'не подтверждено'}</p></article>)}</div>;}
+function PublishedPrice({policy}:{policy:PricePolicy}){
+  const rule=policy.size_formula;
+  if(rule)return <>
+    {priceAmount(rule.base_minor)} + {priceAmount(rule.step_minor)} за каждые начатые {rule.step_mm} мм · до {rule.max_size_mm} мм.
+    {rule.range_add_minor!==null&&` Верхняя граница выше на ${priceAmount(rule.range_add_minor)}.`}
+  </>;
+  return <>{policyLabel[policy.mode]??policy.mode} · {policy.amount_minor===null?'неизвестна':`${policy.amount_minor/100} ₽`}{policy.formula_note?` · ${policy.formula_note}`:''}</>;
+}
+function BundleView({bundle}:{bundle:Bundle}){return <div className="configuration-facts"><p>Стиль: {({NEUTRAL:'Нейтральный',WARM:'Тёплый',CONCISE:'Краткий'} as Record<string,string>)[bundle.communication_style]??bundle.communication_style}</p><h4>Услуги</h4>{bundle.services.map((s,i)=><article key={i}><h5>{s.name} · {s.active?'Активна':'Неактивна'}</h5><p>{s.description}</p><ul><li>Цена: <PublishedPrice policy={s.price}/></li><li>Длительность: {s.duration.size_rule?<SizeRuleSummary rule={s.duration.size_rule}/>:<>{policyLabel[s.duration.mode]??s.duration.mode} · {s.duration.minutes===null?'неизвестна':`${s.duration.minutes} мин`}</>}{s.duration.rule_note?` · ${s.duration.rule_note}`:''}</li><li>Предоплата: {policyLabel[s.deposit.mode]??s.deposit.mode} · сумма {s.deposit.amount_minor===null?'неизвестна':`${s.deposit.amount_minor/100} ₽`} · процент {s.deposit.percent??'неизвестен'}</li></ul>{s.intake_fields.length>0&&<p>Уточнить: {s.intake_fields.map(f=>`${f.label}${f.required?' (обязательно)':''}`).join('; ')}</p>}</article>)}<h4>Правила</h4><ul>{bundle.rules.map((r,i)=><li key={i}>{ruleLabel(r,bundle)}</li>)}</ul><h4>FAQ</h4>{bundle.faqs.map((f,i)=><article key={i}><strong>{f.question}</strong><p className="message-text">{f.answer}</p><p className="muted">Источник: {f.source||'не указан'} · {f.confirmed?'подтверждено владельцем':'не подтверждено'}</p></article>)}</div>;}
 
 const policyLabel:Record<string,string>={FIXED:'Задано владельцем',CONFIGURED_FORMULA:'Формула владельца',OWNER_QUOTE:'Решение владельца',CONFIGURED_RULE:'Правило владельца',OWNER_DEFINED:'Решение владельца',NONE:'Без предоплаты',FIXED_DEPOSIT:'Фиксированная сумма',PERCENT_DEPOSIT:'Процент',FULL_PREPAYMENT:'Полная предоплата'};
 const ruleNames:Record<string,string>={MIN_AGE:'Минимальный возраст',OWNER_HANDOFF:'Решение владельца',MAX_SIZE_MM:'Максимальный размер'};

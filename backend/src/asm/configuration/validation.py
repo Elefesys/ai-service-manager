@@ -48,12 +48,12 @@ def validate_bundle(value: object) -> ValidationResult:
             price.mode != "FIXED"
             and price.amount_minor is not None
             or price.mode != "CONFIGURED_FORMULA"
-            and price.formula_note is not None
+            and (price.formula_note is not None or price.size_formula is not None)
             or price.amount_minor is not None
             and price.amount_minor < 1
         ):
             issue("INVALID_POLICY", prefix + ".price")
-        elif price.mode != "FIXED" or price.amount_minor is None:
+        elif price.amount_minor is None and price.size_formula is None:
             issue("OWNER_HANDOFF", prefix + ".price", True)
         if duration.mode not in {"FIXED", "CONFIGURED_RULE", "OWNER_DEFINED"}:
             issue("INVALID_MODE", prefix + ".duration")

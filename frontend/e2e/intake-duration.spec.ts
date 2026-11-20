@@ -4,7 +4,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,ServiceAssessment} from '../src/intake-api';
+import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,ServiceAssessment} from '../src/intake-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
 if(!fixtureFile||!passwordFile)throw new Error('E2E_INTAKE_PRIVATE_FIXTURES_REQUIRED');
@@ -12,8 +12,8 @@ const fixture=JSON.parse(readFileSync(fixtureFile,'utf8')) as {messaging_fixture
 const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixtures.knowledge;
 
 type Viewport='desktop'|'narrow';
-type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second';
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source';
+type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing';
 
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
@@ -69,13 +69,13 @@ async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  const inbox=await openConversation(page,seed.conversation_id);
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
  const assessment=journey.startsWith('assessment');
- const operation=journey==='intake'?'collect':assessment?'assess-first':'collect-sized';
+ const operation=journey==='intake'?'collect':journey==='pricing'?'price-first':assessment?'assess-first':'collect-sized';
  const collected=await input(operation,seed.conversation_id);
- expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment?'PRELIMINARILY_COMPLETE':'CLARIFY']);
+ expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment||journey==='pricing'?'PRELIMINARILY_COMPLETE':'CLARIFY']);
  const intake=page.getByRole('region',{name:'Предварительный запрос',exact:true});
  await refreshIntake(inbox,intake);
  await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('flower');
- if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue('8 cm');
+ if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue(journey==='pricing'?'20 mm':'8 cm');
  else await expect(intake.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
  return {input,conversation:seed.conversation_id,collected,intake,inbox};
 }
@@ -418,6 +418,8 @@ test('@narrow assesses the selected request against published duration and size 
  const evaluate=panel.getByRole('button',{name:/^(Оценить заявку|Пересчитать оценку)$/});
  const clock=panel.getByText(/Занято на следующий сеанс/);
  const refresh=panel.getByRole('button',{name:'Обновить оценку заявки',exact:true});
+ const pricing=card.getByRole('region',{name:'Расчёт цены',exact:true});
+ const calculatePrice=pricing.getByRole('button',{name:/^(Рассчитать|Пересчитать) цену$/});
  const endpoint=`/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/intake/conversations/${conversation}/service-requests`;
  async function readAssessment(id:string):Promise<ServiceAssessment>{
   const response=await page.request.get(`${endpoint}/${id}/assessment`);
@@ -438,6 +440,9 @@ test('@narrow assesses the selected request against published duration and size 
  const repeated=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`${endpoint}/${firstId}/assessment`);
  await evaluate.click();
  expect(await (await repeated).json()).toEqual(fixed);
+ await expect(clock).toContainText('65 мин');
+ await calculatePrice.click();
+ await expect(pricing.getByText('Цену определяет мастер',{exact:true})).toBeVisible();
  await expect(clock).toContainText('65 мин');
 
  await mode.selectOption('CONFIGURED_RULE');
@@ -544,6 +549,100 @@ test('@narrow assesses the selected request against published duration and size 
  await expect(panel.getByText('Мастер задаёт длительность следующего сеанса.',{exact:true})).toBeVisible();
  await expect(clock).toHaveCount(0);
  expect(await readAssessment(firstId)).toMatchObject({outcome:'NEEDS_OWNER',reason:'OWNER_DURATION',occupied_minutes:null});
+ await calculatePrice.click();
+ await expect(pricing.getByText('150 ₽',{exact:true})).toBeVisible();
+ await expect(panel.getByText('Решает мастер',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+});
+
+test('@narrow prices each selected work from a published rule and preserves the previous price',async({page},info)=>{
+ test.setTimeout(90000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
+ for(let index=await rules.count()-1;index>=0;index--)await rules.nth(index).click();
+ await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('CONFIGURED_FORMULA');
+ for(const [label,value] of [
+  ['База, копейки 1','250000'],['За начатый шаг, копейки 1','50000'],
+  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1','100'],
+  ['Прибавка к верхней границе, копейки 1',''],
+ ])await settings.getByLabel(label,{exact:true}).fill(value);
+ const example=settings.getByLabel('Размер примера, мм 1',{exact:true});
+ const sample=settings.getByRole('status',{name:'Пример цены 1',exact:true});
+ await example.fill('20');
+ await expect(sample).toHaveText('3 500 ₽');
+ await example.fill('21');
+ await expect(sample).toHaveText('4 000 ₽');
+ await publishIntakeService(settings,serviceName);
+
+ const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,'pricing');
+ const card=intake.getByRole('region',{name:'Черновик заявки',exact:true});
+ const panel=card.getByRole('region',{name:'Расчёт цены',exact:true});
+ const current=panel.getByRole('article',{name:'Текущий расчёт цены',exact:true});
+ const calculateButton=panel.getByRole('button',{name:/^(Рассчитать|Пересчитать) цену$/});
+ const refresh=panel.getByRole('button',{name:'Обновить расчёт цены',exact:true});
+ const sourceLink=current.getByRole('link',{name:'Источник размера для цены',exact:true});
+ const cardId=card.getByTestId('service-request-id');
+ const endpoint=`/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/intake/conversations/${conversation}/service-requests`;
+ async function calculate(id:string):Promise<PriceCalculation>{
+  const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===`${endpoint}/${id}/pricing`);
+  await calculateButton.click();
+  const saved=await response;
+  expect(saved.status()).toBe(200);
+  await expect(calculateButton).toBeEnabled();
+  return await saved.json() as PriceCalculation;
+ }
+ await (await chooseWork(page,collected.message_id,'flower','forearm','20 mm','linework')).click();
+ await expect(cardId).toHaveText(/^[0-9a-f-]{36}$/);
+ const firstId=(await cardId.textContent())!;
+ const first=await calculate(firstId);
+ expect(first).toMatchObject({outcome:'EXACT',authority:'CONFIRMED',amount_minor:350000,size_mm:20,steps:2});
+ await expect(current.getByText('3 500 ₽',{exact:true})).toBeVisible();
+ await expect(sourceLink).toHaveAttribute('href',`#message-${collected.message_id}`);
+ expect(await calculate(firstId)).toEqual(first);
+
+ const separate=await input('price-second',conversation);
+ expect(separate.status).toBe('CLARIFY');
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,separate.message_id,'swallow','shoulder',undefined,'linework')).click();
+ await expect(cardId).not.toHaveText(firstId);
+ const secondId=(await cardId.textContent())!;
+ const missing=await calculate(secondId);
+ expect(missing).toMatchObject({outcome:'NEEDS_INPUT',reason:'SIZE_REQUIRED',amount_minor:null});
+ await expect(current.getByText('Уточните подтверждённый размер в миллиметрах.',{exact:true})).toBeVisible();
+
+ const measurement=await input('price-size',conversation);
+ expect(measurement.status).toBe('PRELIMINARILY_COMPLETE');
+ await refreshIntake(inbox,intake);
+ await (await chooseRevision(page,measurement.message_id)).click();
+ await expect(card.getByTestId('service-request-revision')).toHaveText('2');
+ const second=await calculate(secondId);
+ expect(second).toMatchObject({outcome:'EXACT',authority:'CONFIRMED',amount_minor:400000,size_mm:21,steps:3,release_id:first.release_id});
+ await expect(current.getByText('4 000 ₽',{exact:true})).toBeVisible();
+ await expect(sourceLink).toHaveAttribute('href',`#message-${measurement.message_id}`);
+ await expect(current.getByText(first.release_id!,{exact:true})).toBeVisible();
+ expect(await calculate(secondId)).toEqual(second);
+
+ await settings.getByLabel('Прибавка к верхней границе, копейки 1',{exact:true}).fill('50000');
+ await publishIntakeService(settings,serviceName);
+ await expect(settings.getByRole('region',{name:'Опубликованные сведения'}).getByText(/Верхняя граница выше на 500\s₽/)).toBeVisible();
+ await refresh.click();
+ await expect(current).toHaveCount(0);
+ const provisional=await calculate(secondId);
+ expect(provisional).toMatchObject({outcome:'RANGE',authority:'PROVISIONAL',amount_minor:null,lower_minor:400000,upper_minor:450000});
+ expect(provisional.release_id).not.toBe(second.release_id);
+ await expect(current.getByText('Предварительный диапазон',{exact:false})).toContainText('4 000 ₽ – 4 500 ₽');
+ await panel.getByText('История расчётов цены',{exact:true}).click();
+ const old=panel.getByRole('article',{name:'Архивный расчёт цены',exact:true}).filter({has:page.getByText('4 000 ₽',{exact:true})});
+ await expect(old).toBeVisible();
+ await expect(old.getByText(second.release_id!,{exact:true})).toBeVisible();
+ await refresh.click();
+ await expect(refresh).toBeEnabled();
+ await expect(old).toBeVisible();
+ const read=await page.request.get(`${endpoint}/${secondId}/pricing`);
+ expect(read.status()).toBe(200);
+ const history=await read.json() as PriceHistory;
+ expect(history.items).toEqual([provisional,{...second,current:false},{...missing,current:false}]);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 

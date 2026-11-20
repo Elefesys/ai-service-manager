@@ -20,6 +20,7 @@ from asm.service_requests.models import (
     ServiceRequestReceipt,
     ServiceRequestRevisionCommand,
 )
+from asm.service_requests.pricing import PriceCalculation, PriceCommand, PriceHistory
 from asm.service_requests.repository import ServiceRequestRepository
 
 
@@ -158,6 +159,53 @@ def install_service_requests(app: FastAPI, auth: AuthService, settings: AuthSett
         async with auth.workspace(token, UUID(workspace_id)) as unit:
             await require_owner(unit)
             return await ServiceRequestRepository(unit).assess(
+                UUID(business_id), UUID(conversation_id), UUID(request_id), command
+            )
+
+    @router.get("/{request_id}/pricing", response_model=PriceHistory)
+    async def read_price_history(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        before_id: CanonicalUUID | None = None,
+    ) -> PriceHistory:
+        names = [name for name, _ in request.query_params.multi_items()]
+        if names not in ([], ["before_id"]) or request.headers.getlist("if-match"):
+            raise ServiceRequestError(ServiceRequestCode.INVALID_INPUT)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            await require_owner(unit)
+            return await ServiceRequestRepository(unit).price_history(
+                UUID(business_id),
+                UUID(conversation_id),
+                UUID(request_id),
+                UUID(before_id) if before_id is not None else None,
+            )
+
+    @router.post(
+        "/{request_id}/pricing",
+        response_model=PriceCalculation,
+        openapi_extra={"requestBody": command_schema(PriceCommand)["requestBody"]},
+    )
+    async def calculate_price(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+    ) -> PriceCalculation:
+        no_options(request)
+        token = mutation_token(request, settings)
+        command = await body_as(request, PriceCommand)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            await require_owner(unit)
+            return await ServiceRequestRepository(unit).price(
                 UUID(business_id), UUID(conversation_id), UUID(request_id), command
             )
 

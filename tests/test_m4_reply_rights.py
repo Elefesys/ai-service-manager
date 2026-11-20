@@ -55,9 +55,9 @@ def test_reply_rights_add_only_two_claim_bound_runtime_capabilities():
 def test_current_profile_pin_includes_the_additive_rights_boundary():
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_PROFILE_BODY_SHA256
 
-    current = source_catalog(Path("."), "0026")
-    assert DATABASE_SCHEMA_REVISION == "0026"
+    current = source_catalog(Path("."), "0027")
+    assert DATABASE_SCHEMA_REVISION == "0027"
     assert (
-        current["functions"]["platform.service_assessment_schema_profile()"]["body_sha256"]
+        current["functions"]["platform.price_schema_profile()"]["body_sha256"]
         == NATIVE_PROFILE_BODY_SHA256
     )

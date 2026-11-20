@@ -39,6 +39,7 @@ Mode = Annotated[Nonblank, Field(max_length=32)]
 Note = Annotated[Text, Field(max_length=160)]
 OccupiedMinutes = Annotated[int, Field(ge=1, le=10080)]
 SizeMillimetres = Annotated[int, Field(ge=1, le=1000)]
+PriceMinor = Annotated[int, Field(ge=1, le=100000000000)]
 
 
 class ConfigurationModel(BaseModel):
@@ -62,10 +63,32 @@ class IntakeField(ConfigurationModel):
     required: bool
 
 
+class SizePriceFormula(ConfigurationModel):
+    kind: Literal["SIZE_STEPS_V1"]
+    currency: Literal["RUB"]
+    input_unit: Literal["MM"]
+    rounding: Literal["CEILING"]
+    base_minor: Number
+    step_minor: PriceMinor
+    step_mm: SizeMillimetres
+    max_size_mm: SizeMillimetres
+    range_add_minor: PriceMinor | None
+
+    @model_validator(mode="after")
+    def bounded_total(self) -> Self:
+        steps = (self.max_size_mm + self.step_mm - 1) // self.step_mm
+        if self.base_minor + steps * self.step_minor + (self.range_add_minor or 0) > 100000000000:
+            raise ValueError("Price exceeds the maximum in kopecks")
+        return self
+
+
 class PricePolicy(ConfigurationModel):
     mode: Mode
     amount_minor: Number | None = Field(description="Configured RUB kopecks; no Quote is created.")
     formula_note: Note | None
+    size_formula: SizePriceFormula | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class SizeDurationRule(ConfigurationModel):

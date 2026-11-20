@@ -18,6 +18,7 @@ from asm.service_requests.models import (
     ServiceRequestReceipt,
     ServiceRequestRevisionCommand,
 )
+from asm.service_requests.pricing import PriceCalculation, PriceCommand, PriceHistory
 from asm.tenancy import TenantUnitOfWork
 
 
@@ -128,6 +129,35 @@ class ServiceRequestRepository:
         ):
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
         return result
+
+    async def price(
+        self, business: UUID, conversation: UUID, request_id: UUID, command: PriceCommand
+    ) -> PriceCalculation:
+        raw = await self.unit.price_calculate(
+            business, conversation, request_id, command.expected_revision
+        )
+        try:
+            value = PriceCalculation.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        if not value.current or (value.request_id, value.request_revision) != (
+            str(request_id),
+            command.expected_revision,
+        ):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return value
+
+    async def price_history(
+        self, business: UUID, conversation: UUID, request_id: UUID, before_id: UUID | None
+    ) -> PriceHistory:
+        raw = await self.unit.price_history(business, conversation, request_id, before_id)
+        try:
+            history = PriceHistory.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        if any(item.request_id != str(request_id) for item in history.items):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return history
 
 
 def receipt_from_database(raw: object) -> ServiceRequestReceipt:

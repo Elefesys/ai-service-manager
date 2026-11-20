@@ -390,7 +390,7 @@ async def test_used_downgrade_refuses_and_preserves_dispatching_receipts(photo_p
     )
     stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=20)
     assert process.returncode != 0 and b"PORTFOLIO_DELIVERY_DURABLE_DATA" in stdout + stderr
-    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0026"
+    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0027"
     assert await status(h, delivery) == "DISPATCHING"
     assert await worker.ai.database.replay(ai_claim, worker.ai.config) == before
     assert (

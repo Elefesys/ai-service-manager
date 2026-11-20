@@ -1,4 +1,4 @@
-import {parseDurationPolicy,type DurationPolicy} from './configuration-api';
+import {parseDurationPolicy,parsePricePolicy,type DurationPolicy,type PricePolicy} from './configuration-api';
 
 export type IntakeScope = { workspace: string; business: string; conversation?: string; client?: string };
 export type Source = { message_id: string; source_version: string; quote: string; analysis_id: string|null; analysis_sha256: string|null };
@@ -69,6 +69,15 @@ export type ServiceAssessment = {
  complex_work?:{category:'COVER_UP'|'OTHER_COMPLEX';source:IntentSource;source_current:boolean};
  archived_duration?:{assessment_id:string;request_revision:string;release_id:string|null;activation_version:string;occupied_minutes:number};
 };
+const priceOutcomes=['EXACT','RANGE','NEEDS_INPUT','NEEDS_HUMAN'] as const;
+const priceReasons=['FIXED_PRICE','SIZE_FORMULA','SIZE_REQUIRED','SIZE_OUTSIDE_RULE','OWNER_QUOTE','PRICE_UNPUBLISHED','SERVICE_UNAVAILABLE'] as const;
+export type PriceCalculation = {
+ calculation_id:string;request_id:string;request_revision:string;release_id:string|null;activation_version:string;
+ currency:'RUB';current:boolean;policy:PricePolicy|null;outcome:(typeof priceOutcomes)[number];
+ authority:'CONFIRMED'|'PROVISIONAL'|null;reason:(typeof priceReasons)[number];
+ amount_minor:number|null;lower_minor:number|null;upper_minor:number|null;size_mm:number|null;steps:number|null;size_fact:Fact|null;
+};
+export type PriceHistory = {items:PriceCalculation[];next_before_id:string|null};
 export type CaseInput = { description: string; asset: {asset_id:string;asset_version_id:string}|null; width_mm:number|null; height_mm:number|null; placement:string|null; style:string|null; detail:string|null; fill:string|null; provider:string|null; working_minutes:number|null; occupied_minutes:number|null; setup_minutes:number|null; stencil_minutes:number|null; break_minutes:number|null; cleanup_minutes:number|null; treatment:'INCLUDED'|'EXCLUDED'|'UNKNOWN'; session_count:number|null; session_minutes:number[]|null; explanation:string|null };
 export type DurationCase = {case_id:string;version:string;state:'DRAFT'|'CONFIRMED'|'REVOKED';data:CaseInput;confirmed_by:string|null;source_current:boolean};
 export type CasePage = {workspace_id:string;business_id:string;items:DurationCase[]};
@@ -168,6 +177,33 @@ export function parseAssessment(value:unknown,requestId:string,expectedRevision?
  }
  return v as ServiceAssessment;
 }
+export function parsePrice(value:unknown,requestId:string,revision?:string):PriceCalculation{
+ const v=object(value,['calculation_id','request_id','request_revision','release_id','activation_version','currency',
+  'current','policy','outcome','authority','reason','amount_minor','lower_minor','upper_minor','size_mm','steps','size_fact']);
+ const money=(amount:unknown)=>positiveWithin(amount,100000000000);
+ if(!uuid(v.calculation_id)||v.request_id!==requestId||!decimal(v.request_revision,false)
+  ||(revision!==undefined&&v.request_revision!==revision)||!nullable(v.release_id,uuid)||!decimal(v.activation_version)
+  ||v.currency!=='RUB'||typeof v.current!=='boolean'||!one(v.outcome,priceOutcomes)||!one(v.reason,priceReasons)
+  ||!nullable(v.amount_minor,money)||!nullable(v.lower_minor,money)||!nullable(v.upper_minor,money)
+  ||!nullable(v.size_mm,x=>positiveWithin(x,1000))||!nullable(v.steps,x=>positiveWithin(x,1000)))invalid();
+ if(v.outcome==='EXACT'?(v.authority!=='CONFIRMED'||v.amount_minor===null||v.lower_minor!==null||v.upper_minor!==null)
+   :v.outcome==='RANGE'?(v.authority!=='PROVISIONAL'||v.amount_minor!==null||v.lower_minor===null||v.upper_minor===null||Number(v.lower_minor)>=Number(v.upper_minor))
+   :(v.authority!==null||v.amount_minor!==null||v.lower_minor!==null||v.upper_minor!==null))invalid();
+ if(v.policy!==null){try{parsePricePolicy(v.policy);}catch{return invalid();}}
+ if((v.size_fact===null)!==(v.size_mm===null)||(v.steps!==null)!==(v.reason==='SIZE_FORMULA'))invalid();
+ if(v.size_fact!==null){
+  const [fact]=parseFacts([v.size_fact]);
+  if(fact.field!=='approximate_size'||fact.conflict||fact.status==='observed'||fact.source.quote!=='')invalid();
+ }
+ return v as PriceCalculation;
+}
+function parsePriceHistory(value:unknown,requestId:string):PriceHistory{
+ const v=object(value,['items','next_before_id']);
+ const items=array(v.items,10).map(row=>parsePrice(row,requestId));
+ if(!nullable(v.next_before_id,uuid)||(v.next_before_id!==null&&(items.length!==10||items.at(-1)?.calculation_id!==v.next_before_id))
+  ||new Set(items.map(item=>item.calculation_id)).size!==items.length||items.filter(item=>item.current).length>1)invalid();
+ return {items,next_before_id:v.next_before_id as string|null};
+}
 export function parseIntake(value:unknown,scope:IntakeScope):Intake{
  const v=object(value,['revision','workspace_id','business_id','conversation_id','client_id','service_id','release_id','activation_version','template_revision','control_generation','context_version','version','category','facts','missing','conflicts','status','question','sources','fingerprint','preliminary']);
  if(v.revision!=='preliminary_intake_v1'||v.preliminary!==true||!inConversation(v,scope)||!nullable(v.release_id,uuid)||!nullable(v.service_id,serviceId)||!decimal(v.activation_version)||!decimal(v.version)||!decimal(v.control_generation,false)||!decimal(v.context_version,false)||!one(v.category,['NEW_TATTOO','COVER_UP','OTHER_COMPLEX','FAQ_ONLY','AMBIGUOUS'])||!one(v.status,['NOT_STARTED','CLARIFY','OWNER_HANDOFF','PRELIMINARILY_COMPLETE'])||!nullable(v.template_revision,x=>x==='tattoo_intake_v1')||!nullable(v.question,x=>text(x,300))||!digest(v.fingerprint))invalid();
@@ -203,6 +239,7 @@ async function request<T>(scope:IntakeScope,path:string,parse:(v:unknown)=>T,sig
 }
 const draftPath=(scope:IntakeScope)=>`/conversations/${encodeURIComponent(scope.conversation??'')}/service-requests`;
 const assessmentPath=(scope:IntakeScope,id:string)=>`${draftPath(scope)}/${encodeURIComponent(id)}/assessment`;
+const pricePath=(scope:IntakeScope,id:string)=>`${draftPath(scope)}/${encodeURIComponent(id)}/pricing`;
 export const intakeApi={
  summary:(scope:IntakeScope,signal?:AbortSignal)=>request(scope,`/conversations/${encodeURIComponent(scope.conversation??'')}`,v=>parseIntake(v,scope),signal),
  draft:(scope:IntakeScope,requestId?:string,signal?:AbortSignal)=>request(
@@ -218,6 +255,12 @@ export const intakeApi={
   request(scope,assessmentPath(scope,requestId),v=>v===null?null:parseAssessment(v,requestId),signal),
  assess:(scope:IntakeScope,requestId:string,revision:string,csrf:string,signal?:AbortSignal)=>
   request(scope,assessmentPath(scope,requestId),v=>parseAssessment(v,requestId,revision),signal,{
+   method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({expected_revision:revision}),
+  }),
+ priceHistory:(scope:IntakeScope,requestId:string,beforeId?:string,signal?:AbortSignal)=>
+  request(scope,pricePath(scope,requestId)+(beforeId?`?${new URLSearchParams({before_id:beforeId})}`:''),v=>parsePriceHistory(v,requestId),signal),
+ calculatePrice:(scope:IntakeScope,requestId:string,revision:string,csrf:string,signal?:AbortSignal)=>
+  request(scope,pricePath(scope,requestId),v=>parsePrice(v,requestId,revision),signal,{
    method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({expected_revision:revision}),
   }),
  cases:(scope:IntakeScope,signal?:AbortSignal)=>request(scope,'/duration-cases',v=>parseCases(v,scope),signal),

@@ -1,8 +1,9 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import type {ReactNode} from 'react';
 import {Session} from './api';
+import {priceAmount} from './configuration-api';
 import {IntakeError,intakeApi,labels} from './intake-api';
-import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,ServiceAssessment,ServiceRequestDraft} from './intake-api';
+import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,PriceCalculation,PriceHistory,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 
 export function IntakePanel({session,scope,expired,refresh=0}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number}){
  const key=scope?JSON.stringify({...scope,refresh}):'',current=useRef({key,session,epoch:0});
@@ -197,6 +198,104 @@ function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:Int
  </section>;
 }
 
+const pricingReasons:Record<PriceCalculation['reason'],string>={
+ FIXED_PRICE:'Фиксированная цена из опубликованных настроек.',
+ SIZE_FORMULA:'По опубликованной формуле размера.',
+ SIZE_REQUIRED:'Уточните подтверждённый размер в миллиметрах.',
+ SIZE_OUTSIDE_RULE:'Размер выходит за предел опубликованной формулы.',
+ OWNER_QUOTE:'Режим цены этой услуги задан мастером.',
+ PRICE_UNPUBLISHED:'Для услуги нужна опубликованная цена или поддерживаемая формула.',
+ SERVICE_UNAVAILABLE:'Опубликованная услуга для этой заявки недоступна.',
+};
+function PriceResult({value}:{value:PriceCalculation}){
+ const rule=value.policy?.size_formula;
+ return <>
+  {value.outcome==='EXACT'&&value.amount_minor!==null&&<p>Подтверждённая цена <strong>{priceAmount(value.amount_minor)}</strong></p>}
+  {value.outcome==='RANGE'&&value.lower_minor!==null&&value.upper_minor!==null&&<p>Предварительный диапазон <strong>{priceAmount(value.lower_minor)} – {priceAmount(value.upper_minor)}</strong></p>}
+  {value.outcome==='NEEDS_HUMAN'&&<p>Цену определяет мастер</p>}
+  <p>{pricingReasons[value.reason]}</p>
+  {value.size_fact&&<p>
+   Размер {value.size_mm} мм · <a href={`#message-${value.size_fact.source.message_id}`}>Источник размера для цены</a>{' '}
+   · версия <code>{value.size_fact.source.source_version}</code>
+  </p>}
+  {rule&&value.steps!==null&&<p>
+   {priceAmount(rule.base_minor)} + {value.steps} × {priceAmount(rule.step_minor)} · шаг {rule.step_mm} мм, округление вверх.
+   {rule.range_add_minor!==null&&` Верхняя граница включает ещё ${priceAmount(rule.range_add_minor)}.`}
+  </p>}
+  {value.release_id&&<p>Публикация <code>{value.release_id}</code> · версия активации {value.activation_version}{rule?' · SIZE_STEPS_V1':''}</p>}
+ </>;
+}
+function PricingPanel({scope,draft,csrf,activation,locked,expired}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;locked:boolean;expired:()=>void}){
+ const [history,setHistory]=useState<PriceHistory>({items:[],next_before_id:null});
+ const [calculation,setCalculation]=useState<PriceCalculation|null>(null);
+ const [busy,setBusy]=useState(true);
+ const [error,setError]=useState('');
+ const [blocked,setBlocked]=useState(false);
+ const active=useRef<AbortController|null>(null);
+
+ async function load(calculate=false,beforeId?:string){
+  if(active.current)return;
+  const controller=new AbortController(),{signal}=controller;
+  active.current=controller;
+  setBusy(true);setError('');
+  try{
+   if(calculate)await intakeApi.calculatePrice(scope,draft.request_id,draft.revision,csrf,signal);
+   const latest=await intakeApi.priceHistory(scope,draft.request_id,beforeId,signal);
+   if(signal.aborted)return;
+   if(beforeId){
+    setHistory(previous=>({items:[...previous.items,...latest.items],next_before_id:latest.next_before_id}));
+   }else{
+    setCalculation(latest.items.find(item=>item.current)??null);
+    setHistory({items:latest.items.filter(item=>!item.current),next_before_id:latest.next_before_id});
+   }
+   setBlocked(false);
+  }catch(failure){
+   if(signal.aborted)return;
+   if(failure instanceof IntakeError&&[401,403,404].includes(failure.status)){
+    setCalculation(null);setHistory({items:[],next_before_id:null});setBlocked(true);
+    setError('Расчёт цены недоступен.');
+    if(failure.status===401)expired();
+   }else if(failure instanceof IntakeError&&failure.code==='STALE_STATE'){
+    setCalculation(null);setBlocked(true);setError('Заявка изменилась. Обновите карточку перед расчётом цены.');
+   }else{
+    setCalculation(previous=>previous?{...previous,current:false}:previous);
+    setError(calculate?'Не удалось прочитать результат. Повторите расчёт цены.':'Не удалось прочитать историю расчётов.');
+   }
+  }finally{
+   if(active.current===controller){active.current=null;if(!signal.aborted)setBusy(false);}
+  }
+ }
+
+ useEffect(()=>{
+  void load();
+  return ()=>{active.current?.abort();active.current=null;};
+ },[draft]);
+
+ const current=calculation?.current&&calculation.request_revision===draft.revision
+  &&(activation===undefined||BigInt(activation)<=BigInt(calculation.activation_version));
+ const archived=calculation&&!current?[calculation,...history.items]:history.items;
+ return <section aria-label="Расчёт цены" style={{overflowWrap:'anywhere'}}>
+  <h4>Расчёт цены</h4>
+  {error&&<p role="alert">{error}</p>}
+  {current&&calculation&&<article aria-label="Текущий расчёт цены"><PriceResult value={calculation}/></article>}
+  {!current&&archived.length>0&&<p>Обновите расчёт, чтобы получить актуальную цену.</p>}
+  {archived.length>0&&<details>
+   <summary>История расчётов цены</summary>
+   {archived.map(item=><article key={item.calculation_id} aria-label="Архивный расчёт цены">
+    <p>Архив · ревизия заявки {item.request_revision}</p>
+    <PriceResult value={item}/>
+   </article>)}
+   {history.next_before_id&&<button type="button" className="secondary" disabled={busy||locked} onClick={()=>void load(false,history.next_before_id!)}>Показать предыдущие расчёты</button>}
+  </details>}
+  <div className="control-actions">
+   <button type="button" disabled={busy||locked||blocked} onClick={()=>void load(true)}>
+    {current||archived.length>0?'Пересчитать цену':'Рассчитать цену'}
+   </button>
+   <button type="button" className="secondary" disabled={busy||locked} onClick={()=>void load()}>Обновить расчёт цены</button>
+  </div>
+ </section>;
+}
+
 function sourceLabel(source:Intake['sources'][number]){
  return `${Array.from(source.text.trim()).slice(0,100).join('')||'Входящее фото'} · #${source.message_id.slice(-6)}`;
 }
@@ -353,6 +452,7 @@ function RequestDraftPanel({scope,selectionScope,data,csrf,expired}:{scope:Intak
   </section>}
   {draft&&<DraftCard draft={draft}>
    <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired}/>
+   <PricingPanel key={`price:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired}/>
   </DraftCard>}
   {error&&<p role="alert">{error}</p>}
   {waiting&&!busy&&<button type="button" onClick={()=>void open(desiredCard.current,waiting)}>
