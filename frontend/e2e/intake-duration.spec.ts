@@ -4,6 +4,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
+import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
 import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,ServiceAssessment} from '../src/intake-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
@@ -13,7 +14,19 @@ const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixture
 
 type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize';
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other';
+
+function intakeChildFailure(error:unknown,operation:IntakeOperation,journey:IntakeJourney,variant:Viewport):Error {
+ const result=error as {code?:unknown;stderr?:unknown;killed?:boolean;signal?:string};
+ const exit=typeof result.code==='number'?String(result.code):'UNKNOWN';
+ const request=`operation=${operation};journey=${journey};variant=${variant}`;
+ const prefix=`M5_INTAKE_BROWSER_REFUSED:${request};`;
+ const pattern=/^stage=(TARGET|GUARD|CONFIGURATION|MODEL_SETUP|INGEST|CLAIM|EXECUTE|OWNER_READ|REPLAY|EFFECTS);reason=[A-Z][A-Z0-9_]{0,63}(;job_kind=(NONE|PROCESS_INBOX|PROCESS_TURN|SEND_AI_TEXT|ESCALATION_TIMER|SEND_MANUAL_TEXT|SEND_GUARDED_TEXT|SEND_AI_PHOTO|FETCH_IMAGE);matches_expected=(true|false))?$/;
+ const diagnostic=typeof result.stderr==='string'?result.stderr.split(/\r?\n/)
+  .find(line=>line.startsWith(prefix)&&pattern.test(line.slice(prefix.length))):undefined;
+ const timeout=result.killed===true&&result.signal==='SIGTERM';
+ return new Error(`E2E_INTAKE_RUNTIME_REFUSED:exit=${exit};${request};${diagnostic?.slice(prefix.length)??`diagnostic=UNAVAILABLE;timeout=${timeout}`}`);
+}
 
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
@@ -59,23 +72,24 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
 async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
- async function input(operation:IntakeOperation,conversation?:string){
-  const args=['compose','--env-file',envFile!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,...(conversation?['--conversation',conversation]:[])];
+ async function input(operation:IntakeOperation,conversation?:string,fixtureJourney=journey){
+  const args=['compose','--env-file',envFile!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',fixtureJourney,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,...(conversation?['--conversation',conversation]:[])];
   let stdout:string;
-  try{stdout=(await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384})).stdout;}catch(error){const code=(error as {code?:unknown}).code;throw new Error('E2E_INTAKE_RUNTIME_REFUSED:exit='+String(typeof code==='number'?code:'UNKNOWN'));}
+  try{stdout=(await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384})).stdout;}catch(error){throw intakeChildFailure(error,operation,fixtureJourney,variant);}
   return JSON.parse(stdout) as {conversation_id:string;message_id:string;model_calls:number;calls:number;effects:number;status:string};
  }
  const seed=await input('seed');expect([seed.model_calls,seed.calls,seed.effects]).toEqual([0,0,0]);
  const inbox=await openConversation(page,seed.conversation_id);
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
  const assessment=journey.startsWith('assessment');
- const operation=journey==='intake'?'collect':journey==='pricing'?'price-first':assessment?'assess-first':'collect-sized';
+ const pricing=journey==='pricing'||journey.startsWith('owner-decision');
+ const operation=journey==='intake'?'collect':pricing?'price-first':assessment?'assess-first':'collect-sized';
  const collected=await input(operation,seed.conversation_id);
- expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment||journey==='pricing'?'PRELIMINARILY_COMPLETE':'CLARIFY']);
+ expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment||pricing?'PRELIMINARILY_COMPLETE':'CLARIFY']);
  const intake=page.getByRole('region',{name:'Предварительный запрос',exact:true});
  await refreshIntake(inbox,intake);
  await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('flower');
- if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue(journey==='pricing'?'20 mm':'8 cm');
+ if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue(pricing?'20 mm':'8 cm');
  else await expect(intake.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
  return {input,conversation:seed.conversation_id,collected,intake,inbox};
 }
@@ -731,3 +745,257 @@ test(`@narrow late cover-up moves approved minutes to the archive in the owner c
  await expect(clock).toHaveCount(0);
 });
 }
+
+test('@narrow confirms one selected owner decision while the other work stays open',async({page},info)=>{
+ test.setTimeout(90_000);
+ page.setDefaultTimeout(12_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
+ for(let index=await rules.count()-1;index>=0;index--)await rules.nth(index).click();
+ await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('OWNER_QUOTE');
+ await settings.getByLabel('Режим длительности 1',{exact:true}).selectOption('OWNER_DEFINED');
+ await publishIntakeService(settings,serviceName);
+ const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,'owner-decision');
+ const work=intake.getByRole('region',{name:'Черновик заявки',exact:true});
+ const center=page.getByRole('region',{name:'Решения по заявкам',exact:true});
+ const detail=center.getByRole('article',{name:'Карточка решения по заявке',exact:true});
+ const cardId=work.getByTestId('service-request-id');
+ const approvalButton=work.getByRole('button',{name:'Открыть решение мастера',exact:true});
+ const collection='/api/v1/workspaces/'+owner.workspace_id+'/businesses/'+owner.business_id+'/intake/conversations/'+conversation+'/service-requests';
+ const approvalPath=(request:string)=>collection+'/'+request+'/approvals';
+ async function open(request:string){
+  const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===approvalPath(request));
+  await approvalButton.click();
+  const saved=await response;
+  expect(saved.status()).toBe(200);
+  return await saved.json() as ApprovalCard;
+ }
+
+ await (await chooseWork(page,collected.message_id,'flower','forearm','20 mm','linework')).click();
+ await expect(cardId).toHaveText(/^[0-9a-f-]{36}$/);
+ const aId=(await cardId.textContent())!;
+ const first=await open(aId);
+ expect(first).toMatchObject({status:'PENDING',decision:null,basis:{service_name:serviceName,amount_minor:null,occupied_minutes:null,can_approve:true}});
+ await expect(detail.getByRole('heading',{name:serviceName+' · заявка #'+aId.slice(-6)})).toBeVisible();
+ expect(first.basis.intent_source.message_id).toBe(collected.message_id);
+
+ const separate=await input('price-second',conversation);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,separate.message_id,'swallow','shoulder',undefined,'linework')).click();
+ await expect(cardId).not.toHaveText(aId);
+ const bId=(await cardId.textContent())!;
+ const second=await open(bId);
+ expect(second).toMatchObject({status:'PENDING',decision:null,basis:{intent_source:{message_id:separate.message_id}}});
+ expect(second.approval_id).not.toBe(first.approval_id);
+ const a=center.getByTestId('approval-'+first.approval_id),b=center.getByTestId('approval-'+second.approval_id);
+ await expect(a).toContainText('Ожидает решения мастера');
+ await expect(b).toContainText('Ожидает решения мастера');
+ await expect(a).toBeVisible();
+ await expect(b).toBeVisible();
+
+ const control=page.getByRole('region',{name:'Управление диалогом',exact:true});
+ await control.getByRole('button',{name:'Обновить режим',exact:true}).click();
+ await control.getByRole('button',{name:'Забрать управление',exact:true}).click();
+ await expect(control.getByText('Управление у мастера',{exact:true})).toBeVisible();
+ await a.click();
+ await expect(detail.getByRole('link',{name:'Исходная реплика заявки'})).toBeVisible();
+ const aDecisionUrl=approvalPath(aId)+'/'+first.approval_id;
+ const decisions:{body:ApprovalBody;card:ApprovalCard}[]=[];
+ await page.route('**'+aDecisionUrl,async route=>{
+  if(route.request().method()!=='POST')return route.continue();
+  const result=await route.fetch();
+  expect(result.status()).toBe(200);
+  decisions.push({body:route.request().postDataJSON(),card:await result.json() as ApprovalCard});
+  if(decisions.length===1)await route.abort('failed');
+  else await route.fulfill({response:result});
+ });
+ await detail.getByLabel('Цена, ₽',{exact:true}).fill('3950,01');
+ await detail.getByLabel('Длительность следующего сеанса, мин',{exact:true}).fill('75');
+ await detail.getByLabel('Пояснение или вопрос',{exact:true}).fill('Synthetic approved terms');
+ await detail.getByRole('button',{name:'Подтвердить условия',exact:true}).click();
+ await center.getByRole('button',{name:'Повторить то же решение',exact:true}).click();
+ const approved=detail.getByRole('region',{name:'Подтверждённые условия',exact:true});
+ await expect(approved).toContainText(/3\s950,01\s₽/);
+ await expect(approved).toContainText('75 мин');
+ expect(decisions).toHaveLength(2);
+ expect(decisions[0]).toEqual(decisions[1]);
+ expect(decisions[0].body).toMatchObject({operation:'APPROVE',amount_minor:395001,occupied_minutes:75});
+ expect(decisions[0].card.decision?.decision_id).toBeTruthy();
+ await expect(b).toContainText('Ожидает решения мастера');
+ await expect(control.getByText('Управление у мастера',{exact:true})).toBeVisible();
+
+ await page.reload();
+ await openWorkspace(page);
+ await expect(b).toContainText('Ожидает решения мастера');
+ await a.click();
+ await expect(detail).toContainText(decisions[0].card.decision!.decision_id);
+ await expect(approved).toContainText('75 мин');
+
+ // Use another real conversation and the server's real history cursor, without
+ // loading the older message into Inbox before opening the pinned source.
+ const other=await input('seed',undefined,'owner-source-other');
+ expect(other.conversation_id).not.toBe(conversation);
+ const otherInbox=await openConversation(page,other.conversation_id);
+ const pinned=first.basis.intent_source;
+ const pinnedText='Synthetic price flower forearm 20 mm linework';
+ const selectedDecision=decisions[0].card.decision!.decision_id;
+ const sourcePath=aDecisionUrl+'/sources/'+pinned.message_id;
+ async function showPinnedSource(inboxConversation:string){
+  await expect(otherInbox.getByTestId('conversation-'+inboxConversation)).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByTestId('message-'+pinned.message_id)).toHaveCount(0);
+  const response=page.waitForResponse(reply=>reply.request().method()==='GET'
+    &&new URL(reply.url()).pathname===sourcePath);
+  await detail.getByRole('link',{name:'Исходная реплика заявки',exact:true}).click();
+  const reply=await response;
+  expect(reply.status()).toBe(200);
+  expect(await reply.json()).toMatchObject({
+    workspace_id:owner.workspace_id,conversation_id:conversation,client_id:first.client_id,
+    request_id:aId,approval_id:first.approval_id,...pinned,text:pinnedText,
+  });
+  await expect(detail.getByTestId('approval-source-'+pinned.message_id)).toHaveText(pinnedText);
+  await expect(a).toHaveAttribute('aria-pressed','true');
+  await expect(detail.getByText(selectedDecision,{exact:true})).toBeVisible();
+  await expect(otherInbox.getByTestId('conversation-'+inboxConversation)).toHaveAttribute('aria-pressed','true');
+ }
+ await showPinnedSource(other.conversation_id);
+
+ const history='/api/v1/workspaces/'+owner.workspace_id+'/conversations/'+conversation+'/messages';
+ await page.route(url=>url.pathname===history&&!url.searchParams.has('cursor'),route=>{
+  const url=new URL(route.request().url());
+  url.searchParams.set('limit','1');
+  return route.continue({url:url.toString()});
+ });
+ const newHistory=page.waitForResponse(reply=>reply.request().method()==='GET'&&new URL(reply.url()).pathname===history);
+ await openConversation(page,conversation);
+ const firstPage=await newHistory;
+ expect(firstPage.status()).toBe(200);
+ const firstHistory=await firstPage.json();
+ expect(firstHistory.items).toHaveLength(1);
+ expect(firstHistory.items[0].message_id).not.toBe(pinned.message_id);
+ expect(firstHistory.next_cursor).toBeTruthy();
+ const older=await page.request.get(history+'?'+new URLSearchParams({limit:'25',cursor:firstHistory.next_cursor}));
+ expect(older.status()).toBe(200);
+ expect((await older.json()).items).toEqual(expect.arrayContaining([
+  expect.objectContaining({message_id:pinned.message_id,conversation_id:conversation,text:pinnedText}),
+ ]));
+ await showPinnedSource(conversation);
+ console.log('R1 Chromium '+info.project.name+' pinned source '+pinned.message_id+' read from '+other.conversation_id+
+  ' and beyond first Inbox page in '+conversation+'; exact text and decision '+selectedDecision);
+
+ await b.click();
+ await detail.getByLabel('Пояснение или вопрос',{exact:true}).fill('Synthetic уточнение размера');
+ const clarification=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===approvalPath(bId)+'/'+second.approval_id);
+ await detail.getByRole('button',{name:'Запросить уточнение',exact:true}).click();
+ const bResponse=await clarification;
+ expect(bResponse.status()).toBe(200);
+ const clarified=await bResponse.json() as ApprovalCard;
+ expect(clarified).toMatchObject({status:'CLARIFICATION',decision:{authorized_action:null,terms:null}});
+ await expect(detail.getByText('Запрошено уточнение',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ console.log('Q3 Chromium '+info.project.name+' A '+aId+' approval '+first.approval_id+
+  ' decision '+decisions[0].card.decision!.decision_id+'; B '+bId+' approval '+second.approval_id+' clarification '+clarified.decision!.decision_id);
+});
+
+test('@narrow asks only for the missing term and retains its independent basis',async({page},info)=>{
+ test.setTimeout(90_000);
+ page.setDefaultTimeout(12_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
+ for(let index=await rules.count()-1;index>=0;index--)await rules.nth(index).click();
+ const priceMode=settings.getByLabel('Режим цены 1',{exact:true});
+ const durationMode=settings.getByLabel('Режим длительности 1',{exact:true});
+ const depositMode=settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true});
+ await priceMode.selectOption('CONFIGURED_FORMULA');
+ for(const [label,value] of [
+  ['База, копейки 1','300000'],['За начатый шаг, копейки 1','50000'],
+  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1','1000'],
+  ['Прибавка к верхней границе, копейки 1','50000'],
+ ])await settings.getByLabel(label,{exact:true}).fill(value);
+ await durationMode.selectOption('OWNER_DEFINED');
+ await depositMode.selectOption('NONE');
+ await publishIntakeService(settings,serviceName);
+ const {conversation,collected,intake}=await collectIntake(page,variant,'owner-decision-partial');
+ await (await chooseWork(page,collected.message_id,'flower','forearm','20 mm','linework')).click();
+ const work=intake.getByRole('region',{name:'Черновик заявки',exact:true});
+ const cardId=work.getByTestId('service-request-id');
+ await expect(cardId).toHaveText(/^[0-9a-f-]{36}$/);
+ const id=(await cardId.textContent())!;
+ const detail=page.getByRole('article',{name:'Карточка решения по заявке',exact:true});
+ const endpoint='/api/v1/workspaces/'+owner.workspace_id+'/businesses/'+owner.business_id+'/intake/conversations/'+conversation+'/service-requests/'+id+'/approvals';
+ async function clickAndRead(label:string,path=endpoint,container=detail){
+  const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===path);
+  await container.getByRole('button',{name:label,exact:true}).click();
+  const saved=await response;
+  expect(saved.status()).toBe(200);
+  return await saved.json() as ApprovalCard;
+ }
+
+ const rangeBasis=await clickAndRead('Открыть решение мастера',endpoint,work);
+ const range={lower_minor:400000,upper_minor:450000,authority:'PROVISIONAL'};
+ expect(rangeBasis.basis).toMatchObject({amount_minor:null,price_range:range,occupied_minutes:null,deposit:{mode:'NONE'}});
+ const rangeText=/4\s000\s₽\s–\s4\s500\s₽\s·\sпредварительный диапазон/;
+ await expect(detail).toContainText(rangeText);
+ await expect(detail.getByLabel('Цена, ₽',{exact:true})).toHaveCount(0);
+ await detail.getByLabel('Длительность следующего сеанса, мин',{exact:true}).fill('75');
+ const rangeDecisionPath=endpoint+'/'+rangeBasis.approval_id;
+ const firstWrite=page.waitForResponse(reply=>reply.request().method()==='POST'&&new URL(reply.url()).pathname===rangeDecisionPath);
+ const rangeSaved=await clickAndRead('Подтвердить условия',rangeDecisionPath);
+ const command=(await firstWrite).request();
+ expect(command.postDataJSON()).toEqual({expected_version:'1',action:'PREPARE_QUOTE',operation:'APPROVE',occupied_minutes:75});
+ expect(rangeSaved.decision).toMatchObject({submitted:{amount_minor:null,occupied_minutes:75},
+  terms:{amount_minor:null,price_range:range,occupied_minutes:75,price_reference_id:rangeBasis.basis.price_calculation_id}});
+ const replay=await page.request.post(rangeDecisionPath,{
+  data:command.postDataJSON(),headers:{'X-CSRF-Token':command.headers()['x-csrf-token'],Origin:new URL(page.url()).origin},
+ });
+ expect(replay.status()).toBe(200);
+ expect(await replay.json()).toEqual(rangeSaved);
+ const reread=page.waitForResponse(reply=>reply.request().method()==='GET'&&new URL(reply.url()).pathname===rangeDecisionPath);
+ await page.getByRole('button',{name:'Обновить решения по заявкам',exact:true}).click();
+ const renewed=await reread;
+ expect(renewed.status()).toBe(200);
+ expect(await renewed.json()).toEqual(rangeSaved);
+ const terms=detail.getByRole('region',{name:'Подтверждённые условия',exact:true});
+ await expect(terms).toContainText(rangeText);
+ await expect(terms).toContainText('75 мин');
+
+ await priceMode.selectOption('FIXED');
+ await settings.getByLabel('Цена, копейки 1',{exact:true}).fill('120001');
+ await depositMode.selectOption('FULL_PREPAYMENT');
+ await publishIntakeService(settings,serviceName);
+ const priceBasis=await clickAndRead('Открыть решение мастера',endpoint,work);
+ expect(priceBasis.basis).toMatchObject({amount_minor:120001,price_range:null,occupied_minutes:null,deposit:{mode:'FULL_PREPAYMENT'}});
+ await expect(detail.getByLabel('Цена, ₽',{exact:true})).toHaveCount(0);
+ await expect(detail).toContainText(/1\s200,01\s₽/);
+ await detail.getByLabel('Длительность следующего сеанса, мин',{exact:true}).fill('80');
+ const priceSaved=await clickAndRead('Подтвердить условия',endpoint+'/'+priceBasis.approval_id);
+ expect(priceSaved.decision).toMatchObject({submitted:{amount_minor:null,occupied_minutes:80},
+  terms:{amount_minor:120001,occupied_minutes:80,price_reference_id:priceBasis.basis.price_calculation_id}});
+ await expect(detail.getByRole('region',{name:'Подтверждённые условия'})).toContainText('Полная предоплата');
+
+ await settings.getByLabel('Цена, копейки 1',{exact:true}).fill('');
+ await priceMode.selectOption('OWNER_QUOTE');
+ await durationMode.selectOption('FIXED');
+ await settings.getByLabel('Длительность, минуты 1',{exact:true}).fill('65');
+ await publishIntakeService(settings,serviceName);
+ const durationBasis=await clickAndRead('Открыть решение мастера',endpoint,work);
+ expect(durationBasis.approval_id).not.toBe(priceBasis.approval_id);
+ await expect(detail.getByLabel('Длительность следующего сеанса, мин',{exact:true})).toHaveCount(0);
+ await expect(detail).toContainText('65 мин');
+ await detail.getByLabel('Цена, ₽',{exact:true}).fill('4600');
+ const durationSaved=await clickAndRead('Подтвердить условия',endpoint+'/'+durationBasis.approval_id);
+ expect(durationSaved.decision).toMatchObject({submitted:{amount_minor:460000,occupied_minutes:null},
+  terms:{amount_minor:460000,occupied_minutes:65,duration_reference_id:durationBasis.basis.assessment_id}});
+ await expect(detail.getByRole('region',{name:'Подтверждённые условия'})).toContainText('Полная предоплата');
+ await clickAndRead('Отозвать подтверждение',endpoint+'/'+durationBasis.approval_id);
+ const next=await clickAndRead('Открыть новый запрос');
+ await detail.getByLabel('Пояснение или вопрос',{exact:true}).fill('Synthetic отказ по сложности');
+ const declined=await clickAndRead('Отказать по заявке',endpoint+'/'+next.approval_id);
+ expect(declined).toMatchObject({status:'DECLINED',decision:{authorized_action:null,terms:null}});
+ await expect(detail.getByText('Мастер отказал',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ console.log('R1 Chromium '+info.project.name+' RANGE 400000–450000 PROVISIONAL / 75; approval '+rangeSaved.approval_id+
+  ' decision '+rangeSaved.decision!.decision_id+' calculation '+rangeBasis.basis.price_calculation_id+
+  '; Q3-D 120001 / 80 FULL_PREPAYMENT decision '+priceSaved.decision!.decision_id);
+});

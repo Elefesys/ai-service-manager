@@ -103,7 +103,7 @@ function inConversation(v:Record<string,unknown>,scope:IntakeScope){
   &&(scope.client===undefined||v.client_id===scope.client)
   &&['workspace_id','business_id','conversation_id','client_id'].every(k=>uuid(v[k]));
 }
-function parseFacts(value:unknown):Fact[]{
+export function parseFacts(value:unknown):Fact[]{
  const facts=array(value,5).map(raw=>{
   const f=object(raw,['field','value','status','source','confirmed_by','conflict']);
   if(!one(f.field,fields)||!text(f.value,300)||!(f.value as string).trim()||!one(f.status,['client-stated','observed','owner-confirmed'])

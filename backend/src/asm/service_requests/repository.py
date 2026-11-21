@@ -4,6 +4,13 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from asm.service_requests.approvals import (
+    ApprovalPage,
+    ApprovalSourceView,
+    ApprovalView,
+    DecideApproval,
+    OpenApproval,
+)
 from asm.service_requests.assessment import (
     AssessmentCommand,
     AssessmentInputs,
@@ -158,6 +165,112 @@ class ServiceRequestRepository:
         if any(item.request_id != str(request_id) for item in history.items):
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
         return history
+
+    async def approval_open(
+        self, business: UUID, conversation: UUID, request_id: UUID, command: OpenApproval
+    ) -> ApprovalView | None:
+        revision = command.expected_revision
+        await self.assess(
+            business, conversation, request_id, AssessmentCommand(expected_revision=revision)
+        )
+        await self.price(
+            business, conversation, request_id, PriceCommand(expected_revision=revision)
+        )
+        raw = await self.unit.approval_owner_open(business, conversation, request_id, revision)
+        if raw is None:
+            return None
+        return self.approval_view(raw, business, conversation, request_id)
+
+    async def approval_read(
+        self, business: UUID, conversation: UUID, request_id: UUID, approval_id: UUID
+    ) -> ApprovalView:
+        raw = await self.unit.approval_owner_read(business, conversation, request_id, approval_id)
+        return self.approval_view(raw, business, conversation, request_id, approval_id)
+
+    async def approval_source(
+        self,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        approval_id: UUID,
+        message_id: UUID,
+        source_version: str,
+    ) -> ApprovalSourceView:
+        raw = await self.unit.approval_owner_source(
+            business, conversation, request_id, approval_id, message_id, source_version
+        )
+        try:
+            source = ApprovalSourceView.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        if (
+            source.workspace_id,
+            source.business_id,
+            source.conversation_id,
+            source.request_id,
+            source.approval_id,
+            source.message_id,
+            source.source_version,
+        ) != (
+            str(self.unit.context.workspace_id),
+            str(business),
+            str(conversation),
+            str(request_id),
+            str(approval_id),
+            str(message_id),
+            source_version,
+        ):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return source
+
+    async def approval_decide(
+        self,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        approval_id: UUID,
+        command: DecideApproval,
+    ) -> ApprovalView:
+        raw = await self.unit.approval_owner_decide(
+            business, conversation, request_id, approval_id, command.model_dump(mode="json")
+        )
+        return self.approval_view(raw, business, conversation, request_id, approval_id)
+
+    async def approval_list(self, before_id: UUID | None) -> ApprovalPage:
+        raw = await self.unit.approval_owner_list(before_id)
+        try:
+            page = ApprovalPage.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        if any(row.workspace_id != str(self.unit.context.workspace_id) for row in page.items):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return page
+
+    def approval_view(
+        self,
+        raw: object,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        approval_id: UUID | None = None,
+    ) -> ApprovalView:
+        try:
+            view = ApprovalView.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        if (
+            (view.workspace_id, view.business_id, view.conversation_id, view.request_id)
+            != (
+                str(self.unit.context.workspace_id),
+                str(business),
+                str(conversation),
+                str(request_id),
+            )
+            or approval_id is not None
+            and view.approval_id != str(approval_id)
+        ):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return view
 
 
 def receipt_from_database(raw: object) -> ServiceRequestReceipt:

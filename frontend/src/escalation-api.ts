@@ -1,4 +1,4 @@
-import {parseIntake,type Intake} from './intake-api';
+import {parseFacts,parseIntake,type Fact,type Intake,type IntakeScope} from './intake-api';
 import { parseContextHold, type ContextHold } from './human-context-api';
 // Four accepted owner routes (M3_CONTRACT §14.5/14.16). Receipts are historical.
 export type EscalationStatus = 'PENDING' | 'RESOLVED' | 'CANCELLED' | 'EXPIRED';
@@ -122,5 +122,179 @@ export const escalationApi={
   read(context: EscalationContext, signal?: AbortSignal) {return request(context.workspace,`/${encodeURIComponent(context.escalation)}`,v=>parseEscalation(v,context.workspace,context),{},signal);},
   command(context: EscalationContext, operation: EscalationOperation, body: EscalationBody, key: string, csrf: string, signal?: AbortSignal) {
     return request(context.workspace,`/${encodeURIComponent(context.escalation)}/${operation==='RESOLVE'?'resolve':'cancel'}`,v=>parseEscalationReceipt(v,context,operation,body),{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key},body:JSON.stringify(body)},signal);
+  },
+};
+
+export type SourceBinding = { message_id: string; source_version: string };
+export type ApprovalSource = SourceBinding & {
+  workspace_id:string; business_id:string; conversation_id:string; client_id:string;
+  request_id:string; approval_id:string; content_type:'TEXT'|'PHOTO'; text:string|null;
+};
+type ProvisionalPriceRange = { authority:'PROVISIONAL'; lower_minor:number; upper_minor:number };
+type ApprovalPrice = { amount_minor:number|null; price_range:ProvisionalPriceRange|null };
+const approvalStatuses = ['PENDING','APPROVED','CLARIFICATION','DECLINED','EXPIRED','STALE','REVOKED'] as const;
+export type ApprovalScope = { workspace: string; business: string; conversation: string; client: string; request: string };
+export type ApprovalSelection = ApprovalScope & { approval: string };
+export type ApprovalBody = Readonly<{
+  expected_version: '1'|'2';
+  action: 'PREPARE_QUOTE';
+  operation: 'APPROVE'|'CLARIFY'|'DECLINE'|'WITHDRAW';
+  amount_minor?: number;
+  occupied_minutes?: number;
+  note?: string;
+}>;
+export type ApprovalCard = {
+  approval_id: string; workspace_id: string; business_id: string; conversation_id: string; client_id: string;
+  request_id: string; request_revision: string; version: '1'|'2'; action: 'PREPARE_QUOTE';
+  assignee_user_account_id: string; created_at: string; expires_at: string;
+  status: typeof approvalStatuses[number]; can_resolve: boolean; authorization_current: boolean;
+  related_escalation_id: string|null;
+  basis: ApprovalPrice & {
+    service_name: string; release_id: string; activation_version: string; facts: Fact[];
+    intent_source: SourceBinding; intent_current: boolean; question: string|null;
+    unavailable_fields: string[]; assessment_id: string; price_calculation_id: string;
+    assessment_outcome: 'FEASIBLE'|'NEEDS_OWNER'|'NEEDS_DATA'|'DECLINED'; assessment_reason: string; price_reason: string;
+    complex_work: { category:'COVER_UP'|'OTHER_COMPLEX'; source: SourceBinding; source_current: boolean }|null;
+    occupied_minutes: number|null; can_approve: boolean;
+    deposit: { mode: string; amount_minor: number|null; percent: number|null };
+  };
+  decision: {
+    decision_id: string; actor_user_account_id: string; decided_at: string;
+    submitted: ApprovalBody; authorized_action: 'PREPARE_QUOTE'|null;
+    terms: (ApprovalPrice & { currency: 'RUB'; occupied_minutes: number; price_reference_id: string; duration_reference_id: string })|null;
+  } | null;
+};
+
+export function draftApprovalSelection(card: ApprovalCard): ApprovalSelection {
+  return {workspace:card.workspace_id,business:card.business_id,conversation:card.conversation_id,
+    client:card.client_id,request:card.request_id,approval:card.approval_id};
+}
+const boundedInteger = (amount: unknown, max: number) => typeof amount === 'number' && Number.isInteger(amount) && amount > 0 && amount <= max;
+function sourceBinding(value: unknown) {
+  const source = object(value,['message_id','source_version']);
+  if (!uuid(source.message_id) || !matches(source.source_version,/^[0-9a-f]{64}$/)) invalid();
+}
+function priceRange(value:unknown):ProvisionalPriceRange|null {
+  if(value===null)return null;
+  const range=object(value,['authority','lower_minor','upper_minor']);
+  if(range.authority!=='PROVISIONAL'||!boundedInteger(range.lower_minor,100_000_000_000)
+    ||!boundedInteger(range.upper_minor,100_000_000_000)||Number(range.lower_minor)>=Number(range.upper_minor))return invalid();
+  return range as ProvisionalPriceRange;
+}
+
+function parseApprovalSource(value:unknown,scope:ApprovalSelection,source:SourceBinding):ApprovalSource {
+  const reply=object(value,['workspace_id','business_id','conversation_id','client_id','request_id','approval_id',
+    'message_id','source_version','content_type','text']);
+  if(reply.workspace_id!==scope.workspace||reply.business_id!==scope.business||reply.conversation_id!==scope.conversation
+    ||reply.client_id!==scope.client||reply.request_id!==scope.request||reply.approval_id!==scope.approval
+    ||reply.message_id!==source.message_id||reply.source_version!==source.source_version
+    ||!oneOf(reply.content_type,['TEXT','PHOTO'])||reply.text===null&&reply.content_type!=='PHOTO'
+    ||reply.text!==null&&(typeof reply.text!=='string'||Array.from(reply.text).length>4096))return invalid();
+  return value as ApprovalSource;
+}
+
+function parseApproval(value: unknown, workspace: string, expect?: ApprovalScope & {approval?:string}): ApprovalCard {
+  const card = object(value,['approval_id','workspace_id','business_id','conversation_id','client_id','request_id','request_revision',
+    'version','action','assignee_user_account_id','basis','created_at','expires_at','status','decision','can_resolve','authorization_current','related_escalation_id']);
+  if (!['approval_id','business_id','conversation_id','client_id','request_id','assignee_user_account_id'].every(key=>uuid(card[key]))
+    || card.workspace_id!==workspace || !decimal(card.request_revision) || card.action!=='PREPARE_QUOTE'
+    || !timestamp(card.created_at)||!timestamp(card.expires_at)||!oneOf(card.status,[...approvalStatuses])
+    || typeof card.can_resolve!=='boolean'||card.can_resolve&&card.status!=='PENDING'
+    || card.authorization_current!==(card.status==='APPROVED')||card.related_escalation_id!==null&&!uuid(card.related_escalation_id)
+    || (card.version!==(card.decision===null?'1':'2'))
+    || expect&&(card.business_id!==expect.business||card.conversation_id!==expect.conversation||card.client_id!==expect.client
+      ||card.request_id!==expect.request||expect.approval!==undefined&&card.approval_id!==expect.approval)) invalid();
+  const basis=object(card.basis,['service_name','release_id','activation_version','deposit','facts','unavailable_fields','intent_source',
+    'intent_current','question','assessment_id','assessment_outcome','assessment_reason','complex_work','price_calculation_id',
+    'price_reason','amount_minor','price_range','occupied_minutes','can_approve']);
+  const range=priceRange(basis.price_range);
+  parseFacts(basis.facts);
+  sourceBinding(basis.intent_source);
+  const deposit=object(basis.deposit,['mode','amount_minor','percent']);
+  if (typeof basis.service_name!=='string'||!uuid(basis.release_id)||!decimal(basis.activation_version)||!uuid(basis.assessment_id)
+    || !uuid(basis.price_calculation_id)||typeof basis.can_approve!=='boolean'||typeof basis.intent_current!=='boolean'
+    || !oneOf(basis.assessment_outcome,['FEASIBLE','NEEDS_OWNER','NEEDS_DATA','DECLINED'])
+    || typeof basis.assessment_reason!=='string'||typeof basis.price_reason!=='string'
+    || !Array.isArray(basis.unavailable_fields)||!basis.unavailable_fields.every(field=>typeof field==='string')
+    || basis.question!==null&&typeof basis.question!=='string'||typeof deposit.mode!=='string'
+    || deposit.amount_minor!==null&&!boundedInteger(deposit.amount_minor,100_000_000_000)
+    || deposit.percent!==null&&(typeof deposit.percent!=='number'||!Number.isFinite(deposit.percent))
+    || basis.amount_minor!==null&&(!boundedInteger(basis.amount_minor,100_000_000_000)||range!==null)
+    || range!==null&&deposit.mode!=='NONE'&&(deposit.mode!=='FIXED_DEPOSIT'||deposit.amount_minor===null||Number(deposit.amount_minor)>range.lower_minor)
+    || basis.occupied_minutes!==null&&!boundedInteger(basis.occupied_minutes,10_080)) invalid();
+  if(basis.complex_work!==null){
+    const complex=object(basis.complex_work,['category','source','source_current']);
+    if(!oneOf(complex.category,['COVER_UP','OTHER_COMPLEX'])||typeof complex.source_current!=='boolean') invalid();
+    sourceBinding(complex.source);
+  }
+  if(card.decision!==null){
+    const decision=object(card.decision,['decision_id','actor_user_account_id','submitted','decided_at','authorized_action','terms']);
+    const submitted=object(decision.submitted,['action','expected_version','operation','amount_minor','occupied_minutes','note']);
+    if(!uuid(decision.decision_id)||decision.actor_user_account_id!==card.assignee_user_account_id||!timestamp(decision.decided_at)
+      ||submitted.action!==card.action||submitted.expected_version!=='1'||!oneOf(submitted.operation,['APPROVE','CLARIFY','DECLINE'])
+      ||submitted.note!==null&&typeof submitted.note!=='string'
+      ||(submitted.operation==='APPROVE')!==(decision.terms!==null)
+      ||decision.authorized_action!==(submitted.operation==='APPROVE'?card.action:null)) invalid();
+    if(decision.terms!==null){
+      const terms=object(decision.terms,['currency','amount_minor','price_range','occupied_minutes','price_reference_id','duration_reference_id']);
+      const savedRange=priceRange(terms.price_range);
+      if(terms.currency!=='RUB'||!boundedInteger(terms.occupied_minutes,10_080)
+        || (range===null)!==(savedRange===null)
+        || range?.lower_minor!==savedRange?.lower_minor||range?.upper_minor!==savedRange?.upper_minor
+        || (range===null?!boundedInteger(terms.amount_minor,100_000_000_000):terms.amount_minor!==null)
+        || terms.amount_minor!==(basis.amount_minor??submitted.amount_minor)||terms.occupied_minutes!==(basis.occupied_minutes??submitted.occupied_minutes)
+        || terms.price_reference_id!==(basis.amount_minor===null&&range===null?decision.decision_id:basis.price_calculation_id)
+        || terms.duration_reference_id!==(basis.occupied_minutes===null?decision.decision_id:basis.assessment_id)) invalid();
+    }
+  }
+  return value as ApprovalCard;
+}
+
+function approvalPath(scope: ApprovalScope) {
+  return '/api/v1/workspaces/'+encodeURIComponent(scope.workspace)+'/businesses/'+encodeURIComponent(scope.business)
+    +'/intake/conversations/'+encodeURIComponent(scope.conversation)+'/service-requests/'+encodeURIComponent(scope.request)+'/approvals';
+}
+
+async function approvalRequest<T>(path: string, parse:(v:unknown)=>T, signal:AbortSignal, mutation?:{body:unknown;csrf:string}){
+  const init:RequestInit=mutation?{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':mutation.csrf},body:JSON.stringify(mutation.body)}:{};
+  const response=await fetch(path,{...init,credentials:'include',cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(15_000)])});
+  const value:unknown=await response.json();
+  if(response.status!==200){
+    const error=(value as {error?:{code?:string}}|null)?.error;
+    throw new EscalationError(response.status,error?.code??'APPROVAL_FAILED');
+  }
+  return parse(value);
+}
+
+export const approvalApi={
+  scope(scope:IntakeScope,request:string):ApprovalScope {
+    if(!scope.conversation||!scope.client)throw new Error('Missing selected conversation');
+    return {...scope,conversation:scope.conversation,client:scope.client,request};
+  },
+  list(workspace:string,before:string|null,signal:AbortSignal) {
+    const query=before?'?'+new URLSearchParams({before_id:before}):'';
+    return approvalRequest('/api/v1/workspaces/'+encodeURIComponent(workspace)+'/service-approvals'+query,value=>{
+      const page=object(value,['items','next_before_id']);
+      if(!Array.isArray(page.items)||page.items.length>20||page.next_before_id!==null&&!uuid(page.next_before_id))return invalid();
+      return {items:page.items.map(item=>parseApproval(item,workspace)),next:page.next_before_id as string|null};
+    },signal);
+  },
+  read(scope:ApprovalSelection,signal:AbortSignal) {
+    return approvalRequest(approvalPath(scope)+'/'+encodeURIComponent(scope.approval),value=>parseApproval(value,scope.workspace,scope),signal);
+  },
+  source(scope:ApprovalSelection,source:SourceBinding,signal:AbortSignal) {
+    const query=new URLSearchParams({source_version:source.source_version});
+    const path=approvalPath(scope)+'/'+encodeURIComponent(scope.approval)+'/sources/'+encodeURIComponent(source.message_id);
+    return approvalRequest(path+'?'+query,value=>parseApprovalSource(value,scope,source),signal);
+  },
+  open(scope:ApprovalScope,revision:string,csrf:string,signal:AbortSignal) {
+    return approvalRequest(approvalPath(scope),value=>{
+      if(value===null)return null;
+      const card=parseApproval(value,scope.workspace,scope);
+      return card.request_revision===revision?card:invalid();
+    },signal,{body:{expected_revision:revision},csrf});
+  },
+  decide(scope:ApprovalSelection,body:ApprovalBody,csrf:string,signal:AbortSignal) {
+    return approvalRequest(approvalPath(scope)+'/'+encodeURIComponent(scope.approval),value=>parseApproval(value,scope.workspace,scope),signal,{body,csrf});
   },
 };

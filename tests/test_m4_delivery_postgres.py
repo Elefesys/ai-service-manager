@@ -47,8 +47,8 @@ async def delivery(pg):
         yield pg
     finally:
         await current.close()
-        await migrate("upgrade", "0027")
-        pg.schema_revision = "0027"
+        await migrate("upgrade", "0028")
+        pg.schema_revision = "0028"
 
 
 async def source_turn(h, *, native=False, workspace=A, telegram=False, message_text=None):
@@ -139,7 +139,7 @@ def application(h, script=("reply",), *, adapter=None, telegram=None, fake=None,
     cfg = cfg or config()
     if (
         getattr(h, "schema_revision", None)
-        in {"0019", "0020", "0021", "0023", "0024", "0026", "0027"}
+        in {"0019", "0020", "0021", "0023", "0024", "0026", "0027", "0028"}
         and cfg.prompt_revision == "conversation_v2"
     ):
         cfg = KnowledgeGatewayConfig.model_validate(

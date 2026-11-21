@@ -9,8 +9,9 @@ import asyncio
 import json
 import os
 import sys
-from dataclasses import replace
-from datetime import datetime
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -22,16 +23,20 @@ from asm.configuration.models import ActiveProjection
 from asm.foundation import create_worker, native_schema_readiness
 from asm.intake.templates import template_revision
 from asm.messaging.adapter import ControlledAdapter
+from asm.messaging.database import call
+from asm.messaging.errors import MessagingError
 from asm.messaging.http_service import OwnerAPIRepository
 from asm.messaging.models import OutcomeKind
-from asm.messaging.results import AIJobClaim
+from asm.messaging.results import AIJobClaim, JobClaim, ScanStep, parse_claim
 from asm.messaging.worker import Worker
 from asm.tenancy import AuthenticatedAccount, TenantDatabase
 from m2_4_browser_fixture import bot
 from m2_4_browser_worker import KnowledgeBrowserKernel, event, guard, knowledge_config
 from provision_local_auth import PrivateArgumentParser, ProvisioningError
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 INPUTS = {
@@ -82,9 +87,97 @@ CATEGORIES = {
 }
 
 
+class IntakeFixtureRefused(ProvisioningError):
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass
+class Diagnostic:
+    stage: str = "ARGS"
+    job_kind: str = "NONE"
+    matches_expected: bool = False
+
+    def refusal(self, args, error: Exception) -> str:
+        if isinstance(error, IntakeFixtureRefused):
+            reason = error.reason
+        elif isinstance(error, MessagingError):
+            reason = error.code.value
+        elif isinstance(error, TimeoutError):
+            reason = "TIMEOUT"
+        elif isinstance(error, SQLAlchemyError):
+            reason = "DATABASE_ERROR"
+        elif isinstance(error, ValidationError):
+            reason = "VALIDATION_FAILED"
+        elif isinstance(error, ProvisioningError):
+            reason = {
+                "ARGS": "INVALID_ARGUMENTS",
+                "GUARD": "TEST_GUARD_REFUSED",
+                "EXECUTE": "INBOX_PROCESSING_MISMATCH",
+            }.get(self.stage, "PROVISIONING_REFUSED")
+        else:
+            reason = "UNEXPECTED_ERROR"
+        operation = args.operation if args is not None else "UNKNOWN"
+        journey = args.journey if args is not None else "UNKNOWN"
+        variant = args.variant if args is not None else "UNKNOWN"
+        line = (
+            f"M5_INTAKE_BROWSER_REFUSED:operation={operation};journey={journey};variant={variant};"
+            f"stage={self.stage};reason={reason}"
+        )
+        if self.stage == "CLAIM":
+            line += (
+                f";job_kind={self.job_kind};matches_expected={str(self.matches_expected).lower()}"
+            )
+        return line
+
+
+class IntakeBrowserKernel(KnowledgeBrowserKernel):
+    async def claim_intake(
+        self,
+        cutoff: datetime,
+        correlation: UUID,
+        validate: Callable[[JobClaim], None],
+        diagnostic: Diagnostic,
+        *,
+        ai: bool = False,
+    ) -> JobClaim | None:
+        capability = "ai_delivery_claim" if ai else "messaging_claim"
+        worker_id = "m5-intake-ai" if ai else "m5-intake-work"
+        scan = ScanStep(
+            step="BUSY", scan_until=cutoff + timedelta(seconds=30), at=cutoff, id=UUID(int=0)
+        )
+        async with self._transaction() as connection:
+            for _ in range(100):
+                async with connection.begin_nested() as probe:
+                    scan = ScanStep.model_validate(
+                        await call(
+                            connection,
+                            f"SELECT platform.{capability}(:worker, :until, :at, :id)",
+                            {"worker": worker_id, **self._scan_parameters(scan)},
+                        )
+                    )
+                    if scan.step == "END":
+                        return None
+                    self._check_scan_position(scan)
+                    if scan.step == "CLAIMED":
+                        claim = parse_claim(scan.claim)
+                        diagnostic.job_kind = claim.kind
+                        diagnostic.matches_expected = False
+                        if claim.correlation_id == correlation:
+                            validate(claim)
+                            diagnostic.matches_expected = True
+                            return claim
+                    # A prior journey's reminder can become due inside this
+                    # window. Revert foreign leases and candidate terminalization
+                    # before continuing the scan in the same TEST transaction.
+                    await probe.rollback()
+        raise IntakeFixtureRefused("CLAIM_SCAN_LIMIT_EXCEEDED")
+
+
 class DescriptionOnlyStorage:
     async def get(self, key):
-        raise ProvisioningError("This finite journey cannot read private image bytes")
+        raise IntakeFixtureRefused("PRIVATE_IMAGE_READ_REFUSED")
 
     async def close(self):
         pass
@@ -102,7 +195,7 @@ class IntakeModel(FakeAdapter):
         current = next(c for c in contexts if c.get("revision") == "conversation_intake_v1")
         source = current["sources"][-1]
         if source["text"] != INPUTS[self.operation]:
-            raise ProvisioningError("Current finite source required")
+            raise IntakeFixtureRefused("MODEL_SOURCE_MISMATCH")
         facts = [
             dict(
                 field=field,
@@ -154,11 +247,12 @@ def target():
             )
         )
     ):
-        raise ProvisioningError("Isolated runtime-only TEST target required")
+        raise IntakeFixtureRefused("ISOLATED_TEST_TARGET_REQUIRED")
     return url
 
 
-async def run(args):
+async def run(args, diagnostic):
+    diagnostic.stage = "TARGET"
     url = target()
     actor, workspace, business = (
         UUID(value) for value in (args.actor, args.workspace, args.business)
@@ -168,30 +262,32 @@ async def run(args):
     )
     worker = None
     try:
+        diagnostic.stage = "GUARD"
         await guard(engine)
         async with engine.connect() as c:
             await native_schema_readiness(c)
         tenancy = TenantDatabase(engine)
-        kernel = KnowledgeBrowserKernel(engine, environment="TEST")
+        kernel = IntakeBrowserKernel(engine, environment="TEST")
 
         async def barrier():
             if engine.pool.checkedout() != 0:
-                raise ProvisioningError("External TEST work holds a DB connection")
+                raise IntakeFixtureRefused("DB_CONNECTION_HELD_DURING_MODEL_CALL")
 
         adapter = ControlledAdapter(environment="TEST", outcome=OutcomeKind.SUCCESS)
         observer = Worker(kernel, adapter)
+        diagnostic.stage = "CONFIGURATION"
         cid = UUID(args.conversation) if args.conversation else None
         if args.operation != "seed" and cid is None:
-            raise ProvisioningError("Seeded conversation required")
+            raise IntakeFixtureRefused("SEEDED_CONVERSATION_REQUIRED")
         service = None
         async with tenancy.transaction(AuthenticatedAccount(actor), workspace, uuid4()) as unit:
             active = ActiveProjection.model_validate(await unit.configuration_active_read(business))
             if args.operation != "seed":
                 if not active.bundle:
-                    raise ProvisioningError("Explicit owner publication required")
+                    raise IntakeFixtureRefused("OWNER_PUBLICATION_REQUIRED")
                 services = [s.id for s in active.bundle.services if template_revision(s)]
                 if len(services) != 1:
-                    raise ProvisioningError("One explicitly published template required")
+                    raise IntakeFixtureRefused("PUBLISHED_TEMPLATE_COUNT_MISMATCH")
                 service = services[0]
                 admission = await unit._portfolio_execute(
                     "SELECT platform.portfolio_session_admit(:business,:conversation,CAST(:body AS jsonb))",
@@ -211,6 +307,7 @@ async def run(args):
                     ),
                 )
         if cid is not None:
+            diagnostic.stage = "MODEL_SETUP"
             cfg = IntakeGatewayConfig.model_validate(
                 knowledge_config().model_dump()
                 | dict(prompt_revision="conversation_v7", schema_revision="conversation_result_v3")
@@ -236,6 +333,7 @@ async def run(args):
                 model=lambda: model,
                 portfolio_storage=DescriptionOnlyStorage(),
             )
+        diagnostic.stage = "INGEST"
         async with engine.connect() as c:
             cutoff = (await c.execute(text("SELECT clock_timestamp()"))).scalar_one()
         scenario = f"{args.journey}-{args.variant}"
@@ -247,37 +345,51 @@ async def run(args):
             ),
             text=INPUTS[args.operation],
         )
-        incoming = await kernel.ingest_event(adapter.source(bot("knowledge")), value, uuid4())
+        correlation = uuid4()
+        incoming = await kernel.ingest_event(adapter.source(bot("knowledge")), value, correlation)
         if incoming.code != "ACCEPTED" or incoming.workspace_id != workspace:
-            raise ProvisioningError("Fresh canonical finite input required; no retries/resend")
+            raise IntakeFixtureRefused("FRESH_CANONICAL_INGEST_REQUIRED")
         kernel.question_inbox_id = incoming.inbox_id
         owner_handoff = CATEGORIES.get(args.operation) == "COVER_UP"
-        seen_inbox, seen_observer, ai_claim = False, False, None
+        connection_id, seen_observer, ai_claim = None, False, None
+
+        def validate_claim(claim: JobClaim) -> None:
+            if claim.workspace_id != workspace:
+                raise IntakeFixtureRefused("JOB_WORKSPACE_MISMATCH")
+            if claim.kind not in {"PROCESS_INBOX", "PROCESS_TURN", "SEND_AI_TEXT"}:
+                raise IntakeFixtureRefused("UNEXPECTED_JOB_KIND")
+            if connection_id is None:
+                if (
+                    claim.kind != "PROCESS_INBOX"
+                    or claim.job_id != incoming.job_id
+                    or claim.inbox_id != incoming.inbox_id
+                ):
+                    raise IntakeFixtureRefused("INGEST_JOB_MISMATCH")
+            elif claim.connection_id != connection_id or claim.kind == "PROCESS_INBOX":
+                raise IntakeFixtureRefused("UNRELATED_JOB")
+            if isinstance(claim, AIJobClaim) and (ai_claim is not None or worker is None):
+                raise IntakeFixtureRefused("UNEXPECTED_MODEL_JOB")
+
         async with asyncio.timeout(25):
             for _ in range(512):
-                claim = await kernel.claim_knowledge(cutoff, ai=worker is not None)
-                if claim is None:
-                    claim = await kernel.claim_knowledge(cutoff)
+                diagnostic.stage = "CLAIM"
+                diagnostic.job_kind = "NONE"
+                diagnostic.matches_expected = False
+                claim = await kernel.claim_intake(
+                    cutoff, correlation, validate_claim, diagnostic, ai=worker is not None
+                )
+                if claim is None and worker is not None:
+                    claim = await kernel.claim_intake(
+                        cutoff, correlation, validate_claim, diagnostic
+                    )
                 if claim is None:
                     await asyncio.sleep(0.025)
                     continue
-                if claim.workspace_id != workspace or claim.kind not in {
-                    "PROCESS_INBOX",
-                    "PROCESS_TURN",
-                    "SEND_AI_TEXT",
-                }:
-                    raise ProvisioningError("Exclusive finite text-only claim required")
-                if not seen_inbox:
-                    if claim.kind != "PROCESS_INBOX" or claim.job_id != incoming.job_id:
-                        raise ProvisioningError("Original input must be first")
+                if connection_id is None:
                     connection_id = claim.connection_id
-                    seen_inbox = True
-                elif claim.connection_id != connection_id or claim.kind == "PROCESS_INBOX":
-                    raise ProvisioningError("Unrelated fixture job refused")
                 if isinstance(claim, AIJobClaim):
-                    if ai_claim is not None or worker is None:
-                        raise ProvisioningError("One finite model job required")
                     ai_claim = claim
+                diagnostic.stage = "EXECUTE"
                 selected = (
                     observer
                     if worker is None or getattr(claim, "step", None) == "TEST_CONSUME"
@@ -295,6 +407,7 @@ async def run(args):
                 )
                 if not done:
                     continue
+                diagnostic.stage = "OWNER_READ"
                 async with tenancy.transaction(
                     AuthenticatedAccount(actor), workspace, uuid4()
                 ) as unit:
@@ -311,20 +424,22 @@ async def run(args):
                         ):
                             found.append(conversation)
                     if len(found) != 1 or cid is not None and found[0].conversation_id != str(cid):
-                        raise ProvisioningError("Canonical owner-scoped conversation required")
+                        raise IntakeFixtureRefused("OWNER_CONVERSATION_MISMATCH")
                     cid = UUID(found[0].conversation_id)
                     summary = await unit.intake_owner(business, cid, "READ", "", {})
                 if args.operation != "seed":
+                    diagnostic.stage = "REPLAY"
                     receipt = await worker.ai.database.replay(ai_claim, cfg)
                     if (
                         not isinstance(receipt, IntakeRuntimeReceipt)
                         or len(model.requests) != 1
                         or receipt.result.kind != ("handoff" if owner_handoff else "reply")
                     ):
-                        raise ProvisioningError("One durable bounded v7 result required")
+                        raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
+                diagnostic.stage = "EFFECTS"
                 expected = 0 if owner_handoff or args.operation == "seed" else 1
                 if adapter.calls != expected or adapter.effects != expected:
-                    raise ProvisioningError("Unexpected finite external effect count")
+                    raise IntakeFixtureRefused("EXTERNAL_EFFECT_COUNT_MISMATCH")
                 return dict(
                     conversation_id=str(cid),
                     message_id=str(kernel.question_message_id),
@@ -333,7 +448,7 @@ async def run(args):
                     effects=adapter.effects,
                     status=summary["status"],
                 )
-        raise ProvisioningError("Finite intake browser work did not finish")
+        raise IntakeFixtureRefused("FINITE_WORK_INCOMPLETE")
     finally:
         if worker is not None:
             await worker.portfolio_delivery.close()
@@ -341,6 +456,8 @@ async def run(args):
 
 
 def main():
+    diagnostic = Diagnostic()
+    args = None
     try:
         parser = PrivateArgumentParser()
         parser.add_argument("--operation", choices=tuple(INPUTS), required=True)
@@ -355,16 +472,20 @@ def main():
                 "assessment-complex",
                 "assessment-complex-source",
                 "pricing",
+                "owner-decision",
+                "owner-decision-partial",
+                "owner-source-other",
             ),
             default="intake",
         )
         for name in ("actor", "workspace", "business"):
             parser.add_argument("--" + name, required=True)
         parser.add_argument("--conversation")
-        print(json.dumps(asyncio.run(run(parser.parse_args())), sort_keys=True))
+        args = parser.parse_args()
+        print(json.dumps(asyncio.run(run(args, diagnostic)), sort_keys=True))
         return 0
     except Exception as error:
-        print("M5_INTAKE_BROWSER_REFUSED:" + type(error).__name__, file=sys.stderr)
+        print(diagnostic.refusal(args, error), file=sys.stderr)
         return 1
 
 

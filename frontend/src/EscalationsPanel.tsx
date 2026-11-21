@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
+import { OwnerApprovals } from './OwnerApprovals';
+import type { ApprovalSelection } from './escalation-api';
 import { EscalationBody, EscalationContext, EscalationError, EscalationOperation, EscalationPage, EscalationView, StatusFilter, escalationApi, exactAnswer } from './escalation-api';
 
 type Intent = {
@@ -16,8 +18,8 @@ const failure = (e: unknown) => e instanceof EscalationError&&e.code==='RATE_LIM
 
 // Mounted for the page lifetime, including auth recovery. No storage or effects
 // that POST. The ref synchronously freezes one intention before double submit.
-export function EscalationsPanel({session,workspace,recover,expired,accessDenied,accepted}: {
-  session: Session|null; workspace: string; recover: ()=>void; expired: ()=>void; accessDenied: ()=>void; accepted?: (context: EscalationContext)=>void;
+export function EscalationsPanel({session,workspace,recover,expired,accessDenied,accepted,approval}: {
+  session: Session|null; workspace: string; recover: ()=>void; expired: ()=>void; accessDenied: ()=>void; accepted?: (context: EscalationContext)=>void; approval?:ApprovalSelection|null;
 }) {
   const owner=!!session&&session.memberships.some(m=>m.workspace_id===workspace&&m.role==='OWNER');
   const scope=useRef({session,workspace,owner,generation:0});
@@ -27,6 +29,7 @@ export function EscalationsPanel({session,workspace,recover,expired,accessDenied
     selection.current={context:null,epoch:selection.current.epoch+1};
   }
   const generation=scope.current.generation;
+  const [related,setRelated]=useState<readonly string[]>([]);
   const [stored,setView]=useState<View>(()=>blank(generation));
   const view=stored.generation===generation?stored:blank(generation);
   const intent=useRef<Intent|null>(null), alive=useRef(true), denied=useRef(-1);
@@ -127,16 +130,18 @@ export function EscalationsPanel({session,workspace,recover,expired,accessDenied
     {owner&&(view.denied?<section className="panel alert" role="alert"><p>Нет доступа к запросам владельца.</p><button onClick={recover}>Проверить доступ к запросам</button></section>:<section className="panel escalations" aria-label="Запросы владельцу">
       <div className="billing-heading"><div><span className="kicker">OWNER</span><h2>Запросы владельцу</h2></div><button className="secondary" disabled={view.listBusy} onClick={()=>void list()}>Обновить очередь</button></div>
       <p className="muted">Внутренние решения по выбранному Workspace. Ответ здесь не отправляется клиенту и не включает автоматику.</p>
+      {session&&<OwnerApprovals key={generation} session={session} workspace={workspace} selected={approval??null}
+        related={setRelated} recover={recover} expired={expired} denied={accessDenied}/>}
       <label htmlFor="escalation-filter">Сохранённый статус</label><select id="escalation-filter" value={view.filter} onChange={e=>selectFilter(e.target.value as StatusFilter)}>{Object.entries(statusLabel).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
       {view.listBusy&&<p role="status">Загружаем очередь…</p>}{view.listError&&<p role="alert">{view.listError}</p>}
       {view.listed&&!view.pages.some(page=>page.items.length)&&<p>Запросов с этим статусом нет.</p>}
       <ul className="escalation-list">{view.pages.flatMap(page=>page.items.map(item=>{
-        if(seen.has(item.escalation_id))return null;seen.add(item.escalation_id);
+        if(seen.has(item.escalation_id)||item.status==='PENDING'&&related.includes(item.escalation_id))return null;seen.add(item.escalation_id);
         return <li key={item.escalation_id}><button className="secondary" data-testid={`escalation-${item.escalation_id}`} aria-pressed={view.selected?.escalation===item.escalation_id} onClick={()=>choose(contextOf(item))}><strong>Требуется решение владельца</strong><span>{statusLabel[item.status]} · {validityLabel[item.validity]}</span><span>Ответственный: {item.assignee_user_account_id===session?.user_account_id?'вы':item.assignee_user_account_id}</span><small>Создан: {item.created_at} · Срок: {item.expires_at}</small><small>Наблюдение страницы: {page.observed_at}</small></button></li>;
       }))}</ul>
       {last?.next_cursor&&<button disabled={view.listBusy} onClick={()=>void list(last.next_cursor)}>Ещё запросы</button>}
       {view.listed&&last?.next_cursor===null&&view.pages.some(page=>page.items.length>0)&&<p>Конец очереди на момент чтения. Новые запросы появятся после обновления.</p>}
-      {view.selected&&<section className="escalation-detail" aria-label="Карточка запроса">
+      {view.selected&&!related.includes(view.selected.escalation)&&<section className="escalation-detail" aria-label="Карточка запроса">
         <div className="billing-heading"><h3>Решение владельца</h3><button className="secondary" disabled={view.detailBusy||p?.phase==='sending'} onClick={()=>void read()}>Обновить запрос</button></div>
         {view.detailBusy&&<p role="status">Читаем актуальный запрос…</p>}{view.detailError&&<p role="alert">{view.detailError}</p>}
         {d&&<><p>{d.question}</p>{d.policy==='PRELIMINARY_INTAKE_OWNER_V1'&&<div aria-label="Сводка запроса для решения"><h4>Предварительные сведения</h4>{d.summary_current&&d.summary?<ul>{d.summary.facts.map(f=><li key={f.field}>{f.field}: {f.value} · {f.status} · источник {f.source.message_id}</li>)}</ul>:<p>Источники изменились. Прежняя сводка скрыта; требуется актуальный вопрос.</p>}<p>Ответ на вопрос сохраняет решение. Подтверждение отдельных полей выполняется в Inbox.</p></div>}{d.context_hold&&<p role="status">{d.context_hold.reason==='CONTEXT_POLICY_PAUSED'?'Сверка приостановлена оператором.':d.context_hold.reason==='CONTEXT_INPUT_PENDING'?'Входящий контекст ещё обрабатывается.':d.context_hold.reason==='CONTEXT_UNRESOLVED'?'Контекст оставлен неразрешённым.':d.context_hold.reason==='CONTEXT_COVERAGE_REQUIRED'?'Доступной истории недостаточно.':d.context_hold.reason==='NEW_OBSERVATION'?'Есть новые наблюдения канала.':'Контекст требует сверки владельцем.'} Сохранение ответа сейчас недоступно. Отмена определяется текущими правами сервера.</p>}<dl><dt>Сохранённый статус</dt><dd>{statusLabel[d.status]}</dd><dt>Текущая применимость</dt><dd>{validityLabel[d.validity]}</dd><dt>Ожидание</dt><dd>{d.waiting==='WAITING_FOR_HUMAN'?'Ожидается решение владельца':'Актуального ожидания нет'}</dd><dt>Ответственный</dt><dd>{d.assignee_user_account_id===session?.user_account_id?'Вы':d.assignee_user_account_id}</dd><dt>Создан</dt><dd>{d.created_at}</dd><dt>Срок запроса</dt><dd>{d.expires_at}</dd><dt>Состояние прочитано</dt><dd>{d.observed_at}</dd><dt>Режим при чтении</dt><dd>{d.current_context.control_mode==='HUMAN'?'Управление у мастера':'Сохранён режим AI'}</dd></dl>

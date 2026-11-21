@@ -375,6 +375,73 @@ M6_REQUEST_IMPLEMENTATION_PATHS = {
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
 }
+M6_DECISION_BASE = "f8d05b5befe33a5f4081a3f749f458336180678d"
+M6_DECISION_TREE = "6a7628e381c8639f93a37e72fcb63db8b392df36"
+M6_DECISION_ASSIGNMENT = "f3bbabef1ae09c240219bb89c61d201c0fd03f09"
+M6_DECISION_ASSIGNMENT_TREE = "417918e256d392d13f1d09df668a0ab3b3096e49"
+M6_DECISION_BRANCH = "c1/m6-3a-owner-decision"
+M6_DECISION_DOCS = M6_REQUEST_DOCS
+M6_DECISION_MIGRATION = "migrations/versions/0028_owner_decisions.py"
+M6_DECISION_IMPLEMENTATION_PATHS = {
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/service_requests/approvals.py",
+    "backend/src/asm/service_requests/errors.py",
+    "backend/src/asm/service_requests/http.py",
+    "backend/src/asm/service_requests/repository.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/src/App.tsx",
+    "frontend/src/EscalationsPanel.tsx",
+    "frontend/src/IntakePanel.tsx",
+    "frontend/src/OwnerApprovals.tsx",
+    "frontend/src/escalation-api.ts",
+    "frontend/src/intake-api.ts",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_browser.sh",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_owner_decisions_postgres.py",
+    "tests/test_m6_pricing_postgres.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+    M6_DECISION_MIGRATION,
+}
 M6_PRICING_BASE = "82044525485266dfba645c0ed50b681373a8643f"
 M6_PRICING_TREE = "c1f4f5f793eef2ba0a3b93b60735be38f3689412"
 M6_PRICING_ASSIGNMENT = "04d9d9bfee1b59a05f7fd21ee5d25b79f9cbe79a"
@@ -1262,6 +1329,7 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    m6_decision = value.get("branch") == M6_DECISION_BRANCH
     m6_pricing = value.get("branch") == M6_PRICING_BRANCH
     m6_assessment = value.get("branch") == M6_ASSESSMENT_BRANCH
     m6_request = value.get("branch") == M6_REQUEST_BRANCH
@@ -1273,6 +1341,8 @@ def source_tree_from_evidence(path=None):
         keys.update({"v7_fix_assignment", "v7_fix_candidate"})
     if m6_plan:
         keys.add("m6_plan_candidate")
+    if m6_decision:
+        keys.update({"m6_decision_assignment", "m6_decision_candidate"})
     if m6_pricing:
         keys.update({"m6_pricing_assignment", "m6_pricing_candidate"})
     if m6_assessment:
@@ -1286,8 +1356,10 @@ def source_tree_from_evidence(path=None):
         keys.add("scope_amendment")
         keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
-    if m6_pricing or m6_assessment or m6_request:
-        if m6_pricing:
+    if m6_decision or m6_pricing or m6_assessment or m6_request:
+        if m6_decision:
+            prefix, assignment = "m6_decision", m6_decision_assignment_proof()
+        elif m6_pricing:
             prefix, assignment = "m6_pricing", m6_pricing_assignment_proof()
         elif m6_assessment:
             prefix, assignment = "m6_assessment", m6_assessment_assignment_proof()
@@ -1356,7 +1428,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M6_PRICING_BASE, M6_PRICING_TREE)
+        (M6_DECISION_BASE, M6_DECISION_TREE)
+        if m6_decision
+        else (M6_PRICING_BASE, M6_PRICING_TREE)
         if m6_pricing
         else (M6_ASSESSMENT_BASE, M6_ASSESSMENT_TREE)
         if m6_assessment
@@ -1425,7 +1499,15 @@ def source_tree_from_evidence(path=None):
             and value["event"] in {"pull_request", "push"}
             or search
             and value["event"] in {"pull_request", "push"}
-            or (intake or v7_fix or m6_plan or m6_request or m6_assessment or m6_pricing)
+            or (
+                intake
+                or v7_fix
+                or m6_plan
+                or m6_request
+                or m6_assessment
+                or m6_pricing
+                or m6_decision
+            )
             and value["event"] in {"pull_request", "push"}
             or delivery
             and value["event"] in {"pull_request", "push"}
@@ -1452,7 +1534,14 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if m6_pricing:
+    if m6_decision:
+        require(
+            M6_DECISION_DOCS | {M6_DECISION_MIGRATION}
+            <= set(paths)
+            <= M6_DECISION_DOCS | M6_DECISION_IMPLEMENTATION_PATHS,
+            "SOURCE_IDENTITY_WRITE_SET",
+        )
+    elif m6_pricing:
         require(
             M6_PRICING_DOCS | {M6_PRICING_MIGRATION}
             <= set(paths)
@@ -2033,9 +2122,14 @@ def m6_assessment_candidate(event):
     )
 
 
-def admit_m6_slice_source(event, evidence, *, assessment=False, pricing=False):
+def admit_m6_slice_source(event, evidence, *, assessment=False, pricing=False, decision=False):
     require(event["attempt"] == "1", "RUN_ATTEMPT")
-    if pricing:
+    if decision:
+        prefix, base_tree = "m6_decision", M6_DECISION_TREE
+        migration, allowed = M6_DECISION_MIGRATION, M6_DECISION_IMPLEMENTATION_PATHS
+        assignment = m6_decision_assignment_proof()
+        candidate = m6_decision_candidate(event)
+    elif pricing:
         prefix, base_tree = "m6_pricing", M6_PRICING_TREE
         migration, allowed = M6_PRICING_MIGRATION, M6_PRICING_IMPLEMENTATION_PATHS
         assignment = m6_pricing_assignment_proof()
@@ -2080,6 +2174,29 @@ def admit_m6_slice_source(event, evidence, *, assessment=False, pricing=False):
             prefix + "_assignment": assignment,
             prefix + "_candidate": candidate,
         },
+    )
+
+
+def m6_decision_event(event):
+    return event.get("head_ref") == M6_DECISION_BRANCH or (
+        event.get("event") == "push"
+        and event["ref"] == "refs/heads/main"
+        and commit_parents("HEAD")[:1] == [M6_DECISION_BASE]
+    )
+
+
+def m6_decision_assignment_proof():
+    return {
+        "sha": M6_DECISION_ASSIGNMENT,
+        "tree": M6_DECISION_ASSIGNMENT_TREE,
+        "parent": M6_DECISION_BASE,
+        "paths": sorted(M6_DECISION_DOCS),
+    }
+
+
+def m6_decision_candidate(event):
+    return merge_candidate(
+        event, M6_DECISION_BASE, M6_DECISION_BRANCH, M6_DECISION_ASSIGNMENT, "M6_DECISION"
     )
 
 
@@ -2433,10 +2550,13 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    decision = m6_decision_event(event)
     pricing = m6_pricing_event(event)
     assessment = m6_assessment_event(event)
-    if pricing or assessment or m6_request_event(event):
-        admit_m6_slice_source(event, evidence, assessment=assessment, pricing=pricing)
+    if decision or pricing or assessment or m6_request_event(event):
+        admit_m6_slice_source(
+            event, evidence, assessment=assessment, pricing=pricing, decision=decision
+        )
         return event, manifest
     if m6_plan_event(event):
         admit_m6_plan_source(event, evidence)
@@ -2876,7 +2996,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.price_schema_profile()"
+        "platform.owner_decision_schema_profile()"
+        if revision == "0028"
+        else "platform.price_schema_profile()"
         if revision == "0027"
         else "platform.service_assessment_schema_profile()"
         if revision == "0026"
@@ -2994,6 +3116,7 @@ def stock_catalog():
                 "0025",
                 "0026",
                 "0027",
+                "0028",
             },
             "CATALOG_REVISION",
         )
@@ -3013,6 +3136,7 @@ def stock_catalog():
             "0025",
             "0026",
             "0027",
+            "0028",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -3060,7 +3184,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.price_schema_profile()"
+            "platform.owner_decision_schema_profile()"
+            if revision == "0028"
+            else "platform.price_schema_profile()"
             if revision == "0027"
             else "platform.service_assessment_schema_profile()"
             if revision == "0026"
@@ -3479,7 +3605,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            m6_pricing_event(event)
+            m6_decision_event(event)
+            or m6_pricing_event(event)
             or m6_assessment_event(event)
             or m6_request_event(event)
             or m6_plan_event(event)
@@ -3511,10 +3638,11 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    m6_pricing = m6_pricing_event(event)
-    m6_assessment = not m6_pricing and m6_assessment_event(event)
-    m6_request = not (m6_pricing or m6_assessment) and m6_request_event(event)
-    m6_slice = m6_pricing or m6_assessment or m6_request
+    m6_decision = m6_decision_event(event)
+    m6_pricing = not m6_decision and m6_pricing_event(event)
+    m6_assessment = not (m6_decision or m6_pricing) and m6_assessment_event(event)
+    m6_request = not (m6_decision or m6_pricing or m6_assessment) and m6_request_event(event)
+    m6_slice = m6_decision or m6_pricing or m6_assessment or m6_request
     m6_plan = not m6_slice and m6_plan_event(event)
     v7_fix = not (m6_slice or m6_plan) and v7_fix_event(event)
     intake = not (m6_slice or m6_plan or v7_fix) and intake_event(event)
@@ -3556,7 +3684,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M6_PRICING_BASE, M6_PRICING_TREE)
+        (M6_DECISION_BASE, M6_DECISION_TREE)
+        if m6_decision
+        else (M6_PRICING_BASE, M6_PRICING_TREE)
         if m6_pricing
         else (M6_ASSESSMENT_BASE, M6_ASSESSMENT_TREE)
         if m6_assessment
@@ -3601,6 +3731,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M6_DECISION_BRANCH
+            if m6_decision
             else M6_PRICING_BRANCH
             if m6_pricing
             else M6_ASSESSMENT_BRANCH
@@ -3632,6 +3764,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if m6_decision:
+        source["m6_decision_assignment"] = m6_decision_assignment_proof()
+        source["m6_decision_candidate"] = m6_decision_candidate(event)
     if m6_pricing:
         source["m6_pricing_assignment"] = m6_pricing_assignment_proof()
         source["m6_pricing_candidate"] = m6_pricing_candidate(event)
@@ -3810,7 +3945,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             )
             if module == "preflight":
                 current_revision = (
-                    "0027"
+                    "0028"
+                    if m6_decision
+                    else "0027"
                     if m6_pricing
                     else "0026"
                     if m6_assessment

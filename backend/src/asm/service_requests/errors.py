@@ -10,6 +10,8 @@ class ServiceRequestCode(StrEnum):
     NOT_FOUND = "NOT_FOUND"
     INVALID_INPUT = "INVALID_INPUT"
     STALE_STATE = "STALE_STATE"
+    APPROVAL_EXPIRED = "APPROVAL_EXPIRED"
+    APPROVAL_REVOKED = "APPROVAL_REVOKED"
     NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
     IDEMPOTENCY_KEY_CONFLICT = "IDEMPOTENCY_KEY_CONFLICT"
     UNAVAILABLE = "UNAVAILABLE"
@@ -23,6 +25,8 @@ class ServiceRequestError(Exception):
             ServiceRequestCode.NOT_FOUND: 404,
             ServiceRequestCode.INVALID_INPUT: 422,
             ServiceRequestCode.STALE_STATE: 409,
+            ServiceRequestCode.APPROVAL_EXPIRED: 409,
+            ServiceRequestCode.APPROVAL_REVOKED: 409,
             ServiceRequestCode.NEEDS_CLARIFICATION: 409,
             ServiceRequestCode.IDEMPOTENCY_KEY_CONFLICT: 409,
             ServiceRequestCode.UNAVAILABLE: 503,
