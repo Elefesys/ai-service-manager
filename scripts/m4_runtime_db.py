@@ -384,6 +384,7 @@ M6_QUOTE_DOCS = {"docs/TASK_REGISTER.md", "docs/tasks/M6_HANDOFF.md"}
 M6_QUOTE_MIGRATION = "migrations/versions/0029_quote_delivery.py"
 M6_QUOTE_IMPLEMENTATION_PATHS = {
     M6_QUOTE_MIGRATION,
+    ".github/workflows/ci.yml",
     "backend/src/asm/foundation.py",
     "backend/src/asm/messaging/database.py",
     "backend/src/asm/messaging/results.py",
@@ -411,6 +412,7 @@ M6_QUOTE_IMPLEMENTATION_PATHS = {
     "scripts/m5_intake_fixture.py",
     "scripts/native_context_db_catalog.py",
     "scripts/prepare_telegram_egress.py",
+    "scripts/test_browser.sh",
     "scripts/test_telegram_egress.sh",
     "tests/generic_pg_schema.py",
     "tests/m5_knowledge_search_fixtures.py",
