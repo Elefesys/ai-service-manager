@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.2 IN_PROGRESS · 2026-11-20
+## CURRENT — M6.3A IN_PROGRESS · 2026-11-21
 
-**Единственная активная задача — M6.2.** Ведущий C1, C2 отвечает за PostgreSQL и новую миграцию `0027` от `0026`, C5 — за параметры и пример перед публикацией и цену в карточке мастера. Цена определяется для выбранной заявки по настройке услуги, независимо от длительности. Ветка `c1/m6-2-pricing`, принятый `main` — `82044525485266dfba645c0ed50b681373a8643f`, synthetic LOCAL/TEST. [Поручение, границы и демонстрация](tasks/M6_HANDOFF.md#L3).
+**Единственная активная задача — M6.3A.** Одна карточка Action Center для цены и/или длительности выбранной работы, уточнения либо отказа. Ведущий C1, C2 — транзакция и новая `0028` от `0027`, C5 — существующая Console. База `main` `f8d05b5befe33a5f4081a3f749f458336180678d`, ветка `c1/m6-3a-owner-decision`, один Draft PR, synthetic LOCAL/TEST. [Поручение C0, границы и демонстрация Q3](tasks/M6_HANDOFF.md#L3).
+
+## История — M6.2 INTEGRATED / VERIFIED · 2026-11-21
+
+Владелец слил PR #58 на `f8d05b5befe33a5f4081a3f749f458336180678d`. Родители — `82044525485266dfba645c0ed50b681373a8643f` и `0682659023e3689a358ddd83aa876756c93a9f13`, дерево `6a7628e381c8639f93a37e72fcb63db8b392df36` совпало с принятым C8 кандидатом. Схема `0027`. C8 принял цену выбранной работы и закрыл `C0-M6.2-01/02`. `push/main` — 12/12 SUCCESS во второй попытке, в первой `browser` был отменён. [PR #58](https://github.com/Elefesys/ai-service-manager/pull/58) · [заключение C8](https://github.com/Elefesys/ai-service-manager/pull/58#pullrequestreview-5995284550) · [CI фактического main](https://github.com/Elefesys/ai-service-manager/actions/runs/44766815215/attempts/2).
 
 ## История — M6.1B INTEGRATED / VERIFIED · 2026-11-20
 
