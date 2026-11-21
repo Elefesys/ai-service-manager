@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3B REVIEW · R1 для C3 · 2026-11-21
+## CURRENT — M6.3B REVIEW · независимая приёмка C8 · 2026-11-21
 
-Единственная активная задача — M6.3B-R1. C0 проверил head `ebb5c465272264768a8ff1e1b8ac534159d6cd54` Draft PR #60 с базой `main` `248dd3a8ecfc2fb372b12f22f60585235b9e244e`. CI 12/12, Chromium 91/91. До приёмки исправить два расхождения в карточке. При изменении условий предоплаты мастер должен видеть запрос точной цены рядом с историей. При начавшейся отправке он должен видеть, что подтверждение ещё ожидается, в том числе после перехвата диалога. Оба случая воспроизведены через owner API на PostgreSQL 18.6 в synthetic LOCAL/TEST. Ведущий C3, C1/C2/C5 в границах прежней задачи. [Поручение R1 и доказательства](tasks/M6_HANDOFF.md#L3) · [PR #60](https://github.com/Elefesys/ai-service-manager/pull/60) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44895720110).
+C0 закрыл оба замечания R1 на head `1f94684ec40152e7489294a75a4004d819aed182` Draft PR #60, база `main` `248dd3a8ecfc2fb372b12f22f60585235b9e244e`. Уточнение точной цены сохраняет историю и даёт 0 новых отправок. Начавшаяся отправка видна после перехвата, при потере подтверждения после рестарта 0 новых вызовов. Штатный CI 12/12 с первой попытки, Chromium 91/91. Единственная задача — независимое заключение C8 по Q4/Q5 в synthetic LOCAL/TEST. [Поручение C8 и доказательства](tasks/M6_HANDOFF.md#L3) · [PR #60](https://github.com/Elefesys/ai-service-manager/pull/60) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44912106481).
 
 ## История — M6.3A INTEGRATED / VERIFIED · 2026-11-21
 
