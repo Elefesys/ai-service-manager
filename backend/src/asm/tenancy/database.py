@@ -303,6 +303,56 @@ class TenantUnitOfWork:
             "SELECT platform.configuration_active_read(:business)", {"business": business}
         )
 
+    async def approval_owner_open(
+        self, business: UUID, conversation: UUID, request_id: UUID, revision: str
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.approval_owner_open(:business,:conversation,:request,:revision)",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request": request_id,
+                "revision": revision,
+            },
+        )
+
+    async def approval_owner_read(
+        self, business: UUID, conversation: UUID, request_id: UUID, approval_id: UUID
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.approval_owner_read(:business,:conversation,:request,:approval)",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request": request_id,
+                "approval": approval_id,
+            },
+        )
+
+    async def approval_owner_list(self, before_id: UUID | None) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.approval_owner_list(:before_id)", {"before_id": before_id}
+        )
+
+    async def approval_owner_decide(
+        self,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        approval_id: UUID,
+        body: dict[str, object],
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.approval_owner_decide(:business,:conversation,:request,:approval,CAST(:body AS jsonb))",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request": request_id,
+                "approval": approval_id,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
     async def configuration_command(
         self, business: UUID, operation: str, key: str, body: dict[str, object]
     ) -> Any:

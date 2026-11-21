@@ -793,6 +793,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0025", "service_request_schema_profile"),
         ("0026", "service_assessment_schema_profile"),
         ("0027", "price_schema_profile"),
+        ("0028", "owner_decision_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -837,6 +838,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0025", "service_request_schema_profile", 331, 330),
         ("0026", "service_assessment_schema_profile", 340, 339),
         ("0027", "price_schema_profile", 348, 347),
+        ("0028", "owner_decision_schema_profile", 358, 357),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -846,7 +848,7 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
     predicate = {
         "functions": f"(SELECT count(*) FROM functions)={functions}",
         "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
-        "tables": f"(SELECT count(*) FROM tables)={77 if revision == '0027' else 76 if revision == '0026' else 75 if revision == '0025' else 73 if revision in {'0023', '0024'} else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
+        "tables": f"(SELECT count(*) FROM tables)={79 if revision == '0028' else 77 if revision == '0027' else 76 if revision == '0026' else 75 if revision == '0025' else 73 if revision in {'0023', '0024'} else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
     }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
@@ -871,7 +873,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
-    profile_name = "platform.price_schema_profile()"
+    profile_name = "platform.owner_decision_schema_profile()"
     if not body_matches:
         expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
@@ -3699,7 +3701,8 @@ def prepare_m6_slice_event(r, monkeypatch, route, feature, revision, *, protecte
 
 
 @pytest.mark.parametrize(
-    ("feature", "revision"), [("request", "0025"), ("assessment", "0026"), ("pricing", "0027")]
+    ("feature", "revision"),
+    [("request", "0025"), ("assessment", "0026"), ("pricing", "0027"), ("decision", "0028")],
 )
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
 def test_m6_slice_admits_exact_assignment_and_selects_runtime(
@@ -3741,7 +3744,8 @@ def test_m6_slice_admits_exact_assignment_and_selects_runtime(
 
 
 @pytest.mark.parametrize(
-    ("feature", "revision"), [("request", "0025"), ("assessment", "0026"), ("pricing", "0027")]
+    ("feature", "revision"),
+    [("request", "0025"), ("assessment", "0026"), ("pricing", "0027"), ("decision", "0028")],
 )
 def test_m6_slice_cannot_change_its_protected_assignment(r11_event, monkeypatch, feature, revision):
     r = r11_event

@@ -495,12 +495,14 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "messages",
             "outbox_events",
         }
-        if revision in {"0025", "0026", "0027"}:
+        if revision in {"0025", "0026", "0027", "0028"}:
             expected_tables.add("service_requests")
-        if revision in {"0026", "0027"}:
+        if revision in {"0026", "0027", "0028"}:
             expected_tables.add("service_assessments")
-        if revision == "0027":
+        if revision in {"0027", "0028"}:
             expected_tables.add("price_calculations")
+        if revision == "0028":
+            expected_tables.update(("approval_requests", "owner_decisions"))
         assert {row["tablename"] for row in tables} == expected_tables
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
         for table in TABLES:
@@ -755,6 +757,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0025",
             "0026",
             "0027",
+            "0028",
         }:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
@@ -825,6 +828,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0025",
             "0026",
             "0027",
+            "0028",
         }:
             from scripts import native_context_db_catalog as catalog
 
@@ -846,6 +850,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 "0025",
                 "0026",
                 "0027",
+                "0028",
             }:
                 for signature, function in source["functions"].items():
                     if (
@@ -854,26 +859,39 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                         or signature == "platform.published_knowledge_schema_profile()"
                         or (
                             revision
-                            in {"0020", "0021", "0022", "0023", "0024", "0025", "0026", "0027"}
+                            in {
+                                "0020",
+                                "0021",
+                                "0022",
+                                "0023",
+                                "0024",
+                                "0025",
+                                "0026",
+                                "0027",
+                                "0028",
+                            }
                             and signature.startswith("platform.knowledge_")
                         )
                         or (
-                            revision in {"0021", "0022", "0023", "0024", "0025", "0026", "0027"}
+                            revision
+                            in {"0021", "0022", "0023", "0024", "0025", "0026", "0027", "0028"}
                             and (
                                 signature.startswith("platform.portfolio_")
                                 or signature.startswith("platform.vision_")
                             )
                         )
                         or (
-                            revision in {"0023", "0024", "0025", "0026", "0027"}
+                            revision in {"0023", "0024", "0025", "0026", "0027", "0028"}
                             and signature.startswith(("platform.intake_", "platform.duration_"))
                         )
-                        or revision in {"0025", "0026", "0027"}
+                        or revision in {"0025", "0026", "0027", "0028"}
                         and signature.startswith("platform.service_request_")
-                        or revision in {"0026", "0027"}
+                        or revision in {"0026", "0027", "0028"}
                         and signature.startswith("platform.service_assessment_")
-                        or revision == "0027"
+                        or revision in {"0027", "0028"}
                         and signature.startswith("platform.price_")
+                        or revision == "0028"
+                        and signature.startswith(("platform.approval_", "platform.owner_decision_"))
                     ):
                         native_profiles[signature] = (
                             function["security_definer"],

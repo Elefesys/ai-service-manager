@@ -355,6 +355,8 @@ def main():
                 "assessment-complex",
                 "assessment-complex-source",
                 "pricing",
+                "owner-decision",
+                "owner-decision-partial",
             ),
             default="intake",
         )

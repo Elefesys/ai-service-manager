@@ -475,10 +475,13 @@ async def test_0027_preserves_0026_data_and_refuses_downgrade_after_calculation(
             "valid"
         ] is True
     finally:
-        await _migrate("upgrade", "0027")
+        await _migrate("upgrade", "0028")
     assert (await auth.client.get(route(cid), params={"request_id": request_id})).json() == before
     endpoint = f"{route(cid)}/{request_id}/pricing"
     first = await price(auth, endpoint, mutation)
-    with pytest.raises(AssertionError, match="PRICE_CALCULATION_DURABLE_DATA"):
-        await _migrate("downgrade", "0026")
+    try:
+        with pytest.raises(AssertionError, match="PRICE_CALCULATION_DURABLE_DATA"):
+            await _migrate("downgrade", "0026")
+    finally:
+        await _migrate("upgrade", "0028")
     assert await history(auth, endpoint) == [first]

@@ -4,6 +4,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
+import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
 import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,ServiceAssessment} from '../src/intake-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
@@ -13,7 +14,7 @@ const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixture
 
 type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize';
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial';
 
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
@@ -69,13 +70,14 @@ async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  const inbox=await openConversation(page,seed.conversation_id);
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
  const assessment=journey.startsWith('assessment');
- const operation=journey==='intake'?'collect':journey==='pricing'?'price-first':assessment?'assess-first':'collect-sized';
+ const pricing=journey==='pricing'||journey.startsWith('owner-decision');
+ const operation=journey==='intake'?'collect':pricing?'price-first':assessment?'assess-first':'collect-sized';
  const collected=await input(operation,seed.conversation_id);
- expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment||journey==='pricing'?'PRELIMINARILY_COMPLETE':'CLARIFY']);
+ expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,1,1,assessment||pricing?'PRELIMINARILY_COMPLETE':'CLARIFY']);
  const intake=page.getByRole('region',{name:'Предварительный запрос',exact:true});
  await refreshIntake(inbox,intake);
  await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('flower');
- if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue(journey==='pricing'?'20 mm':'8 cm');
+ if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue(pricing?'20 mm':'8 cm');
  else await expect(intake.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
  return {input,conversation:seed.conversation_id,collected,intake,inbox};
 }
@@ -731,3 +733,168 @@ test(`@narrow late cover-up moves approved minutes to the archive in the owner c
  await expect(clock).toHaveCount(0);
 });
 }
+
+test('@narrow confirms one selected owner decision while the other work stays open',async({page},info)=>{
+ test.setTimeout(90_000);
+ page.setDefaultTimeout(12_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
+ for(let index=await rules.count()-1;index>=0;index--)await rules.nth(index).click();
+ await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('OWNER_QUOTE');
+ await settings.getByLabel('Режим длительности 1',{exact:true}).selectOption('OWNER_DEFINED');
+ await publishIntakeService(settings,serviceName);
+ const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,'owner-decision');
+ const work=intake.getByRole('region',{name:'Черновик заявки',exact:true});
+ const center=page.getByRole('region',{name:'Решения по заявкам',exact:true});
+ const detail=center.getByRole('article',{name:'Карточка решения по заявке',exact:true});
+ const cardId=work.getByTestId('service-request-id');
+ const approvalButton=work.getByRole('button',{name:'Открыть решение мастера',exact:true});
+ const collection='/api/v1/workspaces/'+owner.workspace_id+'/businesses/'+owner.business_id+'/intake/conversations/'+conversation+'/service-requests';
+ const approvalPath=(request:string)=>collection+'/'+request+'/approvals';
+ async function open(request:string){
+  const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===approvalPath(request));
+  await approvalButton.click();
+  const saved=await response;
+  expect(saved.status()).toBe(200);
+  return await saved.json() as ApprovalCard;
+ }
+
+ await (await chooseWork(page,collected.message_id,'flower','forearm','20 mm','linework')).click();
+ await expect(cardId).toHaveText(/^[0-9a-f-]{36}$/);
+ const aId=(await cardId.textContent())!;
+ const first=await open(aId);
+ expect(first).toMatchObject({status:'PENDING',decision:null,basis:{service_name:serviceName,amount_minor:null,occupied_minutes:null,can_approve:true}});
+ await expect(detail.getByRole('heading',{name:serviceName+' · заявка #'+aId.slice(-6)})).toBeVisible();
+ await expect(detail.getByRole('link',{name:'Исходная реплика заявки'})).toHaveAttribute('href','#message-'+collected.message_id);
+ await detail.getByRole('link',{name:'Исходная реплика заявки'}).click();
+ await expect(page.locator('#message-'+collected.message_id)).toContainText('Synthetic price flower');
+
+ const separate=await input('price-second',conversation);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,separate.message_id,'swallow','shoulder',undefined,'linework')).click();
+ await expect(cardId).not.toHaveText(aId);
+ const bId=(await cardId.textContent())!;
+ const second=await open(bId);
+ expect(second).toMatchObject({status:'PENDING',decision:null,basis:{intent_source:{message_id:separate.message_id}}});
+ expect(second.approval_id).not.toBe(first.approval_id);
+ const a=center.getByTestId('approval-'+first.approval_id),b=center.getByTestId('approval-'+second.approval_id);
+ await expect(a).toContainText('Ожидает решения мастера');
+ await expect(b).toContainText('Ожидает решения мастера');
+ await expect(a).toBeVisible();
+ await expect(b).toBeVisible();
+
+ const control=page.getByRole('region',{name:'Управление диалогом',exact:true});
+ await control.getByRole('button',{name:'Обновить режим',exact:true}).click();
+ await control.getByRole('button',{name:'Забрать управление',exact:true}).click();
+ await expect(control.getByText('Управление у мастера',{exact:true})).toBeVisible();
+ await a.click();
+ await expect(detail.getByRole('link',{name:'Исходная реплика заявки'})).toHaveAttribute('href','#message-'+collected.message_id);
+ const aDecisionUrl=approvalPath(aId)+'/'+first.approval_id;
+ const decisions:{body:ApprovalBody;card:ApprovalCard}[]=[];
+ await page.route('**'+aDecisionUrl,async route=>{
+  if(route.request().method()!=='POST')return route.continue();
+  const result=await route.fetch();
+  expect(result.status()).toBe(200);
+  decisions.push({body:route.request().postDataJSON(),card:await result.json() as ApprovalCard});
+  if(decisions.length===1)await route.abort('failed');
+  else await route.fulfill({response:result});
+ });
+ await detail.getByLabel('Цена, ₽',{exact:true}).fill('3950,01');
+ await detail.getByLabel('Длительность следующего сеанса, мин',{exact:true}).fill('75');
+ await detail.getByLabel('Пояснение или вопрос',{exact:true}).fill('Synthetic approved terms');
+ await detail.getByRole('button',{name:'Подтвердить условия',exact:true}).click();
+ await center.getByRole('button',{name:'Повторить то же решение',exact:true}).click();
+ const approved=detail.getByRole('region',{name:'Подтверждённые условия',exact:true});
+ await expect(approved).toContainText(/3\s950,01\s₽/);
+ await expect(approved).toContainText('75 мин');
+ expect(decisions).toHaveLength(2);
+ expect(decisions[0]).toEqual(decisions[1]);
+ expect(decisions[0].body).toMatchObject({operation:'APPROVE',amount_minor:395001,occupied_minutes:75});
+ expect(decisions[0].card.decision?.decision_id).toBeTruthy();
+ await expect(b).toContainText('Ожидает решения мастера');
+ await expect(control.getByText('Управление у мастера',{exact:true})).toBeVisible();
+
+ await page.reload();
+ await openWorkspace(page);
+ await expect(b).toContainText('Ожидает решения мастера');
+ await a.click();
+ await expect(detail).toContainText(decisions[0].card.decision!.decision_id);
+ await expect(approved).toContainText('75 мин');
+ await b.click();
+ await detail.getByLabel('Пояснение или вопрос',{exact:true}).fill('Synthetic уточнение размера');
+ const clarification=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===approvalPath(bId)+'/'+second.approval_id);
+ await detail.getByRole('button',{name:'Запросить уточнение',exact:true}).click();
+ const bResponse=await clarification;
+ expect(bResponse.status()).toBe(200);
+ const clarified=await bResponse.json() as ApprovalCard;
+ expect(clarified).toMatchObject({status:'CLARIFICATION',decision:{authorized_action:null,terms:null}});
+ await expect(detail.getByText('Запрошено уточнение',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ console.log('Q3 Chromium '+info.project.name+' A '+aId+' approval '+first.approval_id+
+  ' decision '+decisions[0].card.decision!.decision_id+'; B '+bId+' approval '+second.approval_id+' clarification '+clarified.decision!.decision_id);
+});
+
+test('@narrow asks only for the missing term and retains its independent basis',async({page},info)=>{
+ test.setTimeout(90_000);
+ page.setDefaultTimeout(12_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const {settings,serviceName}=await configureIntakeService(page,variant);
+ const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
+ for(let index=await rules.count()-1;index>=0;index--)await rules.nth(index).click();
+ const priceMode=settings.getByLabel('Режим цены 1',{exact:true});
+ const durationMode=settings.getByLabel('Режим длительности 1',{exact:true});
+ await priceMode.selectOption('FIXED');
+ await settings.getByLabel('Цена, копейки 1',{exact:true}).fill('120001');
+ await durationMode.selectOption('OWNER_DEFINED');
+ await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('NONE');
+ await publishIntakeService(settings,serviceName);
+ const {conversation,collected,intake}=await collectIntake(page,variant,'owner-decision-partial');
+ await (await chooseWork(page,collected.message_id,'flower','forearm','20 mm','linework')).click();
+ const work=intake.getByRole('region',{name:'Черновик заявки',exact:true});
+ const cardId=work.getByTestId('service-request-id');
+ await expect(cardId).toHaveText(/^[0-9a-f-]{36}$/);
+ const id=(await cardId.textContent())!;
+ const detail=page.getByRole('article',{name:'Карточка решения по заявке',exact:true});
+ const endpoint='/api/v1/workspaces/'+owner.workspace_id+'/businesses/'+owner.business_id+'/intake/conversations/'+conversation+'/service-requests/'+id+'/approvals';
+ async function clickAndRead(label:string,path=endpoint,container=detail){
+  const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===path);
+  await container.getByRole('button',{name:label,exact:true}).click();
+  const saved=await response;
+  expect(saved.status()).toBe(200);
+  return await saved.json() as ApprovalCard;
+ }
+
+ const priceBasis=await clickAndRead('Открыть решение мастера',endpoint,work);
+ await expect(detail.getByLabel('Цена, ₽',{exact:true})).toHaveCount(0);
+ await expect(detail).toContainText(/1\s200,01\s₽/);
+ await detail.getByLabel('Длительность следующего сеанса, мин',{exact:true}).fill('80');
+ const priceSaved=await clickAndRead('Подтвердить условия',endpoint+'/'+priceBasis.approval_id);
+ expect(priceSaved.decision).toMatchObject({submitted:{amount_minor:null,occupied_minutes:80},
+  terms:{amount_minor:120001,occupied_minutes:80,price_reference_id:priceBasis.basis.price_calculation_id}});
+ await expect(detail.getByRole('region',{name:'Подтверждённые условия'})).toContainText('Без предоплаты');
+
+ await settings.getByLabel('Цена, копейки 1',{exact:true}).fill('');
+ await priceMode.selectOption('OWNER_QUOTE');
+ await durationMode.selectOption('FIXED');
+ await settings.getByLabel('Длительность, минуты 1',{exact:true}).fill('65');
+ await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('FULL_PREPAYMENT');
+ await publishIntakeService(settings,serviceName);
+ const durationBasis=await clickAndRead('Открыть решение мастера',endpoint,work);
+ expect(durationBasis.approval_id).not.toBe(priceBasis.approval_id);
+ await expect(detail.getByLabel('Длительность следующего сеанса, мин',{exact:true})).toHaveCount(0);
+ await expect(detail).toContainText('65 мин');
+ await detail.getByLabel('Цена, ₽',{exact:true}).fill('4600');
+ const durationSaved=await clickAndRead('Подтвердить условия',endpoint+'/'+durationBasis.approval_id);
+ expect(durationSaved.decision).toMatchObject({submitted:{amount_minor:460000,occupied_minutes:null},
+  terms:{amount_minor:460000,occupied_minutes:65,duration_reference_id:durationBasis.basis.assessment_id}});
+ await expect(detail.getByRole('region',{name:'Подтверждённые условия'})).toContainText('Полная предоплата');
+ await clickAndRead('Отозвать подтверждение',endpoint+'/'+durationBasis.approval_id);
+ const next=await clickAndRead('Открыть новый запрос');
+ await detail.getByLabel('Пояснение или вопрос',{exact:true}).fill('Synthetic отказ по сложности');
+ const declined=await clickAndRead('Отказать по заявке',endpoint+'/'+next.approval_id);
+ expect(declined).toMatchObject({status:'DECLINED',decision:{authorized_action:null,terms:null}});
+ await expect(detail.getByText('Мастер отказал',{exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ console.log('Q3 Chromium '+info.project.name+' original price basis and duration basis preserved; decline '+declined.decision!.decision_id);
+});
