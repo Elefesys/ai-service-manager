@@ -16,6 +16,18 @@ type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize';
 type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other';
 
+function intakeChildFailure(error:unknown,operation:IntakeOperation,journey:IntakeJourney,variant:Viewport):Error {
+ const result=error as {code?:unknown;stderr?:unknown;killed?:boolean;signal?:string};
+ const exit=typeof result.code==='number'?String(result.code):'UNKNOWN';
+ const request=`operation=${operation};journey=${journey};variant=${variant}`;
+ const prefix=`M5_INTAKE_BROWSER_REFUSED:${request};`;
+ const pattern=/^stage=(TARGET|GUARD|CONFIGURATION|MODEL_SETUP|INGEST|CLAIM|EXECUTE|OWNER_READ|REPLAY|EFFECTS);reason=[A-Z][A-Z0-9_]{0,63}(;job_kind=(NONE|PROCESS_INBOX|PROCESS_TURN|SEND_AI_TEXT|ESCALATION_TIMER|SEND_MANUAL_TEXT|SEND_GUARDED_TEXT|SEND_AI_PHOTO|FETCH_IMAGE);matches_expected=(true|false))?$/;
+ const diagnostic=typeof result.stderr==='string'?result.stderr.split(/\r?\n/)
+  .find(line=>line.startsWith(prefix)&&pattern.test(line.slice(prefix.length))):undefined;
+ const timeout=result.killed===true&&result.signal==='SIGTERM';
+ return new Error(`E2E_INTAKE_RUNTIME_REFUSED:exit=${exit};${request};${diagnostic?.slice(prefix.length)??`diagnostic=UNAVAILABLE;timeout=${timeout}`}`);
+}
+
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
  const workspace=page.getByLabel('Workspace',{exact:true});
@@ -63,7 +75,7 @@ async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  async function input(operation:IntakeOperation,conversation?:string,fixtureJourney=journey){
   const args=['compose','--env-file',envFile!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',fixtureJourney,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,...(conversation?['--conversation',conversation]:[])];
   let stdout:string;
-  try{stdout=(await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384})).stdout;}catch(error){const code=(error as {code?:unknown}).code;throw new Error('E2E_INTAKE_RUNTIME_REFUSED:exit='+String(typeof code==='number'?code:'UNKNOWN'));}
+  try{stdout=(await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384})).stdout;}catch(error){throw intakeChildFailure(error,operation,fixtureJourney,variant);}
   return JSON.parse(stdout) as {conversation_id:string;message_id:string;model_calls:number;calls:number;effects:number;status:string};
  }
  const seed=await input('seed');expect([seed.model_calls,seed.calls,seed.effects]).toEqual([0,0,0]);
