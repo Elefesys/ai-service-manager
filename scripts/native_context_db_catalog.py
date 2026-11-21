@@ -112,6 +112,7 @@ INTAKE_NONFUNCTION_SHA256 = "37c156d07431b688aa99e8afca2a83f09e8082f5a4b2d28f4ac
 SERVICE_ASSESSMENT_NONFUNCTION_SHA256 = (
     "75ad504d42f1c8e511d59152d77c594e5d3a5da00367348ac016f36fbe8b758c"
 )
+QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
 OWNER_DECISION_NONFUNCTION_SHA256 = (
     "fc25cd353f880f250d226f00e0f0accb25b9f340e5bab7daa21b3aef6f64810d"
 )
@@ -302,6 +303,7 @@ def capture_source(root, revision="0013"):
             "0026",
             "0027",
             "0028",
+            "0029",
         },
         "Unsupported catalog revision",
     )
@@ -516,6 +518,7 @@ def source_catalog(root, revision="0013"):
             "0026": 340,
             "0027": 348,
             "0028": 359,
+            "0029": 377,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -541,6 +544,7 @@ def source_catalog(root, revision="0013"):
             "0026": 76,
             "0027": 77,
             "0028": 79,
+            "0029": 81,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -611,6 +615,7 @@ def source_catalog(root, revision="0013"):
             | ({"app.service_assessments"} if revision >= "0026" else set())
             | ({"app.price_calculations"} if revision >= "0027" else set())
             | ({"app.approval_requests", "app.owner_decisions"} if revision >= "0028" else set())
+            | ({"app.quotes", "platform.quote_delivery_intents"} if revision >= "0029" else set())
         ),
         "Independent source column replay differs",
     )
@@ -718,11 +723,14 @@ def compare_embedded_profile(expected):
             "0026",
             "0027",
             "0028",
+            "0029",
         },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.owner_decision_schema_profile()"
+        "platform.quote_schema_profile()"
+        if revision == "0029"
+        else "platform.owner_decision_schema_profile()"
         if revision == "0028"
         else "platform.price_schema_profile()"
         if revision == "0027"
@@ -785,6 +793,7 @@ def compare_embedded_profile(expected):
             "0026": 339,
             "0027": 347,
             "0028": 358,
+            "0029": 376,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -831,6 +840,7 @@ def compare_embedded_profile(expected):
             "0026": 76,
             "0027": 77,
             "0028": 79,
+            "0029": 81,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -946,6 +956,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0026",
             "0027",
             "0028",
+            "0029",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -965,6 +976,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0026": SERVICE_ASSESSMENT_NONFUNCTION_SHA256,
                 "0027": PRICE_NONFUNCTION_SHA256,
                 "0028": OWNER_DECISION_NONFUNCTION_SHA256,
+                "0029": QUOTE_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3081,7 +3093,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0028"),
+            source_catalog(ROOT, "0029"),
         )
 
     def persist_partition(self, work):
@@ -3265,7 +3277,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0028"
+            and source["expected_revision"] == "0029"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

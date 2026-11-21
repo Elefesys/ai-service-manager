@@ -18,6 +18,7 @@ from asm.messaging.results import (
     AIJobClaim,
     ContextWorkResultBase,
     JobClaim,
+    QuoteSendJobClaim,
     SendPermit,
     TerminalRejection,
     TurnJobClaim,
@@ -271,14 +272,27 @@ class Worker:
         if claim.kind == "SEND_AI_PHOTO":
             await self._send_photo(claim)
             return
-        if claim.kind not in {"SEND_MANUAL_TEXT", "SEND_GUARDED_TEXT", "SEND_AI_TEXT"}:
-            raise MessagingError(Code.INVALID_INPUT)
 
         # If start commit ACK is lost, no permit reaches this code: recovery
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
         transport = self.telegram
         permit: SendPermit | TerminalRejection | ContextWorkResultBase
-        if claim.kind == "SEND_AI_TEXT":
+        if isinstance(claim, QuoteSendJobClaim):
+            if transport is not None and (
+                not transport.synthetic_ai or transport.provider_runtime is not None
+            ):
+                transport = None
+            quote_probe = await self.database.quote_send_probe(claim)
+            quote_observation = None
+            if quote_probe is not None and transport is not None:
+                quote_observation = await transport.observe(
+                    quote_probe.bot_identity,
+                    quote_probe.external_connection_id,
+                    quote_probe.owner_user_id,
+                )
+            permit = await self.database.begin_quote_send(claim, quote_probe, quote_observation)
+            probe = None
+        elif claim.kind == "SEND_AI_TEXT":
             if self.ai is None:
                 await self.database.retry(claim, Code.INVALID_INPUT, retryable=False)
                 return
@@ -305,8 +319,10 @@ class Worker:
                 # Never repeat begin/the external request; scheduler owns UNKNOWN.
                 raise
             probe = None
-        else:
+        elif claim.kind == "SEND_MANUAL_TEXT":
             probe = await self.database.telegram_probe(claim)
+        else:
+            raise MessagingError(Code.INVALID_INPUT)
         if claim.kind == "SEND_MANUAL_TEXT" and probe is None:
             permit = await self.database.begin_send(claim)
         elif probe is not None:

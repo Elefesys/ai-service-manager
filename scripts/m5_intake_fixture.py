@@ -1,8 +1,7 @@
 """Finite TEST browser input through real ingest/claim/owner/runtime capabilities.
 
-Only the existing CONTROLLED knowledge fixture, two named viewports and fixed
-text events are supported. No arbitrary messages, SQL state writes, paid
-provider, private photo read or real channel adapter is constructed.
+Only the existing CONTROLLED knowledge fixture, two named viewports, fixed
+text events and delivery of a selected synthetic Quote are supported.
 """
 
 import asyncio
@@ -27,10 +26,20 @@ from asm.messaging.database import call
 from asm.messaging.errors import MessagingError
 from asm.messaging.http_service import OwnerAPIRepository
 from asm.messaging.models import OutcomeKind
-from asm.messaging.results import AIJobClaim, JobClaim, ScanStep, parse_claim
+from asm.messaging.results import (
+    AIJobClaim,
+    JobClaim,
+    QuoteSendJobClaim,
+    QuoteSendPermit,
+    ScanStep,
+    SendPermit,
+    parse_claim,
+)
 from asm.messaging.worker import Worker
+from asm.service_requests.quotes import QuoteDeliveryView
+from asm.service_requests.repository import ServiceRequestRepository
 from asm.tenancy import AuthenticatedAccount, TenantDatabase
-from m2_4_browser_fixture import bot
+from m2_4_browser_fixture import bot, route
 from m2_4_browser_worker import KnowledgeBrowserKernel, event, guard, knowledge_config
 from provision_local_auth import PrivateArgumentParser, ProvisioningError
 from pydantic import ValidationError
@@ -55,7 +64,10 @@ INPUTS = {
     "price-second": "Synthetic price separate swallow shoulder linework",
     "price-size": "The swallow will be 21 mm",
     "price-oversize": "The swallow will be 100,1 cm",
+    "quote-second": "Synthetic quote separate swallow shoulder 101 mm linework",
 }
+QUOTE_JOURNEYS = {"quote-delivery", "quote-guard"}
+QUOTE_OPERATIONS = {"deliver-quote": OutcomeKind.SUCCESS, "lose-quote-ack": OutcomeKind.UNKNOWN}
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
     "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
@@ -78,6 +90,12 @@ VALUES = {
     "price-second": (("idea", "swallow"), ("placement", "shoulder"), ("style", "linework")),
     "price-size": (("approximate_size", "21 mm"),),
     "price-oversize": (("approximate_size", "100,1 cm"),),
+    "quote-second": (
+        ("idea", "swallow"),
+        ("placement", "shoulder"),
+        ("approximate_size", "101 mm"),
+        ("style", "linework"),
+    ),
 }
 CATEGORIES = {
     "complex": "COVER_UP",
@@ -136,16 +154,20 @@ class IntakeBrowserKernel(KnowledgeBrowserKernel):
     async def claim_intake(
         self,
         cutoff: datetime,
-        correlation: UUID,
+        matches: Callable[[JobClaim], bool],
         validate: Callable[[JobClaim], None],
         diagnostic: Diagnostic,
         *,
         ai: bool = False,
+        scan_until: datetime | None = None,
     ) -> JobClaim | None:
         capability = "ai_delivery_claim" if ai else "messaging_claim"
         worker_id = "m5-intake-ai" if ai else "m5-intake-work"
         scan = ScanStep(
-            step="BUSY", scan_until=cutoff + timedelta(seconds=30), at=cutoff, id=UUID(int=0)
+            step="BUSY",
+            scan_until=scan_until or cutoff + timedelta(seconds=30),
+            at=cutoff,
+            id=UUID(int=0),
         )
         async with self._transaction() as connection:
             for _ in range(100):
@@ -164,7 +186,7 @@ class IntakeBrowserKernel(KnowledgeBrowserKernel):
                         claim = parse_claim(scan.claim)
                         diagnostic.job_kind = claim.kind
                         diagnostic.matches_expected = False
-                        if claim.correlation_id == correlation:
+                        if matches(claim):
                             validate(claim)
                             diagnostic.matches_expected = True
                             return claim
@@ -219,7 +241,8 @@ class IntakeModel(FakeAdapter):
             intake=dict(
                 service_id=self.service,
                 category=CATEGORIES.get(self.operation, "NEW_TATTOO"),
-                switch_request=self.operation in {"second", "assess-second", "price-second"},
+                switch_request=self.operation
+                in {"second", "assess-second", "price-second", "quote-second"},
                 facts=facts,
             ),
         )
@@ -268,6 +291,10 @@ async def run(args, diagnostic):
             await native_schema_readiness(c)
         tenancy = TenantDatabase(engine)
         kernel = IntakeBrowserKernel(engine, environment="TEST")
+        if args.operation in QUOTE_OPERATIONS:
+            return await run_quote(
+                args, diagnostic, engine, tenancy, kernel, actor, workspace, business
+            )
 
         async def barrier():
             if engine.pool.checkedout() != 0:
@@ -376,11 +403,18 @@ async def run(args, diagnostic):
                 diagnostic.job_kind = "NONE"
                 diagnostic.matches_expected = False
                 claim = await kernel.claim_intake(
-                    cutoff, correlation, validate_claim, diagnostic, ai=worker is not None
+                    cutoff,
+                    lambda job: job.correlation_id == correlation,
+                    validate_claim,
+                    diagnostic,
+                    ai=worker is not None,
                 )
                 if claim is None and worker is not None:
                     claim = await kernel.claim_intake(
-                        cutoff, correlation, validate_claim, diagnostic
+                        cutoff,
+                        lambda job: job.correlation_id == correlation,
+                        validate_claim,
+                        diagnostic,
                     )
                 if claim is None:
                     await asyncio.sleep(0.025)
@@ -455,12 +489,98 @@ async def run(args, diagnostic):
         await engine.dispose()
 
 
+async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace, business):
+    diagnostic.stage = "OWNER_READ"
+    if args.journey not in QUOTE_JOURNEYS or not args.conversation or not args.request:
+        raise IntakeFixtureRefused("SELECTED_SYNTHETIC_QUOTE_REQUIRED")
+    conversation, request_id = UUID(args.conversation), UUID(args.request)
+    scenario = f"{args.journey}-{args.variant}"
+    recipient = event("knowledge", f"{scenario}-seed", conversation=scenario).chat_id
+
+    async def read() -> QuoteDeliveryView:
+        async with tenancy.transaction(AuthenticatedAccount(actor), workspace, uuid4()) as unit:
+            return await ServiceRequestRepository(unit).read_quote(
+                business, conversation, request_id
+            )
+
+    before = await read()
+    quote = before.quote
+    if quote is None or not quote.material.service_name.startswith(
+        f"Synthetic intake consultation {args.variant} "
+    ):
+        raise IntakeFixtureRefused("SELECTED_SYNTHETIC_QUOTE_REQUIRED")
+    async with tenancy.transaction(AuthenticatedAccount(actor), workspace, uuid4()) as unit:
+        messages = await OwnerAPIRepository(unit).messages(conversation, 100, None)
+    if not any(
+        m.message_id == quote.material.intent_source.message_id
+        and m.direction == "INBOUND"
+        and m.text in (INPUTS["price-first"], INPUTS["quote-second"])
+        for m in messages.items
+    ):
+        raise IntakeFixtureRefused("QUOTE_SOURCE_MISMATCH")
+
+    quote_id = UUID(quote.quote_id)
+    sent_text = None
+
+    class QuoteBrowserAdapter(ControlledAdapter):
+        async def send(self, permit: SendPermit):
+            nonlocal sent_text
+            if (
+                not isinstance(permit, QuoteSendPermit)
+                or permit.quote_id != quote_id
+                or permit.workspace_id != workspace
+                or permit.provider != "CONTROLLED"
+                or permit.bot_identity != bot("knowledge")
+                or permit.chat_id != recipient
+                or permit.external_connection_id != route("knowledge", 0)
+                or permit.text != quote.text
+                or engine.pool.checkedout() != 0
+            ):
+                raise IntakeFixtureRefused("QUOTE_SEND_SCOPE_MISMATCH")
+            sent_text = permit.text
+            return await super().send(permit)
+
+    def validate_claim(job: JobClaim):
+        if job.workspace_id != workspace:
+            raise IntakeFixtureRefused("JOB_WORKSPACE_MISMATCH")
+
+    adapter = QuoteBrowserAdapter(environment="TEST", outcome=QUOTE_OPERATIONS[args.operation])
+    worker = Worker(kernel, adapter)
+    born = datetime.fromisoformat(quote.created_at)
+    async with engine.connect() as connection:
+        now = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
+    diagnostic.stage = "CLAIM"
+    claim = await kernel.claim_intake(
+        born - timedelta(seconds=1),
+        lambda job: isinstance(job, QuoteSendJobClaim) and job.quote_id == quote_id,
+        validate_claim,
+        diagnostic,
+        scan_until=now,
+    )
+    if claim is not None:
+        diagnostic.stage = "EXECUTE"
+        await worker.execute(claim)
+    diagnostic.stage = "OWNER_READ"
+    after = await read()
+    if after.quote != quote:
+        raise IntakeFixtureRefused("QUOTE_VERSION_CHANGED")
+    return dict(
+        quote_id=quote.quote_id,
+        job_claimed=claim is not None,
+        status=after.status,
+        reason=after.reason,
+        calls=adapter.calls,
+        effects=adapter.effects,
+        text=sent_text,
+    )
+
+
 def main():
     diagnostic = Diagnostic()
     args = None
     try:
         parser = PrivateArgumentParser()
-        parser.add_argument("--operation", choices=tuple(INPUTS), required=True)
+        parser.add_argument("--operation", choices=(*INPUTS, *QUOTE_OPERATIONS), required=True)
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
         parser.add_argument(
             "--journey",
@@ -475,12 +595,14 @@ def main():
                 "owner-decision",
                 "owner-decision-partial",
                 "owner-source-other",
+                *sorted(QUOTE_JOURNEYS),
             ),
             default="intake",
         )
         for name in ("actor", "workspace", "business"):
             parser.add_argument("--" + name, required=True)
         parser.add_argument("--conversation")
+        parser.add_argument("--request")
         args = parser.parse_args()
         print(json.dumps(asyncio.run(run(args, diagnostic)), sort_keys=True))
         return 0

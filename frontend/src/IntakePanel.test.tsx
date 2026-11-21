@@ -4,15 +4,45 @@ import {act,render,screen,waitFor,cleanup,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {IntakePanel} from './IntakePanel';
 import {intakeApi,IntakeError} from './intake-api';
-import type {PriceCalculation,PriceHistory,ServiceRequestDraft} from './intake-api';
-import {assessment,draft,intake,scope,session,message,listItem,lateSize} from './intake-fixtures.test-helper';
+import type {PriceCalculation,PriceHistory,QuoteDelivery,ServiceRequestDraft} from './intake-api';
+import {assessment,draft,intake,scope,session,message,listItem,lateSize,quoteDelivery} from './intake-fixtures.test-helper';
 beforeEach(()=>{
  vi.stubGlobal('crypto',{randomUUID,subtle:webcrypto.subtle});
  vi.spyOn(intakeApi,'draft').mockResolvedValue(null);
  vi.spyOn(intakeApi,'drafts').mockResolvedValue([]);
  vi.spyOn(intakeApi,'assessment').mockResolvedValue(null);
+ vi.spyOn(intakeApi,'quote').mockResolvedValue({quote:null,status:null,reason:null});
 });
 afterEach(()=>{cleanup();sessionStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
+
+it('shows exact versioned terms and keeps a late delivery read out of another request',async()=>{
+ const a=draft(),b={...draft(),request_id:message};
+ const held=quoteDelivery(a,'HELD','CHANNEL_WINDOW_CLOSED');
+ const unknown=quoteDelivery(a,'UNKNOWN','UNKNOWN_EXTERNAL_RESULT');
+ let finish!:(value:QuoteDelivery)=>void;
+ const read=vi.mocked(intakeApi.quote).mockResolvedValueOnce(held)
+  .mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}))
+  .mockResolvedValueOnce({quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'});
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ vi.spyOn(intakeApi,'priceHistory').mockResolvedValue({items:[],next_before_id:null});
+ vi.mocked(intakeApi.draft).mockImplementation(async (_scope,id)=>id===b.request_id?b:a);
+ vi.mocked(intakeApi.drafts).mockResolvedValue([listItem(a),listItem(b)]);
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()}/>);
+ const panel=within(await screen.findByRole('region',{name:'Предложение клиенту'}));
+ expect(await panel.findByText('Окно ответа в канале закрыто.')).toBeVisible();
+ expect(panel.getByRole('status')).toHaveTextContent('Отправка удержана');
+ expect(panel.getByTestId('quote-text').textContent).toBe(held.quote.text);
+ expect(panel.queryByRole('button',{name:/Отправить/})).not.toBeInTheDocument();
+ await userEvent.click(screen.getByRole('button',{name:'Обновить карточку заявки'}));
+ await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
+ await userEvent.selectOptions(screen.getByLabelText('Сохранённая заявка'),b.request_id);
+ await act(async()=>finish(unknown));
+ const selected=within(await screen.findByRole('region',{name:'Предложение клиенту'}));
+ expect(await selected.findByText(/Уточните точную цену/)).toBeVisible();
+ expect(selected.getByRole('status')).toHaveTextContent('Нужно уточнение');
+ expect(selected.queryByTestId('quote-text')).not.toBeInTheDocument();
+ expect(read.mock.calls[1][2]?.aborted).toBe(true);
+});
 it('shows one missing question, a source link and confirms only the selected field',async()=>{
  const value=intake(),owner=session();vi.spyOn(intakeApi,'summary').mockResolvedValue(value);const command=vi.spyOn(intakeApi,'command').mockResolvedValue({outcome:'ACCEPTED',receipt_id:message,version:'2'});
  render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);expect(await screen.findByText(value.question!)).toBeVisible();expect(screen.getByRole('link',{name:'сообщение клиента'})).toHaveAttribute('href',`#message-${message}`);

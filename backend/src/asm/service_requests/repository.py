@@ -26,6 +26,7 @@ from asm.service_requests.models import (
     ServiceRequestRevisionCommand,
 )
 from asm.service_requests.pricing import PriceCalculation, PriceCommand, PriceHistory
+from asm.service_requests.quotes import QuoteDeliveryView, QuoteInput, QuoteMaterial, render_quote
 from asm.tenancy import TenantUnitOfWork
 
 
@@ -135,6 +136,7 @@ class ServiceRequestRepository:
             inputs.activation_version,
         ):
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        await self._prepare_quote(business, conversation, request_id)
         return result
 
     async def price(
@@ -152,6 +154,7 @@ class ServiceRequestRepository:
             command.expected_revision,
         ):
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        await self._prepare_quote(business, conversation, request_id)
         return value
 
     async def price_history(
@@ -234,7 +237,60 @@ class ServiceRequestRepository:
         raw = await self.unit.approval_owner_decide(
             business, conversation, request_id, approval_id, command.model_dump(mode="json")
         )
-        return self.approval_view(raw, business, conversation, request_id, approval_id)
+        view = self.approval_view(raw, business, conversation, request_id, approval_id)
+        if command.operation == "APPROVE" and view.authorization_current:
+            await self._prepare_quote(business, conversation, request_id)
+        return view
+
+    async def read_quote(
+        self, business: UUID, conversation: UUID, request_id: UUID
+    ) -> QuoteDeliveryView:
+        raw = await self.unit.quote_owner_read(business, conversation, request_id)
+        return self._quote_view(raw, business, conversation, request_id)
+
+    async def _prepare_quote(self, business: UUID, conversation: UUID, request_id: UUID) -> None:
+        raw = await self.unit.quote_owner_prepare(business, conversation, request_id)
+        if raw is None:
+            return
+        try:
+            quote = QuoteInput.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        self._quote_scope(quote.material, business, conversation, request_id)
+        saved = await self.unit.quote_owner_record(
+            business,
+            conversation,
+            request_id,
+            quote.model_dump(mode="json") | {"text": render_quote(quote)},
+        )
+        self._quote_view(saved, business, conversation, request_id)
+
+    def _quote_view(
+        self, raw: object, business: UUID, conversation: UUID, request_id: UUID
+    ) -> QuoteDeliveryView:
+        try:
+            view = QuoteDeliveryView.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        if view.quote is not None:
+            self._quote_scope(view.quote.material, business, conversation, request_id)
+        return view
+
+    def _quote_scope(
+        self, material: QuoteMaterial, business: UUID, conversation: UUID, request_id: UUID
+    ) -> None:
+        if (
+            material.workspace_id,
+            material.business_id,
+            material.conversation_id,
+            material.request_id,
+        ) != (
+            str(self.unit.context.workspace_id),
+            str(business),
+            str(conversation),
+            str(request_id),
+        ):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
 
     async def approval_list(self, before_id: UUID | None) -> ApprovalPage:
         raw = await self.unit.approval_owner_list(before_id)

@@ -1,7 +1,7 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
-import {parseIntake,parseCases,parseDraft,parseAssessment,intakeApi,IntakeError} from './intake-api';
+import {parseIntake,parseCases,parseDraft,parseAssessment,parseQuoteDelivery,intakeApi,IntakeError} from './intake-api';
 import type {DraftCommand,DraftRevisionCommand} from './intake-api';
-import {assessment,draft,intake,scope,example,listItem,w,b,c} from './intake-fixtures.test-helper';
+import {assessment,draft,intake,scope,example,listItem,quoteDelivery,w,b,c} from './intake-fixtures.test-helper';
 afterEach(()=>vi.unstubAllGlobals());
 describe('closed intake projections',()=>{
  it('rejects another Client, Workspace and extra owner-only data',()=>{
@@ -56,6 +56,21 @@ it('accepts a preceding duration in the same request revision',()=>{
  for(const invalid of [{...archive,assessment_id:value.assessment_id},{...archive,request_revision:'2'}]){
   expect(()=>parseAssessment({...recalculated,archived_duration:invalid},value.request_id)).toThrow(IntakeError);
  }
+});
+
+it('reads the selected quote safely and refuses unrelated conditions or a mismatched command',async()=>{
+ const card=draft(),value=quoteDelivery(card);
+ const fetch=vi.fn().mockResolvedValue(new Response(JSON.stringify(value),{status:200}));
+ vi.stubGlobal('fetch',fetch);
+ expect(await intakeApi.quote(scope,card.request_id)).toEqual(value);
+ const [url,init]=fetch.mock.calls[0];
+ expect(url).toBe(`/api/v1/workspaces/${w}/businesses/${b}/intake/conversations/${c}/service-requests/${card.request_id}/quote`);
+ expect(init).toMatchObject({credentials:'include',cache:'no-store'});
+ expect(init.method).toBeUndefined();
+ expect(()=>parseQuoteDelivery(value,scope,c)).toThrow(IntakeError);
+ expect(()=>parseQuoteDelivery(value,{...scope,client:c},card.request_id)).toThrow(IntakeError);
+ expect(()=>parseQuoteDelivery({...value,quote:{...value.quote,code:'Q-012ABCD235'}},scope,card.request_id)).toThrow(IntakeError);
+ expect(()=>parseQuoteDelivery({...value,quote:null},scope,card.request_id)).toThrow(IntakeError);
 });
 
 describe('scoped draft requests',()=>{

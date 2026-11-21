@@ -55,9 +55,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0028"
-NATIVE_CONTEXT_PROFILE_SHA256 = "de398c071cabddc528a5c5aaeea06aa751f65342a23cd6b4e86bd502cdad0b30"
-NATIVE_PROFILE_BODY_SHA256 = "8635a1c904931cc941fda92baedf24f895d1d8a329269d297fca6c04522efc08"
+DATABASE_SCHEMA_REVISION = "0029"
+NATIVE_CONTEXT_PROFILE_SHA256 = "3318ce84ce375820d7058f1866a054a70c9dd329a8277f03d259e4b96c03e9ad"
+NATIVE_PROFILE_BODY_SHA256 = "1e98f8f08f9b66e2d2ebcde11accb3d507805da945b8cbd4606d3c734dc5e400"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -94,7 +94,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.owner_decision_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.quote_schema_profile()')
             """)
             )
         )

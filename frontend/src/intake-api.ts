@@ -78,6 +78,18 @@ export type PriceCalculation = {
  amount_minor:number|null;lower_minor:number|null;upper_minor:number|null;size_mm:number|null;steps:number|null;size_fact:Fact|null;
 };
 export type PriceHistory = {items:PriceCalculation[];next_before_id:string|null};
+const quoteStatuses=['PREPARED','QUEUED','HELD','SENT','UNKNOWN','FAILED','NEEDS_CLARIFICATION'] as const;
+export type QuoteStatus = (typeof quoteStatuses)[number];
+export type RequestQuote = {
+ quote_id:string;version:string;code:string;terms_sha256:string;created_at:string;expires_at:string;text:string;
+ material:{
+  workspace_id:string;business_id:string;conversation_id:string;client_id:string;request_id:string;request_revision:string;
+  intent_source:IntentSource;price_reference_id:string;duration_reference_id:string;decision_id:string|null;
+  price_calculation_id:string;assessment_id:string;currency:'RUB';amount_minor:number|null;
+  price_range:{authority:'PROVISIONAL';lower_minor:number;upper_minor:number}|null;occupied_minutes:number;
+ };
+};
+export type QuoteDelivery = {quote:RequestQuote|null;status:QuoteStatus|null;reason:string|null};
 export type CaseInput = { description: string; asset: {asset_id:string;asset_version_id:string}|null; width_mm:number|null; height_mm:number|null; placement:string|null; style:string|null; detail:string|null; fill:string|null; provider:string|null; working_minutes:number|null; occupied_minutes:number|null; setup_minutes:number|null; stencil_minutes:number|null; break_minutes:number|null; cleanup_minutes:number|null; treatment:'INCLUDED'|'EXCLUDED'|'UNKNOWN'; session_count:number|null; session_minutes:number[]|null; explanation:string|null };
 export type DurationCase = {case_id:string;version:string;state:'DRAFT'|'CONFIRMED'|'REVOKED';data:CaseInput;confirmed_by:string|null;source_current:boolean};
 export type CasePage = {workspace_id:string;business_id:string;items:DurationCase[]};
@@ -92,6 +104,7 @@ const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{
 const digest=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{64}$(?![\s\S])/.test(v);
 const decimal=(v:unknown,zero=true)=>typeof v==='string'&&/^(0|[1-9][0-9]{0,18})$(?![\s\S])/.test(v)&&BigInt(v)<=9223372036854775807n&&(zero||v!=='0');
 const text=(v:unknown,max:number)=>typeof v==='string'&&[...v].length<=max&&!/[\u0000\uD800-\uDFFF]/u.test(v);
+const instant=(v:unknown):v is string=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(v)&&Number.isFinite(Date.parse(v));
 const one=(v:unknown,choices:readonly string[])=>typeof v==='string'&&choices.includes(v);
 const nullable=(v:unknown,check:(v:unknown)=>boolean)=>v===null||check(v);
 const positiveWithin=(v:unknown,max:number)=>typeof v==='number'&&Number.isInteger(v)&&v>=1&&v<=max;
@@ -231,6 +244,41 @@ function parseDraftReceipt(value:unknown,requestId?:string):{request_id:string}{
  if(!uuid(v.request_id)||(requestId!==undefined&&v.request_id!==requestId))return invalid();
  return {request_id:v.request_id};
 }
+export function parseQuoteDelivery(value:unknown,scope:IntakeScope,requestId:string):QuoteDelivery{
+ const response=object(value,['quote','status','reason']);
+ if(!nullable(response.status,v=>one(v,quoteStatuses))
+   ||!nullable(response.reason,v=>typeof v==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v)))return invalid();
+ const quoteExpected=response.status!==null&&response.status!=='NEEDS_CLARIFICATION';
+ if(response.quote===null){
+  if(quoteExpected)return invalid();
+  return response as QuoteDelivery;
+ }
+ if(!quoteExpected)return invalid();
+ const quote=object(response.quote,['quote_id','version','code','terms_sha256','created_at','expires_at','text','material']);
+ if(!uuid(quote.quote_id)||!decimal(quote.version,false)||!digest(quote.terms_sha256)
+   ||typeof quote.code!=='string'||!/^Q-[0-9A-F]{10}$/.test(quote.code)
+   ||!instant(quote.created_at)||!instant(quote.expires_at)||quote.created_at>=quote.expires_at
+   ||!text(quote.text,4096)||typeof quote.text!=='string'||!quote.text.endsWith(`\nПринимаю ${quote.code}`))return invalid();
+ const basis=object(quote.material,['workspace_id','business_id','conversation_id','client_id','request_id','request_revision',
+  'service_id','service_name','facts','intent_source','complex_work','release_id','activation_version','assessment_id',
+  'assessment_reason','price_calculation_id','price_reason','approval_id','decision_id','price_reference_id',
+  'duration_reference_id','currency','amount_minor','price_range','occupied_minutes','deposit_terms_version','deposit','conditions']);
+ if(!inConversation(basis,scope)||basis.request_id!==requestId||!uuid(basis.request_id)||!decimal(basis.request_revision,false)
+   ||!uuid(basis.price_calculation_id)||!uuid(basis.assessment_id)||!nullable(basis.decision_id,uuid)
+   ||!uuid(basis.price_reference_id)||![basis.price_calculation_id,basis.decision_id].includes(basis.price_reference_id)
+   ||!uuid(basis.duration_reference_id)||![basis.assessment_id,basis.decision_id].includes(basis.duration_reference_id)
+   ||basis.currency!=='RUB'||!positiveWithin(basis.occupied_minutes,10080)
+   ||(basis.amount_minor===null)===(basis.price_range===null))return invalid();
+ checkIntentSource(basis.intent_source);
+ if(basis.price_range===null){
+  if(!positiveWithin(basis.amount_minor,100000000000))return invalid();
+ }else{
+  const range=object(basis.price_range,['authority','lower_minor','upper_minor']);
+  if(range.authority!=='PROVISIONAL'||!positiveWithin(range.lower_minor,100000000000)||!positiveWithin(range.upper_minor,100000000000)
+    ||(range.lower_minor as number)>=(range.upper_minor as number))return invalid();
+ }
+ return response as QuoteDelivery;
+}
 function jsonMutation(method:'POST'|'PATCH',body:unknown,key:string,csrf:string):RequestInit{
  return {method,headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key},body:JSON.stringify(body)};
 }
@@ -264,6 +312,8 @@ export const intakeApi={
   request(scope,pricePath(scope,requestId),v=>parsePrice(v,requestId,revision),signal,{
    method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({expected_revision:revision}),
   }),
+ quote:(scope:IntakeScope,requestId:string,signal?:AbortSignal)=>
+  request(scope,`${draftPath(scope)}/${encodeURIComponent(requestId)}/quote`,v=>parseQuoteDelivery(v,scope,requestId),signal),
  cases:(scope:IntakeScope,signal?:AbortSignal)=>request(scope,'/duration-cases',v=>parseCases(v,scope),signal),
  search:(scope:IntakeScope,query:Record<string,string>,signal?:AbortSignal)=>request(scope,`/duration-cases/search?${new URLSearchParams(query)}`,v=>parseSearch(v,scope),signal),
  command:(scope:IntakeScope,operation:string,body:unknown,key:string,csrf:string,signal?:AbortSignal)=>request(scope,operation.startsWith('case-')?`/duration-cases/${operation.slice(5)}`:`/conversations/${encodeURIComponent(scope.conversation??'')}/${operation}`,parseReceipt,signal,jsonMutation('POST',body,key,csrf)),

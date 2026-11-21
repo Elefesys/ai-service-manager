@@ -374,6 +374,33 @@ class TenantUnitOfWork:
             },
         )
 
+    async def quote_owner_prepare(
+        self, business: UUID, conversation: UUID, request_id: UUID
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.quote_owner_prepare(:business,:conversation,:request)",
+            {"business": business, "conversation": conversation, "request": request_id},
+        )
+
+    async def quote_owner_record(
+        self, business: UUID, conversation: UUID, request_id: UUID, body: dict[str, object]
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.quote_owner_record(:business,:conversation,:request,CAST(:body AS jsonb))",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request": request_id,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
+    async def quote_owner_read(self, business: UUID, conversation: UUID, request_id: UUID) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.quote_owner_read(:business,:conversation,:request)",
+            {"business": business, "conversation": conversation, "request": request_id},
+        )
+
     async def configuration_command(
         self, business: UUID, operation: str, key: str, body: dict[str, object]
     ) -> Any:
