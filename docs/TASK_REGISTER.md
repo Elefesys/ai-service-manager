@@ -4,7 +4,7 @@
 
 ## CURRENT — M6.3A REVIEW · 2026-11-21
 
-**Единственная выдача C1 в M6.3A-R1 — устранить два отказа browser.** [Draft PR #59](https://github.com/Elefesys/ai-service-manager/pull/59), head `a3d22503bf4ea8153b57f293ab3f49b5650ce45e`, база `main` `f8d05b5befe33a5f4081a3f749f458336180678d`. В CI 11/12, Chromium 85/87. Сценарии диапазона и источника прошли на обоих размерах экрана. На узком экране фикстура вернула код 1 в `request-deferred / seed` и `assessment / assess-second`. Источник внутреннего отказа пока требует адресной диагностики. [Свидетельства и поручение](tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44873274634).
+**Единственная задача — независимая приёмка C8.** C0 принял исправления M6.3A-R1 в [Draft PR #59](https://github.com/Elefesys/ai-service-manager/pull/59) на `0ca9688ab211793b4d631bdfc9c4550ef284188e`, база `main` `f8d05b5befe33a5f4081a3f749f458336180678d`. Закрыты C0-M6.3A-01 (предварительный диапазон при вводе только минут), C0-M6.3A-02 (закреплённая реплика выбранной работы) и оба отказа браузерной фикстуры. Штатный CI прошёл 12/12 с первой попытки, Chromium прошёл 87/87. Ожидается одно заключение C8 по этому head. [Поручение и доказательства](tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44881084323).
 
 ## История — M6.2 INTEGRATED / VERIFIED · 2026-11-21
 
