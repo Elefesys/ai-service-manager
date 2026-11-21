@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3B REVIEW · независимая приёмка C8 · 2026-11-21
+## CURRENT — M6.3B REVIEW · R2 для C3 · 2026-11-21
 
-C0 закрыл оба замечания R1 на head `1f94684ec40152e7489294a75a4004d819aed182` Draft PR #60, база `main` `248dd3a8ecfc2fb372b12f22f60585235b9e244e`. Уточнение точной цены сохраняет историю и даёт 0 новых отправок. Начавшаяся отправка видна после перехвата, при потере подтверждения после рестарта 0 новых вызовов. Штатный CI 12/12 с первой попытки, Chromium 91/91. Единственная задача — независимое заключение C8 по Q4/Q5 в synthetic LOCAL/TEST. [Поручение C8 и доказательства](tasks/M6_HANDOFF.md#L3) · [PR #60](https://github.com/Elefesys/ai-service-manager/pull/60) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44912106481).
+C8 вернул `CHANGES_REQUESTED` по head `1f94684ec40152e7489294a75a4004d819aed182` в Draft PR #60. Единственная активная задача — M6.3B-R2, `C8-M6.3B-01`. После сбоя worker открытая карточка может прекратить опрос на 16-й секунде и пропустить `UNKNOWN` после истечения 30-секундной аренды. C3 ведёт доработку, C5 отвечает за карточку. Две независимые работы, доставка после решения мастера, история уточнения цены, передача управления и отсутствие повторной отправки подтверждены. База `main` `248dd3a8ecfc2fb372b12f22f60585235b9e244e`, synthetic LOCAL/TEST. [Поручение R2](tasks/M6_HANDOFF.md#L3) · [заключение C8](https://github.com/Elefesys/ai-service-manager/pull/60#pullrequestreview-6006352758) · [CI 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/44912106481).
 
 ## История — M6.3A INTEGRATED / VERIFIED · 2026-11-21
 
