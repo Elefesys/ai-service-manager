@@ -232,7 +232,7 @@ FUNCTIONS = {
       ELSIF box.status='FAILED' THEN
         status:=CASE WHEN i.hold_reason IS NULL THEN 'FAILED' ELSE 'HELD' END;
         reason:=coalesce(i.hold_reason,box.error_code);
-      ELSIF box.status='DISPATCHING' THEN status:='QUEUED';
+      ELSIF box.status='DISPATCHING' THEN status:='DISPATCHING';
       ELSE
         reason:=coalesce(platform.quote_block(q,c,i.control_generation),i.hold_reason);
         status:=CASE WHEN reason IS NOT NULL THEN 'HELD' WHEN box.id IS NULL THEN 'PREPARED' ELSE 'QUEUED' END;
@@ -342,15 +342,20 @@ FUNCTIONS = {
       p_business uuid,p_conversation uuid,p_request uuid
     ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
     DECLARE d app.service_requests%ROWTYPE; c app.conversations%ROWTYPE; q app.quotes%ROWTYPE; reason text;
+      delivery jsonb;
     BEGIN
       d:=platform.service_assessment_scope(p_business,p_conversation,p_request);
+      reason:=platform.quote_basis(d,clock_timestamp())->>'reason';
       SELECT * INTO q FROM app.quotes WHERE (workspace_id,request_id)=(d.workspace_id,d.id)
         ORDER BY version DESC LIMIT 1;
       IF FOUND THEN
         SELECT * INTO STRICT c FROM app.conversations WHERE (workspace_id,id)=(d.workspace_id,d.conversation_id);
-        RETURN platform.quote_view(q,c);
+        delivery:=platform.quote_view(q,c);
+        IF reason='EXACT_PRICE_REQUIRED' THEN
+          RETURN jsonb_build_object('quote',NULL,'status','NEEDS_CLARIFICATION','reason',reason,'previous',delivery);
+        END IF;
+        RETURN delivery;
       END IF;
-      reason:=platform.quote_basis(d,clock_timestamp())->>'reason';
       RETURN jsonb_build_object('quote',NULL,'reason',reason,'status',CASE
         WHEN reason IN ('EXACT_PRICE_REQUIRED','DEPOSIT_TERMS_UNCLEAR','APPROVAL_CLARIFICATION')
           THEN 'NEEDS_CLARIFICATION' END);
@@ -1312,7 +1317,7 @@ PROFILE = r"""CREATE FUNCTION platform.quote_schema_profile() RETURNS jsonb
 ('platform.quote_hash(jsonb)','39c6235034994a21858476d2b5942dbc916a3c733404d7e4e5c07586ef6ef35d','sql',false,'i',false),
 ('platform.quote_immutable()','53bcffa39c87ef26910c57488f342bd68c05ecf9cba299054439d32631291bbb','plpgsql',false,'v',false),
 ('platform.quote_owner_prepare(uuid,uuid,uuid)','b129b4430e92dbc7c339b6167259855b414698faa0fe43425068f93152c28bd7','plpgsql',true,'v',true),
-('platform.quote_owner_read(uuid,uuid,uuid)','00c1501378bc5b6c54ee8f28ef0edca22e94a251932ce3ac2599c654a498e519','plpgsql',true,'v',true),
+('platform.quote_owner_read(uuid,uuid,uuid)','cd7935b14ddacb47e853345822c8cc174a4469b2cd85abd81bd438762b5f88f3','plpgsql',true,'v',true),
 ('platform.quote_owner_record(uuid,uuid,uuid,jsonb)','d69250e9330092f57312eade4788eb7d2dd561ba8e5efc1dff3a9ed7fddfdab3','plpgsql',true,'v',true),
 ('platform.quote_queue(app.quotes,app.conversations,uuid)','63fdf1216fb6aa19de4037ce0423f61f5815858eba26236edfe14f662a1acf18','plpgsql',false,'v',false),
 ('platform.quote_requeue(app.quotes,app.conversations,app.outbox_events,platform.messaging_jobs)','330e2443c2bffcc8d0af4d1c847234f94a780588c8efebfbbd3b9793cc7fd9f1','plpgsql',false,'v',false),
@@ -1320,7 +1325,7 @@ PROFILE = r"""CREATE FUNCTION platform.quote_schema_profile() RETURNS jsonb
 ('platform.quote_send_begin(uuid,uuid,bigint,bigint,jsonb)','b034f259a4e702c1f2092cb9e5e831ad830b88125048835df8ffbfca2ae12978','plpgsql',true,'v',true),
 ('platform.quote_send_probe(uuid,uuid)','d301df2b37a96ddbaaffa31ed5a5c9f0098cc989d600252c62049465bdce0c08','plpgsql',true,'v',true),
 ('platform.quote_timestamp(timestamptz)','2e5b1223a7976432ffbc795a2d2c4c2e6d7770d02529bfd30617d5ad2a06eae5','sql',false,'s',false),
-('platform.quote_view(app.quotes,app.conversations)','c3a00a3cf4caa532286fdac808d363718859017e1ff276f9ed3d00487f17fe13','plpgsql',false,'v',false),
+('platform.quote_view(app.quotes,app.conversations)','88295759706eacd2f81becd27a3a4f027cb451c0b16a140c2f3e7a6a06e8dca7','plpgsql',false,'v',false),
 ('platform.resolve_workspace_membership(uuid,uuid)','8ce9bdd67c17bc83442bea3a5e7a15337a51074e0ea6408855b10542e39ceb39','sql',true,'v',true),
 ('platform.service_assessment_immutable()','bb7b369ae4c8eff6280b650ddf07efaab07e6a93ef775825115377f9a3156873','plpgsql',false,'v',false),
 ('platform.service_assessment_material(app.service_requests)','1aa629e9c025608366eb7d01e0d6a3450665b176d1aedcf902d4557709a5c825','plpgsql',true,'s',false),

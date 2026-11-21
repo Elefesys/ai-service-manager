@@ -274,6 +274,8 @@ class ServiceRequestRepository:
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
         if view.quote is not None:
             self._quote_scope(view.quote.material, business, conversation, request_id)
+        if view.previous is not None:
+            self._quote_scope(view.previous.quote.material, business, conversation, request_id)
         return view
 
     def _quote_scope(

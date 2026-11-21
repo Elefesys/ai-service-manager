@@ -2,10 +2,11 @@ import {expect,test,type Locator,type Page,type Route} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {createInterface} from 'node:readline';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
-import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,ServiceAssessment} from '../src/intake-api';
+import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,RequestQuote,ServiceAssessment} from '../src/intake-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
 if(!fixtureFile||!passwordFile)throw new Error('E2E_INTAKE_PRIVATE_FIXTURES_REQUIRED');
@@ -15,6 +16,7 @@ const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixture
 type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
+type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
 type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'quote-delivery'|'quote-guard';
 
 function intakeChildFailure(error:unknown,operation:IntakeOperation|QuoteOperation,journey:IntakeJourney,variant:Viewport):Error {
@@ -70,14 +72,35 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  return {...await collectIntake(page,variant,journey),serviceName};
 }
 
-async function intakeFixture<T>(operation:IntakeOperation|QuoteOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string):Promise<T>{
+async function intakeFixture<T>(operation:IntakeOperation|QuoteOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
  const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
-  ...(conversation?['--conversation',conversation]:[]),...(requestId?['--request',requestId]:[])];
- let stdout:string;
- try{stdout=(await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384})).stdout;}catch(error){throw intakeChildFailure(error,operation,journey,variant);}
- return JSON.parse(stdout) as T;
+  ...(conversation?['--conversation',conversation]:[]),...(requestId?['--request',requestId]:[]),...(observe?['--observe-dispatch']:[])];
+ const child=promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384});
+ const completed=child.then(result=>({stdout:result.stdout}),error=>({error:intakeChildFailure(error,operation,journey,variant)}));
+ let checkpoints=0;
+ if(observe){
+  const stream=createInterface({input:child.child.stdout!,crlfDelay:Infinity});
+  try{
+   for await(const line of stream){
+    const message=JSON.parse(line);
+    if(!Object.hasOwn(message,'phase'))continue;
+    const phase=(['before_call','before_finalize'] as const)[checkpoints++];
+    expect(message.phase).toBe(phase);
+    await observe(message as DispatchCheckpoint);
+    child.child.stdin!.write('continue\n');
+   }
+  }finally{
+   stream.close();
+   child.child.stdin?.end();
+   await completed;
+  }
+ }
+ const result=await completed;
+ if('error' in result)throw result.error;
+ if(observe)expect(checkpoints).toBe(2);
+ return JSON.parse(observe?result.stdout.trim().split('\n').at(-1)!:result.stdout) as T;
 }
 
 async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
@@ -1028,7 +1051,8 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-deliv
  const panel=work.getByRole('region',{name:'Предложение клиенту',exact:true});
  const endpoint=`/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/intake/conversations/${conversation}/service-requests`;
  const history=`/api/v1/workspaces/${owner.workspace_id}/conversations/${conversation}/messages`;
- const execute=(operation:QuoteOperation,requestId:string)=>intakeFixture<QuoteAttempt>(operation,journey,variant,conversation,requestId);
+ const execute=(operation:QuoteOperation,requestId:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>)=>
+  intakeFixture<QuoteAttempt>(operation,journey,variant,conversation,requestId,observe);
  async function read(requestId:string, status?:QuoteDelivery['status']){
   const response=await page.request.get(`${endpoint}/${requestId}/quote`);
   expect(response.status()).toBe(200);
@@ -1056,6 +1080,98 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-deliv
  return {input,conversation,collected,intake,inbox,settings,serviceName,work,cardId,panel,firstId,endpoint,execute,read,readHistory,evaluateAndPrice,price};
 }
 
+type QuoteJourney=Awaited<ReturnType<typeof beginQuoteJourney>>;
+const dispatchingLabel='Отправка началась, ожидаем подтверждения';
+
+async function takeoverQuote(page:Page,app:QuoteJourney,quote:RequestQuote,operation:QuoteOperation){
+ const {panel,firstId,execute,read}=app;
+ const controls=page.getByRole('region',{name:'Управление диалогом',exact:true});
+ const checkpoints:DispatchCheckpoint[]=[];
+ const result=await execute(operation,firstId,async checkpoint=>{
+  expect([checkpoint.calls,checkpoint.effects]).toEqual(checkpoint.phase==='before_call'?[0,0]:[1,1]);
+  if(checkpoint.phase==='before_finalize'){
+   await controls.getByRole('button',{name:'Обновить режим',exact:true}).click();
+   await controls.getByRole('button',{name:'Забрать управление',exact:true}).click();
+   await expect(controls.getByText('Управление у мастера',{exact:true})).toBeVisible();
+  }
+  expect((await read(firstId,'DISPATCHING')).quote).toEqual(quote);
+  await expect(panel.getByRole('status')).toHaveText(dispatchingLabel);
+  expect(await panel.getByTestId('quote-text').textContent()).toBe(quote.text);
+  checkpoints.push(checkpoint);
+ });
+ await expect(controls.getByText('Управление у мастера',{exact:true})).toBeVisible();
+ return {result,checkpoints};
+}
+
+async function resumeQuote(page:Page){
+ const controls=page.getByRole('region',{name:'Управление диалогом',exact:true});
+ await controls.getByRole('button',{name:'Обновить режим',exact:true}).click();
+ await controls.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();
+ await expect(controls.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
+}
+
+async function confirmExactQuote(page:Page,app:QuoteJourney,previous:RequestQuote,status:'SENT'|'UNKNOWN',mode:'PERCENT_DEPOSIT'|'FULL_PREPAYMENT'){
+ const {settings,serviceName,inbox,intake,work,panel,firstId,endpoint,price,read,execute}=app;
+ if(!await settings.isVisible())await page.getByRole('button',{name:/Synthetic business/}).click();
+ await settings.getByLabel('Прибавка к верхней границе, копейки 1',{exact:true}).fill('50000');
+ await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption(mode);
+ if(mode==='PERCENT_DEPOSIT')await settings.getByLabel('Предоплата, процент 1',{exact:true}).fill('25');
+ await publishIntakeService(settings,serviceName);
+ await refreshIntake(inbox,intake);
+ await work.getByRole('button',{name:/^(Оценить заявку|Пересчитать оценку)$/}).click();
+ await expect(work.getByRole('region',{name:'Оценка заявки',exact:true}).getByText('Выполнимо',{exact:true})).toBeVisible();
+ const calculated=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===`${endpoint}/${firstId}/pricing`);
+ await price.click();
+ const calculation=await calculated;
+ expect(calculation.status()).toBe(200);
+ expect(await calculation.json()).toMatchObject({outcome:'RANGE',lower_minor:350000,upper_minor:400000});
+
+ const priorStatus=status==='SENT'?'Предложение отправлено клиенту':'UNKNOWN · Доставка не подтверждена';
+ const prior=panel.getByRole('region',{name:'Предыдущая версия',exact:true});
+ await expect(panel.getByText('Нужно уточнение',{exact:true})).toBeVisible();
+ await expect(panel.getByText(/^Уточните точную цену\./)).toBeVisible();
+ await expect(prior.getByText(previous.code,{exact:true})).toBeVisible();
+ await expect(prior.getByRole('status')).toHaveText(priorStatus);
+ expect(await prior.getByTestId('quote-text').textContent()).toBe(previous.text);
+ const blocked=await read(firstId,'NEEDS_CLARIFICATION');
+ expect(blocked).toEqual({quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED',
+  previous:{quote:previous,status,reason:status==='UNKNOWN'?'UNKNOWN_EXTERNAL_RESULT':null}});
+ expect(await read(firstId,'NEEDS_CLARIFICATION')).toEqual(blocked);
+ const checked=await execute('deliver-quote',firstId);
+ expect(checked).toMatchObject({quote_id:previous.quote_id,status,job_claimed:false,calls:0,effects:0,text:null});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+
+ if(status==='UNKNOWN')await resumeQuote(page);
+ const approvalPath=`${endpoint}/${firstId}/approvals`;
+ const opened=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===approvalPath);
+ await work.getByRole('button',{name:'Открыть решение мастера',exact:true}).click();
+ const approvalResponse=await opened;
+ expect(approvalResponse.status()).toBe(200);
+ const approval=await approvalResponse.json() as ApprovalCard;
+ expect(approval.basis).toMatchObject({amount_minor:null,occupied_minutes:65,deposit:{mode},can_approve:true});
+ const detail=page.getByRole('article',{name:'Карточка решения по заявке',exact:true});
+ const decisionPath=`${approvalPath}/${approval.approval_id}`;
+ const approved=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===decisionPath);
+ await detail.getByLabel('Цена, ₽',{exact:true}).fill('3750');
+ await detail.getByRole('button',{name:'Подтвердить условия',exact:true}).click();
+ const decision=await approved;
+ expect(decision.status()).toBe(200);
+ const next=(await read(firstId,'QUEUED')).quote!;
+ expect(next.version).toBe(String(Number(previous.version)+1));
+ expect(next.quote_id).not.toBe(previous.quote_id);
+ expect(next.code).not.toBe(previous.code);
+ expect(next.material).toMatchObject({amount_minor:375000,occupied_minutes:65,deposit:{mode}});
+ await expect(panel.getByTestId('quote-text')).toContainText(`Принимаю ${next.code}`);
+ const delivered=await execute('deliver-quote',firstId);
+ expect(delivered).toMatchObject({quote_id:next.quote_id,job_claimed:true,status:'SENT',calls:1,effects:1,text:next.text});
+ await expect(panel.getByRole('status')).toHaveText('Предложение отправлено клиенту');
+ expect((await read(firstId,'SENT')).quote).toEqual(next);
+ const replay=await execute('deliver-quote',firstId);
+ expect(replay).toMatchObject({quote_id:next.quote_id,status:'SENT',job_claimed:false,calls:0,effects:0,text:null});
+ return {mode,previous:{id:previous.quote_id,code:previous.code,version:previous.version,status},checked,
+  next:{id:next.quote_id,code:next.code,version:next.version},delivered,replay};
+}
+
 test('@narrow M6.3B sends each selected work once, including the later owner decision',async({page},info)=>{
  test.setTimeout(120000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
@@ -1066,7 +1182,7 @@ test('@narrow M6.3B sends each selected work once, including the later owner dec
   intent_source:{message_id:collected.message_id},decision_id:null});
  expect(a.material.price_reference_id).toBe(a.material.price_calculation_id);
  expect(a.material.duration_reference_id).toBe(a.material.assessment_id);
- const deliveredA=await execute('deliver-quote',firstId);
+ const {result:deliveredA,checkpoints}=await takeoverQuote(page,app,a,'deliver-quote');
  expect(deliveredA).toMatchObject({quote_id:a.quote_id,job_claimed:true,status:'SENT',calls:1,effects:1,text:a.text});
  await expect(panel.getByRole('status')).toHaveText('Предложение отправлено клиенту');
  expect(await panel.getByTestId('quote-text').textContent()).toBe(a.text);
@@ -1076,6 +1192,7 @@ test('@narrow M6.3B sends each selected work once, including the later owner dec
  expect((await read(firstId,'SENT')).quote).toEqual(a);
  const replayA=await execute('deliver-quote',firstId);
  expect(replayA).toMatchObject({quote_id:a.quote_id,job_claimed:false,status:'SENT',calls:0,effects:0,text:null});
+ await resumeQuote(page);
 
  const second=await input('quote-second',conversation);
  expect(second.status).toBe('PRELIMINARILY_COMPLETE');
@@ -1136,7 +1253,8 @@ test('@narrow M6.3B sends each selected work once, including the later owner dec
  await expect(panel.getByTestId('quote-text')).toContainText(`Принимаю ${a.code}`);
  expect(await panel.getByTestId('quote-text').textContent()).toBe(a.text);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- console.log('M6.3B Chromium '+info.project.name+' '+JSON.stringify({conversation,
+ const clarification=variant==='desktop'?await confirmExactQuote(page,app,a,'SENT','PERCENT_DEPOSIT'):null;
+ console.log('M6.3B R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,checkpoints,clarification,
   a:{request:firstId,code:a.code,delivered:deliveredA,replay:replayA},b:{request:secondId,code:b.code,delivered:deliveredB,replay:replayB},
   inboundAfterApproval:0}));
 });
@@ -1144,7 +1262,8 @@ test('@narrow M6.3B sends each selected work once, including the later owner dec
 test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after restart',async({page},info)=>{
  test.setTimeout(120000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
- const {conversation,intake,inbox,settings,serviceName,panel,firstId,execute,read,evaluateAndPrice}=await beginQuoteJourney(page,variant,'quote-guard');
+ const app=await beginQuoteJourney(page,variant,'quote-guard');
+ const {conversation,intake,inbox,settings,serviceName,panel,firstId,execute,read,evaluateAndPrice}=app;
  const initial=await evaluateAndPrice(firstId);
  const controls=page.getByRole('region',{name:'Управление диалогом',exact:true});
  await controls.getByRole('button',{name:'Обновить режим',exact:true}).click();
@@ -1156,9 +1275,7 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  await expect(panel.getByRole('status')).toHaveText('Отправка удержана');
  await expect(panel.getByText('Управление диалогом у мастера.',{exact:true})).toBeVisible();
 
- await controls.getByRole('button',{name:'Обновить режим',exact:true}).click();
- await controls.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();
- await expect(controls.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
+ await resumeQuote(page);
  await settings.getByLabel('Прибавка к верхней границе, копейки 1',{exact:true}).fill('50000');
  await publishIntakeService(settings,serviceName);
  await refreshIntake(inbox,intake);
@@ -1166,7 +1283,7 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  expect(range.quote_id).not.toBe(initial.quote_id);
  expect(range.material.price_range).toEqual({authority:'PROVISIONAL',lower_minor:350000,upper_minor:400000});
  expect(range.text).toContain('Предварительный диапазон цены — 3\u202f500–4\u202f000 ₽.');
- const unknown=await execute('lose-quote-ack',firstId);
+ const {result:unknown,checkpoints}=await takeoverQuote(page,app,range,'lose-quote-ack');
  expect(unknown).toMatchObject({quote_id:range.quote_id,job_claimed:true,status:'UNKNOWN',reason:'UNKNOWN_EXTERNAL_RESULT',calls:1,effects:1,text:range.text});
  const restarted=await execute('deliver-quote',firstId);
  expect(restarted).toMatchObject({quote_id:range.quote_id,job_claimed:false,status:'UNKNOWN',calls:0,effects:0,text:null});
@@ -1178,5 +1295,6 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  await expect(panel.getByText('Сообщение могло быть доставлено. Автоматический повтор отключён.',{exact:true})).toBeVisible();
  expect(await panel.getByTestId('quote-text').textContent()).toBe(range.text);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- console.log('M6.3B Chromium '+info.project.name+' '+JSON.stringify({conversation,request:firstId,held,unknown,restarted}));
+ const clarification=variant==='narrow'?await confirmExactQuote(page,app,range,'UNKNOWN','FULL_PREPAYMENT'):null;
+ console.log('M6.3B R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,request:firstId,held,checkpoints,unknown,restarted,clarification}));
 });

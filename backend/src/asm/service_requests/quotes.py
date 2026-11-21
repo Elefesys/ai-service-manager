@@ -23,9 +23,10 @@ from asm.service_requests.pricing import PriceReason
 
 QuoteCode = Annotated[str, Field(pattern=r"^Q-[0-9A-F]{10}$")]
 ClientText = Annotated[Nonblank, Field(max_length=4096)]
-QuoteStatus = Literal[
-    "PREPARED", "QUEUED", "HELD", "SENT", "UNKNOWN", "FAILED", "NEEDS_CLARIFICATION"
+QuoteDeliveryStatus = Literal[
+    "PREPARED", "QUEUED", "DISPATCHING", "HELD", "SENT", "UNKNOWN", "FAILED"
 ]
+QuoteStatus = Literal[QuoteDeliveryStatus, "NEEDS_CLARIFICATION"]
 StatusReason = Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")]
 
 
@@ -139,15 +140,29 @@ class QuoteVersion(QuoteInput):
         return self
 
 
+class QuoteDeliverySnapshot(ConfigurationModel):
+    quote: QuoteVersion
+    status: QuoteDeliveryStatus
+    reason: StatusReason | None
+
+
 class QuoteDeliveryView(ConfigurationModel):
     quote: QuoteVersion | None
     status: QuoteStatus | None
     reason: StatusReason | None
+    previous: QuoteDeliverySnapshot | None = Field(
+        default=None, exclude_if=lambda snapshot: snapshot is None
+    )
 
     @model_validator(mode="after")
     def coherent_status(self) -> Self:
         if (self.quote is None) != (self.status in {None, "NEEDS_CLARIFICATION"}):
             raise ValueError("Delivery status requires a quote version")
+        if self.previous is not None and (self.status, self.reason) != (
+            "NEEDS_CLARIFICATION",
+            "EXACT_PRICE_REQUIRED",
+        ):
+            raise ValueError("Previous delivery requires an exact price clarification")
         return self
 
 

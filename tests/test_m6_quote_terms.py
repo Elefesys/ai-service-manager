@@ -1,9 +1,13 @@
-"""Customer wording and consistency checks for a frozen commercial offer."""
+"""Customer wording and owner delivery reads for a frozen commercial offer."""
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
-from asm.service_requests.quotes import QuoteInput, render_quote
+from asm.service_requests.errors import ServiceRequestCode, ServiceRequestError
+from asm.service_requests.quotes import QuoteDeliveryView, QuoteInput, render_quote
+from asm.service_requests.repository import ServiceRequestRepository
 from pydantic import ValidationError
 
 
@@ -135,3 +139,56 @@ def test_range_requires_terms_applicable_to_every_amount(mode, deposit, percent)
 def test_exact_price_allows_percentage_and_full_prepayment(mode, percent, terms):
     quote = QuoteInput.model_validate(quote_payload(mode, percent=percent))
     assert terms in render_quote(quote)
+
+
+def delivery_snapshot(status, reason=None):
+    payload = quote_payload("NONE")
+    quote = payload | {
+        "version": "1",
+        "created_at": "2026-11-20T11:15:00.000000Z",
+        "terms_sha256": "a" * 64,
+        "text": render_quote(QuoteInput.model_validate(payload)),
+    }
+    return {"quote": quote, "status": status, "reason": reason}
+
+
+EXACT_PRICE_CLARIFICATION = {
+    "quote": None,
+    "status": "NEEDS_CLARIFICATION",
+    "reason": "EXACT_PRICE_REQUIRED",
+}
+
+
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [("DISPATCHING", None), ("SENT", None), ("UNKNOWN", "UNKNOWN_EXTERNAL_RESULT")],
+)
+def test_read_quote_preserves_delivery_separately_from_current_clarification(status, reason):
+    snapshot = delivery_snapshot(status, reason)
+    current = QuoteDeliveryView.model_validate(snapshot)
+    assert current.model_dump(mode="json") == snapshot
+    blocked = EXACT_PRICE_CLARIFICATION | {"previous": snapshot}
+    assert QuoteDeliveryView.model_validate(blocked).model_dump(mode="json") == blocked
+
+
+def test_previous_snapshot_requires_current_exact_price_clarification():
+    previous = delivery_snapshot("SENT")
+    with pytest.raises(ValidationError, match="Previous delivery requires an exact price"):
+        QuoteDeliveryView.model_validate(previous | {"previous": previous})
+    with pytest.raises(ValidationError):
+        QuoteDeliveryView.model_validate(
+            EXACT_PRICE_CLARIFICATION | {"previous": EXACT_PRICE_CLARIFICATION}
+        )
+
+
+async def test_owner_read_rejects_previous_quote_from_a_different_work():
+    previous = delivery_snapshot("SENT")
+    previous["quote"]["material"]["request_id"] = uuid(11)
+    unit = SimpleNamespace(
+        context=SimpleNamespace(workspace_id=UUID(uuid(1))),
+        quote_owner_read=AsyncMock(return_value=EXACT_PRICE_CLARIFICATION | {"previous": previous}),
+    )
+    repository = ServiceRequestRepository(unit)
+    with pytest.raises(ServiceRequestError) as caught:
+        await repository.read_quote(UUID(uuid(2)), UUID(uuid(3)), UUID(uuid(5)))
+    assert caught.value.code == ServiceRequestCode.UNAVAILABLE

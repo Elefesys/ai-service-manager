@@ -78,7 +78,8 @@ export type PriceCalculation = {
  amount_minor:number|null;lower_minor:number|null;upper_minor:number|null;size_mm:number|null;steps:number|null;size_fact:Fact|null;
 };
 export type PriceHistory = {items:PriceCalculation[];next_before_id:string|null};
-const quoteStatuses=['PREPARED','QUEUED','HELD','SENT','UNKNOWN','FAILED','NEEDS_CLARIFICATION'] as const;
+const quoteDeliveryStatuses=['PREPARED','QUEUED','DISPATCHING','HELD','SENT','UNKNOWN','FAILED'] as const;
+const quoteStatuses=[...quoteDeliveryStatuses,'NEEDS_CLARIFICATION'] as const;
 export type QuoteStatus = (typeof quoteStatuses)[number];
 export type RequestQuote = {
  quote_id:string;version:string;code:string;terms_sha256:string;created_at:string;expires_at:string;text:string;
@@ -89,7 +90,8 @@ export type RequestQuote = {
   price_range:{authority:'PROVISIONAL';lower_minor:number;upper_minor:number}|null;occupied_minutes:number;
  };
 };
-export type QuoteDelivery = {quote:RequestQuote|null;status:QuoteStatus|null;reason:string|null};
+export type PreviousQuote = {quote:RequestQuote;status:(typeof quoteDeliveryStatuses)[number];reason:string|null};
+export type QuoteDelivery = {quote:RequestQuote|null;status:QuoteStatus|null;reason:string|null;previous?:PreviousQuote};
 export type CaseInput = { description: string; asset: {asset_id:string;asset_version_id:string}|null; width_mm:number|null; height_mm:number|null; placement:string|null; style:string|null; detail:string|null; fill:string|null; provider:string|null; working_minutes:number|null; occupied_minutes:number|null; setup_minutes:number|null; stencil_minutes:number|null; break_minutes:number|null; cleanup_minutes:number|null; treatment:'INCLUDED'|'EXCLUDED'|'UNKNOWN'; session_count:number|null; session_minutes:number[]|null; explanation:string|null };
 export type DurationCase = {case_id:string;version:string;state:'DRAFT'|'CONFIRMED'|'REVOKED';data:CaseInput;confirmed_by:string|null;source_current:boolean};
 export type CasePage = {workspace_id:string;business_id:string;items:DurationCase[]};
@@ -244,17 +246,8 @@ function parseDraftReceipt(value:unknown,requestId?:string):{request_id:string}{
  if(!uuid(v.request_id)||(requestId!==undefined&&v.request_id!==requestId))return invalid();
  return {request_id:v.request_id};
 }
-export function parseQuoteDelivery(value:unknown,scope:IntakeScope,requestId:string):QuoteDelivery{
- const response=object(value,['quote','status','reason']);
- if(!nullable(response.status,v=>one(v,quoteStatuses))
-   ||!nullable(response.reason,v=>typeof v==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v)))return invalid();
- const quoteExpected=response.status!==null&&response.status!=='NEEDS_CLARIFICATION';
- if(response.quote===null){
-  if(quoteExpected)return invalid();
-  return response as QuoteDelivery;
- }
- if(!quoteExpected)return invalid();
- const quote=object(response.quote,['quote_id','version','code','terms_sha256','created_at','expires_at','text','material']);
+function checkQuote(value:unknown,scope:IntakeScope,requestId:string){
+ const quote=object(value,['quote_id','version','code','terms_sha256','created_at','expires_at','text','material']);
  if(!uuid(quote.quote_id)||!decimal(quote.version,false)||!digest(quote.terms_sha256)
    ||typeof quote.code!=='string'||!/^Q-[0-9A-F]{10}$/.test(quote.code)
    ||!instant(quote.created_at)||!instant(quote.expires_at)||quote.created_at>=quote.expires_at
@@ -276,6 +269,23 @@ export function parseQuoteDelivery(value:unknown,scope:IntakeScope,requestId:str
   const range=object(basis.price_range,['authority','lower_minor','upper_minor']);
   if(range.authority!=='PROVISIONAL'||!positiveWithin(range.lower_minor,100000000000)||!positiveWithin(range.upper_minor,100000000000)
     ||(range.lower_minor as number)>=(range.upper_minor as number))return invalid();
+ }
+}
+const quoteReason=(value:unknown)=>nullable(value,v=>typeof v==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v));
+export function parseQuoteDelivery(value:unknown,scope:IntakeScope,requestId:string):QuoteDelivery{
+ const hasPrevious=typeof value==='object'&&value!==null&&Object.hasOwn(value,'previous');
+ const keys=['quote','status','reason'];
+ if(hasPrevious)keys.push('previous');
+ const response=object(value,keys);
+ if(!nullable(response.status,v=>one(v,quoteStatuses))||!quoteReason(response.reason))return invalid();
+ const quoteExpected=response.status!==null&&response.status!=='NEEDS_CLARIFICATION';
+ if((response.quote!==null)!==quoteExpected)return invalid();
+ if(quoteExpected)checkQuote(response.quote,scope,requestId);
+ if(hasPrevious){
+  if(response.status!=='NEEDS_CLARIFICATION'||response.reason!=='EXACT_PRICE_REQUIRED')return invalid();
+  const previous=object(response.previous,['quote','status','reason']);
+  if(!one(previous.status,quoteDeliveryStatuses)||!quoteReason(previous.reason))return invalid();
+  checkQuote(previous.quote,scope,requestId);
  }
  return response as QuoteDelivery;
 }

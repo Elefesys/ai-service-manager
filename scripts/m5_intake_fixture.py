@@ -504,7 +504,7 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
             )
 
     before = await read()
-    quote = before.quote
+    quote = before.previous.quote if before.previous else before.quote
     if quote is None or not quote.material.service_name.startswith(
         f"Synthetic intake consultation {args.variant} "
     ):
@@ -521,6 +521,18 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
 
     quote_id = UUID(quote.quote_id)
     sent_text = None
+    dispatch_commands = asyncio.StreamReader(limit=32) if args.observe_dispatch else None
+
+    async def observe(phase: str):
+        if dispatch_commands is None or phase not in {"before_call", "before_finalize"}:
+            return
+        print(
+            json.dumps(dict(phase=phase, calls=adapter.calls, effects=adapter.effects)),
+            flush=True,
+        )
+        async with asyncio.timeout(12):
+            if await dispatch_commands.readline() != b"continue\n":
+                raise IntakeFixtureRefused("QUOTE_DISPATCH_OBSERVATION_ABORTED")
 
     class QuoteBrowserAdapter(ControlledAdapter):
         async def send(self, permit: SendPermit):
@@ -544,8 +556,10 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
         if job.workspace_id != workspace:
             raise IntakeFixtureRefused("JOB_WORKSPACE_MISMATCH")
 
-    adapter = QuoteBrowserAdapter(environment="TEST", outcome=QUOTE_OPERATIONS[args.operation])
-    worker = Worker(kernel, adapter)
+    adapter = QuoteBrowserAdapter(
+        environment="TEST", outcome=QUOTE_OPERATIONS[args.operation], barrier=observe
+    )
+    worker = Worker(kernel, adapter, deadline=20 if args.observe_dispatch else 10)
     born = datetime.fromisoformat(quote.created_at)
     async with engine.connect() as connection:
         now = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
@@ -559,16 +573,26 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
     )
     if claim is not None:
         diagnostic.stage = "EXECUTE"
-        await worker.execute(claim)
+        if dispatch_commands is None:
+            await worker.execute(claim)
+        else:
+            pipe, _ = await asyncio.get_running_loop().connect_read_pipe(
+                lambda: asyncio.StreamReaderProtocol(dispatch_commands), sys.stdin
+            )
+            try:
+                await worker.execute(claim)
+            finally:
+                pipe.close()
     diagnostic.stage = "OWNER_READ"
     after = await read()
-    if after.quote != quote:
+    result = after.previous if before.previous else after
+    if result is None or result.quote != quote:
         raise IntakeFixtureRefused("QUOTE_VERSION_CHANGED")
     return dict(
         quote_id=quote.quote_id,
         job_claimed=claim is not None,
-        status=after.status,
-        reason=after.reason,
+        status=result.status,
+        reason=result.reason,
         calls=adapter.calls,
         effects=adapter.effects,
         text=sent_text,
@@ -603,7 +627,10 @@ def main():
             parser.add_argument("--" + name, required=True)
         parser.add_argument("--conversation")
         parser.add_argument("--request")
+        parser.add_argument("--observe-dispatch", action="store_true")
         args = parser.parse_args()
+        if args.observe_dispatch and args.operation not in QUOTE_OPERATIONS:
+            raise IntakeFixtureRefused("QUOTE_DISPATCH_OBSERVATION_REFUSED")
         print(json.dumps(asyncio.run(run(args, diagnostic)), sort_keys=True))
         return 0
     except Exception as error:

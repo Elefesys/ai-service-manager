@@ -73,6 +73,16 @@ it('reads the selected quote safely and refuses unrelated conditions or a mismat
  expect(()=>parseQuoteDelivery({...value,quote:null},scope,card.request_id)).toThrow(IntakeError);
 });
 
+it('checks dispatching and the scope of a previous quote during exact-price clarification',()=>{
+ const card=draft(),previous={...quoteDelivery(card),status:'DISPATCHING' as const};
+ const clarification={quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED',previous};
+ expect(parseQuoteDelivery(previous,scope,card.request_id)).toEqual(previous);
+ expect(parseQuoteDelivery(clarification,scope,card.request_id)).toEqual(clarification);
+ expect(()=>parseQuoteDelivery(clarification,{...scope,client:c},card.request_id)).toThrow(IntakeError);
+ expect(()=>parseQuoteDelivery({...clarification,reason:'APPROVAL_CLARIFICATION'},scope,card.request_id)).toThrow(IntakeError);
+ expect(()=>parseQuoteDelivery({...clarification,previous:{...previous,status:'NEEDS_CLARIFICATION'}},scope,card.request_id)).toThrow(IntakeError);
+});
+
 describe('scoped draft requests',()=>{
  it('requires the requested ID and exact conversation scope for a card',()=>{
   const value=draft();

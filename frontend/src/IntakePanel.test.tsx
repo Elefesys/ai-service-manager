@@ -3,6 +3,7 @@ import {randomUUID,webcrypto} from 'node:crypto';
 import {act,render,screen,waitFor,cleanup,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {IntakePanel} from './IntakePanel';
+import {QuotePanel} from './QuotePanel';
 import {intakeApi,IntakeError} from './intake-api';
 import type {PriceCalculation,PriceHistory,QuoteDelivery,ServiceRequestDraft} from './intake-api';
 import {assessment,draft,intake,scope,session,message,listItem,lateSize,quoteDelivery} from './intake-fixtures.test-helper';
@@ -43,6 +44,28 @@ it('shows exact versioned terms and keeps a late delivery read out of another re
  expect(selected.queryByTestId('quote-text')).not.toBeInTheDocument();
  expect(read.mock.calls[1][2]?.aborted).toBe(true);
 });
+
+it('shows exact-price clarification alongside previous terms and refreshes their dispatch result',async()=>{
+ vi.useFakeTimers();
+ try{
+  const a=draft(),current={quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'} as const;
+  const previous={...quoteDelivery(a),status:'DISPATCHING' as const};
+  const read=vi.mocked(intakeApi.quote).mockResolvedValueOnce({...current,previous}).mockResolvedValueOnce({
+   ...current,previous:{...previous,status:'UNKNOWN',reason:'UNKNOWN_EXTERNAL_RESULT'},
+  });
+  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" approvalChange={null} expired={vi.fn()}/>);});
+  expect(screen.getByText(/^Уточните точную цену\./)).toBeVisible();
+  const history=within(screen.getByRole('region',{name:'Предыдущая версия'}));
+  expect(history.getByText(previous.quote.code,{exact:true})).toBeVisible();
+  expect(history.getByTestId('quote-text').textContent).toBe(previous.quote.text);
+  expect(history.getByRole('status')).toHaveTextContent('Отправка началась, ожидаем подтверждения');
+  await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(history.getByRole('status')).toHaveTextContent('UNKNOWN · Доставка не подтверждена');
+  expect(history.getByTestId('quote-text').textContent).toBe(previous.quote.text);
+ }finally{vi.useRealTimers();}
+});
+
 it('shows one missing question, a source link and confirms only the selected field',async()=>{
  const value=intake(),owner=session();vi.spyOn(intakeApi,'summary').mockResolvedValue(value);const command=vi.spyOn(intakeApi,'command').mockResolvedValue({outcome:'ACCEPTED',receipt_id:message,version:'2'});
  render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);expect(await screen.findByText(value.question!)).toBeVisible();expect(screen.getByRole('link',{name:'сообщение клиента'})).toHaveAttribute('href',`#message-${message}`);

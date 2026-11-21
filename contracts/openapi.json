@@ -9544,9 +9544,59 @@
         "title": "QuoteCondition",
         "type": "object"
       },
+      "QuoteDeliverySnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "quote": {
+            "$ref": "#/components/schemas/QuoteVersion"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "PREPARED",
+              "QUEUED",
+              "DISPATCHING",
+              "HELD",
+              "SENT",
+              "UNKNOWN",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quote",
+          "status",
+          "reason"
+        ],
+        "title": "QuoteDeliverySnapshot",
+        "type": "object"
+      },
       "QuoteDeliveryView": {
         "additionalProperties": false,
         "properties": {
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteDeliverySnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "quote": {
             "anyOf": [
               {
@@ -9575,6 +9625,7 @@
                 "enum": [
                   "PREPARED",
                   "QUEUED",
+                  "DISPATCHING",
                   "HELD",
                   "SENT",
                   "UNKNOWN",

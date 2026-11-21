@@ -420,20 +420,140 @@ async def test_quote_uses_existing_telegram_text_wire_for_exact_recipient(approv
     report("telegram_mock_wire", quote_id=q["quote_id"], probes=1, calls=1, effects=1)
 
 
-@pytest.mark.parametrize("fault", ["lost_response", "restart_before_finalize"])
-async def test_quote_unknown_survives_restart_without_second_effect(approval_pg, auth, fault):
+@pytest.mark.parametrize(
+    ("deposit", "previous_status"),
+    [("PERCENT_DEPOSIT", "SENT"), ("FULL_PREPAYMENT", "UNKNOWN")],
+)
+async def test_exact_price_clarification_retains_previous_delivery(
+    approval_pg, auth, deposit, previous_status
+):
     h = approval_pg
-    _, token, _, url, q = await exact_ready(h, auth)
+    cid, token, request_id, url, previous = await exact_ready(h, auth)
+    initial_transport = DeliveryWire(h, lose_reply=previous_status == "UNKNOWN")
+    await run_quote(h, Worker(h.kernel, initial_transport), previous)
+    initial = await owner_get(auth, url + "/quote")
+    assert initial["quote"] == previous and initial["status"] == previous_status
+    initial_delivery = await delivery(h, previous)
+    assert (initial_transport.calls, initial_transport.effects) == (1, 1)
+
+    bundle = contract(formula_price(range_add_minor=50_000), FIXED_DURATION, deposit)
+    bundle["services"][0]["deposit"]["percent"] = 25 if deposit == "PERCENT_DEPOSIT" else None
+    await publish(h, bundle)
+    calculation = await price(auth, url + "/pricing", token)
+    assert (calculation["outcome"], calculation["lower_minor"], calculation["upper_minor"]) == (
+        "RANGE",
+        350_000,
+        400_000,
+    )
+    await request_assessment(auth, url + "/assessment", token)
+    current = await owner_get(auth, url + "/quote")
+    assert current == await owner_get(auth, url + "/quote")
+    assert await scalar(h, "SELECT count(*) FROM app.quotes WHERE conversation_id=:c", c=cid) == 1
+    assert await delivery(h, previous) == initial_delivery
+    assert (initial_transport.calls, initial_transport.effects) == (1, 1)
+    assert current == {
+        "quote": None,
+        "status": "NEEDS_CLARIFICATION",
+        "reason": "EXACT_PRICE_REQUIRED",
+        "previous": initial,
+    }
+
+    approval = await owner_open(auth, url + "/approvals", token)
+    decision_url = url + "/approvals/" + approval["approval_id"]
+    terms = AB | {"operation": "APPROVE", "amount_minor": 375_000}
+    decision = await owner_post(auth, decision_url, token, terms)
+    assert decision == await owner_post(auth, decision_url, token, terms)
+    complete = await owner_get(auth, url + "/quote")
+    assert complete["status"] == "QUEUED"
+    updated = complete["quote"]
+    assert updated["version"] == "2" and updated["code"] != previous["code"]
+    assert updated["quote_id"] != previous["quote_id"]
+    assert updated["material"]["price_reference_id"] == decision["decision"]["decision_id"]
+    assert updated["material"]["amount_minor"] == 375_000
+    assert updated["material"]["deposit"]["mode"] == deposit
+    assert await scalar(h, "SELECT count(*) FROM app.quotes WHERE conversation_id=:c", c=cid) == 2
+    next_transport = DeliveryWire(h)
+    await run_quote(h, Worker(h.kernel, next_transport), updated)
+    assert (next_transport.calls, next_transport.effects) == (1, 1)
+    assert await owner_get(auth, url + "/quote") == {
+        "quote": updated,
+        "status": "SENT",
+        "reason": None,
+    }
+    assert await delivery(h, previous) == initial_delivery
+    report(
+        "r1_exact_price_with_history",
+        deposit=deposit,
+        request_id=request_id,
+        previous={
+            "quote_id": previous["quote_id"],
+            "version": previous["version"],
+            "code": previous["code"],
+            "status": previous_status,
+        },
+        clarification_status=current["status"],
+        clarification_reason=current["reason"],
+        clarification_calls=0,
+        clarification_effects=0,
+        updated={
+            "quote_id": updated["quote_id"],
+            "version": updated["version"],
+            "code": updated["code"],
+            "status": "SENT",
+            "calls": next_transport.calls,
+            "effects": next_transport.effects,
+        },
+    )
+
+
+@pytest.mark.parametrize("fault", ["confirmed", "lost_response", "restart_before_finalize"])
+async def test_quote_in_flight_takeover_and_restart_do_not_repeat_delivery(
+    approval_pg, auth, fault
+):
+    h = approval_pg
+    cid, token, _, url, q = await exact_ready(h, auth)
+    fences = {
+        "before_call": (asyncio.Event(), asyncio.Event()),
+        "before_finalize": (asyncio.Event(), asyncio.Event()),
+    }
 
     async def interrupt(stage):
+        if stage in fences:
+            reached, release = fences[stage]
+            reached.set()
+            await release.wait()
         if stage == "before_finalize" and fault == "restart_before_finalize":
             raise ConnectionError("synthetic worker exits after the effect, before finalization")
 
     transport = DeliveryWire(h, lose_reply=fault == "lost_response", barrier=interrupt)
-    worker = Worker(h.kernel, transport)
+    worker = Worker(h.kernel, transport, deadline=25)
+    processing = asyncio.create_task(run_quote(h, worker, q))
+    try:
+        await asyncio.wait_for(fences["before_call"][0].wait(), timeout=10)
+        before_call = await owner_get(auth, url + "/quote")
+        assert (transport.calls, transport.effects) == (0, 0)
+        assert (await delivery(h, q))["status"] == "DISPATCHING"
+        fences["before_call"][1].set()
+        await asyncio.wait_for(fences["before_finalize"][0].wait(), timeout=10)
+        assert (transport.calls, transport.effects) == (1, 1)
+        await control(h, cid, "TAKEOVER")
+        assert (
+            await scalar(h, "SELECT control_mode FROM app.conversations WHERE id=:c", c=cid)
+            == "HUMAN"
+        )
+        after_takeover = await owner_get(auth, url + "/quote")
+        assert (await delivery(h, q))["status"] == "DISPATCHING"
+    finally:
+        for _, release in fences.values():
+            release.set()
+        if fault == "restart_before_finalize":
+            with pytest.raises(ConnectionError, match="synthetic worker exits"):
+                await processing
+        else:
+            await processing
+    assert before_call == after_takeover == {"quote": q, "status": "DISPATCHING", "reason": None}
+
     if fault == "restart_before_finalize":
-        with pytest.raises(ConnectionError, match="synthetic worker exits"):
-            await run_quote(h, worker, q)
         open_attempt = await delivery(h, q)
         assert open_attempt["status"] == "DISPATCHING" and open_attempt["attempt_id"] is not None
         await scalar(
@@ -441,21 +561,23 @@ async def test_quote_unknown_survives_restart_without_second_effect(approval_pg,
             "UPDATE platform.messaging_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=:id RETURNING id",
             id=open_attempt["send_job_id"],
         )
-    else:
-        await run_quote(h, worker, q)
-        assert (await owner_get(auth, url + "/quote"))["status"] == "UNKNOWN"
     assert (transport.calls, transport.effects) == (1, 1)
     restarted_transport = DeliveryWire(h)
     restarted = Worker(MessagingDatabase(h.runtime.engine, environment="TEST"), restarted_transport)
     await restarted.database.recover_expired()
+    status, job_status, reason = (
+        ("SENT", "SUCCEEDED", None)
+        if fault == "confirmed"
+        else ("UNKNOWN", "DEAD", "UNKNOWN_EXTERNAL_RESULT")
+    )
     assert await owner_get(auth, url + "/quote") == {
         "quote": q,
-        "status": "UNKNOWN",
-        "reason": "UNKNOWN_EXTERNAL_RESULT",
+        "status": status,
+        "reason": reason,
     }
     await price(auth, url + "/pricing", token)
     record = await delivery(h, q)
-    assert record["status"] == "UNKNOWN" and record["job_status"] == "DEAD"
+    assert record["status"] == status and record["job_status"] == job_status
     assert (
         await scalar(
             h,
@@ -466,10 +588,13 @@ async def test_quote_unknown_survives_restart_without_second_effect(approval_pg,
     )
     assert (restarted_transport.calls, restarted_transport.effects) == (0, 0)
     report(
-        "unknown_after_restart",
+        "r1_in_flight_takeover",
         fault=fault,
         quote_id=q["quote_id"],
-        status="UNKNOWN",
+        dispatch_before_call=before_call["status"],
+        status_after_takeover=after_takeover["status"],
+        control="HUMAN",
+        status=status,
         calls=1,
         effects=1,
         restart_calls=0,
