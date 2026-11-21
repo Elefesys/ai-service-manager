@@ -18,8 +18,9 @@ const failure = (e: unknown) => e instanceof EscalationError&&e.code==='RATE_LIM
 
 // Mounted for the page lifetime, including auth recovery. No storage or effects
 // that POST. The ref synchronously freezes one intention before double submit.
-export function EscalationsPanel({session,workspace,recover,expired,accessDenied,accepted,approval}: {
+export function EscalationsPanel({session,workspace,recover,expired,accessDenied,accepted,approval,approvalChanged}: {
   session: Session|null; workspace: string; recover: ()=>void; expired: ()=>void; accessDenied: ()=>void; accepted?: (context: EscalationContext)=>void; approval?:ApprovalSelection|null;
+  approvalChanged?:(selection:ApprovalSelection)=>void;
 }) {
   const owner=!!session&&session.memberships.some(m=>m.workspace_id===workspace&&m.role==='OWNER');
   const scope=useRef({session,workspace,owner,generation:0});
@@ -129,9 +130,9 @@ export function EscalationsPanel({session,workspace,recover,expired,accessDenied
     {p&&!attached&&<section className="panel alert" aria-label="Незавершённое решение"><p>В прежнем контексте осталось намерение решения. Здесь оно не показывается и не отправляется.</p><p>Завершение ожидания не отменяет возможную серверную операцию.</p><button onClick={discard}>Завершить ожидание решения</button></section>}
     {owner&&(view.denied?<section className="panel alert" role="alert"><p>Нет доступа к запросам владельца.</p><button onClick={recover}>Проверить доступ к запросам</button></section>:<section className="panel escalations" aria-label="Запросы владельцу">
       <div className="billing-heading"><div><span className="kicker">OWNER</span><h2>Запросы владельцу</h2></div><button className="secondary" disabled={view.listBusy} onClick={()=>void list()}>Обновить очередь</button></div>
-      <p className="muted">Внутренние решения по выбранному Workspace. Ответ здесь не отправляется клиенту и не включает автоматику.</p>
       {session&&<OwnerApprovals key={generation} session={session} workspace={workspace} selected={approval??null}
-        related={setRelated} recover={recover} expired={expired} denied={accessDenied}/>}
+        related={setRelated} recover={recover} expired={expired} denied={accessDenied} changed={approvalChanged}/>}
+      <p className="muted">Ответ на обращение из этой очереди сохраняется для мастера.</p>
       <label htmlFor="escalation-filter">Сохранённый статус</label><select id="escalation-filter" value={view.filter} onChange={e=>selectFilter(e.target.value as StatusFilter)}>{Object.entries(statusLabel).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
       {view.listBusy&&<p role="status">Загружаем очередь…</p>}{view.listError&&<p role="alert">{view.listError}</p>}
       {view.listed&&!view.pages.some(page=>page.items.length)&&<p>Запросов с этим статусом нет.</p>}

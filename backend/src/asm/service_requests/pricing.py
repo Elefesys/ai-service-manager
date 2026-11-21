@@ -8,6 +8,16 @@ from asm.billing.validation import CanonicalUUID, LimitDecimal, PositiveDecimal
 from asm.configuration.models import ConfigurationModel, PriceMinor, PricePolicy, SizeMillimetres
 from asm.intake.models import Fact
 
+PriceReason = Literal[
+    "FIXED_PRICE",
+    "SIZE_FORMULA",
+    "SIZE_REQUIRED",
+    "SIZE_OUTSIDE_RULE",
+    "OWNER_QUOTE",
+    "PRICE_UNPUBLISHED",
+    "SERVICE_UNAVAILABLE",
+]
+
 
 class PriceCommand(ConfigurationModel):
     expected_revision: PositiveDecimal
@@ -24,15 +34,7 @@ class PriceCalculation(ConfigurationModel):
     policy: PricePolicy | None
     outcome: Literal["EXACT", "RANGE", "NEEDS_INPUT", "NEEDS_HUMAN"]
     authority: Literal["CONFIRMED", "PROVISIONAL"] | None
-    reason: Literal[
-        "FIXED_PRICE",
-        "SIZE_FORMULA",
-        "SIZE_REQUIRED",
-        "SIZE_OUTSIDE_RULE",
-        "OWNER_QUOTE",
-        "PRICE_UNPUBLISHED",
-        "SERVICE_UNAVAILABLE",
-    ]
+    reason: PriceReason
     amount_minor: PriceMinor | None
     lower_minor: PriceMinor | None
     upper_minor: PriceMinor | None

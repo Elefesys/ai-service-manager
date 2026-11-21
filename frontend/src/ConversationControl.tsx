@@ -108,7 +108,7 @@ export function ConversationControl({session,context,intent,manualPending,refres
     <div className="billing-heading"><h3>Управление диалогом</h3><button className="secondary" disabled={view.busy||p?.phase==='sending'} onClick={()=>void read()}>Обновить режим</button></div>
     {view.busy&&<p role="status">Проверяем текущий режим…</p>}{view.error&&<p role="alert">{view.error}</p>}
     {view.state&&<><p role="status" className="control-mode">{view.state.control_mode==='HUMAN'?'Управление у мастера':nativeHold?'Сохранён режим AI; новые действия требуют сверки':'Автоматика разрешена'}</p>
-      <p className="muted">Автоматика разрешается только для будущих входящих сообщений. Режим AI не означает, что ИИ уже подключён или ответит клиенту.</p>
+      <p className="muted">Разрешение применяется к новым входящим сообщениям и подготовленным предложениям. Перед отправкой сервер проверяет актуальность условий и права канала.</p>
       {view.state.manual_delivery.has_dispatching&&<p role="status">Отправка уже начата. Смена режима не отзывает внешний запрос.</p>}
       {view.state.manual_delivery.has_unknown&&<p role="status">Есть отправка с неизвестным результатом (UNKNOWN). Она не отменена и не отправляется повторно.</p>}
     </>}

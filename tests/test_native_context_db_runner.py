@@ -118,7 +118,7 @@ def foundation_real_catalog_sink(foundation_git, monkeypatch, request):
     """Real migration expansion in an owned synthetic Git checkout; no database."""
     fixture = foundation_git
     paths = sorted((fixture.actual / "migrations/versions").glob("*.py"))
-    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 29)]
+    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 30)]
     for source in paths:
         target = fixture.root / source.relative_to(fixture.actual)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -172,8 +172,8 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    # 0028 adds the request and immutable decision tables with closed owner capabilities.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1241
+    # 0029 adds immutable quote versions and their guarded delivery intents.
+    assert len(journal.catalog["nonfunction_ddl"]) == 1280
     journal.start(node)
     append = store.append
 
@@ -378,7 +378,7 @@ def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_g
     }
     assert len(jobs) - 1 + 6 == 12
     for job, digest in {
-        "browser": "f459d0f2880ebc8f41db798811b0b0c5c1f5475fe511041d8bfa72853586dbe5",
+        "browser": "c1513cf8054ef2ffecaf99ba11ca9f67e6395b764314625191a6883b9e84a81a",
         "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
         "connect5-migration": "940bc041722d35488f6bc5b148e87793eebda363df6aa572762f5ed4f2de2100",
         "native-context-db": "ab14f25d082e830a8be35422a7ae4f0fc7d8f7092ec992fcbde703751b2fe78b",
@@ -1437,7 +1437,7 @@ def test_foundation_durable_completeness_requires_current_six_lane_receipts(
     source = {
         "source_sha": head,
         "parents": [],
-        "expected_revision": "0028",
+        "expected_revision": "0029",
         "images": {k: {} for k in ("api", "worker", "scheduler", "fixture")},
     }
     if fault == "missing-lifecycle":

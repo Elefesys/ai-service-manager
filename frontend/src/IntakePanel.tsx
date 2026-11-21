@@ -6,8 +6,9 @@ import {approvalApi,draftApprovalSelection,EscalationError} from './escalation-a
 import type {ApprovalSelection} from './escalation-api';
 import {IntakeError,intakeApi,labels} from './intake-api';
 import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,PriceCalculation,PriceHistory,ServiceAssessment,ServiceRequestDraft} from './intake-api';
+import {QuotePanel} from './QuotePanel';
 
-export function IntakePanel({session,scope,expired,refresh=0,approvalOpened}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number;approvalOpened?:(selection:ApprovalSelection)=>void}){
+export function IntakePanel({session,scope,expired,refresh=0,approvalOpened,approvalChanged}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number;approvalOpened?:(selection:ApprovalSelection)=>void;approvalChanged?:ApprovalSelection|null}){
  const key=scope?JSON.stringify({...scope,refresh}):'',current=useRef({key,session,epoch:0});
  if(current.current.key!==key||current.current.session!==session)current.current={key,session,epoch:current.current.epoch+1};
  const [view,setView]=useState<{key:string;session:Session|null;value:Intake|null;error:string;busy:boolean}>({key:'',session:null,value:null,error:'',busy:false});
@@ -27,7 +28,7 @@ export function IntakePanel({session,scope,expired,refresh=0,approvalOpened}:{se
  if(!permitted||!scope||!session)return null;
  const draftScopeKey=JSON.stringify([scope.workspace,scope.business,scope.conversation,scope.client,session.user_account_id,session.csrf_token]);
  return <section className="intake-card" aria-label="Предварительный запрос"><div className="billing-heading"><h3>Предварительный запрос</h3><button className="secondary" onClick={()=>void load()} disabled={visible&&view.busy}>Обновить сводку</button></div><p>Мастер проверяет детали. Цена, длительность и запись ещё не согласованы.</p>{visible&&view.error&&<p role="alert">{view.error}</p>}{intent.current&&visible&&!view.busy&&<button onClick={()=>void send()}>Проверить ту же команду</button>}{data&&<><p role="status">{({NOT_STARTED:'Сбор ещё не начат',CLARIFY:'Нужно уточнение',OWNER_HANDOFF:'Требуется решение мастера',PRELIMINARILY_COMPLETE:'Предварительно собрано'})[data.status]}</p>{data.question&&<p>{data.question}</p>}{data.facts.map(f=><article key={f.field}><label>{labels[f.field]}<input disabled={view.busy||!!intent.current} maxLength={300} value={edits[f.field]??f.value} onChange={e=>setEdits(v=>({...v,[f.field]:e.target.value}))}/></label><p>{f.status==='owner-confirmed'?'Подтверждено мастером':f.status==='observed'?'Наблюдение изображения':'Со слов клиента'}{f.conflict?' · есть противоречие':''}</p><p className="muted">Источник: <a href={`#message-${f.source.message_id}`}>сообщение клиента</a> · {f.source.quote||'текущий анализ изображения'}</p><button disabled={view.busy||!!intent.current||!(edits[f.field]??f.value).trim()} onClick={()=>void save(f)}>Подтвердить поле {labels[f.field]}</button></article>)}{data.missing.length>0&&<p>Неизвестно: {data.missing.map(f=>labels[f]).join(', ')}</p>}<button className="secondary" disabled={compared&&comparisons.busy} onClick={()=>void compare()}>Сравнить с примерами мастера</button>{compared&&<div aria-label="Сравнение примеров мастера"><p>Время прошлых работ видно только мастеру. Это не оценка нового запроса.</p>{comparisons.error&&<p role="alert">{comparisons.error}</p>}{!comparisons.busy&&!comparisons.error&&comparisons.items.length===0&&<p>Подтверждённых текущих примеров нет.</p>}{comparisons.items.map(m=><article key={m.case.case_id}><h4>{m.case.data.description}</h4><p>Совпадает: {m.matches.map(f=>labels[f]??f).join(', ')||'нет'} · различается: {m.differences.map(f=>labels[f]??f).join(', ')||'нет'} · неизвестно: {m.unknown.map(f=>labels[f]??f).join(', ')||'нет'}</p><p>Источник: подтверждённый пример, версия {m.case.version}. Рабочее время: {m.case.data.working_minutes??'неизвестно'}, занятое: {m.case.data.occupied_minutes??'неизвестно'} мин.</p></article>)}</div>}</>}{scope.conversation&&
-  <RequestDraftPanel key={draftScopeKey} selectionScope={draftScopeKey} scope={scope} data={data} summaryRefresh={summaryRefresh} csrf={session.csrf_token} expired={expired} approvalOpened={approvalOpened}/>
+  <RequestDraftPanel key={draftScopeKey} selectionScope={draftScopeKey} scope={scope} data={data} summaryRefresh={summaryRefresh} csrf={session.csrf_token} expired={expired} approvalOpened={approvalOpened} approvalChanged={approvalChanged}/>
  }</section>;
 }
 
@@ -120,7 +121,7 @@ function assessmentReason(value:ServiceAssessment):string{
  }
 }
 
-function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;locked:boolean;expired:()=>void}){
+function AssessmentPanel({scope,draft,csrf,activation,locked,expired,termsChanged}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;locked:boolean;expired:()=>void;termsChanged:()=>void}){
  const [value,setValue]=useState<ServiceAssessment|null>(null);
  const [busy,setBusy]=useState(true);
  const [error,setError]=useState('');
@@ -139,6 +140,7 @@ function AssessmentPanel({scope,draft,csrf,activation,locked,expired}:{scope:Int
     :await intakeApi.assessment(scope,draft.request_id,signal);
    if(signal.aborted)return;
    setValue(result);setBlocked(false);
+   if(evaluate)termsChanged();
   }catch(failure){
    if(signal.aborted)return;
    setValue(previous=>previous?{...previous,current:false}:previous);
@@ -229,7 +231,7 @@ function PriceResult({value}:{value:PriceCalculation}){
   {value.release_id&&<p>Публикация <code>{value.release_id}</code> · версия активации {value.activation_version}{rule?' · SIZE_STEPS_V1':''}</p>}
  </>;
 }
-function PricingPanel({scope,draft,csrf,activation,summaryRefresh,locked,expired}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;summaryRefresh:number;locked:boolean;expired:()=>void}){
+function PricingPanel({scope,draft,csrf,activation,summaryRefresh,locked,expired,termsChanged}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;activation?:string;summaryRefresh:number;locked:boolean;expired:()=>void;termsChanged:()=>void}){
  const [history,setHistory]=useState<PriceHistory>({items:[],next_before_id:null});
  const [calculation,setCalculation]=useState<PriceCalculation|null>(null);
  const [checkedRefresh,setCheckedRefresh]=useState<number|null>(null);
@@ -244,7 +246,11 @@ function PricingPanel({scope,draft,csrf,activation,summaryRefresh,locked,expired
   active.current=controller;
   setBusy(true);setError('');
   try{
-   if(calculate)await intakeApi.calculatePrice(scope,draft.request_id,draft.revision,csrf,signal);
+   if(calculate){
+    await intakeApi.calculatePrice(scope,draft.request_id,draft.revision,csrf,signal);
+    if(signal.aborted)return;
+    termsChanged();
+   }
    const latest=await intakeApi.priceHistory(scope,draft.request_id,beforeId,signal);
    if(signal.aborted)return;
    if(beforeId){
@@ -307,7 +313,7 @@ function sourceLabel(source:Intake['sources'][number]){
  return `${Array.from(source.text.trim()).slice(0,100).join('')||'Входящее фото'} · #${source.message_id.slice(-6)}`;
 }
 
-function OpenOwnerApproval({scope,draft,csrf,locked,expired,opened}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;locked:boolean;expired:()=>void;opened:(selection:ApprovalSelection)=>void}){
+function OpenOwnerApproval({scope,draft,csrf,locked,expired,opened,termsChanged}:{scope:IntakeScope;draft:ServiceRequestDraft;csrf:string;locked:boolean;expired:()=>void;opened:(selection:ApprovalSelection)=>void;termsChanged:()=>void}){
  const active=useRef<AbortController|null>(null);
  const [busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  useEffect(()=>()=>active.current?.abort(),[]);
@@ -318,6 +324,7 @@ function OpenOwnerApproval({scope,draft,csrf,locked,expired,opened}:{scope:Intak
   try{
    const result=await approvalApi.open(approvalApi.scope(scope,draft.request_id),draft.revision,csrf,controller.signal);
    if(controller.signal.aborted)return;
+   termsChanged();
    if(result)opened(draftApprovalSelection(result));
    else setNotice('Цена и длительность уже утверждены.');
   }catch(error){
@@ -332,12 +339,13 @@ function OpenOwnerApproval({scope,draft,csrf,locked,expired,opened}:{scope:Intak
  </div>;
 }
 
-function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expired,approvalOpened}:{scope:IntakeScope;selectionScope:string;data:Intake|null;summaryRefresh:number;csrf:string;expired:()=>void;approvalOpened?:(selection:ApprovalSelection)=>void}){
+function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expired,approvalOpened,approvalChanged}:{scope:IntakeScope;selectionScope:string;data:Intake|null;summaryRefresh:number;csrf:string;expired:()=>void;approvalOpened?:(selection:ApprovalSelection)=>void;approvalChanged?:ApprovalSelection|null}){
  const sourceId=useId();
  const cardId=useId();
  const revisionFieldId=useId();
  const revisionMessageId=useId();
  const [draft,setDraft]=useState<ServiceRequestDraft|null>(null);
+ const [termsRefresh,setTermsRefresh]=useState(0);
  const [cards,setCards]=useState<DraftListItem[]>([]);
  const [choice,setChoice]=useState<DraftChoice|null>(null);
  const [revisionChoice,setRevisionChoice]=useState<RevisionChoice|null>(null);
@@ -374,6 +382,7 @@ function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expire
    if(signal.aborted)return;
    setDraft(result);
    setCards(items);
+   setTermsRefresh(n=>n+1);
    setReadable(true);
    setChoice(null);
    setRevisionChoice(null);
@@ -444,6 +453,10 @@ function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expire
   :revisionSources.find(item=>item.message_id===revisionFact?.source.message_id&&item.source_version===revisionFact?.source.source_version);
  const waiting=pending.current;
  const locked=busy||!!waiting;
+ const termsChanged=()=>setTermsRefresh(n=>n+1);
+ const quoteApproval=approvalChanged&&draft&&approvalChanged.request===draft.request_id
+  &&approvalChanged.workspace===draft.workspace_id&&approvalChanged.business===draft.business_id
+  &&approvalChanged.conversation===draft.conversation_id&&approvalChanged.client===draft.client_id?approvalChanged:null;
 
  function startCreate(){
   if(!data||!source||!selected?.confirmed||locked||!canChoose||pending.current)return;
@@ -483,9 +496,10 @@ function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expire
    </select>
   </section>}
   {draft&&<DraftCard draft={draft}>
-   <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired}/>
-   <PricingPanel key={`price:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} summaryRefresh={summaryRefresh} locked={locked} expired={expired}/>
-   {approvalOpened&&scope.conversation&&scope.client&&<OpenOwnerApproval key={'approval:'+draft.request_id+':'+draft.revision} scope={scope} draft={draft} csrf={csrf} locked={locked} expired={expired} opened={approvalOpened}/>}
+   <QuotePanel key={`quote:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} refresh={`${summaryRefresh}:${termsRefresh}`} approvalChange={quoteApproval} expired={expired}/>
+   <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired} termsChanged={termsChanged}/>
+   <PricingPanel key={`price:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} summaryRefresh={summaryRefresh} locked={locked} expired={expired} termsChanged={termsChanged}/>
+   {approvalOpened&&scope.conversation&&scope.client&&<OpenOwnerApproval key={'approval:'+draft.request_id+':'+draft.revision} scope={scope} draft={draft} csrf={csrf} locked={locked} expired={expired} opened={approvalOpened} termsChanged={termsChanged}/>}
   </DraftCard>}
   {error&&<p role="alert">{error}</p>}
   {waiting&&!busy&&<button type="button" onClick={()=>void open(desiredCard.current,waiting)}>

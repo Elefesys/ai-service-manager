@@ -48,6 +48,8 @@ from asm.messaging.results import (
     InboxReceipt,
     JobClaim,
     MutationInboxProcessingResult,
+    QuoteSendJobClaim,
+    QuoteSendPermit,
     ScanStep,
     SendPermit,
     TerminalRejection,
@@ -507,6 +509,53 @@ class MessagingDatabase:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             result = await unit._execute("SELECT platform.telegram_worker_probe(:job, :token)")
             return TelegramProbe.model_validate(result) if result is not None else None
+
+    async def quote_send_probe(self, claim: QuoteSendJobClaim) -> "TelegramProbe | None":
+        from asm.telegram.database import TelegramProbe
+
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            if unit.claim != claim:
+                raise MessagingError(Code.STALE_CLAIM)
+            raw = await unit._execute("SELECT platform.quote_send_probe(:job, :token)")
+            return TelegramProbe.model_validate(raw) if raw is not None else None
+
+    async def begin_quote_send(
+        self,
+        claim: QuoteSendJobClaim,
+        probe: "TelegramProbe | None",
+        observation: dict[str, object] | None,
+    ) -> QuoteSendPermit | TerminalRejection:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute(
+                "SELECT platform.quote_send_begin(:job, :token, :generation, :version, CAST(:observation AS jsonb))",
+                {
+                    "generation": probe.generation if probe is not None else None,
+                    "version": probe.observation_version if probe is not None else None,
+                    "observation": json.dumps(observation) if observation is not None else None,
+                },
+            )
+            result = (
+                QuoteSendPermit.model_validate(raw)
+                if raw["code"] == "PERMITTED"
+                else TerminalRejection.model_validate(raw)
+            )
+            if isinstance(result, QuoteSendPermit) and (
+                result.job_id,
+                result.claim_token,
+                result.workspace_id,
+                result.connection_id,
+                result.quote_id,
+            ) != (
+                claim.job_id,
+                claim.claim_token,
+                claim.workspace_id,
+                claim.connection_id,
+                claim.quote_id,
+            ):
+                raise MessagingError(Code.NOT_ALLOWED)
+            await self.checkpoint("start_before_commit")
+        await self.checkpoint("start_after_commit")
+        return result
 
     async def telegram_begin_send(
         self, claim: JobClaim, probe: "TelegramProbe", observation: dict[str, object]
