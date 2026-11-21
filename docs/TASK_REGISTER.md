@@ -4,7 +4,7 @@
 
 ## CURRENT — M6.3A REVIEW · 2026-11-21
 
-**Единственная задача — независимая приёмка C8.** C0 принял исправления M6.3A-R1 в [Draft PR #59](https://github.com/Elefesys/ai-service-manager/pull/59) на `0ca9688ab211793b4d631bdfc9c4550ef284188e`, база `main` `f8d05b5befe33a5f4081a3f749f458336180678d`. Закрыты C0-M6.3A-01 (предварительный диапазон при вводе только минут), C0-M6.3A-02 (закреплённая реплика выбранной работы) и оба отказа браузерной фикстуры. Штатный CI прошёл 12/12 с первой попытки, Chromium прошёл 87/87. Ожидается одно заключение C8 по этому head. [Поручение и доказательства](tasks/M6_HANDOFF.md#L3) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44881084323).
+**Кандидат принят C0 и C8 в synthetic LOCAL/TEST. Ожидается разрешение владельца на слияние.** [PR #59](https://github.com/Elefesys/ai-service-manager/pull/59) в Ready for review, head `0ca9688ab211793b4d631bdfc9c4550ef284188e`, база `main` `f8d05b5befe33a5f4081a3f749f458336180678d`. C8 дал `PASS` и подтвердил оба исправления R1. CI прошёл 12/12 с первой попытки, Chromium прошёл 87/87. После слияния C0 сверит фактический коммит и результат `push/main`. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/59#pullrequestreview-6004274198) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44881084323) · [Решение C0](tasks/M6_HANDOFF.md#L3).
 
 ## История — M6.2 INTEGRATED / VERIFIED · 2026-11-21
 
