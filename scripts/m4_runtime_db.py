@@ -403,6 +403,7 @@ M6_DECISION_IMPLEMENTATION_PATHS = {
     "scripts/m5_intake_fixture.py",
     "scripts/native_context_db_catalog.py",
     "scripts/prepare_telegram_egress.py",
+    "scripts/test_browser.sh",
     "scripts/test_telegram_egress.sh",
     "tests/generic_pg_schema.py",
     "tests/m5_knowledge_search_fixtures.py",
