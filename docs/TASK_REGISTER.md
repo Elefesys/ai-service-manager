@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3A IN_PROGRESS · 2026-11-21
+## CURRENT — M6.3A REVIEW · 2026-11-21
 
-**Единственная активная задача — M6.3A.** Одна карточка Action Center для цены и/или длительности выбранной работы, уточнения либо отказа. Ведущий C1, C2 — транзакция и новая `0028` от `0027`, C5 — существующая Console. База `main` `f8d05b5befe33a5f4081a3f749f458336180678d`, ветка `c1/m6-3a-owner-decision`, один Draft PR, synthetic LOCAL/TEST. [Поручение C0, границы и демонстрация Q3](tasks/M6_HANDOFF.md#L3).
+**CHANGES_REQUESTED. Единственная выдача — M6.3A-R1 в [Draft PR #59](https://github.com/Elefesys/ai-service-manager/pull/59).** Стартовый head `e5609e9f22a48b01e068a06c7f9a93bec36ba7b7`, принятый `main` `f8d05b5befe33a5f4081a3f749f458336180678d`, ветка `c1/m6-3a-owner-decision`. C1 ведёт, C2/C5 участвуют. C0 подтвердил 12/12 CI и 87/87 Chromium. Открыты `C0-M6.3A-01` (ввести только длительность при допустимом предварительном диапазоне) и `C0-M6.3A-02` (открыть из общей очереди реплику другой переписки либо более ранней страницы). [Поручение, доказательства и критерии R1](tasks/M6_HANDOFF.md#L3).
 
 ## История — M6.2 INTEGRATED / VERIFIED · 2026-11-21
 
