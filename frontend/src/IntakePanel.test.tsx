@@ -45,24 +45,95 @@ it('shows exact versioned terms and keeps a late delivery read out of another re
  expect(read.mock.calls[1][2]?.aborted).toBe(true);
 });
 
-it('shows exact-price clarification alongside previous terms and refreshes their dispatch result',async()=>{
+it.each(['current','previous'] as const)('polls the %s quote through lease expiry and stops at the outcome',async(version)=>{
  vi.useFakeTimers();
  try{
-  const a=draft(),current={quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'} as const;
-  const previous={...quoteDelivery(a),status:'DISPATCHING' as const};
-  const read=vi.mocked(intakeApi.quote).mockResolvedValueOnce({...current,previous}).mockResolvedValueOnce({
-   ...current,previous:{...previous,status:'UNKNOWN',reason:'UNKNOWN_EXTERNAL_RESULT'},
+  const a=draft(),{quote}=quoteDelivery(a);
+  const clarification={quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'} as const;
+  const readTimes:number[]=[];
+  const openedAt=Date.now();
+  const read=vi.mocked(intakeApi.quote).mockImplementation(async()=>{
+   const elapsed=Date.now()-openedAt;
+   readTimes.push(elapsed);
+   const delivery=elapsed<30_000
+    ?{quote,status:'DISPATCHING',reason:null} as const
+    :{quote,status:'UNKNOWN',reason:'UNKNOWN_EXTERNAL_RESULT'} as const;
+   return version==='previous'?{...clarification,previous:delivery}:delivery;
   });
   await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" approvalChange={null} expired={vi.fn()}/>);});
-  expect(screen.getByText(/^Уточните точную цену\./)).toBeVisible();
-  const history=within(screen.getByRole('region',{name:'Предыдущая версия'}));
-  expect(history.getByText(previous.quote.code,{exact:true})).toBeVisible();
-  expect(history.getByTestId('quote-text').textContent).toBe(previous.quote.text);
-  expect(history.getByRole('status')).toHaveTextContent('Отправка началась, ожидаем подтверждения');
-  await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
-  expect(read).toHaveBeenCalledTimes(2);
-  expect(history.getByRole('status')).toHaveTextContent('UNKNOWN · Доставка не подтверждена');
-  expect(history.getByTestId('quote-text').textContent).toBe(previous.quote.text);
+  const card=screen.getByRole('region',{name:'Предложение клиенту'});
+  const delivery=within(version==='previous'?within(card).getByRole('region',{name:'Предыдущая версия'}):card);
+  const terms=delivery.getByRole('article',{name:'Условия предложения'});
+  expect(within(terms).getByText(quote.code,{exact:true})).toBeVisible();
+  expect(within(terms).getByTestId('quote-text').textContent).toBe(quote.text);
+  if(version==='previous')expect(within(card).getByText(/^Уточните точную цену\./)).toBeVisible();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(29_999);});
+  expect(delivery.getByRole('status')).toHaveTextContent('Отправка началась, ожидаем подтверждения');
+  await act(async()=>{await vi.advanceTimersByTimeAsync(3001);});
+  const outcome=delivery.getByRole('status');
+  expect(readTimes.at(-1),`Final GET since the card opened (ms). Card at 33000 ms: ${outcome.textContent}`).toBe(30_000);
+  expect(outcome).toHaveTextContent('UNKNOWN · Доставка не подтверждена');
+  expect(screen.getByRole('region',{name:'Предложение клиенту'})).toBe(card);
+  expect(delivery.getByRole('article',{name:'Условия предложения'})).toBe(terms);
+  expect(within(terms).getByText(quote.code,{exact:true})).toBeVisible();
+  expect(within(terms).getByTestId('quote-text').textContent).toBe(quote.text);
+  if(version==='previous')expect(within(card).getByText(/^Уточните точную цену\./)).toBeVisible();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(30_000);});
+  expect(read).toHaveBeenCalledTimes(16);
+  expect(read).toHaveBeenLastCalledWith(scope,a.request_id,expect.any(AbortSignal));
+ }finally{vi.useRealTimers();}
+});
+
+it('bounds quote polling while the delivery remains queued',async()=>{
+ vi.useFakeTimers();
+ try{
+  const a=draft();
+  const read=vi.mocked(intakeApi.quote).mockResolvedValue(quoteDelivery(a,'QUEUED'));
+  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" approvalChange={null} expired={vi.fn()}/>);});
+  await act(async()=>{await vi.advanceTimersByTimeAsync(40_000);});
+  expect(screen.getByRole('status')).toHaveTextContent('Предложение в очереди на отправку');
+  expect(read).toHaveBeenCalledTimes(9);
+ }finally{vi.useRealTimers();}
+});
+
+it.each([
+ ['closing','timer'],['closing','GET'],['switching','timer'],['switching','GET'],
+] as const)('cancels quote polling when %s the card with a pending %s',async(change,pending)=>{
+ vi.useFakeTimers();
+ try{
+  const a=draft(),b={...draft(),request_id:message};
+  const dispatching=quoteDelivery(a,'DISPATCHING');
+  const replacement={quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'} as const;
+  let finish!:(value:QuoteDelivery)=>void;
+  const late=new Promise<QuoteDelivery>(resolve=>{finish=resolve;});
+  const read=vi.mocked(intakeApi.quote).mockResolvedValueOnce(dispatching).mockResolvedValue(replacement);
+  if(pending==='GET')read.mockReturnValueOnce(late);
+  const props={scope,refresh:'',approvalChange:null,expired:vi.fn()};
+  const view=render(<QuotePanel {...props} draft={a}/>);
+  await act(async()=>{});
+  expect(screen.getByRole('status')).toHaveTextContent('Отправка началась, ожидаем подтверждения');
+  if(pending==='GET')await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
+  const oldCalls=pending==='GET'?2:1;
+  expect(read).toHaveBeenCalledTimes(oldCalls);
+  const signal=read.mock.lastCall?.[2];
+  expect(signal?.aborted).toBe(false);
+
+  if(change==='closing')view.unmount();
+  else view.rerender(<QuotePanel {...props} draft={b}/>);
+  expect(signal?.aborted).toBe(true);
+  await act(async()=>finish(dispatching));
+  await act(async()=>{await vi.advanceTimersByTimeAsync(40_000);});
+
+  expect(read.mock.calls.filter(([,id])=>id===a.request_id)).toHaveLength(oldCalls);
+  if(change==='switching'){
+   expect(read).toHaveBeenCalledTimes(oldCalls+1);
+   expect(read).toHaveBeenLastCalledWith(scope,b.request_id,expect.any(AbortSignal));
+   expect(screen.getByRole('status')).toHaveTextContent('Нужно уточнение');
+  }else{
+   expect(read).toHaveBeenCalledTimes(oldCalls);
+   expect(screen.queryByRole('region',{name:'Предложение клиенту'})).not.toBeInTheDocument();
+  }
+  expect(screen.queryByTestId('quote-text')).not.toBeInTheDocument();
  }finally{vi.useRealTimers();}
 });
 

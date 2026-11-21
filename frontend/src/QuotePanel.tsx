@@ -75,8 +75,7 @@ export function QuotePanel({scope,draft,refresh,approvalChange,expired}:Props){
  useEffect(()=>{
   const controller=new AbortController(),{signal}=controller;
   let timer:ReturnType<typeof setTimeout>|undefined;
-  let waitingFor:QuoteStatus|undefined;
-  let refreshes=0;
+  let queuedRefreshes=0;
   setDelivery(null);setError(false);
 
   async function load(){
@@ -85,10 +84,10 @@ export function QuotePanel({scope,draft,refresh,approvalChange,expired}:Props){
     if(signal.aborted)return;
     setDelivery(result);
     const status=result.previous?.status??result.status;
-    if(status==='QUEUED'||status==='DISPATCHING'){
-     if(status!==waitingFor){waitingFor=status;refreshes=0;}
-     if(refreshes++<8)timer=setTimeout(()=>void load(),2000);
-    }
+    // Recovery of an in-flight attempt can outlast the queue polling window.
+    if(status==='DISPATCHING')queuedRefreshes=0;
+    else if(status!=='QUEUED'||queuedRefreshes++>=8)return;
+    timer=setTimeout(()=>void load(),2000);
    }catch(cause){
     if(signal.aborted)return;
     setDelivery(null);setError(true);
