@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3B IN_PROGRESS · 2026-11-21
+## CURRENT — M6.3B REVIEW · R1 для C3 · 2026-11-21
 
-**Единственная активная задача — M6.3B.** Предложение по выбранной работе и статус его доставки. Ведущий C3, C1 отвечает за Quote и контракт, C2/C5 подключаются к транзакции и карточке. База `main` `248dd3a8ecfc2fb372b12f22f60585235b9e244e`, ветка `c3/m6-3b-quote-delivery`, миграция `0029` от `0028`, synthetic LOCAL/TEST. [Границы и демонстрация Q4/Q5](tasks/M6_HANDOFF.md#L3).
+Единственная активная задача — M6.3B-R1. C0 проверил head `ebb5c465272264768a8ff1e1b8ac534159d6cd54` Draft PR #60 с базой `main` `248dd3a8ecfc2fb372b12f22f60585235b9e244e`. CI 12/12, Chromium 91/91. До приёмки исправить два расхождения в карточке. При изменении условий предоплаты мастер должен видеть запрос точной цены рядом с историей. При начавшейся отправке он должен видеть, что подтверждение ещё ожидается, в том числе после перехвата диалога. Оба случая воспроизведены через owner API на PostgreSQL 18.6 в synthetic LOCAL/TEST. Ведущий C3, C1/C2/C5 в границах прежней задачи. [Поручение R1 и доказательства](tasks/M6_HANDOFF.md#L3) · [PR #60](https://github.com/Elefesys/ai-service-manager/pull/60) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44895720110).
 
 ## История — M6.3A INTEGRATED / VERIFIED · 2026-11-21
 
