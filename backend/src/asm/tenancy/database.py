@@ -329,6 +329,27 @@ class TenantUnitOfWork:
             },
         )
 
+    async def approval_owner_source(
+        self,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        approval_id: UUID,
+        message_id: UUID,
+        source_version: str,
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.approval_owner_source(:business,:conversation,:request,:approval,:message,:version)",
+            {
+                "business": business,
+                "conversation": conversation,
+                "request": request_id,
+                "approval": approval_id,
+                "message": message_id,
+                "version": source_version,
+            },
+        )
+
     async def approval_owner_list(self, before_id: UUID | None) -> Any:
         return await self._service_request_execute(
             "SELECT platform.approval_owner_list(:before_id)", {"before_id": before_id}

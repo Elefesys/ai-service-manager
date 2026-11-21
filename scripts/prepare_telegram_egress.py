@@ -2021,7 +2021,7 @@ def native_source_profile():
     profile = runner.source_catalog(ROOT, "0028")
     schema_inventory("0028", profile["columns"])
     require(
-        len(profile["functions"]) == 358 and sum(map(len, profile["columns"].values())) == 1164,
+        len(profile["functions"]) == 359 and sum(map(len, profile["columns"].values())) == 1166,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile

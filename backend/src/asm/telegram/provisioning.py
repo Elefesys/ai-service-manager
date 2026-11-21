@@ -497,9 +497,9 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
         stage = "HOST_SOURCE_EXPANSION"
         expected = runner.source_catalog(root, "0028")
         if (
-            len(expected["functions"]) != 358
+            len(expected["functions"]) != 359
             or len(expected["columns"]) != 79
-            or sum(map(len, expected["columns"].values())) != 1164
+            or sum(map(len, expected["columns"].values())) != 1166
         ):
             raise ValueError
         return runner, expected

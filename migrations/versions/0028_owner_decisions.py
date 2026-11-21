@@ -49,6 +49,8 @@ TABLES = {
       decided_at timestamptz NOT NULL CHECK(isfinite(decided_at)),
       authorized_action text CHECK(authorized_action='PREPARE_QUOTE'),
       amount_minor bigint CHECK(amount_minor BETWEEN 1 AND 100000000000),
+      lower_minor bigint CHECK(lower_minor BETWEEN 1 AND 100000000000),
+      upper_minor bigint CHECK(upper_minor BETWEEN 1 AND 100000000000),
       occupied_minutes integer CHECK(occupied_minutes BETWEEN 1 AND 10080),
       price_reference_id uuid,
       duration_reference_id uuid,
@@ -57,10 +59,14 @@ TABLES = {
       FOREIGN KEY(workspace_id,approval_id) REFERENCES app.approval_requests(workspace_id,id),
       FOREIGN KEY(workspace_id,actor_user_account_id)
         REFERENCES platform.workspace_memberships(workspace_id,user_account_id),
-      CHECK(CASE WHEN operation='APPROVE' THEN authorized_action IS NOT NULL AND amount_minor IS NOT NULL
+      CHECK(CASE WHEN operation='APPROVE' THEN authorized_action IS NOT NULL
+        AND (
+          (amount_minor IS NOT NULL AND lower_minor IS NULL AND upper_minor IS NULL)
+          OR (amount_minor IS NULL AND lower_minor IS NOT NULL AND upper_minor IS NOT NULL AND lower_minor<upper_minor)
+        )
         AND occupied_minutes IS NOT NULL AND price_reference_id IS NOT NULL AND duration_reference_id IS NOT NULL
-      ELSE authorized_action IS NULL AND amount_minor IS NULL AND occupied_minutes IS NULL
-        AND price_reference_id IS NULL AND duration_reference_id IS NULL END)
+      ELSE authorized_action IS NULL AND amount_minor IS NULL AND lower_minor IS NULL AND upper_minor IS NULL
+        AND occupied_minutes IS NULL AND price_reference_id IS NULL AND duration_reference_id IS NULL END)
     )""",
 }
 
@@ -69,6 +75,7 @@ FUNCTIONS = {
     RETURNS jsonb LANGUAGE plpgsql STABLE SET search_path=pg_catalog,pg_temp AS $$
     DECLARE a app.service_assessments%ROWTYPE; p app.price_calculations%ROWTYPE;
       material jsonb; intent jsonb; intent_current boolean;
+      deposit jsonb; fixed_deposit bigint; payment_terms_complete boolean; price_range jsonb;
     BEGIN
       material:=platform.service_assessment_material(p_draft);
       IF material->'service'='null'::jsonb THEN RETURN NULL; END IF;
@@ -79,21 +86,31 @@ FUNCTIONS = {
         WHERE (s.workspace_id,s.request_id,s.authority_sha256)
           =(p_draft.workspace_id,p_draft.id,platform.price_material(p_draft)->>'authority_sha256');
       IF a.id IS NULL OR p.id IS NULL THEN RETURN NULL; END IF;
+      deposit:=material->'service'->'deposit';
+      fixed_deposit:=(deposit->>'amount_minor')::bigint;
+      payment_terms_complete:=CASE deposit->>'mode'
+        WHEN 'FIXED_DEPOSIT' THEN fixed_deposit IS NOT NULL AND (p.amount_minor IS NULL OR fixed_deposit<=p.amount_minor)
+        WHEN 'PERCENT_DEPOSIT' THEN deposit->>'percent' IS NOT NULL
+        ELSE deposit->>'mode' IN ('NONE','FULL_PREPAYMENT') END;
+      IF p.outcome='RANGE' AND p.authority='PROVISIONAL' AND
+        (deposit->>'mode'='NONE' OR (deposit->>'mode'='FIXED_DEPOSIT' AND fixed_deposit<=p.lower_minor)) THEN
+        price_range:=jsonb_build_object('lower_minor',p.lower_minor,'upper_minor',p.upper_minor,'authority',p.authority);
+      END IF;
       intent:=jsonb_build_object('message_id',p_draft.intent_message_id,'source_version',p_draft.intent_source_version);
       intent_current:=platform.intake_source_current(p_draft.workspace_id,p_draft.business_id,
         p_draft.conversation_id,p_draft.client_id,intent);
       RETURN jsonb_build_object(
         'service_name',material->'service'->'name','release_id',material->'release_id',
-        'activation_version',material->'activation_version','deposit',material->'service'->'deposit',
+        'activation_version',material->'activation_version','deposit',deposit,
         'facts',material->'facts','unavailable_fields',material->'unavailable_fields',
         'intent_source',intent,'intent_current',intent_current,'question',p_draft.question,
         'assessment_id',a.id,'assessment_outcome',a.outcome,
         'assessment_reason',a.reason,'complex_work',a.complex_work,
         'price_calculation_id',p.id,'price_reason',p.reason,'amount_minor',
           CASE WHEN p.outcome='EXACT' AND p.authority='CONFIRMED' THEN p.amount_minor END,
-        'occupied_minutes',CASE WHEN a.outcome='FEASIBLE' THEN a.occupied_minutes END,
+        'price_range',price_range,'occupied_minutes',CASE WHEN a.outcome='FEASIBLE' THEN a.occupied_minutes END,
         'can_approve',intent_current AND material->'unavailable_fields'='[]'::jsonb
-          AND a.outcome IN ('FEASIBLE','NEEDS_OWNER'));
+          AND a.outcome IN ('FEASIBLE','NEEDS_OWNER') AND coalesce(payment_terms_complete,false));
     END $$""",
     "platform.approval_related_escalation(app.service_requests)": r"""CREATE FUNCTION platform.approval_related_escalation(
       p_draft app.service_requests
@@ -156,6 +173,8 @@ FUNCTIONS = {
             'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
           'authorized_action',result.authorized_action,'terms',CASE WHEN result.authorized_action IS NOT NULL THEN
             jsonb_build_object('currency','RUB','amount_minor',result.amount_minor,
+              'price_range',CASE WHEN result.lower_minor IS NOT NULL THEN
+                jsonb_build_object('lower_minor',result.lower_minor,'upper_minor',result.upper_minor,'authority','PROVISIONAL') END,
               'occupied_minutes',result.occupied_minutes,'price_reference_id',result.price_reference_id,
               'duration_reference_id',result.duration_reference_id) END);
       END IF;
@@ -181,7 +200,8 @@ FUNCTIONS = {
       IF d.revision::text IS DISTINCT FROM p_revision THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
       material:=platform.approval_basis(d);
       IF material IS NULL THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
-      IF material->'amount_minor'<>'null'::jsonb AND material->'occupied_minutes'<>'null'::jsonb
+      IF (material->'amount_minor'<>'null'::jsonb OR material->'price_range'<>'null'::jsonb)
+        AND material->'occupied_minutes'<>'null'::jsonb AND material->'can_approve'='true'::jsonb
         THEN RETURN NULL; END IF;
       SELECT a.* INTO p FROM app.approval_requests a
         WHERE (a.workspace_id,a.request_id)=(d.workspace_id,d.id) AND a.retired_at IS NULL FOR UPDATE;
@@ -214,6 +234,39 @@ FUNCTIONS = {
       IF NOT FOUND THEN RAISE EXCEPTION 'NOT_FOUND' USING ERRCODE='P3101'; END IF;
       RETURN platform.approval_view(p,d,clock_timestamp());
     END $$""",
+    "platform.approval_owner_source(uuid,uuid,uuid,uuid,uuid,text)": r"""CREATE FUNCTION platform.approval_owner_source(
+      p_business uuid,p_conversation uuid,p_request uuid,p_approval uuid,p_message uuid,p_source_version text
+    ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE d app.service_requests%ROWTYPE; p app.approval_requests%ROWTYPE;
+      pins jsonb; material jsonb; source_current boolean;
+    BEGIN
+      d:=platform.service_assessment_scope(p_business,p_conversation,p_request);
+      SELECT a.* INTO p FROM app.approval_requests a
+        WHERE (a.workspace_id,a.id,a.business_id,a.conversation_id,a.client_id,a.request_id)
+          =(d.workspace_id,p_approval,d.business_id,d.conversation_id,d.client_id,d.id);
+      IF NOT FOUND THEN RAISE EXCEPTION 'NOT_FOUND' USING ERRCODE='P3101'; END IF;
+      SELECT jsonb_agg(source.pin) INTO pins FROM (
+        SELECT p.basis->'intent_source' AS pin
+        UNION ALL SELECT p.basis->'complex_work'->'source'
+        UNION ALL SELECT fact.value->'source' FROM jsonb_array_elements(p.basis->'facts') fact(value)
+      ) source
+      WHERE source.pin->>'message_id'=p_message::text AND source.pin->>'source_version'=p_source_version;
+      IF pins IS NULL THEN RAISE EXCEPTION 'NOT_FOUND' USING ERRCODE='P3101'; END IF;
+      SELECT platform.message_effective(m.workspace_id,m.id),EXISTS(
+        SELECT 1 FROM jsonb_array_elements(pins) source(pin)
+        WHERE platform.intake_source_current(d.workspace_id,d.business_id,d.conversation_id,d.client_id,source.pin)
+      ) INTO material,source_current FROM app.messages m
+      WHERE (m.workspace_id,m.conversation_id,m.id)=(d.workspace_id,d.conversation_id,p_message)
+        AND m.direction='INBOUND';
+      IF material->>'state' IS DISTINCT FROM 'VISIBLE' THEN
+        RAISE EXCEPTION 'NOT_FOUND' USING ERRCODE='P3101';
+      END IF;
+      IF source_current IS NOT TRUE THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
+      RETURN jsonb_build_object('workspace_id',p.workspace_id,'business_id',p.business_id,
+        'conversation_id',p.conversation_id,'client_id',p.client_id,'request_id',p.request_id,
+        'approval_id',p.id,'message_id',p_message,'source_version',p_source_version,
+        'content_type',material->'content_type','text',material->'text');
+    END $$""",
     "platform.approval_owner_list(uuid)": r"""CREATE FUNCTION platform.approval_owner_list(p_before uuid)
     RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
     DECLARE ws uuid:=app.current_workspace_id();
@@ -244,7 +297,8 @@ FUNCTIONS = {
       actor uuid:=nullif(current_setting('asm.actor_id',true),'')::uuid;
       moment timestamptz; validity text; operation text:=body->>'operation'; action text;
       submitted_amount bigint; submitted_minutes integer; final_amount bigint; final_minutes integer;
-      price_id uuid; duration_id uuid; result_id uuid:=uuidv7();
+      lower_bound bigint; upper_bound bigint;
+      price_supplied boolean; price_id uuid; duration_id uuid; result_id uuid:=uuidv7();
     BEGIN
       d:=platform.service_assessment_scope(p_business,p_conversation,p_request);
       SELECT a.* INTO p FROM app.approval_requests a
@@ -295,19 +349,26 @@ FUNCTIONS = {
         submitted_minutes:=(body->>'occupied_minutes')::integer;
         final_amount:=(p.basis->>'amount_minor')::bigint;
         final_minutes:=(p.basis->>'occupied_minutes')::integer;
-        IF (final_amount IS NULL)=(submitted_amount IS NULL)
+        lower_bound:=(p.basis->'price_range'->>'lower_minor')::bigint;
+        upper_bound:=(p.basis->'price_range'->>'upper_minor')::bigint;
+        price_supplied:=final_amount IS NOT NULL OR lower_bound IS NOT NULL;
+        IF price_supplied=(submitted_amount IS NOT NULL)
           OR (final_minutes IS NULL)=(submitted_minutes IS NULL)
           OR submitted_amount>100000000000 OR submitted_minutes>10080
           THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
-        price_id:=CASE WHEN final_amount IS NULL THEN result_id ELSE (p.basis->>'price_calculation_id')::uuid END;
+        price_id:=CASE WHEN price_supplied THEN (p.basis->>'price_calculation_id')::uuid ELSE result_id END;
         duration_id:=CASE WHEN final_minutes IS NULL THEN result_id ELSE (p.basis->>'assessment_id')::uuid END;
         final_amount:=coalesce(final_amount,submitted_amount);
+        IF p.basis->'deposit'->>'mode'='FIXED_DEPOSIT'
+          AND (p.basis->'deposit'->>'amount_minor')::bigint>coalesce(final_amount,lower_bound)
+          THEN RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101'; END IF;
         final_minutes:=coalesce(final_minutes,submitted_minutes);
         action:=p.action;
       END IF;
       INSERT INTO app.owner_decisions(workspace_id,id,approval_id,actor_user_account_id,operation,
-        submitted,decided_at,authorized_action,amount_minor,occupied_minutes,price_reference_id,duration_reference_id)
-      VALUES(p.workspace_id,result_id,p.id,actor,operation,body,moment,action,final_amount,final_minutes,price_id,duration_id);
+        submitted,decided_at,authorized_action,amount_minor,lower_minor,upper_minor,occupied_minutes,price_reference_id,duration_reference_id)
+      VALUES(p.workspace_id,result_id,p.id,actor,operation,body,moment,action,
+        final_amount,lower_bound,upper_bound,final_minutes,price_id,duration_id);
       RETURN platform.approval_view(p,d,moment);
     END $$""",
     "platform.owner_decision_immutable()": r"""CREATE FUNCTION platform.owner_decision_immutable()
@@ -325,6 +386,7 @@ FUNCTIONS = {
 RUNTIME_FUNCTIONS = (
     "platform.approval_owner_open(uuid,uuid,uuid,text)",
     "platform.approval_owner_read(uuid,uuid,uuid,uuid)",
+    "platform.approval_owner_source(uuid,uuid,uuid,uuid,uuid,text)",
     "platform.approval_owner_list(uuid)",
     "platform.approval_owner_decide(uuid,uuid,uuid,uuid,jsonb)",
 )
@@ -538,14 +600,15 @@ PROFILE = r"""CREATE FUNCTION platform.owner_decision_schema_profile() RETURNS j
 ('platform.ai_runtime_result_valid(jsonb)','7f81305118ab1bff57585a409c91b04ff2eb44d24722d74b35ae05379d5e21d1','plpgsql',true,'i',false),
 ('platform.ai_runtime_view(platform.ai_runs)','ebfb0382fb632ea8ae5b0cc6d2a7976647ee9cbbad89810973d1ec3e15e45298','sql',true,'s',false),
 ('platform.ai_synthetic_config_valid(jsonb)','20241427cbe5024f6a5876184f29895f28a83191519bf4d99a4e6e6993baf00c','plpgsql',true,'i',false),
-('platform.approval_basis(app.service_requests)','3c10bacd9d035975237c262d919806c39d4b5473004db700d2432784b4daeb04','plpgsql',false,'s',false),
-('platform.approval_owner_decide(uuid,uuid,uuid,uuid,jsonb)','b84786d23ee0a84b233f09fc1399180726e95c5d02b438323d260ce1cc68e87b','plpgsql',true,'v',true),
+('platform.approval_basis(app.service_requests)','5b5eea8bb476bb527727d4b041eeb53f5c8ae3976ff199299f945e5db2f26b6e','plpgsql',false,'s',false),
+('platform.approval_owner_decide(uuid,uuid,uuid,uuid,jsonb)','b16c2f8ecd6a1d200f5dff646607bbd6890a55ba63d445c8c9100ee49f612699','plpgsql',true,'v',true),
 ('platform.approval_owner_list(uuid)','1882ad6ed68216fc6b3d4ed1442949bea2e4aaa71a4bae1c253da365acadfe67','plpgsql',true,'v',true),
-('platform.approval_owner_open(uuid,uuid,uuid,text)','08a713f896537cdd2ebe38159818c7b87dbd40d5c078b74c09c800ea5dbaa664','plpgsql',true,'v',true),
+('platform.approval_owner_open(uuid,uuid,uuid,text)','6f372c2354e3a52d54107b3c288eda912f9b0ada5265289170bf4c832c85a0f6','plpgsql',true,'v',true),
 ('platform.approval_owner_read(uuid,uuid,uuid,uuid)','e5dc57c5686640d84d8b1843e6d92f3cd963201dd98f9f578236c1684bc2d7de','plpgsql',true,'v',true),
+('platform.approval_owner_source(uuid,uuid,uuid,uuid,uuid,text)','c9ae6cb29d799a71290acffd5c21a570e030496ec7414a8055f7bf073fc71189','plpgsql',true,'v',true),
 ('platform.approval_related_escalation(app.service_requests)','c49c9c357fed4f07393e06724a245e438d9d3389c1b7bed93153f62e557412e7','sql',false,'s',false),
 ('platform.approval_validity(app.approval_requests,app.service_requests,timestamptz)','73f00e321cf6c690277ce321e967baeba6a27167cbdfb3339c9fa92ae3fe8d37','plpgsql',false,'s',false),
-('platform.approval_view(app.approval_requests,app.service_requests,timestamptz)','60ba81ad5f89f0601d618c3af68783d13b87d0a6c8318a10c055d4979ef952e2','plpgsql',false,'s',false),
+('platform.approval_view(app.approval_requests,app.service_requests,timestamptz)','5d83e2877cb5813c648ea1d91b9e069039f71087063a3738b3fec2fb51192802','plpgsql',false,'s',false),
 ('platform.auth_bootstrap(text,integer)','6eb28b55313391c9d0eb07ca055ff8754e49b83cfeef132d9ba413077545c5dd','plpgsql',true,'v',true),
 ('platform.auth_lock_session(text,boolean)','55ca74ab7475f964865b6d3a6b73778f7139add6a1531781b14362fef0f30428','plpgsql',true,'v',false),
 ('platform.auth_login(text,uuid,bigint,bigint,text,integer)','3f975835d787dd8531c415783aa7492facafcbd5d9def911703780bb1bfc83c1','plpgsql',true,'v',true),
@@ -877,7 +940,7 @@ PROFILE = r"""CREATE FUNCTION platform.owner_decision_schema_profile() RETURNS j
 ('app.locations',ARRAY['workspace_id','id','business_id','name','status','version','created_at']::text[]),
 ('app.messages',ARRAY['workspace_id','id','conversation_id','connection_id','provider_chat_id','provider_message_id','direction','content_type','text','image_file_id','media_group_id','occurred_at','projection_fingerprint','version','created_at']::text[]),
 ('app.outbox_events',ARRAY['workspace_id','id','connection_id','message_id','kind','required_direction','status','attempt_id','provider_message_id','error_code','completed_at','version','created_at']::text[]),
-('app.owner_decisions',ARRAY['workspace_id','id','approval_id','actor_user_account_id','operation','submitted','decided_at','authorized_action','amount_minor','occupied_minutes','price_reference_id','duration_reference_id']::text[]),
+('app.owner_decisions',ARRAY['workspace_id','id','approval_id','actor_user_account_id','operation','submitted','decided_at','authorized_action','amount_minor','lower_minor','upper_minor','occupied_minutes','price_reference_id','duration_reference_id']::text[]),
 ('app.price_calculations',ARRAY['workspace_id','id','business_id','request_id','request_revision','release_id','activation_version','authority_sha256','currency','policy','size_fact','size_mm','steps','outcome','authority','reason','amount_minor','lower_minor','upper_minor','actor_user_account_id','correlation_id','created_at']::text[]),
 ('app.service_assessments',ARRAY['workspace_id','id','business_id','request_id','request_revision','service_id','release_id','activation_version','authority_sha256','owner_handoff','duration_policy','rules','evidence','unavailable_fields','outcome','reason','field','rule_id','limit_value','size_mm','occupied_minutes','actor_user_account_id','correlation_id','created_at','complex_work']::text[]),
 ('app.service_requests',ARRAY['workspace_id','id','business_id','conversation_id','client_id','intent_message_id','intent_source_version','release_id','service_id','service_name','template_revision','state','revision','facts','missing','conflicts','question','created_at','complex_work']::text[]),
@@ -948,7 +1011,7 @@ PROFILE = r"""CREATE FUNCTION platform.owner_decision_schema_profile() RETURNS j
         JOIN pg_attribute a ON a.attrelid=r.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname IN ('app','platform') AND r.relkind='r'
         GROUP BY r.oid,n.nspname,r.relname,r.relowner,r.relrowsecurity,r.relforcerowsecurity,r.relacl),
       validity AS MATERIALIZED (SELECT
-        (SELECT count(*) FROM functions)=358 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=357
+        (SELECT count(*) FROM functions)=359 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=358
         AND NOT EXISTS(SELECT 1 FROM expected e LEFT JOIN functions f ON f.oid=to_regprocedure(e.signature)
           WHERE f.oid IS NULL OR encode(sha256(convert_to(f.prosrc,'UTF8')),'hex')<>e.body_hash OR f.lanname<>e.language
             OR f.prosecdef<>e.security_definer OR f.provolatile::text<>e.volatility OR f.proowner<>'asm_migrator'::regrole
@@ -983,5 +1046,5 @@ PROFILE = r"""CREATE FUNCTION platform.owner_decision_schema_profile() RETURNS j
         'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,e.extversion,n.nspname) ORDER BY e.extname)
           FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname IN ('vector','btree_gist'))) AS value)
       SELECT jsonb_build_object('schema_revision','0028','valid',coalesce(v.valid,false)
-        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='ff84470cfbfcfd753e5e1e9cc5a11ff83674101633a76dca17a04317f76fa08d',
+        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='fc25cd353f880f250d226f00e0f0accb25b9f340e5bab7daa21b3aef6f64810d',
         'profile_sha256',encode(sha256(convert_to(E'asm:m3:native_schema:v1\n'||c.value::text,'UTF8')),'hex')) FROM validity v CROSS JOIN catalog c $$"""

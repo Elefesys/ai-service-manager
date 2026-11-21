@@ -4,7 +4,13 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from asm.service_requests.approvals import ApprovalPage, ApprovalView, DecideApproval, OpenApproval
+from asm.service_requests.approvals import (
+    ApprovalPage,
+    ApprovalSourceView,
+    ApprovalView,
+    DecideApproval,
+    OpenApproval,
+)
 from asm.service_requests.assessment import (
     AssessmentCommand,
     AssessmentInputs,
@@ -180,6 +186,42 @@ class ServiceRequestRepository:
     ) -> ApprovalView:
         raw = await self.unit.approval_owner_read(business, conversation, request_id, approval_id)
         return self.approval_view(raw, business, conversation, request_id, approval_id)
+
+    async def approval_source(
+        self,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        approval_id: UUID,
+        message_id: UUID,
+        source_version: str,
+    ) -> ApprovalSourceView:
+        raw = await self.unit.approval_owner_source(
+            business, conversation, request_id, approval_id, message_id, source_version
+        )
+        try:
+            source = ApprovalSourceView.model_validate(raw)
+        except ValidationError:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        if (
+            source.workspace_id,
+            source.business_id,
+            source.conversation_id,
+            source.request_id,
+            source.approval_id,
+            source.message_id,
+            source.source_version,
+        ) != (
+            str(self.unit.context.workspace_id),
+            str(business),
+            str(conversation),
+            str(request_id),
+            str(approval_id),
+            str(message_id),
+            source_version,
+        ):
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return source
 
     async def approval_decide(
         self,

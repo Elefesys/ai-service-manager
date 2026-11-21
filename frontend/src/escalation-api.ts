@@ -125,7 +125,13 @@ export const escalationApi={
   },
 };
 
-type SourceBinding = { message_id: string; source_version: string };
+export type SourceBinding = { message_id: string; source_version: string };
+export type ApprovalSource = SourceBinding & {
+  workspace_id:string; business_id:string; conversation_id:string; client_id:string;
+  request_id:string; approval_id:string; content_type:'TEXT'|'PHOTO'; text:string|null;
+};
+type ProvisionalPriceRange = { authority:'PROVISIONAL'; lower_minor:number; upper_minor:number };
+type ApprovalPrice = { amount_minor:number|null; price_range:ProvisionalPriceRange|null };
 const approvalStatuses = ['PENDING','APPROVED','CLARIFICATION','DECLINED','EXPIRED','STALE','REVOKED'] as const;
 export type ApprovalScope = { workspace: string; business: string; conversation: string; client: string; request: string };
 export type ApprovalSelection = ApprovalScope & { approval: string };
@@ -143,19 +149,19 @@ export type ApprovalCard = {
   assignee_user_account_id: string; created_at: string; expires_at: string;
   status: typeof approvalStatuses[number]; can_resolve: boolean; authorization_current: boolean;
   related_escalation_id: string|null;
-  basis: {
+  basis: ApprovalPrice & {
     service_name: string; release_id: string; activation_version: string; facts: Fact[];
     intent_source: SourceBinding; intent_current: boolean; question: string|null;
     unavailable_fields: string[]; assessment_id: string; price_calculation_id: string;
     assessment_outcome: 'FEASIBLE'|'NEEDS_OWNER'|'NEEDS_DATA'|'DECLINED'; assessment_reason: string; price_reason: string;
     complex_work: { category:'COVER_UP'|'OTHER_COMPLEX'; source: SourceBinding; source_current: boolean }|null;
-    amount_minor: number|null; occupied_minutes: number|null; can_approve: boolean;
+    occupied_minutes: number|null; can_approve: boolean;
     deposit: { mode: string; amount_minor: number|null; percent: number|null };
   };
   decision: {
     decision_id: string; actor_user_account_id: string; decided_at: string;
     submitted: ApprovalBody; authorized_action: 'PREPARE_QUOTE'|null;
-    terms: { currency: 'RUB'; amount_minor: number; occupied_minutes: number; price_reference_id: string; duration_reference_id: string }|null;
+    terms: (ApprovalPrice & { currency: 'RUB'; occupied_minutes: number; price_reference_id: string; duration_reference_id: string })|null;
   } | null;
 };
 
@@ -168,6 +174,25 @@ function sourceBinding(value: unknown) {
   const source = object(value,['message_id','source_version']);
   if (!uuid(source.message_id) || !matches(source.source_version,/^[0-9a-f]{64}$/)) invalid();
 }
+function priceRange(value:unknown):ProvisionalPriceRange|null {
+  if(value===null)return null;
+  const range=object(value,['authority','lower_minor','upper_minor']);
+  if(range.authority!=='PROVISIONAL'||!boundedInteger(range.lower_minor,100_000_000_000)
+    ||!boundedInteger(range.upper_minor,100_000_000_000)||Number(range.lower_minor)>=Number(range.upper_minor))return invalid();
+  return range as ProvisionalPriceRange;
+}
+
+function parseApprovalSource(value:unknown,scope:ApprovalSelection,source:SourceBinding):ApprovalSource {
+  const reply=object(value,['workspace_id','business_id','conversation_id','client_id','request_id','approval_id',
+    'message_id','source_version','content_type','text']);
+  if(reply.workspace_id!==scope.workspace||reply.business_id!==scope.business||reply.conversation_id!==scope.conversation
+    ||reply.client_id!==scope.client||reply.request_id!==scope.request||reply.approval_id!==scope.approval
+    ||reply.message_id!==source.message_id||reply.source_version!==source.source_version
+    ||!oneOf(reply.content_type,['TEXT','PHOTO'])||reply.text===null&&reply.content_type!=='PHOTO'
+    ||reply.text!==null&&(typeof reply.text!=='string'||Array.from(reply.text).length>4096))return invalid();
+  return value as ApprovalSource;
+}
+
 function parseApproval(value: unknown, workspace: string, expect?: ApprovalScope & {approval?:string}): ApprovalCard {
   const card = object(value,['approval_id','workspace_id','business_id','conversation_id','client_id','request_id','request_revision',
     'version','action','assignee_user_account_id','basis','created_at','expires_at','status','decision','can_resolve','authorization_current','related_escalation_id']);
@@ -181,7 +206,8 @@ function parseApproval(value: unknown, workspace: string, expect?: ApprovalScope
       ||card.request_id!==expect.request||expect.approval!==undefined&&card.approval_id!==expect.approval)) invalid();
   const basis=object(card.basis,['service_name','release_id','activation_version','deposit','facts','unavailable_fields','intent_source',
     'intent_current','question','assessment_id','assessment_outcome','assessment_reason','complex_work','price_calculation_id',
-    'price_reason','amount_minor','occupied_minutes','can_approve']);
+    'price_reason','amount_minor','price_range','occupied_minutes','can_approve']);
+  const range=priceRange(basis.price_range);
   parseFacts(basis.facts);
   sourceBinding(basis.intent_source);
   const deposit=object(basis.deposit,['mode','amount_minor','percent']);
@@ -193,7 +219,8 @@ function parseApproval(value: unknown, workspace: string, expect?: ApprovalScope
     || basis.question!==null&&typeof basis.question!=='string'||typeof deposit.mode!=='string'
     || deposit.amount_minor!==null&&!boundedInteger(deposit.amount_minor,100_000_000_000)
     || deposit.percent!==null&&(typeof deposit.percent!=='number'||!Number.isFinite(deposit.percent))
-    || basis.amount_minor!==null&&!boundedInteger(basis.amount_minor,100_000_000_000)
+    || basis.amount_minor!==null&&(!boundedInteger(basis.amount_minor,100_000_000_000)||range!==null)
+    || range!==null&&deposit.mode!=='NONE'&&(deposit.mode!=='FIXED_DEPOSIT'||deposit.amount_minor===null||Number(deposit.amount_minor)>range.lower_minor)
     || basis.occupied_minutes!==null&&!boundedInteger(basis.occupied_minutes,10_080)) invalid();
   if(basis.complex_work!==null){
     const complex=object(basis.complex_work,['category','source','source_current']);
@@ -209,10 +236,14 @@ function parseApproval(value: unknown, workspace: string, expect?: ApprovalScope
       ||(submitted.operation==='APPROVE')!==(decision.terms!==null)
       ||decision.authorized_action!==(submitted.operation==='APPROVE'?card.action:null)) invalid();
     if(decision.terms!==null){
-      const terms=object(decision.terms,['currency','amount_minor','occupied_minutes','price_reference_id','duration_reference_id']);
-      if(terms.currency!=='RUB'||!boundedInteger(terms.amount_minor,100_000_000_000)||!boundedInteger(terms.occupied_minutes,10_080)
+      const terms=object(decision.terms,['currency','amount_minor','price_range','occupied_minutes','price_reference_id','duration_reference_id']);
+      const savedRange=priceRange(terms.price_range);
+      if(terms.currency!=='RUB'||!boundedInteger(terms.occupied_minutes,10_080)
+        || (range===null)!==(savedRange===null)
+        || range?.lower_minor!==savedRange?.lower_minor||range?.upper_minor!==savedRange?.upper_minor
+        || (range===null?!boundedInteger(terms.amount_minor,100_000_000_000):terms.amount_minor!==null)
         || terms.amount_minor!==(basis.amount_minor??submitted.amount_minor)||terms.occupied_minutes!==(basis.occupied_minutes??submitted.occupied_minutes)
-        || terms.price_reference_id!==(basis.amount_minor===null?decision.decision_id:basis.price_calculation_id)
+        || terms.price_reference_id!==(basis.amount_minor===null&&range===null?decision.decision_id:basis.price_calculation_id)
         || terms.duration_reference_id!==(basis.occupied_minutes===null?decision.decision_id:basis.assessment_id)) invalid();
     }
   }
@@ -250,6 +281,11 @@ export const approvalApi={
   },
   read(scope:ApprovalSelection,signal:AbortSignal) {
     return approvalRequest(approvalPath(scope)+'/'+encodeURIComponent(scope.approval),value=>parseApproval(value,scope.workspace,scope),signal);
+  },
+  source(scope:ApprovalSelection,source:SourceBinding,signal:AbortSignal) {
+    const query=new URLSearchParams({source_version:source.source_version});
+    const path=approvalPath(scope)+'/'+encodeURIComponent(scope.approval)+'/sources/'+encodeURIComponent(source.message_id);
+    return approvalRequest(path+'?'+query,value=>parseApprovalSource(value,scope,source),signal);
   },
   open(scope:ApprovalScope,revision:string,csrf:string,signal:AbortSignal) {
     return approvalRequest(approvalPath(scope),value=>{

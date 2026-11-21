@@ -173,7 +173,7 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
     # 0028 adds the request and immutable decision tables with closed owner capabilities.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1239
+    assert len(journal.catalog["nonfunction_ddl"]) == 1241
     journal.start(node)
     append = store.append
 

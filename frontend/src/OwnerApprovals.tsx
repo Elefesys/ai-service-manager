@@ -2,7 +2,7 @@ import {useEffect,useId,useRef,useState} from 'react';
 import type {Session} from './api';
 import {priceAmount} from './configuration-api';
 import {approvalApi,draftApprovalSelection,EscalationError} from './escalation-api';
-import type {ApprovalBody,ApprovalCard,ApprovalSelection} from './escalation-api';
+import type {ApprovalBody,ApprovalCard,ApprovalSelection,ApprovalSource,SourceBinding} from './escalation-api';
 import {IntakeError,intakeApi,labels} from './intake-api';
 
 const statusText:Record<ApprovalCard['status'],string>={
@@ -28,6 +28,16 @@ const depositText=(deposit:ApprovalCard['basis']['deposit'])=>{
   if(deposit.percent!==null)return deposit.percent+'%';
   return 'Условия определяет мастер';
 };
+
+function shownPrice({amount_minor,price_range}:ApprovalCard['basis']|NonNullable<NonNullable<ApprovalCard['decision']>['terms']>){
+  if(price_range)return priceAmount(price_range.lower_minor)+' – '+priceAmount(price_range.upper_minor)+' · предварительный диапазон';
+  return amount_minor===null?'Определяет мастер':priceAmount(amount_minor);
+}
+
+type SourcePreviewState =
+  | {state:'loading'}
+  | {state:'unavailable'|'changed'|'failed'}
+  | {state:'ready';source:ApprovalSource};
 
 type PanelProps={
   session:Session;workspace:string;selected:ApprovalSelection|null;
@@ -172,17 +182,45 @@ export function OwnerApprovals({session,workspace,selected,related,expired,recov
     {error&&<p role="alert">{error}</p>}
     {retry&&attempt.current&&<button type="button" disabled={busy} onClick={()=>{const retry=attempt.current;if(retry)void send(retry);}}>Повторить то же решение</button>}
     {detail&&<SelectedApproval key={detail.approval_id+detail.version} card={detail} locked={busy||retry}
-      submit={body=>void send({scope:draftApprovalSelection(detail),body})} reopen={()=>void reopen(detail)}/>}
+      submit={body=>void send({scope:draftApprovalSelection(detail),body})} reopen={()=>void reopen(detail)} onAccessError={sessionFailure}/>}
   </section>;
 }
 
-function SelectedApproval({card,locked,submit,reopen}:{card:ApprovalCard;locked:boolean;submit:(body:ApprovalBody)=>void;reopen:()=>void;}){
+function SelectedApproval({card,locked,submit,reopen,onAccessError}:{
+  card:ApprovalCard;locked:boolean;submit:(body:ApprovalBody)=>void;reopen:()=>void;onAccessError:(cause:unknown)=>void;
+}){
   const {basis,decision}=card;
   const [price,setPrice]=useState(''), [minutes,setMinutes]=useState(''), [note,setNote]=useState('');
   const [error,setError]=useState('');
   const id=useId();
   const inactive=['EXPIRED','STALE','REVOKED'].includes(card.status);
-  const knownPrice=basis.amount_minor!==null,knownDuration=basis.occupied_minutes!==null;
+  const knownPrice=basis.amount_minor!==null||basis.price_range!==null,knownDuration=basis.occupied_minutes!==null;
+  const [preview,setPreview]=useState<SourcePreviewState|null>(null);
+  const previewRead=useRef<AbortController|null>(null);
+  const previewRegion=useRef<HTMLElement|null>(null);
+  useEffect(()=>()=>previewRead.current?.abort(),[]);
+  useEffect(()=>{if(preview?.state==='loading')previewRegion.current?.focus();},[preview]);
+
+  async function showSource(source:SourceBinding){
+    previewRead.current?.abort();
+    const controller=new AbortController();
+    previewRead.current=controller;
+    setPreview({state:'loading'});
+    try{
+      const reply=await approvalApi.source(draftApprovalSelection(card),source,controller.signal);
+      if(!controller.signal.aborted)setPreview({state:'ready',source:reply});
+    }catch(cause){
+      if(controller.signal.aborted)return;
+      const status=cause instanceof EscalationError?cause.status:null;
+      setPreview({state:status===409?'changed':status===404?'unavailable':'failed'});
+      onAccessError(cause);
+    }finally{
+      if(previewRead.current===controller)previewRead.current=null;
+    }
+  }
+  function sourceLink(source:SourceBinding,label:string){
+    return <a href={'#'+id+'-source'} onClick={event=>{event.preventDefault();void showSource(source);}}>{label}</a>;
+  }
   function decide(operation:ApprovalBody['operation']){
     const value=note.trim()?note:undefined;
     let amount_minor:number|undefined,occupied_minutes:number|undefined;
@@ -208,13 +246,23 @@ function SelectedApproval({card,locked,submit,reopen}:{card:ApprovalCard;locked:
     <p>Ревизия {card.request_revision} · срок {new Date(card.expires_at).toLocaleString('ru-RU')}</p>
     {basis.question&&<p>{basis.question}</p>}
     <ul aria-label={inactive?'Сведения на момент запроса':'Проверенные сведения'}>
-      {basis.facts.map(fact=><li key={fact.field}>{labels[fact.field]} · {fact.value} · {factStatus[fact.status]} · <a href={'#message-'+fact.source.message_id}>Источник</a></li>)}
+      {basis.facts.map(fact=><li key={fact.field}>{labels[fact.field]} · {fact.value} · {factStatus[fact.status]} ·  {sourceLink(fact.source,'Источник')}</li>)}
     </ul>
-    {basis.intent_current&&<p><a href={'#message-'+basis.intent_source.message_id}>Исходная реплика заявки</a></p>}
-    {basis.complex_work&&<p>{basis.complex_work.category==='COVER_UP'?'Перекрытие':'Сложная работа'} · <a href={'#message-'+basis.complex_work.source.message_id}>Уточнение клиента</a></p>}
+    <p>{sourceLink(basis.intent_source,'Исходная реплика заявки')}</p>
+    {basis.complex_work&&<p>{basis.complex_work.category==='COVER_UP'?'Перекрытие':'Сложная работа'} · {sourceLink(basis.complex_work.source,'Уточнение клиента')}</p>}
+    {preview&&<section id={id+'-source'} ref={previewRegion} tabIndex={-1} aria-label="Реплика заявки">
+      <h5>Реплика заявки</h5>
+      {preview.state==='loading'&&<p role="status">Загружаем реплику…</p>}
+      {preview.state==='changed'&&<p role="alert">Версия реплики изменилась.</p>}
+      {preview.state==='unavailable'&&<p role="alert">Реплика недоступна.</p>}
+      {preview.state==='failed'&&<p role="alert">Не удалось прочитать реплику.</p>}
+      {preview.state==='ready'&&<p className="exact-answer" data-testid={'approval-source-'+preview.source.message_id}>
+        {preview.source.text??'Фото без подписи'}
+      </p>}
+    </section>}
     {basis.unavailable_fields.length>0&&<p>Нужны актуальные сведения по полям {basis.unavailable_fields.map(field=>labels[field]).join(', ')}.</p>}
     {(!decision?.terms||inactive)&&<dl>
-      <dt>Цена на момент запроса</dt><dd>{basis.amount_minor===null?'Определяет мастер':priceAmount(basis.amount_minor)}</dd>
+      <dt>Цена на момент запроса</dt><dd>{shownPrice(basis)}</dd>
       <dt>Длительность следующего сеанса на момент запроса</dt><dd>{basis.occupied_minutes===null?'Определяет мастер':basis.occupied_minutes+' мин'}</dd>
       <dt>Предоплата</dt><dd>{depositText(basis.deposit)}</dd>
     </dl>}
@@ -222,7 +270,7 @@ function SelectedApproval({card,locked,submit,reopen}:{card:ApprovalCard;locked:
       {decision.terms&&<section aria-label={inactive?'Прежние условия':'Подтверждённые условия'}>
         <h5>{inactive?'Прежние условия':'Подтверждённые условия'}</h5>
         <dl>
-          <dt>Цена</dt><dd>{priceAmount(decision.terms.amount_minor)} · {knownPrice?'Расчёт по правилу услуги':'Утверждено мастером'}</dd>
+          <dt>Цена</dt><dd>{shownPrice(decision.terms)}{!decision.terms.price_range&&' · '+(knownPrice?'Расчёт по правилу услуги':'Утверждено мастером')}</dd>
           <dt>Длительность следующего сеанса</dt><dd>{decision.terms.occupied_minutes} мин · {knownDuration?'Оценка по правилу услуги':'Утверждено мастером'}</dd>
           <dt>Предоплата</dt><dd>{depositText(basis.deposit)}</dd>
         </dl>

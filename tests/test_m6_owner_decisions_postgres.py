@@ -13,7 +13,16 @@ from test_m3_1_native_context_postgres import claim_job, control, scalar
 from test_m3_1_provenance_postgres import process, raw
 from test_m4_runtime_postgres import COUNTER
 from test_m5_intake_postgres import application, next_turn, summary
-from test_m6_pricing_postgres import FIXED, MANUAL, draft_for_size, pricing_bundle, publish, sign_in
+from test_m6_pricing_postgres import (
+    FIXED,
+    MANUAL,
+    draft_for_size,
+    formula_price,
+    price,
+    pricing_bundle,
+    publish,
+    sign_in,
+)
 from test_m6_pricing_postgres import assessment_pg as assessment_pg
 from test_m6_pricing_postgres import auth as auth
 from test_m6_pricing_postgres import db as db
@@ -53,6 +62,10 @@ def contract(price=MANUAL, duration=OWNER_DURATION, deposit="NONE"):
 
 def endpoint(cid, request):
     return f"{route(cid)}/{request}/approvals"
+
+
+def source_url(detail, source):
+    return f"{detail}/sources/{source['message_id']}?source_version={source['source_version']}"
 
 
 async def owner_post(auth, url, token, body):
@@ -133,6 +146,22 @@ async def test_two_approvals_same_dialog_replay_exact_edition_in_human(approval_
         second["approval_id"],
     }
     first_url = a_url + "/" + first["approval_id"]
+    pinned = first["basis"]["intent_source"]
+    source = await owner_get(auth, source_url(first_url, pinned))
+    assert source == pinned | {
+        "workspace_id": str(A),
+        "business_id": first["business_id"],
+        "client_id": first["client_id"],
+        "conversation_id": str(cid),
+        "request_id": a,
+        "approval_id": first["approval_id"],
+        "content_type": "TEXT",
+        "text": "flower forearm linework 20 mm",
+    }
+    foreign_source = second["basis"]["intent_source"]
+    assert (await auth.client.get(source_url(first_url, foreign_source))).status_code == 404
+    wrong_version = pinned | {"source_version": "0" * 64}
+    assert (await auth.client.get(source_url(first_url, wrong_version))).status_code == 404
     result, replay = await asyncio.gather(
         owner_post(auth, first_url, token, CONFIRM | {"note": "  Test exact note  "}),
         owner_post(auth, first_url, token, CONFIRM | {"note": "  Test exact note  "}),
@@ -150,6 +179,7 @@ async def test_two_approvals_same_dialog_replay_exact_edition_in_human(approval_
     assert decision["terms"] == {
         "currency": "RUB",
         "amount_minor": 395_001,
+        "price_range": None,
         "occupied_minutes": 75,
         "price_reference_id": decision["decision_id"],
         "duration_reference_id": decision["decision_id"],
@@ -194,15 +224,15 @@ async def test_two_approvals_same_dialog_replay_exact_edition_in_human(approval_
     )
 
 
-@pytest.mark.parametrize("known", ["price", "duration", "both"])
+@pytest.mark.parametrize("known", ["price", "price-prepaid", "duration", "both"])
 async def test_one_missing_dimension_keeps_original_basis(approval_pg, auth, known):
     h = approval_pg
     published = await publish(
         h,
         contract(
             MANUAL if known == "duration" else FIXED,
-            OWNER_DURATION if known == "price" else FIXED_DURATION,
-            "FULL_PREPAYMENT" if known == "duration" else "NONE",
+            OWNER_DURATION if known.startswith("price") else FIXED_DURATION,
+            "FULL_PREPAYMENT" if known in {"duration", "price-prepaid"} else "NONE",
         ),
     )
     token = await sign_in(auth)
@@ -219,12 +249,16 @@ async def test_one_missing_dimension_keeps_original_basis(approval_pg, auth, kno
     body = (
         AB
         | {"operation": "APPROVE"}
-        | ({"occupied_minutes": 80} if known == "price" else {"amount_minor": 460_000})
+        | ({"occupied_minutes": 80} if known.startswith("price") else {"amount_minor": 460_000})
     )
     result = await owner_post(auth, detail, token, body)
     decision = result["decision"]
-    if known == "price":
-        assert result["basis"]["deposit"]["mode"] == "NONE"
+    assert await owner_post(auth, detail, token, body) == await owner_get(auth, detail) == result
+    if known.startswith("price"):
+        assert result["basis"]["deposit"]["mode"] == (
+            "FULL_PREPAYMENT" if known == "price-prepaid" else "NONE"
+        )
+        assert decision["terms"]["price_range"] is None
         assert (decision["terms"]["amount_minor"], decision["terms"]["occupied_minutes"]) == (
             120_001,
             80,
@@ -291,6 +325,8 @@ async def test_old_edition_cannot_be_used_after_material_change(approval_pg, aut
     original = await owner_post(auth, target, token, CONFIRM)
     expected, error = "STALE", "STALE_STATE"
     if change in {"EDIT", "DELETE"}:
+        pinned_url = source_url(target, card["basis"]["intent_source"])
+        assert "20 mm" in (await owner_get(auth, pinned_url))["text"]
         source = (
             await query(
                 h,
@@ -311,6 +347,12 @@ async def test_old_edition_cannot_be_used_after_material_change(approval_pg, aut
             ),
         )
         assert material.code == "MATERIAL_PROCESSED"
+        preview = await auth.client.get(pinned_url)
+        assert (preview.status_code, preview.json()) == (
+            (409, {"error": {"code": "STALE_STATE"}})
+            if change == "EDIT"
+            else (404, {"error": {"code": "NOT_FOUND"}})
+        )
     elif change == "RULE":
         await publish(h, contract(FIXED))
     elif change == "REVISION":
@@ -376,7 +418,11 @@ async def test_cross_scope_rights_revocation_and_durable_downgrade_refusal(appro
             403,
         ),
     ):
-        assert (await auth.client.get(foreign + "/" + card["approval_id"])).status_code == status
+        foreign_approval = foreign + "/" + card["approval_id"]
+        assert (await auth.client.get(foreign_approval)).status_code == status
+        assert (
+            await auth.client.get(source_url(foreign_approval, card["basis"]["intent_source"]))
+        ).status_code == status
         await assert_denial(auth, foreign + "/" + card["approval_id"], token, CONFIRM, status)
     with pytest.raises(AssertionError, match="OWNER_DECISION_DURABLE_DATA"):
         await _migrate("downgrade", "0027")
@@ -389,6 +435,9 @@ async def test_cross_scope_rights_revocation_and_durable_downgrade_refusal(appro
         )
     try:
         assert (await auth.client.get(target)).status_code == 403
+        assert (
+            await auth.client.get(source_url(target, card["basis"]["intent_source"]))
+        ).status_code == 403
         assert (
             await auth.client.get(f"/api/v1/workspaces/{A}/service-approvals")
         ).status_code == 403
@@ -470,5 +519,89 @@ async def test_m3_pending_covers_only_the_work_with_the_same_question(approval_p
         first["approval_id"],
         "B",
         second["approval_id"],
+        flush=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("deposit", "fixed", "percent", "retain_range"),
+    [
+        pytest.param("NONE", None, None, True, id="none"),
+        pytest.param("FIXED_DEPOSIT", 400_000, None, True, id="fixed-at-lower-bound"),
+        pytest.param("FIXED_DEPOSIT", 410_000, None, False, id="fixed-above-lower-bound"),
+        pytest.param("PERCENT_DEPOSIT", None, 25, False, id="percent-needs-exact-price"),
+        pytest.param("FULL_PREPAYMENT", None, None, False, id="full-prepayment-needs-exact-price"),
+    ],
+)
+async def test_r1_provisional_range_depends_on_deposit_and_survives_duration_only_decision(
+    approval_pg, auth, deposit, fixed, percent, retain_range
+):
+    h = approval_pg
+    bundle = contract(formula_price(range_add_minor=50_000), deposit=deposit)
+    bundle["services"][0]["deposit"].update(amount_minor=fixed, percent=percent)
+    await publish(h, bundle)
+    token = await sign_in(auth)
+    conversation, _, _, _, request = await draft_for_size(h, auth, token, "21 mm")
+    url = endpoint(conversation, request)
+    calculation = await price(auth, f"{route(conversation)}/{request}/pricing", token)
+    price_range = {"lower_minor": 400_000, "upper_minor": 450_000, "authority": "PROVISIONAL"}
+    assert (calculation["outcome"], calculation["amount_minor"]) == ("RANGE", None)
+    assert price_range == {key: calculation[key] for key in price_range}
+    card = await owner_open(auth, url, token)
+    detail = url + "/" + card["approval_id"]
+    basis = card["basis"]
+    assert basis["price_calculation_id"] == calculation["calculation_id"]
+    assert basis["amount_minor"] is None and basis["occupied_minutes"] is None
+    assert basis["price_range"] == (price_range if retain_range else None)
+    minutes_only = AB | {"operation": "APPROVE", "occupied_minutes": 75}
+    if not retain_range:
+        await assert_denial(auth, detail, token, minutes_only, 422, "INVALID_INPUT")
+        assert (await owner_get(auth, detail))["decision"] is None
+        if fixed:
+            await assert_denial(auth, detail, token, CONFIRM, 409, "NEEDS_CLARIFICATION")
+        exact = await owner_post(auth, detail, token, minutes_only | {"amount_minor": 440_000})
+        exact_terms = exact["decision"]["terms"]
+        assert exact_terms["amount_minor"] == 440_000 and exact_terms["price_range"] is None
+        assert exact_terms["price_reference_id"] == exact["decision"]["decision_id"]
+        print("R1 range requires exact price", deposit, fixed, flush=True)
+        return
+
+    await assert_denial(auth, detail, token, CONFIRM, 422, "INVALID_INPUT")
+    approved = await owner_post(auth, detail, token, minutes_only)
+    assert approved == await owner_post(auth, detail, token, minutes_only)
+    assert approved == await owner_get(auth, detail) == await owner_open(auth, url, token)
+    assert approved["status"] == "APPROVED"
+    decision = approved["decision"]
+    assert decision["submitted"]["amount_minor"] is None
+    assert decision["terms"] == {
+        "currency": "RUB",
+        "amount_minor": None,
+        "price_range": price_range,
+        "occupied_minutes": 75,
+        "price_reference_id": calculation["calculation_id"],
+        "duration_reference_id": decision["decision_id"],
+    }
+    persisted = await query(
+        h,
+        "SELECT amount_minor,lower_minor,upper_minor,price_reference_id,occupied_minutes "
+        "FROM app.owner_decisions WHERE id=:id",
+        id=UUID(decision["decision_id"]),
+    )
+    assert persisted == [
+        {
+            "amount_minor": None,
+            "lower_minor": 400_000,
+            "upper_minor": 450_000,
+            "price_reference_id": UUID(calculation["calculation_id"]),
+            "occupied_minutes": 75,
+        }
+    ]
+    print(
+        "R1 RANGE",
+        deposit,
+        card["approval_id"],
+        decision["decision_id"],
+        calculation["calculation_id"],
+        "400000–450000 PROVISIONAL / 75",
         flush=True,
     )

@@ -11,7 +11,14 @@ from asm.auth.service import AuthService
 from asm.billing.validation import CanonicalUUID
 from asm.configuration.http import body_as, command_key, command_schema, no_options
 from asm.configuration.permissions import require_owner
-from asm.service_requests.approvals import ApprovalPage, ApprovalView, DecideApproval, OpenApproval
+from asm.intake.models import Digest
+from asm.service_requests.approvals import (
+    ApprovalPage,
+    ApprovalSourceView,
+    ApprovalView,
+    DecideApproval,
+    OpenApproval,
+)
 from asm.service_requests.assessment import AssessmentCommand, ServiceAssessment
 from asm.service_requests.errors import ServiceRequestCode, ServiceRequestError
 from asm.service_requests.models import (
@@ -250,6 +257,37 @@ def install_service_requests(app: FastAPI, auth: AuthService, settings: AuthSett
             await require_owner(unit)
             return await ServiceRequestRepository(unit).approval_read(
                 UUID(business_id), UUID(conversation_id), UUID(request_id), UUID(approval_id)
+            )
+
+    @router.get(
+        "/{request_id}/approvals/{approval_id}/sources/{message_id}",
+        response_model=ApprovalSourceView,
+    )
+    async def read_approval_source(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        approval_id: CanonicalUUID,
+        message_id: CanonicalUUID,
+        source_version: Digest,
+    ) -> ApprovalSourceView:
+        names = [name for name, _ in request.query_params.multi_items()]
+        if names != ["source_version"] or request.headers.getlist("if-match"):
+            raise ServiceRequestError(ServiceRequestCode.INVALID_INPUT)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            await require_owner(unit)
+            return await ServiceRequestRepository(unit).approval_source(
+                UUID(business_id),
+                UUID(conversation_id),
+                UUID(request_id),
+                UUID(approval_id),
+                UUID(message_id),
+                source_version,
             )
 
     @router.post(

@@ -45,6 +45,18 @@ class DecideApproval(ConfigurationModel):
         return self
 
 
+class ProvisionalPriceRange(ConfigurationModel):
+    authority: Literal["PROVISIONAL"]
+    lower_minor: PriceMinor
+    upper_minor: PriceMinor
+
+    @model_validator(mode="after")
+    def ordered_bounds(self) -> Self:
+        if self.lower_minor >= self.upper_minor:
+            raise ValueError("Price range bounds must be strictly ordered")
+        return self
+
+
 class ApprovalBasis(ConfigurationModel):
     service_name: Nonblank = Field(max_length=100)
     release_id: CanonicalUUID
@@ -62,16 +74,38 @@ class ApprovalBasis(ConfigurationModel):
     price_calculation_id: CanonicalUUID
     price_reason: str = Field(max_length=40)
     amount_minor: PriceMinor | None
+    price_range: ProvisionalPriceRange | None
     occupied_minutes: OccupiedMinutes | None
     can_approve: bool
+
+    @model_validator(mode="after")
+    def permitted_range(self) -> Self:
+        if self.price_range is not None and (
+            self.amount_minor is not None
+            or self.deposit.mode != "NONE"
+            and (
+                self.deposit.mode != "FIXED_DEPOSIT"
+                or self.deposit.amount_minor is None
+                or self.deposit.amount_minor > self.price_range.lower_minor
+            )
+        ):
+            raise ValueError("Price range conflicts with the selected payment terms")
+        return self
 
 
 class ApprovedTerms(ConfigurationModel):
     currency: Literal["RUB"]
-    amount_minor: PriceMinor
+    amount_minor: PriceMinor | None
+    price_range: ProvisionalPriceRange | None
     occupied_minutes: OccupiedMinutes
     price_reference_id: CanonicalUUID
     duration_reference_id: CanonicalUUID
+
+    @model_validator(mode="after")
+    def exactly_one_price(self) -> Self:
+        if (self.amount_minor is None) == (self.price_range is None):
+            raise ValueError("Approved terms require one price representation")
+        return self
 
 
 class OwnerDecision(ConfigurationModel):
@@ -128,7 +162,7 @@ class ApprovalView(ConfigurationModel):
                 decision.terms.price_reference_id
                 != (
                     self.basis.price_calculation_id
-                    if self.basis.amount_minor is not None
+                    if self.basis.amount_minor is not None or self.basis.price_range is not None
                     else decision.decision_id
                 )
                 or decision.terms.duration_reference_id
@@ -137,6 +171,7 @@ class ApprovalView(ConfigurationModel):
                     if self.basis.occupied_minutes is not None
                     else decision.decision_id
                 )
+                or decision.terms.price_range != self.basis.price_range
                 or decision.terms.amount_minor
                 != (self.basis.amount_minor or decision.submitted.amount_minor)
                 or decision.terms.occupied_minutes
@@ -149,3 +184,14 @@ class ApprovalView(ConfigurationModel):
 class ApprovalPage(ConfigurationModel):
     items: list[ApprovalView] = Field(max_length=20)
     next_before_id: CanonicalUUID | None
+
+
+class ApprovalSourceView(IntentSource):
+    workspace_id: CanonicalUUID
+    business_id: CanonicalUUID
+    conversation_id: CanonicalUUID
+    client_id: CanonicalUUID
+    request_id: CanonicalUUID
+    approval_id: CanonicalUUID
+    content_type: Literal["TEXT", "PHOTO"]
+    text: str | None = Field(max_length=4096, repr=False)
