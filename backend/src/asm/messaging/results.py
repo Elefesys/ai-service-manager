@@ -167,6 +167,30 @@ class ScanStep(Result):
     claim: dict[str, object] | None = Field(default=None, repr=False)
 
 
+QuoteReplyOutcome = Literal[
+    "ACCEPTED",
+    "DECLINED",
+    "NEEDS_CLARIFICATION",
+    "DELIVERY_UNCONFIRMED",
+    "HUMAN_CONTROL",
+    "CONTROL_CHANGED",
+    "EXPIRED",
+    "REVOKED",
+    "STALE",
+    "REVIEW_REQUIRED",
+    "INVALID_MESSAGE",
+]
+
+
+class QuoteReplyResult(Result):
+    outcome: QuoteReplyOutcome
+    quote_id: UUID | None
+    acceptance_id: UUID | None
+    order_id: UUID | None
+    session_id: UUID | None
+    message_id: UUID
+
+
 class InboxProcessingResult(Result):
     code: Literal[
         "PROCESSED",
@@ -181,6 +205,9 @@ class InboxProcessingResult(Result):
     inbox_id: UUID
     message_id: UUID | None
     status: Literal["PROCESSED", "IGNORED", "FAILED"]
+    quote_reply: QuoteReplyResult | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class MutationInboxProcessingResult(Result):

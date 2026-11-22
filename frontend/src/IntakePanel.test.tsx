@@ -45,6 +45,26 @@ it('shows exact versioned terms and keeps a late delivery read out of another re
  expect(read.mock.calls[1][2]?.aborted).toBe(true);
 });
 
+it('opens the exact reply from the selected work and cancels navigation when it changes',async()=>{
+ const a=draft(),b={...draft(),request_id:message};
+ const openMessage=vi.fn<(messageId:string,signal:AbortSignal)=>void>();
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ vi.spyOn(intakeApi,'priceHistory').mockResolvedValue({items:[],next_before_id:null});
+ vi.mocked(intakeApi.draft).mockImplementation(async (_scope,id)=>id===b.request_id?b:a);
+ vi.mocked(intakeApi.drafts).mockResolvedValue([listItem(a),listItem(b)]);
+ vi.mocked(intakeApi.quote).mockResolvedValueOnce({
+  ...quoteDelivery(a,'SENT'),reply_notice:{outcome:'DECLINED',message_id:message},
+ });
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()} openMessage={openMessage}/>);
+ await userEvent.click(await screen.findByRole('link',{name:'Ответ клиента'}));
+ expect(openMessage).toHaveBeenCalledExactlyOnceWith(message,expect.any(AbortSignal));
+ const signal=openMessage.mock.calls[0][1];
+ expect(signal.aborted).toBe(false);
+ await userEvent.selectOptions(screen.getByLabelText('Сохранённая заявка'),b.request_id);
+ expect(signal.aborted).toBe(true);
+ expect(screen.getByTestId('service-request-id')).toHaveTextContent(b.request_id);
+});
+
 it.each(['current','previous'] as const)('polls the %s quote through lease expiry and stops at the outcome',async(version)=>{
  vi.useFakeTimers();
  try{

@@ -1,4 +1,4 @@
-import {expect,test,type Locator,type Page,type Route} from '@playwright/test';
+import {expect,test,type Locator,type Page,type Request,type Route} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -16,10 +16,14 @@ const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixture
 type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
+type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
+type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history';
+type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'quote-delivery'|'quote-guard';
+type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|QuoteIntakeJourney;
 
-function intakeChildFailure(error:unknown,operation:IntakeOperation|QuoteOperation,journey:IntakeJourney,variant:Viewport):Error {
+function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:IntakeJourney,variant:Viewport):Error {
  const result=error as {code?:unknown;stderr?:unknown;killed?:boolean;signal?:string};
  const exit=typeof result.code==='number'?String(result.code):'UNKNOWN';
  const request=`operation=${operation};journey=${journey};variant=${variant}`;
@@ -72,7 +76,7 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  return {...await collectIntake(page,variant,journey),serviceName};
 }
 
-async function intakeFixture<T>(operation:IntakeOperation|QuoteOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
+async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
  const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
@@ -1030,7 +1034,7 @@ test('@narrow asks only for the missing term and retains its independent basis',
 
 type QuoteAttempt={quote_id:string;job_claimed:boolean;status:QuoteDelivery['status'];reason:string|null;calls:number;effects:number;text:string|null};
 
-async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-delivery'|'quote-guard'){
+async function beginQuoteJourney(page:Page,variant:Viewport,journey:QuoteIntakeJourney){
  page.setDefaultTimeout(12000);
  const {settings,serviceName}=await configureIntakeService(page,variant);
  const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
@@ -1038,10 +1042,11 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-deliv
  await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('CONFIGURED_FORMULA');
  await settings.getByLabel('Режим длительности 1',{exact:true}).selectOption('FIXED');
  await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('NONE');
+ const range=journey==='quote-acceptance'||journey==='quote-clarification';
  for(const [label,value] of [
   ['База, копейки 1','250000'],['За начатый шаг, копейки 1','50000'],
-  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1','100'],
-  ['Прибавка к верхней границе, копейки 1',''],['Длительность, минуты 1','65'],
+  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',range?'1000':'100'],
+  ['Прибавка к верхней границе, копейки 1',range?'50000':''],['Длительность, минуты 1','65'],
   ['Предоплата, копейки 1',''],['Предоплата, процент 1',''],
  ])await settings.getByLabel(label,{exact:true}).fill(value);
  await publishIntakeService(settings,serviceName);
@@ -1297,4 +1302,175 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  const clarification=variant==='narrow'?await confirmExactQuote(page,app,range,'UNKNOWN','FULL_PREPAYMENT'):null;
  console.log('M6.3B R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,request:firstId,held,checkpoints,unknown,restarted,clarification}));
+});
+
+test('@narrow M6.3C agrees B before A and preserves the first reply and planned session',async({page},info)=>{
+ test.setTimeout(120_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const journey='quote-acceptance';
+ const {input,conversation,intake,inbox,cardId,panel,firstId,execute,read,evaluateAndPrice}=await beginQuoteJourney(page,variant,journey);
+ const reply=(operation:QuoteReply,id:string)=>intakeFixture<QuoteReplyResult>(operation,journey,variant,conversation,id);
+ const a=await evaluateAndPrice(firstId);
+ expect(await execute('deliver-quote',firstId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ const second=await input('quote-second',conversation);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,second.message_id,'swallow','shoulder','101 mm','linework')).click();
+ await expect(cardId).not.toHaveText(firstId);
+ const secondId=(await cardId.textContent())!;
+ const b=await evaluateAndPrice(secondId);
+ expect(await execute('deliver-quote',secondId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ expect(a.code).not.toBe(b.code);
+
+ const ambiguous=await reply('ambiguous-agreement',secondId);
+ expect(ambiguous).toMatchObject({outcome:'NEEDS_CLARIFICATION',acceptance_id:null,order_id:null,session_id:null});
+ await refreshIntake(inbox,intake);
+ await expect(panel.getByText(/Уточните, какое предложение он принимает/)).toBeVisible();
+ expect((await read(firstId)).agreement).toBeUndefined();
+ expect((await read(secondId)).agreement).toBeUndefined();
+
+ const agreedB=await reply('agree-quote',secondId);
+ expect(agreedB).toMatchObject({outcome:'ACCEPTED',quote_id:b.quote_id,source_message_id:agreedB.message_id});
+ const savedB=(await read(secondId)).agreement!;
+ expect(savedB).toMatchObject({acceptance_id:agreedB.acceptance_id,order_id:agreedB.order_id,session_id:agreedB.session_id,
+  status:'PLANNED',scheduled_at:null,quote:b,source:{message_id:agreedB.message_id,status:'AVAILABLE',text:'Принимаю '+b.code}});
+ expect(savedB.quote.material.price_range).toEqual({authority:'PROVISIONAL',lower_minor:800000,upper_minor:850000});
+ await refreshIntake(inbox,intake);
+ const order=panel.getByRole('region',{name:'Согласованный заказ',exact:true});
+ await expect(order.getByTestId('service-order-id')).toHaveText(savedB.order_id);
+ await expect(order.getByText(/Запланирован без даты · 65 мин/)).toBeVisible();
+ await order.getByRole('link',{name:'Первая подтверждающая реплика'}).click();
+ await expect(order.getByText('Принимаю '+b.code,{exact:true})).toBeVisible();
+ await order.getByText('Принятые условия · '+b.code,{exact:true}).click();
+ await expect(order.getByTestId('quote-text')).toHaveText(b.text);
+ const retry=await reply('repeat-agreement',secondId);
+ expect(retry).toMatchObject({acceptance_id:savedB.acceptance_id,order_id:savedB.order_id,session_id:savedB.session_id,
+  source_message_id:agreedB.message_id});
+ expect(retry.message_id).not.toBe(agreedB.message_id);
+ expect((await read(secondId)).agreement).toEqual(savedB);
+
+ await intake.getByLabel('Сохранённая заявка',{exact:true}).selectOption(firstId);
+ await expect(panel.getByTestId('quote-text')).toContainText(a.code);
+ await expect(order).toHaveCount(0);
+ expect((await read(firstId)).agreement).toBeUndefined();
+ const agreedA=await reply('agree-quote',firstId);
+ const savedA=(await read(firstId)).agreement!;
+ expect(savedA).toMatchObject({acceptance_id:agreedA.acceptance_id,order_id:agreedA.order_id,session_id:agreedA.session_id,
+  status:'PLANNED',scheduled_at:null,quote:a,source:{message_id:agreedA.message_id}});
+ expect(new Set([savedA.acceptance_id,savedA.order_id,savedA.session_id,savedB.acceptance_id,savedB.order_id,savedB.session_id]).size).toBe(6);
+ await refreshIntake(inbox,intake);
+ await expect(order.getByTestId('service-order-id')).toHaveText(savedA.order_id);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ console.log('M6.3C Chromium '+info.project.name+' '+JSON.stringify({conversation,a:agreedA,b:agreedB,retry,ambiguous:ambiguous.outcome,scheduledAt:null}));
+});
+
+test('@narrow M6.3C-R1 keeps A declined and asks for the code only on open B',async({page},info)=>{
+ test.setTimeout(120_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const journey='quote-clarification';
+ const {input,conversation,intake,inbox,cardId,panel,firstId,execute,read,evaluateAndPrice}=await beginQuoteJourney(page,variant,journey);
+ const reply=(operation:QuoteReply,id:string)=>intakeFixture<QuoteReplyResult>(operation,journey,variant,conversation,id);
+ const a=await evaluateAndPrice(firstId);
+ expect(await execute('deliver-quote',firstId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ const other=await input('quote-second',conversation);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,other.message_id,'swallow','shoulder','101 mm','linework')).click();
+ await expect(cardId).not.toHaveText(firstId);
+ const secondId=(await cardId.textContent())!;
+ const b=await evaluateAndPrice(secondId);
+ expect(a.code).not.toBe(b.code);
+ const requests=intake.getByLabel('Сохранённая заявка',{exact:true});
+ await requests.selectOption(firstId);
+ await expect(panel.getByTestId('quote-text')).toContainText(a.code);
+ const decline=await reply('decline-quote',firstId);
+ expect(decline).toMatchObject({outcome:'DECLINED',quote_id:a.quote_id});
+ const declined=panel.getByRole('status').filter({hasText:'Клиент отклонил предложение.'});
+ const clarify=panel.getByRole('status').filter({hasText:'Уточните, какое предложение он принимает'});
+ const source=panel.getByRole('link',{name:'Ответ клиента',exact:true});
+ const order=panel.getByRole('region',{name:'Согласованный заказ',exact:true});
+ const closedYes=await reply('ambiguous-agreement',firstId);
+ expect(closedYes).toMatchObject({outcome:null,order_id:null});
+ await refreshIntake(inbox,intake);
+ await expect(declined).toBeVisible();
+ await expect(clarify).toHaveCount(0);
+ await expect(source).toHaveAttribute('href','#message-'+decline.message_id);
+ await expect(order).toHaveCount(0);
+
+ await requests.selectOption(secondId);
+ await expect(panel.getByTestId('quote-text')).toContainText(b.code);
+ expect(await execute('deliver-quote',secondId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ const bBefore=await read(secondId,'SENT');
+ expect(bBefore.reply_notice).toBeUndefined();
+ const openYes=await reply('ambiguous-agreement',secondId);
+ expect(openYes).toMatchObject({outcome:'NEEDS_CLARIFICATION',acceptance_id:null,order_id:null,session_id:null});
+ await refreshIntake(inbox,intake);
+ await expect(clarify).toBeVisible();
+ await expect(declined).toHaveCount(0);
+ await expect(source).toHaveAttribute('href','#message-'+openYes.message_id);
+ await expect(order).toHaveCount(0);
+
+ await requests.selectOption(firstId);
+ await expect(panel.getByTestId('quote-text')).toContainText(a.code);
+ await expect(declined).toBeVisible();
+ await expect(clarify).toHaveCount(0);
+ await expect(source).toHaveAttribute('href','#message-'+decline.message_id);
+ await expect(order).toHaveCount(0);
+ const [aView,bView]=await Promise.all([read(firstId,'SENT'),read(secondId,'SENT')]);
+ expect(aView.agreement).toBeUndefined();
+ expect(bView.agreement).toBeUndefined();
+ expect(aView.reply_notice).toEqual({outcome:'DECLINED',message_id:decline.message_id});
+ expect(bView.reply_notice).toEqual({outcome:'NEEDS_CLARIFICATION',message_id:openYes.message_id});
+ console.log('M6.3C-R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,a:aView.reply_notice,b:bView.reply_notice,closedYes:closedYes.message_id,orders:0}));
+
+ const newer=await intakeFixture<{count:number;last_message_id:string}>('page-reply-history',journey,variant,conversation,secondId);
+ expect(newer.count).toBe(25);
+ const history=inbox.getByRole('region',{name:'История сообщений',exact:true}).locator('ol.message-list');
+ const historyPath=`/api/v1/workspaces/${owner.workspace_id}/conversations/${conversation}/messages`;
+ const historyReads:boolean[]=[];
+ function recordHistory(request:Request){
+  const url=new URL(request.url());
+  if(request.method()==='GET'&&url.pathname===historyPath)historyReads.push(url.searchParams.has('cursor'));
+ }
+ page.on('request',recordHistory);
+ try{
+  for(const [work,requestId,messageId,expectedText] of [
+   ['A',firstId,decline.message_id,`Отклоняю ${a.code}`],
+   ['B',secondId,openYes.message_id,'да'],
+  ]){
+   await page.goto('/');
+   await openWorkspace(page);
+   await openConversation(page,conversation);
+   await expect(page.getByTestId(`conversation-${conversation}`)).toHaveAttribute('aria-pressed','true');
+   await expect(history.getByTestId(`message-${newer.last_message_id}`)).toHaveText(/Synthetic reply history 25/);
+   await expect(history.getByRole('listitem')).toHaveCount(25);
+   await requests.selectOption(requestId);
+   await expect(cardId).toHaveText(requestId);
+   const elementId=`message-${messageId}`;
+   const row=history.getByTestId(elementId);
+   await expect(row).toHaveCount(0);
+   await expect(source).toHaveAttribute('href',`#${elementId}`);
+   const beforeClick=historyReads.length;
+   await source.click();
+   await expect.soft(row,`${work} opens and focuses the older reply`).toBeFocused();
+   const activeId=await page.evaluate(()=>document.activeElement?.id||null);
+   const observed=await row.evaluateAll(rows=>rows.map(row=>({
+    id:row.id,text:row.querySelector('.message-text')?.textContent,
+   })));
+   const reads=historyReads.slice(beforeClick);
+   let repeatGets:number|null=null;
+   if(observed.length){
+    await expect.soft(row.locator('.message-text')).toHaveText(expectedText);
+    await expect.soft(row).toBeInViewport();
+    const beforeRepeat=historyReads.length;
+    await source.click();
+    await expect.soft(row,`${work} refocuses the loaded reply`).toBeFocused();
+    repeatGets=historyReads.length-beforeRepeat;
+   }
+   console.log('M6.3C-R2 Chromium '+info.project.name+' '+JSON.stringify({work,requestId,messageId,expectedText,newer:newer.count,observed,activeId,historyGets:reads.length,cursorGets:reads.filter(Boolean).length,repeatGets}));
+   expect.soft(observed).toEqual([{id:elementId,text:expectedText}]);
+   expect.soft(reads).toEqual([true]);
+   expect.soft(repeatGets).toBe(0);
+  }
+ }finally{
+  page.off('request',recordHistory);
+ }
 });

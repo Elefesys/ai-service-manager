@@ -1,5 +1,5 @@
 import { HumanContextPanel, type HumanContextIntent } from './HumanContextPanel';
-import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Session } from './api';
 import { EscalationContext } from './escalation-api';
 import { ConversationControl, ControlIntent } from './ConversationControl';
@@ -8,6 +8,8 @@ import { PortfolioError, portfolioApi } from './portfolio-api';
 
 type Intent = { readonly actor: string; readonly workspace: string; readonly conversation: string; readonly body: SendBody; readonly key: string; phase: 'sending' | 'uncertain' | 'confirmed' | 'conflict'; ambiguous: boolean; failedSession: Session; receipt?: SendReceipt };
 type Collection<T> = { items: T[] | null; cursor: string | null; busy: boolean; error: string };
+export type OpenMessage = (messageId: string, signal: AbortSignal) => void;
+type MessageTarget = { messageId: string; conversation: string; epoch: number; signal: AbortSignal };
 type ImageView = { message: string; version: string; busy: boolean; grant: ReadGrant | null; error: string };
 type PortfolioImageView = { message: string; source: string; busy: boolean; url: string | null; error: string };
 type View = { generation: number; connections: Collection<Connection>; conversations: Collection<Conversation>; messages: Collection<Message>; selected: string; draft: string; notice: string; denied: boolean; image: ImageView | null; portfolioImage: PortfolioImageView | null; receipt: SendReceipt | null };
@@ -24,7 +26,7 @@ function merge<T extends { created_at: string }>(old: T[], next: T[], id: (v: T)
 }
 
 // Page lifetime includes login/recovery. No storage, polling, or write on mount.
-export function MessagingPanel({ session, workspace, recover, expired, accessDenied, ownerDecision, portfolio }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void; ownerDecision?: EscalationContext | null; portfolio?: (context: Pick<Conversation, 'business_id'|'client_id'|'conversation_id'> | null, canAnalyse: boolean, refresh: number) => ReactNode }) {
+export function MessagingPanel({ session, workspace, recover, expired, accessDenied, ownerDecision, portfolio }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void; ownerDecision?: EscalationContext | null; portfolio?: (context: Pick<Conversation, 'business_id'|'client_id'|'conversation_id'> | null, canAnalyse: boolean, refresh: number, openMessage: OpenMessage) => ReactNode }) {
   const owner = !!session && !!workspace && session.memberships.some(m => m.workspace_id === workspace && m.role === 'OWNER');
   const scope = useRef({ session, workspace, owner, generation: 0 });
   const selection = useRef({ id: '', epoch: 0 });
@@ -39,6 +41,8 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   imageState.current = view.image;
   const messagesState = useRef(view.messages.items);
   messagesState.current = view.messages.items;
+  const messageList = useRef<HTMLOListElement>(null);
+  const [messageTarget, setMessageTarget] = useState<MessageTarget | null>(null);
   const intent = useRef<Intent | null>(null);
   const humanIntent=useRef<HumanContextIntent|null>(null);
   const [nativeRefresh,setNativeRefresh]=useState(0);
@@ -107,18 +111,41 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       if (!authorization(e)) setView(v => ({ ...v, [kind]: { ...v[kind], busy: false, error: failure(e) } }));
     } finally { controllers.current.delete(c); if (current() && seq === sequence.current[kind]) reading.current[kind] = false; }
   }
-  async function history(id = selection.current.id, cursor: string | null = null) {
-    if (!current() || !id || reading.current.messages || intent.current?.phase === 'sending') return;
+  async function history(id = selection.current.id, cursor: string | null = null, target?: MessageTarget) {
+    if (!current() || !id || reading.current.messages || intent.current?.phase === 'sending' || target?.signal.aborted) return;
     // Only a read begun after acceptance may finish receipt recovery.
     const confirmed = intent.current?.phase === 'confirmed' ? intent.current : null;
     const epoch = selection.current.epoch, seq = ++sequence.current.messages, c = controller();
+    const isCurrentRead = () => inConversation(id, epoch) && seq === sequence.current.messages;
+    const abort = () => {
+      c.abort();
+      if (isCurrentRead()) {
+        reading.current.messages = false;
+        setView(v => ({ ...v, messages: { ...v.messages, busy: false } }));
+      }
+    };
+    target?.signal.addEventListener('abort', abort, { once: true });
     reading.current.messages = true;
     if (cursor === null) { sequence.current.image++; clearPortfolioImage(); update({ image: null }); }
     setView(v => ({ ...v, messages: { ...(cursor === null ? empty<Message>() : v.messages), busy: true, error: '' } }));
     try {
-      const page = await messagingApi.messages(workspace, id, cursor, c.signal);
-      if (!inConversation(id, epoch) || seq !== sequence.current.messages) return;
-      setView(v => ({ ...v, messages: { items: merge(cursor === null ? [] : v.messages.items ?? [], page.items, x => x.message_id), cursor: page.next_cursor, busy: false, error: '' } }));
+      const items: Message[] = [], visited = new Set<string | null>();
+      let nextCursor = cursor, found: boolean;
+      do {
+        if (visited.has(nextCursor)) throw new MessagingError(422, 'INVALID_REQUEST');
+        visited.add(nextCursor);
+        const page = await messagingApi.messages(workspace, id, nextCursor, c.signal);
+        if (!isCurrentRead() || c.signal.aborted) return;
+        items.push(...page.items);
+        nextCursor = page.next_cursor;
+        found = !target || page.items.some(item => item.message_id === target.messageId);
+      } while (!found && nextCursor !== null);
+      const error = found ? '' : 'Сообщение не найдено в истории.';
+      setView(v => ({ ...v, messages: { items: merge(cursor === null ? [] : v.messages.items ?? [], items, x => x.message_id), cursor: nextCursor, busy: false, error } }));
+      if (target) {
+        if (!found) setMessageTarget(value => value === target ? null : value);
+        return;
+      }
       refreshPortfolio(n => n + 1);
       const p = intent.current;
       if (p && p === confirmed && p.phase === 'confirmed' && sameActor(p) && p.conversation === id) {
@@ -126,10 +153,40 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         intent.current = null; changed();
       }
     } catch (e) {
-      if (!inConversation(id, epoch) || seq !== sequence.current.messages) return;
+      if (!isCurrentRead() || c.signal.aborted) return;
+      if (target) setMessageTarget(value => value === target ? null : value);
       if (!authorization(e)) setView(v => ({ ...v, messages: { ...v.messages, busy: false, error: failure(e) } }));
-    } finally { controllers.current.delete(c); if (inConversation(id, epoch) && seq === sequence.current.messages) reading.current.messages = false; }
+    } finally {
+      target?.signal.removeEventListener('abort', abort);
+      controllers.current.delete(c);
+      if (isCurrentRead()) reading.current.messages = false;
+    }
   }
+  const openMessage: OpenMessage = (messageId, signal) => {
+    const { id: conversation, epoch } = selection.current;
+    if (current() && conversation && !signal.aborted) setMessageTarget({ messageId, conversation, epoch, signal });
+  };
+  const sendPhase = intent.current?.phase;
+  useLayoutEffect(() => {
+    if (!messageTarget) return;
+    const { messageId, conversation, epoch, signal } = messageTarget;
+    if (signal.aborted || !inConversation(conversation, epoch) || view.selected !== conversation) {
+      setMessageTarget(null);
+      return;
+    }
+    const row = document.getElementById(`message-${messageId}`);
+    if (row && messageList.current?.contains(row)) {
+      row.focus({ preventScroll: true });
+      row.scrollIntoView?.({ block: 'center' });
+      setMessageTarget(null);
+    } else if (!view.messages.busy && sendPhase !== 'sending') {
+      if (view.messages.cursor) void history(conversation, view.messages.cursor, messageTarget);
+      else {
+        setMessageTarget(null);
+        setView(v => ({ ...v, messages: { ...v.messages, error: 'Сообщение не найдено в истории.' } }));
+      }
+    }
+  }, [messageTarget, generation, view.selected, view.messages, sendPhase]);
   function choose(id: string) {
     if (!current() || selection.current.id === id) return;
     interruptSend();
@@ -271,11 +328,11 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {!view.selected && <p>Выберите диалог.</p>}
         {selected && <p className="muted">Окно ответа: {selected.reply_window_expires_at ?? 'Нет отметки Telegram'}. Текущее разрешение проверяет сервер.</p>}
         {control}{humanContext}
-        {portfolio?.(selected && view.messages.items !== null ? {business_id:selected.business_id,client_id:selected.client_id,conversation_id:selected.conversation_id} : null, !view.messages.busy && !controlPending && !contextPending && !intent.current && humanState?.control_mode === 'AI' && (humanState.policy === 'OFF_UNUSED' ? humanState.context_blockers.every(b => b === 'POLICY_INACTIVE') : humanState.policy === 'ON' && humanState.context_blockers.length === 0), portfolioRefresh)}
+        {portfolio?.(selected && view.messages.items !== null ? {business_id:selected.business_id,client_id:selected.client_id,conversation_id:selected.conversation_id} : null, !view.messages.busy && !controlPending && !contextPending && !intent.current && humanState?.control_mode === 'AI' && (humanState.policy === 'OFF_UNUSED' ? humanState.context_blockers.every(b => b === 'POLICY_INACTIVE') : humanState.policy === 'ON' && humanState.context_blockers.length === 0), portfolioRefresh, openMessage)}
         {ownerDecision?.workspace===workspace&&ownerDecision.conversation===selected?.conversation_id&&ownerDecision.client===selected.client_id&&<p role="status" className="notice">По этому диалогу сохранено внутреннее решение владельца. Обновите сообщения и режим перед следующим действием; решение не является отправкой клиенту.</p>}
         {view.messages.busy && <p role="status">Загружаем сообщения…</p>}{view.messages.error && <p role="alert">{view.messages.error}</p>}
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}
-        <ol className="message-list">{view.messages.items?.map(m => <li key={m.message_id} id={`message-${m.message_id}`} data-testid={`message-${m.message_id}`}><article>
+        <ol ref={messageList} className="message-list">{view.messages.items?.map(m => <li key={m.message_id} id={`message-${m.message_id}`} data-testid={`message-${m.message_id}`} tabIndex={-1}><article>
           <strong>{m.direction === 'INBOUND' ? 'Входящее' : 'Исходящее'}</strong><time dateTime={m.occurred_at}>{m.occurred_at}</time>
           {m.current.changed && <p className="muted">Изменено</p>}
           {m.current.state === 'DELETED' && <p>Сообщение удалено.</p>}

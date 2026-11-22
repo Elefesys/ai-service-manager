@@ -403,3 +403,38 @@ def update_fingerprint_v2(projection: TelegramProjectionV2) -> str:
     return hashlib.sha256(
         b"asm:m3:telegram_provenance:v2\n" + b"".join(_part(v) for v in values)
     ).hexdigest()
+
+
+def is_own_client_text(update: dict[str, Any], projection: TelegramProjectionV2) -> bool:
+    """Derive origin from the authenticated raw update before provider extras are dropped."""
+    if (
+        projection.discriminator != "NEW"
+        or projection.unsupported_reason != "NONE"
+        or projection.content is None
+        or projection.content.kind != "TEXT"
+    ):
+        return False
+    message = update["business_message"]
+    origin_markers = {
+        "forward_origin",
+        "forward_date",
+        "forward_from",
+        "forward_from_chat",
+        "forward_from_message_id",
+        "forward_sender_name",
+        "forward_signature",
+        "is_automatic_forward",
+        "is_from_offline",
+        "via_bot",
+        "sender_business_bot",
+        "edit_date",
+    }
+    if origin_markers.intersection(message):
+        return False
+    entities = message.get("entities", [])
+    return isinstance(entities, list) and all(
+        isinstance(entity, dict)
+        and isinstance(entity.get("type"), str)
+        and entity["type"] not in {"blockquote", "expandable_blockquote"}
+        for entity in entities
+    )

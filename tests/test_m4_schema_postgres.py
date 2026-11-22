@@ -53,8 +53,8 @@ async def schema15(pg):
     )
     pg.probe_checks_0014 = await probe_checks(pg)
     assert len(pg.probe_checks_0014) == 3
-    await migrate("upgrade", "0029")
-    await migrate("upgrade", "0029")
+    await migrate("upgrade", "0030")
+    await migrate("upgrade", "0030")
     assert (
         await scalar(
             pg,
@@ -73,7 +73,7 @@ async def schema15(pg):
         await scalar(pg, "SELECT to_jsonb(c) FROM app.conversations c WHERE id=:id", id=pg.retained)
         == pg.retained_before
     )
-    pg.schema_revision = "0029"
+    pg.schema_revision = "0030"
     return pg
 
 
@@ -92,7 +92,7 @@ async def test_unused_successor_downgrade_restore_and_exact_readiness(schema15):
         with pytest.raises(RuntimeError, match="schema"):
             await runtime.check()
         assert await scalar(h, "SELECT to_regclass('platform.ai_deliveries')") is None
-        await migrate("upgrade", "0029")
+        await migrate("upgrade", "0030")
         await runtime.check()
         async with h.migrator.begin() as c:
             assert await current_snapshot(c) == before
