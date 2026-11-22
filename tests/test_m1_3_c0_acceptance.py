@@ -158,7 +158,11 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                         (
                             *TABLES,
                             "platform.service_request_receipts",
+                            "platform.quote_reply_events",
                             "platform.quote_delivery_intents",
+                            "app.service_sessions",
+                            "app.service_orders",
+                            "app.quote_acceptances",
                             "app.quotes",
                             "app.owner_decisions",
                             "app.approval_requests",
