@@ -113,6 +113,9 @@ SERVICE_ASSESSMENT_NONFUNCTION_SHA256 = (
     "75ad504d42f1c8e511d59152d77c594e5d3a5da00367348ac016f36fbe8b758c"
 )
 ACCEPTANCE_NONFUNCTION_SHA256 = "bf6e7c247ca23be5b6cc79e27916976c53e4b1a5530bca1246a5e6443d949a80"
+SERVICE_INTENT_NONFUNCTION_SHA256 = (
+    "102f76177a579c854fafc90752f6dce2a1a57c98c0a82a657de79fa4570b2a39"
+)
 QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
 OWNER_DECISION_NONFUNCTION_SHA256 = (
     "fc25cd353f880f250d226f00e0f0accb25b9f340e5bab7daa21b3aef6f64810d"
@@ -306,6 +309,7 @@ def capture_source(root, revision="0013"):
             "0028",
             "0029",
             "0030",
+            "0031",
         },
         "Unsupported catalog revision",
     )
@@ -438,6 +442,12 @@ def source_catalog(root, revision="0013"):
                     ):
                         require(col[1] not in columns[m[1]], "Duplicate added column")
                         columns[m[1]].append(col[1])
+                    elif (
+                        revision == "0031"
+                        and m[1] in {"app.service_assessments", "app.price_calculations"}
+                        and operation == "ALTER COLUMN actor_user_account_id DROP NOT NULL"
+                    ):
+                        continue
                     else:
                         require(
                             re.fullmatch(
@@ -522,6 +532,7 @@ def source_catalog(root, revision="0013"):
             "0028": 359,
             "0029": 377,
             "0030": 390,
+            "0031": 407,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -549,6 +560,7 @@ def source_catalog(root, revision="0013"):
             "0028": 79,
             "0029": 81,
             "0030": 85,
+            "0031": 86,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -630,6 +642,7 @@ def source_catalog(root, revision="0013"):
                 if revision >= "0030"
                 else set()
             )
+            | ({"platform.service_request_agent_intents"} if revision >= "0031" else set())
         ),
         "Independent source column replay differs",
     )
@@ -739,11 +752,14 @@ def compare_embedded_profile(expected):
             "0028",
             "0029",
             "0030",
+            "0031",
         },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.quote_acceptance_schema_profile()"
+        "platform.service_intent_schema_profile()"
+        if revision == "0031"
+        else "platform.quote_acceptance_schema_profile()"
         if revision == "0030"
         else "platform.quote_schema_profile()"
         if revision == "0029"
@@ -812,6 +828,7 @@ def compare_embedded_profile(expected):
             "0028": 358,
             "0029": 376,
             "0030": 389,
+            "0031": 406,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -860,6 +877,7 @@ def compare_embedded_profile(expected):
             "0028": 79,
             "0029": 81,
             "0030": 85,
+            "0031": 86,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -977,6 +995,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0028",
             "0029",
             "0030",
+            "0031",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -998,6 +1017,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0028": OWNER_DECISION_NONFUNCTION_SHA256,
                 "0029": QUOTE_NONFUNCTION_SHA256,
                 "0030": ACCEPTANCE_NONFUNCTION_SHA256,
+                "0031": SERVICE_INTENT_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3114,7 +3134,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0030"),
+            source_catalog(ROOT, "0031"),
         )
 
     def persist_partition(self, work):
@@ -3298,7 +3318,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0030"
+            and source["expected_revision"] == "0031"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

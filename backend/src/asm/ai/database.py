@@ -33,11 +33,14 @@ from asm.ai.contracts import (
     AnyGatewayConfig,
     Budget,
     IntakeGatewayConfig,
+    IntakeReply,
     PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
     PortfolioPhoto,
     PortfolioPhotoSelection,
     Reply,
+    ServiceIntentGatewayConfig,
+    ServiceIntentResult,
     validate_conversation_result,
     validate_gateway_config,
 )
@@ -77,7 +80,10 @@ from asm.ai.runtime_contracts import (
     RuntimeReceipt,
     RuntimeStop,
     SearchRuntimeReceipt,
+    ServiceIntentRuntimeReceipt,
 )
+from asm.intake.models import CandidateSet
+from asm.intake.projection import AMBIGUOUS_QUESTION
 from asm.knowledge.embeddings import EmbeddingClient, EmbeddingFailure, unavailable
 from asm.knowledge.errors import KnowledgeError
 from asm.messaging.database import MessagingDatabase
@@ -156,9 +162,9 @@ class AIDatabase:
 
     def config(self, config: AnyGatewayConfig) -> AnyGatewayConfig:
         if self.intake:
-            if not isinstance(config, IntakeGatewayConfig):
+            if not isinstance(config, (IntakeGatewayConfig, ServiceIntentGatewayConfig)):
                 raise MessagingError(Code.NOT_ALLOWED)
-            return IntakeGatewayConfig.model_validate(config)
+            return validate_gateway_config(config)
         if self.portfolio_delivery:
             if not isinstance(config, PortfolioDeliveryGatewayConfig):
                 raise MessagingError(Code.NOT_ALLOWED)
@@ -199,21 +205,32 @@ class AIDatabase:
             "deadline": deadline.isoformat(),
         }
         if isinstance(
-            config, (PortfolioGatewayConfig, PortfolioDeliveryGatewayConfig, IntakeGatewayConfig)
+            config,
+            (
+                PortfolioGatewayConfig,
+                PortfolioDeliveryGatewayConfig,
+                IntakeGatewayConfig,
+                ServiceIntentGatewayConfig,
+            ),
         ):
             if self.portfolio_session_id is None:
                 raise MessagingError(Code.NOT_ALLOWED)
             payload["portfolio_session_id"] = str(self.portfolio_session_id)
         raw = await self._command(claim, "PREPARE", **payload)
-        if config.prompt_revision in {"conversation_v5", "conversation_v6", "conversation_v7"}:
+        if config.prompt_revision in {
+            "conversation_v5",
+            "conversation_v6",
+            "conversation_v7",
+            "conversation_v8",
+        }:
             run = (
                 decoded(PreparedIntakeRun, raw)
-                if isinstance(config, IntakeGatewayConfig)
+                if isinstance(config, (IntakeGatewayConfig, ServiceIntentGatewayConfig))
                 else decoded(PreparedPortfolioDeliveryRun, raw)
                 if isinstance(config, PortfolioDeliveryGatewayConfig)
                 else decoded(PreparedPortfolioRun, raw)
             )
-            if run.portfolio_session_id != self.portfolio_session_id:
+            if run.portfolio_session_id != self.portfolio_session_id or run.config != config:
                 raise MessagingError(Code.AI_STALE)
             return run
         if config.prompt_revision == "conversation_v4":
@@ -236,6 +253,8 @@ class AIDatabase:
         return PostgresAuthority(self, claim, run)
 
     def receipt(self, config: AnyGatewayConfig, raw: Any) -> AnyRuntimeReceipt:
+        if isinstance(config, ServiceIntentGatewayConfig):
+            return decoded(ServiceIntentRuntimeReceipt, raw)
         if isinstance(config, IntakeGatewayConfig):
             return decoded(IntakeRuntimeReceipt, raw)
         if isinstance(config, PortfolioDeliveryGatewayConfig):
@@ -289,6 +308,8 @@ class AIDatabase:
             if error.code != Code.STALE_CLAIM:
                 raise
         try:
+            if isinstance(result, ServiceIntentResult):
+                return await self._commit_service_intents(claim, run, result)
             return self.receipt(
                 run.config,
                 await self._command(
@@ -301,6 +322,27 @@ class AIDatabase:
             # Admission may have waited behind the winning commit. Historical
             # replay still requires that winning capability, not just a run ID.
             return await self.replay(claim, run.config, result)
+
+    async def _commit_service_intents(
+        self, claim: JobClaim, run: AnyPreparedRun, result: ServiceIntentResult
+    ) -> ServiceIntentRuntimeReceipt:
+        from asm.service_requests.agent import finish_service_intents
+
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit.ai_runtime(
+                "COMMIT",
+                {"run_id": str(run.run_id), "result": result.model_dump(mode="json")},
+                delivery=self.delivery,
+            )
+
+            async def continue_intents(stage: str, payload: dict[str, object]) -> object:
+                return await unit.continue_service_intents(run.run_id, stage, payload)
+
+            effects = await finish_service_intents(continue_intents)
+            receipt = decoded(ServiceIntentRuntimeReceipt, raw | {"service_intents": effects})
+            await self.messaging.checkpoint("service_intents_before_commit")
+        await self.messaging.checkpoint("service_intents_after_commit")
+        return receipt
 
     async def execute(
         self,
@@ -349,10 +391,12 @@ class AIDatabase:
         if isinstance(run, (PreparedPortfolioDeliveryRun, PreparedIntakeRun)):
             if not isinstance(portfolio_data, PortfolioDeliveryQueryData):
                 raise MessagingError(Code.AI_STALE)
-            from asm.ai.intake import IntakeConversationAgent
+            from asm.ai.intake import IntakeConversationAgent, ServiceIntentConversationAgent
 
             agent_class = (
-                IntakeConversationAgent
+                ServiceIntentConversationAgent
+                if isinstance(config, ServiceIntentGatewayConfig)
+                else IntakeConversationAgent
                 if isinstance(run, PreparedIntakeRun)
                 else PortfolioDeliveryConversationAgent
             )
@@ -424,7 +468,26 @@ class AIDatabase:
             return RuntimeStop(run_id=run.run_id, reason="AGENT_STOP")
         if self.delivery and isinstance(outcome.candidate, (Reply, PortfolioPhoto)):
             return await self._commit_reply(claim, run, outcome.candidate, telegram)
-        return await self.commit(claim, run, outcome.candidate)
+        try:
+            return await self.commit(claim, run, outcome.candidate)
+        except MessagingError as intent_error:
+            if intent_error.code != Code.AI_INTENT_AMBIGUOUS or not isinstance(
+                outcome.candidate, ServiceIntentResult
+            ):
+                raise
+            return await self._commit_reply(
+                claim,
+                run,
+                IntakeReply(
+                    kind="reply",
+                    text=AMBIGUOUS_QUESTION,
+                    reason=None,
+                    intake=CandidateSet(
+                        service_id=None, category="AMBIGUOUS", switch_request=False, facts=()
+                    ),
+                ),
+                telegram,
+            )
 
     async def _commit_reply(
         self,

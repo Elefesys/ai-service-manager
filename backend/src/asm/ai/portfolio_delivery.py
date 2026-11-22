@@ -24,6 +24,7 @@ from asm.ai.contracts import (
     PortfolioPhoto,
     PortfolioPhotoSelection,
     ReadTool,
+    ServiceIntentGatewayConfig,
 )
 from asm.ai.gateway import ModelAdapter
 from asm.ai.knowledge import KnowledgeFailure, KnowledgePin, SearchPin, SearchProjection
@@ -192,7 +193,10 @@ class PortfolioDeliveryConversationAgent(PortfolioConversationAgent):
         search_query: str,
         builder: PortfolioContextBuilder | None = None,
     ):
-        if not isinstance(config, (PortfolioDeliveryGatewayConfig, IntakeGatewayConfig)):
+        if not isinstance(
+            config,
+            (PortfolioDeliveryGatewayConfig, IntakeGatewayConfig, ServiceIntentGatewayConfig),
+        ):
             raise ValueError("PORTFOLIO_DELIVERY_CONFIG_INVALID")
         self.eligible = DeliveryEligibility(references=delivery_eligible).references
         self.delivery_authority = authority

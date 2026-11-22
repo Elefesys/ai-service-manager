@@ -14,9 +14,9 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from asm.ai.contracts import IntakeGatewayConfig
+from asm.ai.contracts import IntakeGatewayConfig, ServiceIntentGatewayConfig
 from asm.ai.fake import FakeAdapter
-from asm.ai.runtime_contracts import IntakeRuntimeReceipt
+from asm.ai.runtime_contracts import IntakeRuntimeReceipt, ServiceIntentRuntimeReceipt
 from asm.ai.runtime_settings import IntakeRuntimeSettings
 from asm.configuration.models import ActiveProjection
 from asm.foundation import create_worker, native_schema_readiness
@@ -65,8 +65,20 @@ INPUTS = {
     "price-size": "The swallow will be 21 mm",
     "price-oversize": "The swallow will be 100,1 cm",
     "quote-second": "Synthetic quote separate swallow shoulder 101 mm linework",
+    "agent-first": "Synthetic intake flower forearm 20 mm linework",
+    "agent-second": "Отдельная татуировка: swallow shoulder 101 mm linework",
 }
-QUOTE_JOURNEYS = {"quote-delivery", "quote-guard", "quote-acceptance", "quote-clarification"}
+QUOTE_JOURNEYS = {
+    "quote-delivery",
+    "quote-guard",
+    "quote-acceptance",
+    "quote-clarification",
+    "quote-agent",
+}
+AGENT_OPERATIONS = {
+    "agent-first": ("prepare_service_request",),
+    "agent-second": ("prepare_service_request", "request_owner_decision"),
+}
 QUOTE_OPERATIONS = {"deliver-quote": OutcomeKind.SUCCESS, "lose-quote-ack": OutcomeKind.UNKNOWN}
 QUOTE_REPLIES = {"agree-quote", "repeat-agreement", "ambiguous-agreement", "decline-quote"}
 QUOTE_HISTORY = "page-reply-history"
@@ -99,6 +111,8 @@ VALUES = {
         ("style", "linework"),
     ),
 }
+VALUES["agent-first"] = VALUES["price-first"]
+VALUES["agent-second"] = VALUES["quote-second"]
 CATEGORIES = {
     "complex": "COVER_UP",
     "late-cover-up": "COVER_UP",
@@ -244,10 +258,21 @@ class IntakeModel(FakeAdapter):
                 service_id=self.service,
                 category=CATEGORIES.get(self.operation, "NEW_TATTOO"),
                 switch_request=self.operation
-                in {"second", "assess-second", "price-second", "quote-second"},
+                in {"second", "assess-second", "price-second", "quote-second", "agent-second"},
                 facts=facts,
             ),
         )
+        if self.operation in AGENT_OPERATIONS:
+            source_pin = {field: source[field] for field in ("message_id", "source_version")}
+            result.update(
+                kind="no_reply",
+                text=None,
+                reason="REQUEST_PREPARATION",
+                intents=[
+                    {"name": intent, "source": source_pin}
+                    for intent in AGENT_OPERATIONS[self.operation]
+                ],
+            )
         return response.model_copy(update={"output_json": json.dumps(result)})
 
 
@@ -306,6 +331,8 @@ async def run(args, diagnostic):
         observer = Worker(kernel, adapter)
         diagnostic.stage = "CONFIGURATION"
         cid = UUID(args.conversation) if args.conversation else None
+        service_intents = args.operation in AGENT_OPERATIONS
+        profile = "SYNTHETIC_SERVICE_INTENTS_V1" if service_intents else "SYNTHETIC_INTAKE_V1"
         if args.operation != "seed" and cid is None:
             raise IntakeFixtureRefused("SEEDED_CONVERSATION_REQUIRED")
         service = None
@@ -325,7 +352,7 @@ async def run(args, diagnostic):
                         conversation=cid,
                         body=json.dumps(
                             dict(
-                                profile_id="SYNTHETIC_INTAKE_V1",
+                                profile_id=profile,
                                 execution="CONTROLLED",
                                 eligibility="EVAL_ONLY",
                                 max_calls=2,
@@ -337,9 +364,15 @@ async def run(args, diagnostic):
                 )
         if cid is not None:
             diagnostic.stage = "MODEL_SETUP"
-            cfg = IntakeGatewayConfig.model_validate(
+            config_type = ServiceIntentGatewayConfig if service_intents else IntakeGatewayConfig
+            cfg = config_type.model_validate(
                 knowledge_config().model_dump()
-                | dict(prompt_revision="conversation_v7", schema_revision="conversation_result_v3")
+                | dict(
+                    prompt_revision="conversation_v8" if service_intents else "conversation_v7",
+                    schema_revision="conversation_result_v4"
+                    if service_intents
+                    else "conversation_result_v3",
+                )
             )
             model = IntakeModel(cfg.route, service, args.operation, barrier)
             settings = IntakeRuntimeSettings(
@@ -348,7 +381,7 @@ async def run(args, diagnostic):
                 business_id=business,
                 client_id=UUID(admission["client_id"]),
                 conversation_id=cid,
-                data_profile="SYNTHETIC_INTAKE_V1",
+                data_profile=profile,
                 expires_at=datetime.fromisoformat(admission["expires_at"]),
                 max_calls=2,
                 max_cost=Decimal(1),
@@ -439,7 +472,7 @@ async def run(args, diagnostic):
                     if args.operation == "seed"
                     else seen_observer
                     and ai_claim is not None
-                    and (owner_handoff or kernel.finalized is not None)
+                    and (service_intents or owner_handoff or kernel.finalized is not None)
                 )
                 if not done:
                     continue
@@ -463,17 +496,28 @@ async def run(args, diagnostic):
                         raise IntakeFixtureRefused("OWNER_CONVERSATION_MISMATCH")
                     cid = UUID(found[0].conversation_id)
                     summary = await unit.intake_owner(business, cid, "READ", "", {})
+                commercial_result = {}
                 if args.operation != "seed":
                     diagnostic.stage = "REPLAY"
                     receipt = await worker.ai.database.replay(ai_claim, cfg)
-                    if (
-                        not isinstance(receipt, IntakeRuntimeReceipt)
-                        or len(model.requests) != 1
-                        or receipt.result.kind != ("handoff" if owner_handoff else "reply")
+                    if len(model.requests) != 1:
+                        raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
+                    if service_intents:
+                        if (
+                            not isinstance(receipt, ServiceIntentRuntimeReceipt)
+                            or receipt.result.kind != "no_reply"
+                            or receipt.service_intents is None
+                        ):
+                            raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
+                        commercial_result["service_intents"] = receipt.service_intents.model_dump(
+                            mode="json"
+                        )
+                    elif not isinstance(receipt, IntakeRuntimeReceipt) or receipt.result.kind != (
+                        "handoff" if owner_handoff else "reply"
                     ):
                         raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
                 diagnostic.stage = "EFFECTS"
-                expected = 0 if owner_handoff or args.operation == "seed" else 1
+                expected = 0 if service_intents or owner_handoff or args.operation == "seed" else 1
                 if adapter.calls != expected or adapter.effects != expected:
                     raise IntakeFixtureRefused("EXTERNAL_EFFECT_COUNT_MISMATCH")
                 return dict(
@@ -483,6 +527,7 @@ async def run(args, diagnostic):
                     calls=adapter.calls,
                     effects=adapter.effects,
                     status=summary["status"],
+                    **commercial_result,
                 )
         raise IntakeFixtureRefused("FINITE_WORK_INCOMPLETE")
     finally:
@@ -513,10 +558,15 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
         raise IntakeFixtureRefused("SELECTED_SYNTHETIC_QUOTE_REQUIRED")
     async with tenancy.transaction(AuthenticatedAccount(actor), workspace, uuid4()) as unit:
         messages = await OwnerAPIRepository(unit).messages(conversation, 100, None)
+    allowed_sources = (
+        tuple(INPUTS[operation] for operation in AGENT_OPERATIONS)
+        if args.journey == "quote-agent"
+        else (INPUTS["price-first"], INPUTS["quote-second"])
+    )
     if not any(
         m.message_id == quote.material.intent_source.message_id
         and m.direction == "INBOUND"
-        and m.text in (INPUTS["price-first"], INPUTS["quote-second"])
+        and m.text in allowed_sources
         for m in messages.items
     ):
         raise IntakeFixtureRefused("QUOTE_SOURCE_MISMATCH")
@@ -701,6 +751,11 @@ def main():
         parser.add_argument("--request")
         parser.add_argument("--observe-dispatch", action="store_true")
         args = parser.parse_args()
+        if args.journey == "quote-agent":
+            if args.operation not in {"seed", "deliver-quote", *AGENT_OPERATIONS}:
+                raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        elif args.operation in AGENT_OPERATIONS:
+            raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         if args.observe_dispatch and args.operation not in QUOTE_OPERATIONS:
             raise IntakeFixtureRefused("QUOTE_DISPATCH_OBSERVATION_REFUSED")
         print(json.dumps(asyncio.run(run(args, diagnostic)), sort_keys=True))

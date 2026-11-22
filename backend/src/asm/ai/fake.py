@@ -70,6 +70,7 @@ class FakeAdapter:
                 "conversation_result_v1",
                 "conversation_result_v2",
                 "conversation_result_v3",
+                "conversation_result_v4",
             ),
             max_input_tokens=131072,
             max_output_tokens=8192,
@@ -128,7 +129,10 @@ class FakeAdapter:
             output = '"' + "x" * 40000 + '"'
         if scenario == "unknown_cost":
             usage, cost = Usage(), Cost()
-        if request.config.prompt_revision == "conversation_v7" and scenario not in {
+        if request.config.prompt_revision in {
+            "conversation_v7",
+            "conversation_v8",
+        } and scenario not in {
             "invalid",
             "oversize",
         }:
