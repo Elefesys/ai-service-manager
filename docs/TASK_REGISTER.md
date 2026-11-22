@@ -2,7 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3C REVIEW · повторная проверка R2 у C8 · 2026-11-22
+## CURRENT — M6.3C REVIEW · PR #61 готов к слиянию, ожидается разрешение владельца · 2026-11-22
+
+C0 принял кандидат `63108151c1d8d8c8e5b20082b20691e9c40de497` в synthetic LOCAL/TEST. C8 подтвердил Q6/Q7 и закрыл `C8-M6.3C-01`. Из обеих карточек мастер открывает точный ответ клиента в истории одним нажатием. CI кандидата — 12/12 с первой попытки. PR #61 переведён в Ready for review, база `main` `3fa9af54225c7f0806aa0eb199441a0aa225b2d5`. Следующий шаг — решение владельца о слиянии. [Решение C0](tasks/M6_HANDOFF.md#L3) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/61#pullrequestreview-6012039242) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45011279141/attempts/1).
+
+## История — M6.3C-R2 · повторная проверка C8 · 2026-11-22
 
 C0 проверил R2 на head `63108151c1d8d8c8e5b20082b20691e9c40de497`, база `main` `3fa9af54225c7f0806aa0eb199441a0aa225b2d5`. На обычном и узком экранах один клик из A или B показывает точную реплику и переводит на неё фокус. Первый переход читает одну страницу истории, повторный обходится без запроса. CI 12/12 с первой попытки. Единственная активная задача — повторная проверка C8 по `C8-M6.3C-01`. [Поручение C8 и проверка C0](tasks/M6_HANDOFF.md#L3) · [PR #61](https://github.com/Elefesys/ai-service-manager/pull/61) · [Chromium](https://github.com/Elefesys/ai-service-manager/actions/runs/45011279141/artifacts/14751280224).
 
