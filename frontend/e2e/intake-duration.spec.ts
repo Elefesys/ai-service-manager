@@ -16,10 +16,11 @@ const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixture
 type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
-type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement';
-type QuoteReplyResult={outcome:string;message_id:string;source_message_id:string;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
+type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
+type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'quote-delivery'|'quote-guard'|'quote-acceptance';
+type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|QuoteIntakeJourney;
 
 function intakeChildFailure(error:unknown,operation:IntakeOperation|QuoteOperation|QuoteReply,journey:IntakeJourney,variant:Viewport):Error {
  const result=error as {code?:unknown;stderr?:unknown;killed?:boolean;signal?:string};
@@ -1032,7 +1033,7 @@ test('@narrow asks only for the missing term and retains its independent basis',
 
 type QuoteAttempt={quote_id:string;job_claimed:boolean;status:QuoteDelivery['status'];reason:string|null;calls:number;effects:number;text:string|null};
 
-async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-delivery'|'quote-guard'|'quote-acceptance'){
+async function beginQuoteJourney(page:Page,variant:Viewport,journey:QuoteIntakeJourney){
  page.setDefaultTimeout(12000);
  const {settings,serviceName}=await configureIntakeService(page,variant);
  const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
@@ -1040,10 +1041,11 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-deliv
  await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('CONFIGURED_FORMULA');
  await settings.getByLabel('Режим длительности 1',{exact:true}).selectOption('FIXED');
  await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('NONE');
+ const range=journey==='quote-acceptance'||journey==='quote-clarification';
  for(const [label,value] of [
   ['База, копейки 1','250000'],['За начатый шаг, копейки 1','50000'],
-  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',journey==='quote-acceptance'?'1000':'100'],
-  ['Прибавка к верхней границе, копейки 1',journey==='quote-acceptance'?'50000':''],['Длительность, минуты 1','65'],
+  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',range?'1000':'100'],
+  ['Прибавка к верхней границе, копейки 1',range?'50000':''],['Длительность, минуты 1','65'],
   ['Предоплата, копейки 1',''],['Предоплата, процент 1',''],
  ])await settings.getByLabel(label,{exact:true}).fill(value);
  await publishIntakeService(settings,serviceName);
@@ -1358,4 +1360,63 @@ test('@narrow M6.3C agrees B before A and preserves the first reply and planned 
  await expect(order.getByTestId('service-order-id')).toHaveText(savedA.order_id);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  console.log('M6.3C Chromium '+info.project.name+' '+JSON.stringify({conversation,a:agreedA,b:agreedB,retry,ambiguous:ambiguous.outcome,scheduledAt:null}));
+});
+
+test('@narrow M6.3C-R1 keeps A declined and asks for the code only on open B',async({page},info)=>{
+ test.setTimeout(120_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const journey='quote-clarification';
+ const {input,conversation,intake,inbox,cardId,panel,firstId,execute,read,evaluateAndPrice}=await beginQuoteJourney(page,variant,journey);
+ const reply=(operation:QuoteReply,id:string)=>intakeFixture<QuoteReplyResult>(operation,journey,variant,conversation,id);
+ const a=await evaluateAndPrice(firstId);
+ expect(await execute('deliver-quote',firstId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ const other=await input('quote-second',conversation);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,other.message_id,'swallow','shoulder','101 mm','linework')).click();
+ await expect(cardId).not.toHaveText(firstId);
+ const secondId=(await cardId.textContent())!;
+ const b=await evaluateAndPrice(secondId);
+ expect(a.code).not.toBe(b.code);
+ const requests=intake.getByLabel('Сохранённая заявка',{exact:true});
+ await requests.selectOption(firstId);
+ await expect(panel.getByTestId('quote-text')).toContainText(a.code);
+ const decline=await reply('decline-quote',firstId);
+ expect(decline).toMatchObject({outcome:'DECLINED',quote_id:a.quote_id});
+ const declined=panel.getByRole('status').filter({hasText:'Клиент отклонил предложение.'});
+ const clarify=panel.getByRole('status').filter({hasText:'Уточните, какое предложение он принимает'});
+ const source=panel.getByRole('link',{name:'Ответ клиента',exact:true});
+ const order=panel.getByRole('region',{name:'Согласованный заказ',exact:true});
+ const closedYes=await reply('ambiguous-agreement',firstId);
+ expect(closedYes).toMatchObject({outcome:null,order_id:null});
+ await refreshIntake(inbox,intake);
+ await expect(declined).toBeVisible();
+ await expect(clarify).toHaveCount(0);
+ await expect(source).toHaveAttribute('href','#message-'+decline.message_id);
+ await expect(order).toHaveCount(0);
+
+ await requests.selectOption(secondId);
+ await expect(panel.getByTestId('quote-text')).toContainText(b.code);
+ expect(await execute('deliver-quote',secondId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ const bBefore=await read(secondId,'SENT');
+ expect(bBefore.reply_notice).toBeUndefined();
+ const openYes=await reply('ambiguous-agreement',secondId);
+ expect(openYes).toMatchObject({outcome:'NEEDS_CLARIFICATION',acceptance_id:null,order_id:null,session_id:null});
+ await refreshIntake(inbox,intake);
+ await expect(clarify).toBeVisible();
+ await expect(declined).toHaveCount(0);
+ await expect(source).toHaveAttribute('href','#message-'+openYes.message_id);
+ await expect(order).toHaveCount(0);
+
+ await requests.selectOption(firstId);
+ await expect(panel.getByTestId('quote-text')).toContainText(a.code);
+ await expect(declined).toBeVisible();
+ await expect(clarify).toHaveCount(0);
+ await expect(source).toHaveAttribute('href','#message-'+decline.message_id);
+ await expect(order).toHaveCount(0);
+ const [aView,bView]=await Promise.all([read(firstId,'SENT'),read(secondId,'SENT')]);
+ expect(aView.agreement).toBeUndefined();
+ expect(bView.agreement).toBeUndefined();
+ expect(aView.reply_notice).toEqual({outcome:'DECLINED',message_id:decline.message_id});
+ expect(bView.reply_notice).toEqual({outcome:'NEEDS_CLARIFICATION',message_id:openYes.message_id});
+ console.log('M6.3C-R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,a:aView.reply_notice,b:bView.reply_notice,closedYes:closedYes.message_id,orders:0}));
 });

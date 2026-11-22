@@ -66,9 +66,9 @@ INPUTS = {
     "price-oversize": "The swallow will be 100,1 cm",
     "quote-second": "Synthetic quote separate swallow shoulder 101 mm linework",
 }
-QUOTE_JOURNEYS = {"quote-delivery", "quote-guard", "quote-acceptance"}
+QUOTE_JOURNEYS = {"quote-delivery", "quote-guard", "quote-acceptance", "quote-clarification"}
 QUOTE_OPERATIONS = {"deliver-quote": OutcomeKind.SUCCESS, "lose-quote-ack": OutcomeKind.UNKNOWN}
-QUOTE_REPLIES = {"agree-quote", "repeat-agreement", "ambiguous-agreement"}
+QUOTE_REPLIES = {"agree-quote", "repeat-agreement", "ambiguous-agreement", "decline-quote"}
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
     "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
@@ -558,15 +558,22 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
             raise IntakeFixtureRefused("JOB_WORKSPACE_MISMATCH")
 
     if args.operation in QUOTE_REPLIES:
-        if args.journey != "quote-acceptance" or before.status != "SENT":
+        if (
+            args.journey not in {"quote-acceptance", "quote-clarification"}
+            or before.status != "SENT"
+        ):
             raise IntakeFixtureRefused("SENT_SYNTHETIC_QUOTE_REQUIRED")
         diagnostic.stage = "INGEST"
         async with engine.connect() as connection:
             cutoff = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
         adapter = ControlledAdapter(environment="TEST")
+        body = {
+            "ambiguous-agreement": "да",
+            "decline-quote": f"Отклоняю {quote.code}",
+        }.get(args.operation, f"Принимаю {quote.code}")
         value = replace(
             event("knowledge", f"{scenario}-{quote_id}-{args.operation}", conversation=scenario),
-            text="да" if args.operation == "ambiguous-agreement" else f"Принимаю {quote.code}",
+            text=body,
             occurred_at=datetime.now(UTC),
         )
         incoming = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
@@ -581,8 +588,20 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
         diagnostic.stage = "EXECUTE"
         result = await kernel.process_inbox(claim)
         reply = getattr(result, "quote_reply", None)
-        if reply is None or result.code != "PROCESSED":
+        if result.code != "PROCESSED" or result.message_id is None:
             raise IntakeFixtureRefused("CANONICAL_QUOTE_REPLY_REQUIRED")
+        if reply is None:
+            if args.operation != "ambiguous-agreement":
+                raise IntakeFixtureRefused("CANONICAL_QUOTE_REPLY_REQUIRED")
+            return {
+                "message_id": str(result.message_id),
+                "outcome": None,
+                "source_message_id": None,
+                "quote_id": None,
+                "acceptance_id": None,
+                "order_id": None,
+                "session_id": None,
+            }
         return {
             "message_id": str(result.message_id),
             **reply.model_dump(mode="json", exclude={"message_id"}),

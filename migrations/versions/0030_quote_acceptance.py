@@ -52,7 +52,7 @@ TABLES = {
       outcome text NOT NULL CHECK(outcome IN ('CANDIDATE','ACCEPTED','DECLINED','NEEDS_CLARIFICATION',
         'DELIVERY_UNCONFIRMED','HUMAN_CONTROL','CONTROL_CHANGED','EXPIRED','REVOKED','STALE',
         'REVIEW_REQUIRED','INVALID_MESSAGE')),
-      message_id uuid, claim_token uuid,
+      message_id uuid, claim_token uuid, clarification_quote_ids uuid[] NOT NULL,
       PRIMARY KEY(workspace_id,inbox_id),
       FOREIGN KEY(workspace_id,inbox_id) REFERENCES platform.inbox_events(workspace_id,id),
       FOREIGN KEY(workspace_id,conversation_id,client_id)
@@ -60,14 +60,15 @@ TABLES = {
       FOREIGN KEY(workspace_id,quote_id) REFERENCES app.quotes(workspace_id,id),
       FOREIGN KEY(workspace_id,message_id) REFERENCES app.messages(workspace_id,id),
       CHECK ((quote_id IS NULL)=(kind='CLARIFY')),
+      CHECK ((cardinality(clarification_quote_ids)>0)=(kind='CLARIFY')),
       CHECK ((message_id IS NULL)=(claim_token IS NULL)),
       CHECK (outcome NOT IN ('ACCEPTED','DECLINED') OR message_id IS NOT NULL)
     )""",
 }
 
 FUNCTIONS = {
-    "platform.quote_authority(app.quotes,app.conversations,bigint,boolean)": r"""CREATE FUNCTION platform.quote_authority(
-      q app.quotes,c app.conversations,generation bigint,p_client_reply boolean
+    "platform.quote_authority(app.quotes,app.conversations,bigint)": r"""CREATE FUNCTION platform.quote_authority(
+      q app.quotes,c app.conversations,generation bigint
     ) RETURNS text LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
     DECLARE conn app.channel_connections%ROWTYPE; d app.service_requests%ROWTYPE; a app.approval_requests%ROWTYPE;
       native_reason text; validity text;
@@ -103,18 +104,6 @@ FUNCTIONS = {
             AND r.operation='RESUME' AND r.accepted_mode='AI')
         THEN RETURN 'ACTIVATION_REQUIRED'; END IF;
       native_reason:=platform.human_context_admission(c.workspace_id,c.id,NULL);
-      -- Only pending copies of this origin-checked reply can share the
-      -- admission. All other pending input keeps the ordinary native barrier.
-      IF p_client_reply AND native_reason='CONTEXT_INPUT_PENDING'
-        AND NOT EXISTS(SELECT 1 FROM platform.inbox_events i
-          LEFT JOIN platform.quote_reply_events r ON (r.workspace_id,r.inbox_id)=(i.workspace_id,i.id)
-          WHERE (i.workspace_id,i.connection_id,i.normalized_event->>'chat_id')
-              =(c.workspace_id,c.connection_id,c.provider_chat_id)
-            AND i.status='PENDING'
-            AND i.normalized_event->>'kind' IN ('CLIENT_MESSAGE','MESSAGE_EDITED','MESSAGE_DELETED')
-            AND (r.quote_id,r.kind,r.control_generation,r.outcome)
-              IS DISTINCT FROM (q.id,'ACCEPT'::text,c.control_generation,'CANDIDATE'::text))
-        THEN native_reason:='CURRENT'; END IF;
       IF native_reason IS DISTINCT FROM 'CURRENT'
         THEN RETURN coalesce(native_reason,'CONTEXT_CONFIRMATION_REQUIRED'); END IF;
       SELECT k.* INTO conn FROM app.channel_connections k
@@ -142,6 +131,23 @@ FUNCTIONS = {
       EXCEPTION WHEN SQLSTATE 'P2301' THEN RETURN 'CHANNEL_UNAVAILABLE'; END;
       RETURN NULL;
     END $$""",
+    "platform.quote_open_at(app.quotes,timestamptz)": r"""CREATE FUNCTION platform.quote_open_at(
+      q app.quotes,moment timestamptz
+    ) RETURNS boolean LANGUAGE sql STABLE SET search_path=pg_catalog,pg_temp AS $$
+      SELECT q.expires_at>moment AND EXISTS(
+        SELECT 1 FROM app.service_requests d JOIN platform.quote_delivery_intents intent
+          ON (intent.workspace_id,intent.quote_id)=(q.workspace_id,q.id)
+        JOIN app.outbox_events box ON (box.workspace_id,box.id)=(intent.workspace_id,intent.outbox_id)
+        WHERE (d.workspace_id,d.id,d.business_id,d.conversation_id,d.client_id,d.revision)
+            =(q.workspace_id,q.request_id,q.business_id,q.conversation_id,q.client_id,q.request_revision)
+          AND box.status='SENT' AND box.completed_at<moment
+          AND q.material=platform.quote_basis(d,moment)->'material')
+      AND NOT EXISTS(SELECT 1 FROM app.quotes newer
+        WHERE (newer.workspace_id,newer.request_id)=(q.workspace_id,q.request_id) AND newer.version>q.version)
+      AND NOT EXISTS(SELECT 1 FROM app.quote_acceptances a
+        WHERE (a.workspace_id,a.request_id)=(q.workspace_id,q.request_id))
+      AND NOT EXISTS(SELECT 1 FROM platform.quote_reply_events r
+        WHERE (r.workspace_id,r.quote_id,r.kind,r.outcome)=(q.workspace_id,q.id,'DECLINE','DECLINED')) $$""",
     "platform.quote_reply_snapshot(uuid,uuid,jsonb,timestamptz)": r"""CREATE FUNCTION platform.quote_reply_snapshot(
       ws uuid,p_connection uuid,e jsonb,received timestamptz
     ) RETURNS platform.quote_reply_events LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
@@ -165,15 +171,13 @@ FUNCTIONS = {
       IF NOT FOUND THEN RETURN NULL; END IF;
       r.workspace_id:=ws; r.conversation_id:=c.id; r.client_id:=c.client_id;
       r.control_generation:=c.control_generation;
+      r.clarification_quote_ids:=ARRAY[]::uuid[];
       IF r.kind='CLARIFY' THEN
-        IF NOT EXISTS(SELECT 1 FROM app.quotes q0 JOIN platform.quote_delivery_intents i
-            ON (i.workspace_id,i.quote_id)=(q0.workspace_id,q0.id)
-          JOIN app.outbox_events o ON (o.workspace_id,o.id)=(i.workspace_id,i.outbox_id)
-          WHERE (q0.workspace_id,q0.conversation_id,q0.client_id)=(ws,c.id,c.client_id)
-            AND o.status='SENT' AND q0.expires_at>received
-            AND NOT EXISTS(SELECT 1 FROM app.quote_acceptances a
-              WHERE (a.workspace_id,a.request_id)=(q0.workspace_id,q0.request_id)))
-          THEN RETURN NULL; END IF;
+        r.clarification_quote_ids:=ARRAY(SELECT q0.id FROM app.quotes q0
+          WHERE (q0.workspace_id,q0.business_id,q0.conversation_id,q0.client_id)=(ws,c.business_id,c.id,c.client_id)
+            AND platform.quote_open_at(q0,least(received,(e->>'occurred_at')::timestamptz))
+          ORDER BY q0.id);
+        IF cardinality(r.clarification_quote_ids)=0 THEN RETURN NULL; END IF;
         r.outcome:='NEEDS_CLARIFICATION'; RETURN r;
       END IF;
       SELECT q0.* INTO q FROM app.quotes q0
@@ -284,7 +288,7 @@ FUNCTIONS = {
         RETURN 'STALE';
       END IF;
       IF EXISTS(SELECT 1 FROM platform.quote_reply_events p
-        WHERE (p.workspace_id,p.quote_id,p.outcome)=(q.workspace_id,q.id,'DECLINED'))
+        WHERE (p.workspace_id,p.quote_id,p.kind,p.outcome)=(q.workspace_id,q.id,'DECLINE','DECLINED'))
         THEN RETURN 'DECLINED'; END IF;
       SELECT * INTO terms FROM app.service_requests WHERE (workspace_id,id)=(q.workspace_id,q.request_id)
         FOR SHARE;
@@ -295,7 +299,7 @@ FUNCTIONS = {
         OR q.terms_sha256 IS DISTINCT FROM platform.quote_hash(jsonb_build_array(
           'quote_v1',q.id,q.version,q.code,platform.quote_timestamp(q.expires_at),q.material,q.text))
         THEN RETURN 'STALE'; END IF;
-      reason:=platform.quote_authority(q,c,r.control_generation,r.kind='ACCEPT');
+      reason:=platform.quote_authority(q,c,r.control_generation);
       IF reason IN ('EXPIRED','REVOKED','STALE','HUMAN_CONTROL','CONTROL_CHANGED') THEN RETURN reason; END IF;
       IF reason IS NOT NULL THEN RETURN 'REVIEW_REQUIRED'; END IF;
       moment:=clock_timestamp();
@@ -315,35 +319,91 @@ FUNCTIONS = {
           jsonb_build_object('quote_id',q.id,'acceptance_id',accepted,'session_id',session_id,'message_id',m.id));
       RETURN 'ACCEPTED';
     END $$""",
+    "platform.quote_lock_reply_queue(uuid,uuid,text)": r"""CREATE FUNCTION platform.quote_lock_reply_queue(
+      ws uuid,conn uuid,chat text
+    ) RETURNS void LANGUAGE sql SET search_path=pg_catalog,pg_temp AS $$
+      SELECT pg_advisory_xact_lock(hashtextextended(ws::text||':'||conn::text||':'||chat,2030)) $$""",
+    "platform.quote_fail_pending_replies()": r"""CREATE FUNCTION platform.quote_fail_pending_replies()
+    RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    BEGIN
+      -- A terminal Inbox failure can leave no worker to close a deferred reply.
+      PERFORM platform.quote_lock_reply_queue(NEW.workspace_id,NEW.connection_id,NEW.normalized_event->>'chat_id');
+      UPDATE platform.quote_reply_events r SET outcome='REVIEW_REQUIRED'
+        FROM app.conversations c
+        WHERE (c.workspace_id,c.connection_id,c.provider_chat_id)
+            =(NEW.workspace_id,NEW.connection_id,NEW.normalized_event->>'chat_id')
+          AND (r.workspace_id,r.conversation_id,r.client_id)=(c.workspace_id,c.id,c.client_id)
+          AND r.outcome='CANDIDATE' AND r.message_id IS NOT NULL;
+      RETURN NULL;
+    END $$""",
     "platform.quote_process_inbox(uuid,uuid)": r"""CREATE FUNCTION platform.quote_process_inbox(
       p_job uuid,p_claim uuid
     ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
     DECLARE j platform.messaging_jobs%ROWTYPE; r platform.quote_reply_events%ROWTYPE;
-      q app.quotes%ROWTYPE; m app.messages%ROWTYPE; result jsonb;
+      c app.conversations%ROWTYPE; m app.messages%ROWTYPE; e jsonb; result jsonb;
+      owners uuid[]; owner_id uuid; queued record;
     BEGIN
       j:=platform.messaging_guard(p_job,p_claim);
       IF j.kind<>'PROCESS_INBOX' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
-      SELECT * INTO r FROM platform.quote_reply_events WHERE (workspace_id,inbox_id)=(j.workspace_id,j.inbox_id);
-      IF r.outcome='CANDIDATE' THEN
-        SELECT * INTO STRICT q FROM app.quotes WHERE (workspace_id,id)=(r.workspace_id,r.quote_id);
-        -- Owner/configuration authority precedes the ordinary kernel's connection and conversation locks.
-        PERFORM platform.messaging_lock_owner(q.workspace_id,q.prepared_by);
-        PERFORM 1 FROM app.businesses WHERE (workspace_id,id)=(q.workspace_id,q.business_id) FOR SHARE;
-        PERFORM pg_advisory_xact_lock(hashtextextended(q.workspace_id::text||':'||q.business_id::text||'|CONFIGURATION_V1',2018));
+      SELECT normalized_event INTO STRICT e FROM platform.inbox_events WHERE (workspace_id,id)=(j.workspace_id,j.inbox_id);
+      IF e->>'kind' IN ('CLIENT_MESSAGE','MESSAGE_EDITED','MESSAGE_DELETED') THEN
+        PERFORM platform.quote_lock_reply_queue(j.workspace_id,j.connection_id,e->>'chat_id');
+        SELECT * INTO c FROM app.conversations WHERE (workspace_id,connection_id,provider_chat_id)
+          =(j.workspace_id,j.connection_id,e->>'chat_id');
+        SELECT array_agg(DISTINCT q.prepared_by ORDER BY q.prepared_by) INTO owners
+          FROM platform.quote_reply_events pending JOIN app.quotes q
+            ON (q.workspace_id,q.id)=(pending.workspace_id,pending.quote_id)
+          WHERE (pending.workspace_id,pending.conversation_id,pending.client_id)=(c.workspace_id,c.id,c.client_id)
+            AND pending.outcome='CANDIDATE';
+        IF owners IS NOT NULL THEN
+          -- Acquire authority before the kernel locks the connection and conversation.
+          FOREACH owner_id IN ARRAY owners LOOP
+            PERFORM platform.messaging_lock_owner(c.workspace_id,owner_id);
+          END LOOP;
+          PERFORM 1 FROM app.businesses WHERE (workspace_id,id)=(c.workspace_id,c.business_id) FOR SHARE;
+          PERFORM pg_advisory_xact_lock(hashtextextended(c.workspace_id::text||':'||c.business_id::text||'|CONFIGURATION_V1',2018));
+        END IF;
       END IF;
       result:=platform.messaging_process_inbox(p_job,p_claim);
-      IF r.inbox_id IS NULL OR result->>'code'<>'PROCESSED' THEN RETURN result; END IF;
-      SELECT * INTO STRICT m FROM app.messages WHERE (workspace_id,id)=(r.workspace_id,(result->>'message_id')::uuid);
-      r.outcome:=platform.quote_apply_reply(r,m,j.correlation_id);
-      UPDATE platform.quote_reply_events SET outcome=r.outcome,message_id=m.id,claim_token=p_claim
-        WHERE (workspace_id,inbox_id)=(r.workspace_id,r.inbox_id) RETURNING * INTO r;
-      RETURN result||jsonb_build_object('quote_reply',platform.quote_reply_result(r));
+      SELECT * INTO r FROM platform.quote_reply_events WHERE (workspace_id,inbox_id)=(j.workspace_id,j.inbox_id);
+      IF FOUND AND result->>'code'='PROCESSED' THEN
+        SELECT * INTO STRICT m FROM app.messages WHERE (workspace_id,id)=(r.workspace_id,(result->>'message_id')::uuid);
+        IF r.outcome<>'CANDIDATE' THEN r.outcome:=platform.quote_apply_reply(r,m,j.correlation_id); END IF;
+        UPDATE platform.quote_reply_events SET outcome=r.outcome,message_id=m.id,claim_token=p_claim
+          WHERE (workspace_id,inbox_id)=(r.workspace_id,r.inbox_id);
+      END IF;
+
+      -- Any relevant Inbox worker can drain a conversation. Store the original
+      -- Message and lease now, then apply commands in receipt order once all
+      -- pending inputs (including edits) have reached the canonical state.
+      IF owners IS NOT NULL AND NOT EXISTS(SELECT 1 FROM platform.inbox_events i
+        WHERE (i.workspace_id,i.connection_id,i.normalized_event->>'chat_id')
+            =(c.workspace_id,c.connection_id,c.provider_chat_id)
+          AND i.status='PENDING' AND i.normalized_event->>'kind' IN ('CLIENT_MESSAGE','MESSAGE_EDITED','MESSAGE_DELETED'))
+      THEN
+        FOR queued IN SELECT pending AS reply,i.correlation_id FROM platform.quote_reply_events pending
+          JOIN platform.inbox_events i ON (i.workspace_id,i.id)=(pending.workspace_id,pending.inbox_id)
+          WHERE (pending.workspace_id,pending.conversation_id,pending.client_id)=(c.workspace_id,c.id,c.client_id)
+            AND pending.outcome='CANDIDATE' AND pending.message_id IS NOT NULL AND i.status='PROCESSED'
+          ORDER BY i.received_at,i.id
+        LOOP
+          r:=queued.reply;
+          SELECT * INTO STRICT m FROM app.messages WHERE (workspace_id,id)=(r.workspace_id,r.message_id);
+          UPDATE platform.quote_reply_events SET outcome=platform.quote_apply_reply(r,m,queued.correlation_id)
+            WHERE (workspace_id,inbox_id)=(r.workspace_id,r.inbox_id);
+        END LOOP;
+      END IF;
+      SELECT * INTO r FROM platform.quote_reply_events WHERE (workspace_id,inbox_id)=(j.workspace_id,j.inbox_id)
+        AND message_id IS NOT NULL AND outcome<>'CANDIDATE';
+      RETURN CASE WHEN FOUND THEN result||jsonb_build_object('quote_reply',platform.quote_reply_result(r))
+        ELSE result END;
     END $$""",
     "platform.quote_process_replay(uuid,uuid)": r"""CREATE FUNCTION platform.quote_process_replay(
       p_job uuid,p_claim uuid
     ) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       SELECT jsonb_build_object('code','PROCESSED','inbox_id',r.inbox_id,'message_id',r.message_id,
-        'status','PROCESSED','quote_reply',platform.quote_reply_result(r))
+        'status','PROCESSED')||CASE WHEN r.outcome='CANDIDATE' THEN '{}'::jsonb
+          ELSE jsonb_build_object('quote_reply',platform.quote_reply_result(r)) END
       FROM platform.messaging_jobs j JOIN platform.quote_reply_events r
         ON (r.workspace_id,r.inbox_id)=(j.workspace_id,j.inbox_id)
       WHERE j.id=p_job AND j.kind='PROCESS_INBOX' AND j.status='SUCCEEDED'
@@ -376,16 +436,17 @@ FUNCTIONS = {
           'source',jsonb_build_object('message_id',a.message_id,'source_version',a.source_version,
             'status',source_state,'text',CASE WHEN source_state='AVAILABLE' THEN effective->>'text' END));
       ELSE
+        SELECT * INTO q FROM app.quotes
+          WHERE (workspace_id,request_id)=(d.workspace_id,d.id) ORDER BY version DESC LIMIT 1;
         SELECT r.* INTO reply FROM platform.quote_reply_events r
           JOIN platform.inbox_events i ON (i.workspace_id,i.id)=(r.workspace_id,r.inbox_id)
           LEFT JOIN app.quotes q0 ON (q0.workspace_id,q0.id)=(r.workspace_id,r.quote_id)
           WHERE (r.workspace_id,r.conversation_id,r.client_id)=(d.workspace_id,c.id,c.client_id)
             AND r.message_id IS NOT NULL AND r.outcome NOT IN ('INVALID_MESSAGE','CANDIDATE','ACCEPTED')
-            AND (q0.request_id=d.id OR (r.kind='CLARIFY' AND EXISTS(
-              SELECT 1 FROM app.quotes current_quote
-              WHERE (current_quote.workspace_id,current_quote.request_id)=(d.workspace_id,d.id)
-              AND current_quote.created_at<i.received_at)))
-          ORDER BY i.received_at DESC,r.inbox_id DESC LIMIT 1;
+            AND ((q0.request_id=d.id AND (r.outcome<>'DECLINED' OR (r.kind='DECLINE' AND r.quote_id=q.id)))
+              OR (r.kind='CLARIFY' AND q.id=ANY(r.clarification_quote_ids) AND platform.quote_open_at(q,clock_timestamp())))
+          ORDER BY (r.kind='DECLINE' AND r.outcome='DECLINED' AND r.quote_id IS NOT DISTINCT FROM q.id) DESC,
+            i.received_at DESC,r.inbox_id DESC LIMIT 1;
         IF FOUND THEN
           notice:=jsonb_build_object('outcome',reply.outcome,'message_id',reply.message_id);
         END IF;
@@ -428,6 +489,10 @@ def upgrade():
     op.execute("""CREATE TRIGGER quote_capture_controlled_reply AFTER INSERT ON platform.inbox_events
       FOR EACH ROW WHEN (NEW.provider='CONTROLLED')
       EXECUTE FUNCTION platform.quote_capture_controlled_reply()""")
+    op.execute("""CREATE TRIGGER quote_fail_pending_replies AFTER UPDATE OF status ON platform.inbox_events
+      FOR EACH ROW WHEN (OLD.status='PENDING' AND NEW.status='FAILED'
+        AND NEW.normalized_event->>'kind' IN ('CLIENT_MESSAGE','MESSAGE_EDITED','MESSAGE_DELETED'))
+      EXECUTE FUNCTION platform.quote_fail_pending_replies()""")
     _audit_constraint(forward=True)
     _quote_commands(forward=True)
     op.execute(PROFILE)
@@ -455,6 +520,7 @@ def downgrade():
     op.execute("DROP FUNCTION platform.quote_acceptance_schema_profile()")
     _quote_commands(forward=False)
     _audit_constraint(forward=False)
+    op.execute("DROP TRIGGER quote_fail_pending_replies ON platform.inbox_events")
     op.execute("DROP TRIGGER quote_capture_controlled_reply ON platform.inbox_events")
     for signature in reversed(FUNCTIONS):
         op.execute(f"DROP FUNCTION {signature}")
@@ -471,7 +537,7 @@ def _quote_commands(forward):
                   q app.quotes,c app.conversations,generation bigint
                 ) RETURNS text LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
                 BEGIN
-                  RETURN platform.quote_authority(q,c,generation,false);
+                  RETURN platform.quote_authority(q,c,generation);
                 END $$"""
             elif signature.startswith("platform.quote_owner_read("):
                 sql = sql.replace("delivery jsonb;", "delivery jsonb; agreement jsonb;")
@@ -842,25 +908,28 @@ PROFILE = r"""CREATE FUNCTION platform.quote_acceptance_schema_profile() RETURNS
 ('platform.price_schema_profile()','1c7fff96f1e69fbd1cacc4724f15155d596aef3620d3d363c918c215fd18ab9b','sql',true,'s',false),
 ('platform.price_size_mm(text)','e0393c004439cedd55091f61509fd1fec009e7ebecc99670067a31b2d48b2525','plpgsql',false,'i',false),
 ('platform.published_knowledge_schema_profile()','93c1c8615c17619929194606686ebd21b7f99afa7698cfd425bb6b65035137f5','sql',true,'s',false),
-('platform.quote_agreement_owner_read(uuid,uuid,uuid)','f60c734b14148ea85608a7e05c299a9dec623570d1a3baa9161158288d631445','plpgsql',true,'v',false),
-('platform.quote_apply_reply(platform.quote_reply_events,app.messages,uuid)','93a702e5fd125252010a43cb5ef399193bd9348633c6e094d7dadd455690eabf','plpgsql',false,'v',false),
-('platform.quote_authority(app.quotes,app.conversations,bigint,boolean)','8746e294b44513df60fc9b5af8477b701f79e186a6f5d05d5d2ebd220d71ec9b','plpgsql',false,'v',false),
+('platform.quote_agreement_owner_read(uuid,uuid,uuid)','adae10a3ee485b175765759e88f5811570f45d6afd858a92aeb3b1a4019104ad','plpgsql',true,'v',false),
+('platform.quote_apply_reply(platform.quote_reply_events,app.messages,uuid)','780fa29a83d00d97be7091cc346c0888f1202c0f03c341b95533d3b6ad6889bf','plpgsql',false,'v',false),
+('platform.quote_authority(app.quotes,app.conversations,bigint)','d4354fa2822d200c6a2d51caeb801f3c8f8b257d44a471e4dc4dca6bdcf8f231','plpgsql',false,'v',false),
 ('platform.quote_basis(app.service_requests,timestamptz)','823b48c8cb65e2f4200debd4789f48312bdb9b15926814d8739a63901bfed237','plpgsql',false,'s',false),
-('platform.quote_block(app.quotes,app.conversations,bigint)','d07e6ef2a97629033a7e31818abb18323806a791f6d95511e741cf0ff677d2e1','plpgsql',false,'v',false),
+('platform.quote_block(app.quotes,app.conversations,bigint)','80fb5643f858a7f98a092812f84d875ab383413916ad36bac8611cfbdc4e40fe','plpgsql',false,'v',false),
 ('platform.quote_capture_controlled_reply()','8c16a24d2c2bdb45c6a26b40383b6b380862a8e9b0227528699ffb5f1bbf17f4','plpgsql',true,'v',false),
 ('platform.quote_code(uuid)','8fc9c15c54ca4746ec129f66313ff1da3deaa3453687e9d7c6b002ff72289e48','sql',false,'i',false),
 ('platform.quote_dispatch_scope(app.quotes,uuid)','bfa5d26e6cd766e8981db5784cafd184b5c35e8c4c55cb0385424fac6cd15e4e','plpgsql',false,'v',false),
 ('platform.quote_expiry(jsonb)','f16dfa38d17861e0f5037260c25353a87b4bf3f5dd2efc86ff9cca069c81dde4','sql',false,'s',false),
+('platform.quote_fail_pending_replies()','5e1cfd52de92fca390bbbfe4ccf35c7bd15d3adf70f7016897230ca22d051240','plpgsql',true,'v',false),
 ('platform.quote_hash(jsonb)','39c6235034994a21858476d2b5942dbc916a3c733404d7e4e5c07586ef6ef35d','sql',false,'i',false),
 ('platform.quote_immutable()','53bcffa39c87ef26910c57488f342bd68c05ecf9cba299054439d32631291bbb','plpgsql',false,'v',false),
+('platform.quote_lock_reply_queue(uuid,uuid,text)','6ba099f9bb95fc0c58f4071d4b12d99fcf3892d43c85b7f29aa7c376d479bbae','sql',false,'v',false),
+('platform.quote_open_at(app.quotes,timestamptz)','7b812455050ac6cb0e23f49402abad1453b7fcc2aee9f7b29cb96648f5edb652','sql',false,'s',false),
 ('platform.quote_owner_prepare(uuid,uuid,uuid)','068a16ae6d70ec4932df994815542d1fcb6756f9e927fb21a0ad25f0816fa08a','plpgsql',true,'v',true),
 ('platform.quote_owner_read(uuid,uuid,uuid)','c7a8cf423a3128a2da136782ab47f7cbf9961f8ede1e5ef34d9636188e43bdd9','plpgsql',true,'v',true),
 ('platform.quote_owner_record(uuid,uuid,uuid,jsonb)','56bf52973c8cab3aee65c2c316cca23bf13e8b39ca0f1b5c81b40427029ac6fb','plpgsql',true,'v',true),
-('platform.quote_process_inbox(uuid,uuid)','79d5e72c9660e6e41cbd9a784ad3e43402293421ed23393e6fafde0ff65974e2','plpgsql',true,'v',true),
-('platform.quote_process_replay(uuid,uuid)','a0df4379cb042c15faf2b02200bd564d31a835ddfa208be5ae47176880733a85','sql',true,'v',true),
+('platform.quote_process_inbox(uuid,uuid)','bb4b043d21700552b259141ed89941d7f0f261c62c53d7a8eb4764d9876e2efd','plpgsql',true,'v',true),
+('platform.quote_process_replay(uuid,uuid)','9a2ae5d4c42fbb493f2aa79e256ea3579a105502979434fc9019eb8e34bc1714','sql',true,'v',true),
 ('platform.quote_queue(app.quotes,app.conversations,uuid)','63fdf1216fb6aa19de4037ce0423f61f5815858eba26236edfe14f662a1acf18','plpgsql',false,'v',false),
 ('platform.quote_reply_result(platform.quote_reply_events)','0e7db1e2bb6cdd7fdb548750afcd59fed6d07ddc9fc8fea52bc926a442a9e950','sql',false,'s',false),
-('platform.quote_reply_snapshot(uuid,uuid,jsonb,timestamptz)','9b5d390de1d200a164ceb2dc336ed4d31ed9f9ba3986a030969ab02ae5bf031a','plpgsql',false,'v',false),
+('platform.quote_reply_snapshot(uuid,uuid,jsonb,timestamptz)','03dbbb16390abb91c6a0227d6511c1ccc89cc9c6730d34fd57ee0b9c1fa9b5ea','plpgsql',false,'v',false),
 ('platform.quote_requeue(app.quotes,app.conversations,app.outbox_events,platform.messaging_jobs)','330e2443c2bffcc8d0af4d1c847234f94a780588c8efebfbbd3b9793cc7fd9f1','plpgsql',false,'v',false),
 ('platform.quote_resume()','172bf601df5b72d2f286241292b9898240d60dfc70a15317881f68fe36fcb48f','plpgsql',false,'v',false),
 ('platform.quote_schema_profile()','44596761e8003b068323bccc1f0937cb4fcb1116543796096a78de0e267f3f0f','sql',true,'s',false),
@@ -996,7 +1065,7 @@ columns_expected(table_name,column_names) AS (VALUES ('app.approval_requests',AR
 ('platform.portfolio_release_builds',ARRAY['workspace_id','business_id','release_id','build_id']::text[]),
 ('platform.portfolio_revisions',ARRAY['workspace_id','business_id','id','item_id','revision_no','asset_id','asset_version_id','source_sha256','asset_epoch','description','attributes','service_id','analysis_id','canonical_sha256','confirmed','confirmed_by','confirmed_at','confirmed_epoch','created_by','created_at']::text[]),
 ('platform.quote_delivery_intents',ARRAY['workspace_id','quote_id','connection_id','control_generation','message_id','outbox_id','send_job_id','hold_reason']::text[]),
-('platform.quote_reply_events',ARRAY['workspace_id','inbox_id','conversation_id','client_id','quote_id','kind','control_generation','outcome','message_id','claim_token']::text[]),
+('platform.quote_reply_events',ARRAY['workspace_id','inbox_id','conversation_id','client_id','quote_id','kind','control_generation','outcome','message_id','claim_token','clarification_quote_ids']::text[]),
 ('platform.saas_plan_revisions',ARRAY['plan_revision_id','plan_id','revision','publication_state','published_at','created_at']::text[]),
 ('platform.saas_plans',ARRAY['plan_id','code','display_name','status','created_at']::text[]),
 ('platform.service_request_receipts',ARRAY['workspace_id','actor_user_account_id','command_key','correlation_id','request_fingerprint','request_id','accepted_revision','effect','recorded_at']::text[]),
@@ -1019,7 +1088,7 @@ columns_expected(table_name,column_names) AS (VALUES ('app.approval_requests',AR
         JOIN pg_attribute a ON a.attrelid=r.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname IN ('app','platform') AND r.relkind='r'
         GROUP BY r.oid,n.nspname,r.relname,r.relowner,r.relrowsecurity,r.relforcerowsecurity,r.relacl),
       validity AS MATERIALIZED (SELECT
-        (SELECT count(*) FROM functions)=387 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=386
+        (SELECT count(*) FROM functions)=390 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=389
         AND NOT EXISTS(SELECT 1 FROM expected e LEFT JOIN functions f ON f.oid=to_regprocedure(e.signature)
           WHERE f.oid IS NULL OR encode(sha256(convert_to(f.prosrc,'UTF8')),'hex')<>e.body_hash OR f.lanname<>e.language
             OR f.prosecdef<>e.security_definer OR f.provolatile::text<>e.volatility OR f.proowner<>'asm_migrator'::regrole
@@ -1054,5 +1123,5 @@ columns_expected(table_name,column_names) AS (VALUES ('app.approval_requests',AR
         'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,e.extversion,n.nspname) ORDER BY e.extname)
           FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname IN ('vector','btree_gist'))) AS value)
       SELECT jsonb_build_object('schema_revision','0030','valid',coalesce(v.valid,false)
-        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='904ebc99bd8081dca24b518226ad15bcb269a79cc2490ff2ea82b47891beb501',
+        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='bf6e7c247ca23be5b6cc79e27916976c53e4b1a5530bca1246a5e6443d949a80',
         'profile_sha256',encode(sha256(convert_to(E'asm:m3:native_schema:v1\n'||c.value::text,'UTF8')),'hex')) FROM validity v CROSS JOIN catalog c $$"""

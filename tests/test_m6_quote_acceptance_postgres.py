@@ -8,10 +8,12 @@ from uuid import uuid4
 import httpx
 import pytest
 from asm.messaging.database import MessagingDatabase
+from asm.messaging.errors import Code
 from asm.messaging.worker import Worker
 from asm.telegram.database import TelegramIngress
 from asm.telegram.normalization import normalize_update_v2
 from sqlalchemy import text
+from test_m2_1_postgres import event
 from test_m2_1_schema_postgres import _migrate
 from test_m2_3_db_postgres import BOT
 from test_m3_1_native_context_postgres import claim_job, control, reconcile, scalar
@@ -67,6 +69,17 @@ async def process(h, receipt, kernel=None):
 
 async def new_reply(h, text_value, **kwargs):
     return await process(h, await telegram_inbox(h, tg_reply(h, text_value, **kwargs)))
+
+
+async def controlled_reply(h, value):
+    number = str(next(COUNTER))
+    message = event(
+        event_id=number,
+        message_id=number,
+        occurred_at=datetime.now(UTC),
+        **(h.intake_scope | {"text": value}),
+    )
+    return await h.kernel.ingest_event(h.adapter.source(message.bot_identity), message, uuid4())
 
 
 def edit_reply(h, original, replacement):
@@ -231,8 +244,10 @@ async def test_ack_loss_concurrency_and_atomic_rollback(approval_pg, auth):
     )
     assert isinstance(lost, Fault)
     replay = await h.kernel.process_inbox(ca)
-    assert replay.quote_reply.outcome == "ACCEPTED" and replay.quote_reply == normal.quote_reply
-    assert replay.quote_reply.message_id in {replay.message_id, normal.message_id}
+    replay_b = await h.kernel.process_inbox(cb)
+    assert normal.message_id == replay_b.message_id
+    assert replay.quote_reply.outcome == "ACCEPTED" and replay.quote_reply == replay_b.quote_reply
+    assert replay.quote_reply.message_id == replay.message_id
     assert await counts(h) == (1, 1, 1)
     assert (await read(h, auth, url))["agreement"]["source"]["message_id"] == str(
         replay.quote_reply.message_id
@@ -300,17 +315,21 @@ async def test_replaced_quote_decline_and_current_terms_are_serialized(approval_
     assert await counts(h) == (0, 0, 0)
 
 
-async def test_two_works_keep_separate_orders_and_published_range(approval_pg, auth):
-    h = approval_pg
+async def ready_two_works(h, auth, *, use_telegram=False):
     await publish(h, contract(formula_price(range_add_minor=50_000), FIXED_DURATION))
     token = await sign_in(auth)
-    cid, intake, model, _, a_id = await draft_for_size(h, auth, token, "20 mm")
+    cid, intake, model, _, a_id = await draft_for_size(
+        h, auth, token, "20 mm", telegram=use_telegram
+    )
     a_url = f"{route(cid)}/{a_id}"
     await price(auth, a_url + "/pricing", token)
     await request_assessment(auth, a_url + "/assessment", token)
     a = (await read(h, auth, a_url))["quote"]
     worker = Worker(h.kernel, DeliveryWire(h))
-    await run_quote(h, worker, a)
+    if use_telegram:
+        await telegram_send(h, a)
+    else:
+        await run_quote(h, worker, a)
     model.values = dict(
         idea="bird", placement="shoulder", approximate_size="21 mm", style="linework"
     )
@@ -321,20 +340,19 @@ async def test_two_works_keep_separate_orders_and_published_range(approval_pg, a
     await price(auth, b_url + "/pricing", token)
     await request_assessment(auth, b_url + "/assessment", token)
     b = (await read(h, auth, b_url))["quote"]
-    await run_quote(h, worker, b)
+    if use_telegram:
+        await telegram_send(h, b)
+    else:
+        await run_quote(h, worker, b)
+    return token, a_url, a, b_url, b
 
-    from test_m2_1_postgres import event
+
+async def test_two_works_keep_separate_orders_and_published_range(approval_pg, auth):
+    h = approval_pg
+    token, a_url, a, b_url, b = await ready_two_works(h, auth)
 
     async def send(value):
-        number = str(next(COUNTER))
-        msg = event(
-            event_id=number,
-            message_id=number,
-            occurred_at=datetime.now(UTC),
-            **(h.intake_scope | {"text": value}),
-        )
-        receipt = await h.kernel.ingest_event(h.adapter.source(msg.bot_identity), msg, uuid4())
-        return await process(h, receipt)
+        return await process(h, await controlled_reply(h, value))
 
     await send("Нейтральная реплика")
     after_b = await send(f"Принимаю {b['code']}")
@@ -360,6 +378,167 @@ async def test_two_works_keep_separate_orders_and_published_range(approval_pg, a
     assert (await read(h, auth, b_url))["agreement"] == saved_b
     assert (await read(h, auth, a_url))["agreement"] == saved_a
     print("M6.3C two works", json.dumps({"A": saved_a, "B": saved_b}, ensure_ascii=False))
+
+
+def outcome(result):
+    return result.quote_reply.outcome if result.quote_reply else None
+
+
+def report_r1(case, **fields):
+    print("M6.3C-R1", json.dumps({"case": case, **fields}, default=str, ensure_ascii=False))
+
+
+@pytest.mark.parametrize(
+    ("case", "use_telegram"),
+    [
+        ("decline-before-accept", True),
+        ("two-queued-works", True),
+        ("two-queued-works", False),
+        ("accept-before-thanks", True),
+    ],
+)
+async def test_r1_prequeued_inbox_keeps_decisions_in_received_order(
+    approval_pg, auth, case, use_telegram
+):
+    h = approval_pg
+    if case == "two-queued-works":
+        _, a_url, a, b_url, b = await ready_two_works(h, auth, use_telegram=use_telegram)
+        phrases = (f"Принимаю {b['code']}", f"Принимаю {a['code']}")
+    else:
+        _, _, _, a_url, a = await exact_ready(h, auth, use_telegram=True)
+        await telegram_send(h, a)
+        phrases = (
+            (f"Отклоняю {a['code']}", f"Принимаю {a['code']}")
+            if case == "decline-before-accept"
+            else (f"Принимаю {a['code']}", "Спасибо")
+        )
+    receipts = [
+        await telegram_inbox(h, tg_reply(h, phrase))
+        if use_telegram
+        else await controlled_reply(h, phrase)
+        for phrase in phrases
+    ]
+    assert receipts[0].accepted_at < receipts[1].accepted_at
+    claims = [await claim_job(h, r.job_id) for r in receipts]
+    processed = [await h.kernel.process_inbox(c) for c in claims]
+    first = await h.kernel.process_inbox(claims[0])
+    second = processed[1]
+    a_view = await read(h, auth, a_url)
+    b_view = await read(h, auth, b_url) if case == "two-queued-works" else {}
+    triples = await counts(h)
+    report_r1(
+        case,
+        provider="TELEGRAM" if use_telegram else "CONTROLLED",
+        first_processing=outcome(processed[0]),
+        outcomes=[outcome(first), outcome(second)],
+        triples=triples,
+        inbox_messages=[first.message_id, second.message_id],
+        a=a_view.get("reply_notice"),
+        b=b_view.get("reply_notice"),
+        accepted=[
+            {
+                k: record["agreement"][k]
+                for k in ("acceptance_id", "order_id", "session_id", "source")
+            }
+            for record in (a_view, b_view)
+            if "agreement" in record
+        ],
+    )
+    assert outcome(processed[0]) is None
+    if case == "decline-before-accept":
+        assert triples == (0, 0, 0)
+        assert [outcome(first), outcome(second)] == ["DECLINED", "DECLINED"]
+        assert a_view["reply_notice"] == {
+            "outcome": "DECLINED",
+            "message_id": str(first.message_id),
+        }
+        return
+
+    a_source = first if case == "accept-before-thanks" else second
+    assert outcome(a_source) == "ACCEPTED"
+    assert a_view["agreement"]["source"]["message_id"] == str(a_source.message_id)
+    if case == "two-queued-works":
+        assert triples == (2, 2, 2)
+        assert outcome(first) == "ACCEPTED"
+        assert b_view["agreement"]["source"]["message_id"] == str(first.message_id)
+        fields = ("acceptance_id", "order_id", "session_id")
+        assert len({v["agreement"][k] for v in (a_view, b_view) for k in fields}) == 6
+        assert (await h.kernel.process_inbox(claims[1])).quote_reply == second.quote_reply
+    else:
+        assert triples == (1, 1, 1)
+        assert outcome(second) is None
+    assert (await h.kernel.process_inbox(claims[0])).quote_reply == first.quote_reply
+
+
+@pytest.mark.parametrize("with_open_b", [False, True])
+async def test_r1_yes_only_clarifies_open_sent_offers(approval_pg, auth, with_open_b):
+    h = approval_pg
+    if with_open_b:
+        _, a_url, a, b_url, _ = await ready_two_works(h, auth, use_telegram=True)
+    else:
+        _, _, _, a_url, a = await exact_ready(h, auth, use_telegram=True)
+        await telegram_send(h, a)
+    decline = await new_reply(h, f"Отклоняю {a['code']}")
+    assert await read(h, auth, a_url, "DECLINED")
+    yes = await new_reply(h, "да")
+    a_notice = (await read(h, auth, a_url)).get("reply_notice")
+    b_notice = (await read(h, auth, b_url)).get("reply_notice") if with_open_b else None
+    triples = await counts(h)
+    report_r1("decline-then-yes", with_open_b=with_open_b, a=a_notice, b=b_notice, triples=triples)
+    assert triples == (0, 0, 0)
+    assert a_notice == {"outcome": "DECLINED", "message_id": str(decline.message_id)}
+    if with_open_b:
+        assert b_notice == {"outcome": "NEEDS_CLARIFICATION", "message_id": str(yes.message_id)}
+    else:
+        assert yes.quote_reply is None
+
+
+async def test_r1_reversed_workers_keep_decline_before_accept(approval_pg, auth):
+    h = approval_pg
+    _, _, _, url, quote = await exact_ready(h, auth, use_telegram=True)
+    await telegram_send(h, quote)
+    decline = await telegram_inbox(h, tg_reply(h, f"Отклоняю {quote['code']}"))
+    accept = await telegram_inbox(h, tg_reply(h, f"Принимаю {quote['code']}"))
+    decline_claim, accept_claim = [await claim_job(h, r.job_id) for r in (decline, accept)]
+    awaited = await h.kernel.process_inbox(accept_claim)
+    assert awaited.message_id and outcome(awaited) is None
+    assert await h.kernel.process_inbox(accept_claim) == awaited
+    assert await counts(h) == (0, 0, 0)
+    final = await h.kernel.process_inbox(decline_claim)
+    assert outcome(final) == "DECLINED"
+    assert outcome(await h.kernel.process_inbox(accept_claim)) == "DECLINED"
+    assert (await read(h, auth, url, "DECLINED"))["reply_notice"]["message_id"] == str(
+        final.message_id
+    )
+    assert await counts(h) == (0, 0, 0)
+
+
+@pytest.mark.parametrize("blocker", ["edit", "failed-input"])
+async def test_r1_recheck_never_bypasses_a_pending_edit_or_failed_input(approval_pg, auth, blocker):
+    h = approval_pg
+    _, _, _, url, quote = await exact_ready(h, auth, use_telegram=True)
+    await telegram_send(h, quote)
+    original = tg_reply(h, f"Принимаю {quote['code']}")
+    accept = await telegram_inbox(h, original)
+    event = edit_reply(h, original, "Уточню позже") if blocker == "edit" else tg_reply(h, "Спасибо")
+    later = await telegram_inbox(h, event)
+    accept_claim, later_claim = [await claim_job(h, r.job_id) for r in (accept, later)]
+    waiting = await h.kernel.process_inbox(accept_claim)
+    assert waiting.message_id and outcome(waiting) is None
+    assert await counts(h) == (0, 0, 0)
+
+    if blocker == "edit":
+        assert (await h.kernel.process_inbox(later_claim)).code == "MATERIAL_PROCESSED"
+        expected = "INVALID_MESSAGE"
+    else:
+        resent = await h.kernel.retry(later_claim, Code.DEPENDENCY_UNAVAILABLE, retryable=False)
+        assert resent["status"] == "DEAD"
+        expected = "REVIEW_REQUIRED"
+    final = await h.kernel.process_inbox(accept_claim)
+    assert outcome(final) == expected and final.message_id == waiting.message_id
+    assert "agreement" not in await read(h, auth, url)
+    assert await counts(h) == (0, 0, 0)
+    report_r1("native-barrier", blocker=blocker, outcome=outcome(final), triples=await counts(h))
 
 
 async def test_expiry_after_ingest_and_before_commit_leaves_no_order(approval_pg, auth):
