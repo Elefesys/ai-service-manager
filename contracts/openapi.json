@@ -9491,6 +9491,107 @@
         "title": "PurgeResponse",
         "type": "object"
       },
+      "QuoteAcceptanceSource": {
+        "additionalProperties": false,
+        "properties": {
+          "message_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "source_version": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "AVAILABLE",
+              "CHANGED",
+              "UNAVAILABLE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "message_id",
+          "source_version",
+          "status",
+          "text"
+        ],
+        "title": "QuoteAcceptanceSource",
+        "type": "object"
+      },
+      "QuoteAgreement": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Acceptance Id",
+            "type": "string"
+          },
+          "accepted_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "quote": {
+            "$ref": "#/components/schemas/QuoteVersion"
+          },
+          "scheduled_at": {
+            "title": "Scheduled At",
+            "type": "null"
+          },
+          "session_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/QuoteAcceptanceSource"
+          },
+          "status": {
+            "const": "PLANNED",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptance_id",
+          "order_id",
+          "session_id",
+          "status",
+          "scheduled_at",
+          "accepted_at",
+          "quote",
+          "source"
+        ],
+        "title": "QuoteAgreement",
+        "type": "object"
+      },
       "QuoteCondition": {
         "additionalProperties": false,
         "properties": {
@@ -9587,6 +9688,16 @@
       "QuoteDeliveryView": {
         "additionalProperties": false,
         "properties": {
+          "agreement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteAgreement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "previous": {
             "anyOf": [
               {
@@ -9618,6 +9729,16 @@
               }
             ],
             "title": "Reason"
+          },
+          "reply_notice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteReplyNotice"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "anyOf": [
@@ -9898,6 +10019,38 @@
           "conditions"
         ],
         "title": "QuoteMaterial",
+        "type": "object"
+      },
+      "QuoteReplyNotice": {
+        "additionalProperties": false,
+        "properties": {
+          "message_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Message Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "DECLINED",
+              "NEEDS_CLARIFICATION",
+              "DELIVERY_UNCONFIRMED",
+              "HUMAN_CONTROL",
+              "CONTROL_CHANGED",
+              "EXPIRED",
+              "REVOKED",
+              "STALE",
+              "REVIEW_REQUIRED"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "message_id"
+        ],
+        "title": "QuoteReplyNotice",
         "type": "object"
       },
       "QuoteVersion": {

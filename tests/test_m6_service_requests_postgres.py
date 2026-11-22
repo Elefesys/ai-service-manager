@@ -35,6 +35,14 @@ async def clear_quote_rows(connection):
     ).scalar_one():
         return
     scope = {"a": A, "b": B}
+    if (
+        await connection.execute(text("SELECT to_regclass('app.quote_acceptances') IS NOT NULL"))
+    ).scalar_one():
+        await connection.execute(
+            text(
+                "TRUNCATE platform.quote_reply_events,app.service_sessions,app.service_orders,app.quote_acceptances"
+            )
+        )
     await connection.execute(
         text("DELETE FROM platform.quote_delivery_intents WHERE workspace_id IN (:a,:b)"), scope
     )
@@ -742,4 +750,4 @@ async def test_0025_upgrade_preserves_0024_intake_and_rejects_downgrade_with_req
         updated = await read(h, cid, draft["request_id"])
         assert "idea" not in updated["missing"] and updated["question"] != old_question
     finally:
-        await _migrate("upgrade", "0029")
+        await _migrate("upgrade", "0030")

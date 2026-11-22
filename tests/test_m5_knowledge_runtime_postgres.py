@@ -99,8 +99,8 @@ async def current_knowledge_pg(knowledge_pg):
     """Only the current-application case advances the historical knowledge fixture."""
     h = knowledge_pg
     assert h.schema_revision == "0020"
-    await migrate("upgrade", "0029")
-    h.schema_revision = "0029"
+    await migrate("upgrade", "0030")
+    h.schema_revision = "0030"
     try:
         yield h
     finally:

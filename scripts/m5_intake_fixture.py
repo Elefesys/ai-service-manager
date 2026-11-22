@@ -10,7 +10,7 @@ import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -66,8 +66,9 @@ INPUTS = {
     "price-oversize": "The swallow will be 100,1 cm",
     "quote-second": "Synthetic quote separate swallow shoulder 101 mm linework",
 }
-QUOTE_JOURNEYS = {"quote-delivery", "quote-guard"}
+QUOTE_JOURNEYS = {"quote-delivery", "quote-guard", "quote-acceptance"}
 QUOTE_OPERATIONS = {"deliver-quote": OutcomeKind.SUCCESS, "lose-quote-ack": OutcomeKind.UNKNOWN}
+QUOTE_REPLIES = {"agree-quote", "repeat-agreement", "ambiguous-agreement"}
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
     "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
@@ -291,7 +292,7 @@ async def run(args, diagnostic):
             await native_schema_readiness(c)
         tenancy = TenantDatabase(engine)
         kernel = IntakeBrowserKernel(engine, environment="TEST")
-        if args.operation in QUOTE_OPERATIONS:
+        if args.operation in QUOTE_OPERATIONS or args.operation in QUOTE_REPLIES:
             return await run_quote(
                 args, diagnostic, engine, tenancy, kernel, actor, workspace, business
             )
@@ -556,6 +557,38 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
         if job.workspace_id != workspace:
             raise IntakeFixtureRefused("JOB_WORKSPACE_MISMATCH")
 
+    if args.operation in QUOTE_REPLIES:
+        if args.journey != "quote-acceptance" or before.status != "SENT":
+            raise IntakeFixtureRefused("SENT_SYNTHETIC_QUOTE_REQUIRED")
+        diagnostic.stage = "INGEST"
+        async with engine.connect() as connection:
+            cutoff = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
+        adapter = ControlledAdapter(environment="TEST")
+        value = replace(
+            event("knowledge", f"{scenario}-{quote_id}-{args.operation}", conversation=scenario),
+            text="да" if args.operation == "ambiguous-agreement" else f"Принимаю {quote.code}",
+            occurred_at=datetime.now(UTC),
+        )
+        incoming = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
+        if incoming.code != "ACCEPTED" or incoming.workspace_id != workspace:
+            raise IntakeFixtureRefused("FRESH_CANONICAL_INGEST_REQUIRED")
+        diagnostic.stage = "CLAIM"
+        claim = await kernel.claim_intake(
+            cutoff, lambda job: job.job_id == incoming.job_id, validate_claim, diagnostic
+        )
+        if claim is None:
+            raise IntakeFixtureRefused("INGEST_JOB_MISMATCH")
+        diagnostic.stage = "EXECUTE"
+        result = await kernel.process_inbox(claim)
+        reply = getattr(result, "quote_reply", None)
+        if reply is None or result.code != "PROCESSED":
+            raise IntakeFixtureRefused("CANONICAL_QUOTE_REPLY_REQUIRED")
+        return {
+            "message_id": str(result.message_id),
+            **reply.model_dump(mode="json", exclude={"message_id"}),
+            "source_message_id": str(reply.message_id),
+        }
+
     adapter = QuoteBrowserAdapter(
         environment="TEST", outcome=QUOTE_OPERATIONS[args.operation], barrier=observe
     )
@@ -604,7 +637,11 @@ def main():
     args = None
     try:
         parser = PrivateArgumentParser()
-        parser.add_argument("--operation", choices=(*INPUTS, *QUOTE_OPERATIONS), required=True)
+        parser.add_argument(
+            "--operation",
+            choices=(*INPUTS, *QUOTE_OPERATIONS, *sorted(QUOTE_REPLIES)),
+            required=True,
+        )
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
         parser.add_argument(
             "--journey",

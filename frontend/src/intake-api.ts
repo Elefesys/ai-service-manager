@@ -91,7 +91,17 @@ export type RequestQuote = {
  };
 };
 export type PreviousQuote = {quote:RequestQuote;status:(typeof quoteDeliveryStatuses)[number];reason:string|null};
-export type QuoteDelivery = {quote:RequestQuote|null;status:QuoteStatus|null;reason:string|null;previous?:PreviousQuote};
+const quoteReplyNotices=['DECLINED','NEEDS_CLARIFICATION','DELIVERY_UNCONFIRMED','HUMAN_CONTROL','CONTROL_CHANGED',
+ 'EXPIRED','REVOKED','STALE','REVIEW_REQUIRED'] as const;
+export type QuoteReplyNotice = {outcome:(typeof quoteReplyNotices)[number];message_id:string};
+export type QuoteAgreement = {
+ acceptance_id:string;order_id:string;session_id:string;status:'PLANNED';scheduled_at:null;accepted_at:string;
+ quote:RequestQuote;source:IntentSource&{status:'AVAILABLE'|'CHANGED'|'UNAVAILABLE';text:string|null};
+};
+export type QuoteDelivery = {
+ quote:RequestQuote|null;status:QuoteStatus|null;reason:string|null;previous?:PreviousQuote;
+ agreement?:QuoteAgreement;reply_notice?:QuoteReplyNotice;
+};
 export type CaseInput = { description: string; asset: {asset_id:string;asset_version_id:string}|null; width_mm:number|null; height_mm:number|null; placement:string|null; style:string|null; detail:string|null; fill:string|null; provider:string|null; working_minutes:number|null; occupied_minutes:number|null; setup_minutes:number|null; stencil_minutes:number|null; break_minutes:number|null; cleanup_minutes:number|null; treatment:'INCLUDED'|'EXCLUDED'|'UNKNOWN'; session_count:number|null; session_minutes:number[]|null; explanation:string|null };
 export type DurationCase = {case_id:string;version:string;state:'DRAFT'|'CONFIRMED'|'REVOKED';data:CaseInput;confirmed_by:string|null;source_current:boolean};
 export type CasePage = {workspace_id:string;business_id:string;items:DurationCase[]};
@@ -273,19 +283,34 @@ function checkQuote(value:unknown,scope:IntakeScope,requestId:string){
 }
 const quoteReason=(value:unknown)=>nullable(value,v=>typeof v==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v));
 export function parseQuoteDelivery(value:unknown,scope:IntakeScope,requestId:string):QuoteDelivery{
- const hasPrevious=typeof value==='object'&&value!==null&&Object.hasOwn(value,'previous');
+ const has=(key:string)=>typeof value==='object'&&value!==null&&Object.hasOwn(value,key);
  const keys=['quote','status','reason'];
- if(hasPrevious)keys.push('previous');
+ for(const optional of ['previous','agreement','reply_notice'])if(has(optional))keys.push(optional);
  const response=object(value,keys);
  if(!nullable(response.status,v=>one(v,quoteStatuses))||!quoteReason(response.reason))return invalid();
  const quoteExpected=response.status!==null&&response.status!=='NEEDS_CLARIFICATION';
  if((response.quote!==null)!==quoteExpected)return invalid();
  if(quoteExpected)checkQuote(response.quote,scope,requestId);
- if(hasPrevious){
+ if(has('previous')){
   if(response.status!=='NEEDS_CLARIFICATION'||response.reason!=='EXACT_PRICE_REQUIRED')return invalid();
   const previous=object(response.previous,['quote','status','reason']);
   if(!one(previous.status,quoteDeliveryStatuses)||!quoteReason(previous.reason))return invalid();
   checkQuote(previous.quote,scope,requestId);
+ }
+ if(has('agreement')){
+  const agreement=object(response.agreement,['acceptance_id','order_id','session_id','status','scheduled_at','accepted_at','quote','source']);
+  if(has('reply_notice')||!uuid(agreement.acceptance_id)||!uuid(agreement.order_id)||!uuid(agreement.session_id)
+    ||agreement.status!=='PLANNED'||agreement.scheduled_at!==null||!instant(agreement.accepted_at))return invalid();
+  checkQuote(agreement.quote,scope,requestId);
+  const acceptedQuote=agreement.quote as RequestQuote;
+  const source=object(agreement.source,['message_id','source_version','status','text']);
+  if(!uuid(source.message_id)||!digest(source.source_version)||!one(source.status,['AVAILABLE','CHANGED','UNAVAILABLE'])
+    ||source.text!==(source.status==='AVAILABLE'?`Принимаю ${acceptedQuote.code}`:null)
+    ||agreement.accepted_at<=acceptedQuote.created_at||agreement.accepted_at>=acceptedQuote.expires_at)return invalid();
+ }
+ if(has('reply_notice')){
+  const notice=object(response.reply_notice,['outcome','message_id']);
+  if(!uuid(notice.message_id)||!one(notice.outcome,quoteReplyNotices))return invalid();
  }
  return response as QuoteDelivery;
 }

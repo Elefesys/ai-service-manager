@@ -2013,16 +2013,23 @@ SCHEMA_TABLES["0027"] = SCHEMA_TABLES["0026"] | {"app.price_calculations"}
 SCHEMA_TABLES["0028"] = SCHEMA_TABLES["0027"] | {"app.approval_requests", "app.owner_decisions"}
 SCHEMA_TABLES["0029"] = SCHEMA_TABLES["0028"] | {"app.quotes", "platform.quote_delivery_intents"}
 
+SCHEMA_TABLES["0030"] = SCHEMA_TABLES["0029"] | {
+    "app.quote_acceptances",
+    "app.service_orders",
+    "app.service_sessions",
+    "platform.quote_reply_events",
+}
+
 
 def native_source_profile():
-    """Current 0029 inventory including quotes and their delivery intents."""
+    """Current inventory including accepted quotes, orders and their planned sessions."""
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT, "0029")
-    schema_inventory("0029", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0030")
+    schema_inventory("0030", profile["columns"])
     require(
-        len(profile["functions"]) == 377 and sum(map(len, profile["columns"].values())) == 1193,
+        len(profile["functions"]) == 387 and sum(map(len, profile["columns"].values())) == 1224,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -2050,7 +2057,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0029",
+            "schema_revision": "0030",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

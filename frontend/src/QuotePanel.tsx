@@ -1,7 +1,7 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import type {ApprovalSelection} from './escalation-api';
 import {IntakeError,intakeApi} from './intake-api';
-import type {IntakeScope,QuoteDelivery,QuoteStatus,RequestQuote,ServiceRequestDraft} from './intake-api';
+import type {IntakeScope,QuoteAgreement,QuoteDelivery,QuoteReplyNotice,QuoteStatus,RequestQuote,ServiceRequestDraft} from './intake-api';
 
 const statusText:Record<QuoteStatus,string>={
  PREPARED:'Предложение подготовлено',
@@ -68,6 +68,44 @@ function QuoteTerms({quote,revision}:{quote:RequestQuote;revision:string}){
  </article>;
 }
 
+const replyText:Record<QuoteReplyNotice['outcome'],string>={
+ NEEDS_CLARIFICATION:'Клиент ответил «да». Уточните, какое предложение он принимает, и попросите прислать его код.',
+ DELIVERY_UNCONFIRMED:'Сверьте доставку и попросите клиента прислать новое согласие.',
+ HUMAN_CONTROL:'Ответ поступил при управлении мастером. Для заказа нужно новое согласие клиента.',
+ CONTROL_CHANGED:'Режим управления изменился. Для заказа нужно новое согласие клиента.',
+ EXPIRED:'Срок предложения истёк. Для заказа нужно действующее предложение и новое согласие.',
+ REVOKED:'Основание предложения отозвано. Для заказа нужно новое предложение.',
+ STALE:'Код относится к прежним условиям. Для заказа нужно согласие на действующие условия.',
+ REVIEW_REQUIRED:'Ответ клиента требует проверки мастером.',
+ DECLINED:'Клиент отклонил предложение.',
+};
+
+function Agreement({agreement,revision}:{agreement:QuoteAgreement;revision:string}){
+ const {source,quote}=agreement;
+ const evidence=useRef<HTMLDetailsElement>(null);
+ return <section aria-label="Согласованный заказ" data-testid="quote-agreement">
+  <h5>Согласованный заказ</h5>
+  <dl className="billing-facts">
+   <dt>Заказ</dt><dd><code data-testid="service-order-id">{agreement.order_id}</code></dd>
+   <dt>Согласие клиента</dt><dd><code data-testid="quote-acceptance-id">{agreement.acceptance_id}</code></dd>
+   <dt>Следующий сеанс</dt><dd>Запланирован без даты · {quote.material.occupied_minutes} мин <code data-testid="service-session-id">{agreement.session_id}</code></dd>
+  </dl>
+  <p><a href={`#consent-${source.message_id}`} onClick={event=>{
+   event.preventDefault();
+   if(evidence.current){evidence.current.open=true;evidence.current.focus();}
+  }}>Первая подтверждающая реплика</a></p>
+  <details id={`consent-${source.message_id}`} ref={evidence} tabIndex={-1}>
+   <summary>Согласие на {quote.code}</summary>
+   <p className="message-text">{source.status==='AVAILABLE'?source.text:
+    source.status==='CHANGED'?'Версия подтверждающей реплики изменилась.':'Подтверждающая реплика недоступна.'}</p>
+  </details>
+  <details>
+   <summary>Принятые условия · {quote.code}</summary>
+   <QuoteTerms quote={quote} revision={revision}/>
+  </details>
+ </section>;
+}
+
 export function QuotePanel({scope,draft,refresh,approvalChange,expired}:Props){
  const [delivery,setDelivery]=useState<QuoteDelivery|null>(null);
  const [error,setError]=useState(false);
@@ -106,6 +144,9 @@ export function QuotePanel({scope,draft,refresh,approvalChange,expired}:Props){
   {!error&&!delivery&&<p role="status">Проверяем статус предложения…</p>}
   {delivery&&<DeliveryStatus status={delivery.status} reason={delivery.reason}/>}
   {delivery?.quote&&<QuoteTerms quote={delivery.quote} revision={draft.revision}/>}
+  {delivery?.agreement&&<Agreement key={delivery.agreement.acceptance_id} agreement={delivery.agreement} revision={draft.revision}/>}
+  {delivery?.reply_notice&&<p role="status">{replyText[delivery.reply_notice.outcome]}{' '}
+   <a href={`#message-${delivery.reply_notice.message_id}`}>Ответ клиента</a></p>}
   {previous&&<section aria-label="Предыдущая версия">
    <h5>Предыдущая версия</h5>
    <DeliveryStatus status={previous.status} reason={previous.reason}/>

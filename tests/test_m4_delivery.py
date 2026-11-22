@@ -478,7 +478,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     assessment = catalog.source_catalog(catalog.ROOT, "0026")
     pricing = catalog.source_catalog(catalog.ROOT, "0027")
     decisions = catalog.source_catalog(catalog.ROOT, "0028")
-    current = catalog.source_catalog(catalog.ROOT, "0029")
+    current = catalog.source_catalog(catalog.ROOT, "0030")
     assert (len(request["functions"]), len(request["columns"])) == (331, 75)
     assert (len(intake["functions"]), len(intake["columns"])) == (318, 73)
     assert (len(v7_repair["functions"]), len(v7_repair["columns"])) == (321, 73)
@@ -493,7 +493,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         175,
         194,
         233,
-        377,
+        387,
     )
     assert (
         len(old["columns"]),
@@ -501,7 +501,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         len(rights["columns"]),
         len(previous["columns"]),
         len(current["columns"]),
-    ) == (45, 47, 49, 59, 81)
+    ) == (45, 47, 49, 59, 85)
     assert (
         current["functions"]["platform.intake_schema_profile()"]
         == intake["functions"]["platform.intake_schema_profile()"]
@@ -526,11 +526,11 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         current["functions"]["platform.owner_decision_schema_profile()"]
         == decisions["functions"]["platform.owner_decision_schema_profile()"]
     )
-    body = current["functions"]["platform.quote_schema_profile()"]["body"]
+    body = current["functions"]["platform.quote_acceptance_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 376,
-        "tables": 81,
+        "other_functions": 386,
+        "tables": 85,
         "result": "PASS",
     }
     assert (

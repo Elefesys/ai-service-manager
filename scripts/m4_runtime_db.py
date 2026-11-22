@@ -375,6 +375,66 @@ M6_REQUEST_IMPLEMENTATION_PATHS = {
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
 }
+M6_ACCEPTANCE_BASE = "3fa9af54225c7f0806aa0eb199441a0aa225b2d5"
+M6_ACCEPTANCE_TREE = "c5b76ef1cd2636f53680f5e4e029892bf3b1a985"
+M6_ACCEPTANCE_ASSIGNMENT = "edc59e7846989eee253bdfe89663cc8e9c676157"
+M6_ACCEPTANCE_ASSIGNMENT_TREE = "ee5ef85999185997c860662ed7effc81758dec15"
+M6_ACCEPTANCE_BRANCH = "c1/m6-3c-quote-acceptance"
+M6_ACCEPTANCE_MIGRATION = "migrations/versions/0030_quote_acceptance.py"
+M6_ACCEPTANCE_DOCS = {"docs/TASK_REGISTER.md", "docs/tasks/M6_HANDOFF.md"}
+M6_ACCEPTANCE_IMPLEMENTATION_PATHS = {
+    M6_ACCEPTANCE_MIGRATION,
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/messaging/database.py",
+    "backend/src/asm/messaging/results.py",
+    "backend/src/asm/service_requests/quotes.py",
+    "backend/src/asm/service_requests/repository.py",
+    "backend/src/asm/telegram/database.py",
+    "backend/src/asm/telegram/normalization.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "contracts/openapi.json",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/src/QuotePanel.tsx",
+    "frontend/src/intake-api.ts",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/test_foundation.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_pricing_postgres.py",
+    "tests/test_m6_quote_acceptance_postgres.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
 M6_QUOTE_BASE = "248dd3a8ecfc2fb372b12f22f60585235b9e244e"
 M6_QUOTE_TREE = "3785de58180475a8efaa29386928fc697ebb1e55"
 M6_QUOTE_ASSIGNMENT = "32f6a91ad372285e5c232d1d98c449bc88a879da"
@@ -1407,6 +1467,7 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    m6_acceptance = value.get("branch") == M6_ACCEPTANCE_BRANCH
     m6_quote = value.get("branch") == M6_QUOTE_BRANCH
     m6_decision = value.get("branch") == M6_DECISION_BRANCH
     m6_pricing = value.get("branch") == M6_PRICING_BRANCH
@@ -1420,6 +1481,8 @@ def source_tree_from_evidence(path=None):
         keys.update({"v7_fix_assignment", "v7_fix_candidate"})
     if m6_plan:
         keys.add("m6_plan_candidate")
+    if m6_acceptance:
+        keys.update({"m6_acceptance_assignment", "m6_acceptance_candidate"})
     if m6_quote:
         keys.update({"m6_quote_assignment", "m6_quote_candidate"})
     if m6_decision:
@@ -1437,8 +1500,10 @@ def source_tree_from_evidence(path=None):
         keys.add("scope_amendment")
         keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
-    if m6_quote or m6_decision or m6_pricing or m6_assessment or m6_request:
-        if m6_quote:
+    if m6_acceptance or m6_quote or m6_decision or m6_pricing or m6_assessment or m6_request:
+        if m6_acceptance:
+            prefix, assignment = "m6_acceptance", m6_acceptance_assignment_proof()
+        elif m6_quote:
             prefix, assignment = "m6_quote", m6_quote_assignment_proof()
         elif m6_decision:
             prefix, assignment = "m6_decision", m6_decision_assignment_proof()
@@ -1511,7 +1576,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M6_QUOTE_BASE, M6_QUOTE_TREE)
+        (M6_ACCEPTANCE_BASE, M6_ACCEPTANCE_TREE)
+        if m6_acceptance
+        else (M6_QUOTE_BASE, M6_QUOTE_TREE)
         if m6_quote
         else (M6_DECISION_BASE, M6_DECISION_TREE)
         if m6_decision
@@ -1593,6 +1660,7 @@ def source_tree_from_evidence(path=None):
                 or m6_pricing
                 or m6_decision
                 or m6_quote
+                or m6_acceptance
             )
             and value["event"] in {"pull_request", "push"}
             or delivery
@@ -1620,7 +1688,14 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if m6_quote:
+    if m6_acceptance:
+        require(
+            M6_ACCEPTANCE_DOCS | {M6_ACCEPTANCE_MIGRATION}
+            <= set(paths)
+            <= M6_ACCEPTANCE_DOCS | M6_ACCEPTANCE_IMPLEMENTATION_PATHS,
+            "SOURCE_IDENTITY_WRITE_SET",
+        )
+    elif m6_quote:
         require(
             M6_QUOTE_DOCS | {M6_QUOTE_MIGRATION}
             <= set(paths)
@@ -2216,10 +2291,22 @@ def m6_assessment_candidate(event):
 
 
 def admit_m6_slice_source(
-    event, evidence, *, assessment=False, pricing=False, decision=False, quote=False
+    event,
+    evidence,
+    *,
+    assessment=False,
+    pricing=False,
+    decision=False,
+    quote=False,
+    acceptance=False,
 ):
     require(event["attempt"] == "1", "RUN_ATTEMPT")
-    if quote:
+    if acceptance:
+        prefix, base_tree = "m6_acceptance", M6_ACCEPTANCE_TREE
+        migration, allowed = M6_ACCEPTANCE_MIGRATION, M6_ACCEPTANCE_IMPLEMENTATION_PATHS
+        assignment = m6_acceptance_assignment_proof()
+        candidate = m6_acceptance_candidate(event)
+    elif quote:
         prefix, base_tree = "m6_quote", M6_QUOTE_TREE
         migration, allowed = M6_QUOTE_MIGRATION, M6_QUOTE_IMPLEMENTATION_PATHS
         assignment = m6_quote_assignment_proof()
@@ -2274,6 +2361,29 @@ def admit_m6_slice_source(
             prefix + "_assignment": assignment,
             prefix + "_candidate": candidate,
         },
+    )
+
+
+def m6_acceptance_event(event):
+    return event.get("head_ref") == M6_ACCEPTANCE_BRANCH or (
+        event.get("event") == "push"
+        and event["ref"] == "refs/heads/main"
+        and commit_parents("HEAD")[:1] == [M6_ACCEPTANCE_BASE]
+    )
+
+
+def m6_acceptance_assignment_proof():
+    return {
+        "sha": M6_ACCEPTANCE_ASSIGNMENT,
+        "tree": M6_ACCEPTANCE_ASSIGNMENT_TREE,
+        "parent": M6_ACCEPTANCE_BASE,
+        "paths": sorted(M6_ACCEPTANCE_DOCS),
+    }
+
+
+def m6_acceptance_candidate(event):
+    return merge_candidate(
+        event, M6_ACCEPTANCE_BASE, M6_ACCEPTANCE_BRANCH, M6_ACCEPTANCE_ASSIGNMENT, "M6_ACCEPTANCE"
     )
 
 
@@ -2671,6 +2781,9 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    if m6_acceptance_event(event):
+        admit_m6_slice_source(event, evidence, acceptance=True)
+        return event, manifest
     if m6_quote_event(event):
         admit_m6_slice_source(event, evidence, quote=True)
         return event, manifest
@@ -3120,7 +3233,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.quote_schema_profile()"
+        "platform.quote_acceptance_schema_profile()"
+        if revision == "0030"
+        else "platform.quote_schema_profile()"
         if revision == "0029"
         else "platform.owner_decision_schema_profile()"
         if revision == "0028"
@@ -3154,6 +3269,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0029":
+        profile_pin = "09f4e715939c5ebb4024d0d992f8dbc8f09a5129c87187ea3267cf26f2a6fb87"
+        body_pin = "44596761e8003b068323bccc1f0937cb4fcb1116543796096a78de0e267f3f0f"
     if revision == "0026":
         profile_pin = "4c51a6773a39f4596dbf6da3dcc36e4ff0dfa0e0ed8eadaa399734aff2ed9910"
         body_pin = "c7c9624fcc55e4ff00a3b4abf7ec8e907f099898ec41a21fc3fbfef5d68493f8"
@@ -3244,6 +3362,7 @@ def stock_catalog():
                 "0027",
                 "0028",
                 "0029",
+                "0030",
             },
             "CATALOG_REVISION",
         )
@@ -3265,6 +3384,7 @@ def stock_catalog():
             "0027",
             "0028",
             "0029",
+            "0030",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -3312,7 +3432,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.quote_schema_profile()"
+            "platform.quote_acceptance_schema_profile()"
+            if revision == "0030"
+            else "platform.quote_schema_profile()"
             if revision == "0029"
             else "platform.owner_decision_schema_profile()"
             if revision == "0028"
@@ -3735,7 +3857,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            m6_quote_event(event)
+            m6_acceptance_event(event)
+            or m6_quote_event(event)
             or m6_decision_event(event)
             or m6_pricing_event(event)
             or m6_assessment_event(event)
@@ -3769,14 +3892,17 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    m6_quote = m6_quote_event(event)
-    m6_decision = not m6_quote and m6_decision_event(event)
-    m6_pricing = not (m6_quote or m6_decision) and m6_pricing_event(event)
-    m6_assessment = not (m6_quote or m6_decision or m6_pricing) and m6_assessment_event(event)
-    m6_request = not (m6_quote or m6_decision or m6_pricing or m6_assessment) and m6_request_event(
-        event
-    )
-    m6_slice = m6_quote or m6_decision or m6_pricing or m6_assessment or m6_request
+    m6_acceptance = m6_acceptance_event(event)
+    m6_quote = not m6_acceptance and m6_quote_event(event)
+    m6_decision = not (m6_acceptance or m6_quote) and m6_decision_event(event)
+    m6_pricing = not (m6_acceptance or m6_quote or m6_decision) and m6_pricing_event(event)
+    m6_assessment = not (
+        m6_acceptance or m6_quote or m6_decision or m6_pricing
+    ) and m6_assessment_event(event)
+    m6_request = not (
+        m6_acceptance or m6_quote or m6_decision or m6_pricing or m6_assessment
+    ) and m6_request_event(event)
+    m6_slice = m6_acceptance or m6_quote or m6_decision or m6_pricing or m6_assessment or m6_request
     m6_plan = not m6_slice and m6_plan_event(event)
     v7_fix = not (m6_slice or m6_plan) and v7_fix_event(event)
     intake = not (m6_slice or m6_plan or v7_fix) and intake_event(event)
@@ -3818,7 +3944,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M6_QUOTE_BASE, M6_QUOTE_TREE)
+        (M6_ACCEPTANCE_BASE, M6_ACCEPTANCE_TREE)
+        if m6_acceptance
+        else (M6_QUOTE_BASE, M6_QUOTE_TREE)
         if m6_quote
         else (M6_DECISION_BASE, M6_DECISION_TREE)
         if m6_decision
@@ -3867,6 +3995,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M6_ACCEPTANCE_BRANCH
+            if m6_acceptance
             else M6_QUOTE_BRANCH
             if m6_quote
             else M6_DECISION_BRANCH
@@ -3902,6 +4032,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if m6_acceptance:
+        source["m6_acceptance_assignment"] = m6_acceptance_assignment_proof()
+        source["m6_acceptance_candidate"] = m6_acceptance_candidate(event)
     if m6_quote:
         source["m6_quote_assignment"] = m6_quote_assignment_proof()
         source["m6_quote_candidate"] = m6_quote_candidate(event)
@@ -4086,7 +4219,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             )
             if module == "preflight":
                 current_revision = (
-                    "0029"
+                    "0030"
+                    if m6_acceptance
+                    else "0029"
                     if m6_quote
                     else "0028"
                     if m6_decision

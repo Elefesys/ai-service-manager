@@ -16,10 +16,12 @@ const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixture
 type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
+type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement';
+type QuoteReplyResult={outcome:string;message_id:string;source_message_id:string;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'quote-delivery'|'quote-guard';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'quote-delivery'|'quote-guard'|'quote-acceptance';
 
-function intakeChildFailure(error:unknown,operation:IntakeOperation|QuoteOperation,journey:IntakeJourney,variant:Viewport):Error {
+function intakeChildFailure(error:unknown,operation:IntakeOperation|QuoteOperation|QuoteReply,journey:IntakeJourney,variant:Viewport):Error {
  const result=error as {code?:unknown;stderr?:unknown;killed?:boolean;signal?:string};
  const exit=typeof result.code==='number'?String(result.code):'UNKNOWN';
  const request=`operation=${operation};journey=${journey};variant=${variant}`;
@@ -72,7 +74,7 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  return {...await collectIntake(page,variant,journey),serviceName};
 }
 
-async function intakeFixture<T>(operation:IntakeOperation|QuoteOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
+async function intakeFixture<T>(operation:IntakeOperation|QuoteOperation|QuoteReply,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
  const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
@@ -1030,7 +1032,7 @@ test('@narrow asks only for the missing term and retains its independent basis',
 
 type QuoteAttempt={quote_id:string;job_claimed:boolean;status:QuoteDelivery['status'];reason:string|null;calls:number;effects:number;text:string|null};
 
-async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-delivery'|'quote-guard'){
+async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-delivery'|'quote-guard'|'quote-acceptance'){
  page.setDefaultTimeout(12000);
  const {settings,serviceName}=await configureIntakeService(page,variant);
  const rules=settings.getByRole('button',{name:/^Удалить правило \d+$/});
@@ -1040,8 +1042,8 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:'quote-deliv
  await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('NONE');
  for(const [label,value] of [
   ['База, копейки 1','250000'],['За начатый шаг, копейки 1','50000'],
-  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1','100'],
-  ['Прибавка к верхней границе, копейки 1',''],['Длительность, минуты 1','65'],
+  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',journey==='quote-acceptance'?'1000':'100'],
+  ['Прибавка к верхней границе, копейки 1',journey==='quote-acceptance'?'50000':''],['Длительность, минуты 1','65'],
   ['Предоплата, копейки 1',''],['Предоплата, процент 1',''],
  ])await settings.getByLabel(label,{exact:true}).fill(value);
  await publishIntakeService(settings,serviceName);
@@ -1297,4 +1299,63 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  const clarification=variant==='narrow'?await confirmExactQuote(page,app,range,'UNKNOWN','FULL_PREPAYMENT'):null;
  console.log('M6.3B R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,request:firstId,held,checkpoints,unknown,restarted,clarification}));
+});
+
+test('@narrow M6.3C agrees B before A and preserves the first reply and planned session',async({page},info)=>{
+ test.setTimeout(120_000);
+ const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
+ const journey='quote-acceptance';
+ const {input,conversation,intake,inbox,cardId,panel,firstId,execute,read,evaluateAndPrice}=await beginQuoteJourney(page,variant,journey);
+ const reply=(operation:QuoteReply,id:string)=>intakeFixture<QuoteReplyResult>(operation,journey,variant,conversation,id);
+ const a=await evaluateAndPrice(firstId);
+ expect(await execute('deliver-quote',firstId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ const second=await input('quote-second',conversation);
+ await refreshIntake(inbox,intake);
+ await (await chooseWork(page,second.message_id,'swallow','shoulder','101 mm','linework')).click();
+ await expect(cardId).not.toHaveText(firstId);
+ const secondId=(await cardId.textContent())!;
+ const b=await evaluateAndPrice(secondId);
+ expect(await execute('deliver-quote',secondId)).toMatchObject({status:'SENT',calls:1,effects:1});
+ expect(a.code).not.toBe(b.code);
+
+ const ambiguous=await reply('ambiguous-agreement',secondId);
+ expect(ambiguous).toMatchObject({outcome:'NEEDS_CLARIFICATION',acceptance_id:null,order_id:null,session_id:null});
+ await refreshIntake(inbox,intake);
+ await expect(panel.getByText(/Уточните, какое предложение он принимает/)).toBeVisible();
+ expect((await read(firstId)).agreement).toBeUndefined();
+ expect((await read(secondId)).agreement).toBeUndefined();
+
+ const agreedB=await reply('agree-quote',secondId);
+ expect(agreedB).toMatchObject({outcome:'ACCEPTED',quote_id:b.quote_id,source_message_id:agreedB.message_id});
+ const savedB=(await read(secondId)).agreement!;
+ expect(savedB).toMatchObject({acceptance_id:agreedB.acceptance_id,order_id:agreedB.order_id,session_id:agreedB.session_id,
+  status:'PLANNED',scheduled_at:null,quote:b,source:{message_id:agreedB.message_id,status:'AVAILABLE',text:'Принимаю '+b.code}});
+ expect(savedB.quote.material.price_range).toEqual({authority:'PROVISIONAL',lower_minor:800000,upper_minor:850000});
+ await refreshIntake(inbox,intake);
+ const order=panel.getByRole('region',{name:'Согласованный заказ',exact:true});
+ await expect(order.getByTestId('service-order-id')).toHaveText(savedB.order_id);
+ await expect(order.getByText(/Запланирован без даты · 65 мин/)).toBeVisible();
+ await order.getByRole('link',{name:'Первая подтверждающая реплика'}).click();
+ await expect(order.getByText('Принимаю '+b.code,{exact:true})).toBeVisible();
+ await order.getByText('Принятые условия · '+b.code,{exact:true}).click();
+ await expect(order.getByTestId('quote-text')).toHaveText(b.text);
+ const retry=await reply('repeat-agreement',secondId);
+ expect(retry).toMatchObject({acceptance_id:savedB.acceptance_id,order_id:savedB.order_id,session_id:savedB.session_id,
+  source_message_id:agreedB.message_id});
+ expect(retry.message_id).not.toBe(agreedB.message_id);
+ expect((await read(secondId)).agreement).toEqual(savedB);
+
+ await intake.getByLabel('Сохранённая заявка',{exact:true}).selectOption(firstId);
+ await expect(panel.getByTestId('quote-text')).toContainText(a.code);
+ await expect(order).toHaveCount(0);
+ expect((await read(firstId)).agreement).toBeUndefined();
+ const agreedA=await reply('agree-quote',firstId);
+ const savedA=(await read(firstId)).agreement!;
+ expect(savedA).toMatchObject({acceptance_id:agreedA.acceptance_id,order_id:agreedA.order_id,session_id:agreedA.session_id,
+  status:'PLANNED',scheduled_at:null,quote:a,source:{message_id:agreedA.message_id}});
+ expect(new Set([savedA.acceptance_id,savedA.order_id,savedA.session_id,savedB.acceptance_id,savedB.order_id,savedB.session_id]).size).toBe(6);
+ await refreshIntake(inbox,intake);
+ await expect(order.getByTestId('service-order-id')).toHaveText(savedA.order_id);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ console.log('M6.3C Chromium '+info.project.name+' '+JSON.stringify({conversation,a:agreedA,b:agreedB,retry,ambiguous:ambiguous.outcome,scheduledAt:null}));
 });

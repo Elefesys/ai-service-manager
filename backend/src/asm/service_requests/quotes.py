@@ -146,12 +146,63 @@ class QuoteDeliverySnapshot(ConfigurationModel):
     reason: StatusReason | None
 
 
+class QuoteAcceptanceSource(ConfigurationModel):
+    message_id: CanonicalUUID
+    source_version: Digest
+    status: Literal["AVAILABLE", "CHANGED", "UNAVAILABLE"]
+    text: ClientText | None = Field(repr=False)
+
+    @model_validator(mode="after")
+    def visible_text(self) -> Self:
+        if (self.status == "AVAILABLE") != (self.text is not None):
+            raise ValueError("Acceptance source availability and text differ")
+        return self
+
+
+class QuoteAgreement(ConfigurationModel):
+    acceptance_id: CanonicalUUID
+    order_id: CanonicalUUID
+    session_id: CanonicalUUID
+    status: Literal["PLANNED"]
+    scheduled_at: None
+    accepted_at: Timestamp
+    quote: QuoteVersion
+    source: QuoteAcceptanceSource
+
+    @model_validator(mode="after")
+    def accepted_version(self) -> Self:
+        if not self.quote.created_at < self.accepted_at < self.quote.expires_at or (
+            self.source.text is not None and self.source.text != f"Принимаю {self.quote.code}"
+        ):
+            raise ValueError("Acceptance evidence and quote differ")
+        return self
+
+
+class QuoteReplyNotice(ConfigurationModel):
+    outcome: Literal[
+        "DECLINED",
+        "NEEDS_CLARIFICATION",
+        "DELIVERY_UNCONFIRMED",
+        "HUMAN_CONTROL",
+        "CONTROL_CHANGED",
+        "EXPIRED",
+        "REVOKED",
+        "STALE",
+        "REVIEW_REQUIRED",
+    ]
+    message_id: CanonicalUUID
+
+
 class QuoteDeliveryView(ConfigurationModel):
     quote: QuoteVersion | None
     status: QuoteStatus | None
     reason: StatusReason | None
     previous: QuoteDeliverySnapshot | None = Field(
         default=None, exclude_if=lambda snapshot: snapshot is None
+    )
+    agreement: QuoteAgreement | None = Field(default=None, exclude_if=lambda value: value is None)
+    reply_notice: QuoteReplyNotice | None = Field(
+        default=None, exclude_if=lambda value: value is None
     )
 
     @model_validator(mode="after")
@@ -163,6 +214,8 @@ class QuoteDeliveryView(ConfigurationModel):
             "EXACT_PRICE_REQUIRED",
         ):
             raise ValueError("Previous delivery requires an exact price clarification")
+        if self.agreement is not None and self.reply_notice is not None:
+            raise ValueError("An accepted work cannot require a new client reply")
         return self
 
 

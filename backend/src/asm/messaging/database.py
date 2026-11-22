@@ -290,8 +290,13 @@ class WorkerUnitOfWork:
         )
 
     async def process_inbox(self) -> InboxProcessingResult | MutationInboxProcessingResult:
+        capability = "messaging_process_inbox"
+        if await self._execute(
+            "SELECT to_regprocedure('platform.quote_process_inbox(uuid,uuid)') IS NOT NULL"
+        ):
+            capability = "quote_process_inbox"
         return parse_inbox_result(
-            await self._execute("SELECT platform.messaging_process_inbox(:job, :token)")
+            await self._execute(f"SELECT platform.{capability}(:job, :token)")
         )
 
     async def begin_send(self) -> SendPermit | TerminalRejection:
@@ -475,6 +480,17 @@ class MessagingDatabase:
             # A concurrent winner can commit while admission waits. Re-read only
             # that winning terminal claim in a fresh physical transaction.
             async with self._transaction() as connection:
+                params: dict[str, object] = {"job": claim.job_id, "claim": claim.claim_token}
+                if await call(
+                    connection,
+                    "SELECT to_regprocedure('platform.quote_process_replay(uuid,uuid)') IS NOT NULL",
+                    {},
+                ):
+                    reply = await call(
+                        connection, "SELECT platform.quote_process_replay(:job,:claim)", params
+                    )
+                    if reply is not None:
+                        return InboxProcessingResult.model_validate(reply)
                 # Historical migration test lanes retain their old capabilities;
                 # readiness still rejects those schemas for the current server.
                 available = await call(

@@ -9,7 +9,7 @@ from pydantic import Field
 
 from asm.messaging.database import MessagingDatabase, call, require_uuid
 from asm.messaging.results import Result
-from asm.telegram.normalization import normalize_update, normalize_update_v2
+from asm.telegram.normalization import is_own_client_text, normalize_update, normalize_update_v2
 
 
 class TelegramReceipt(Result):
@@ -57,15 +57,30 @@ class TelegramIngress:
         if saved is not None:
             return TelegramReceipt.model_validate(saved)
         projection = normalize_update_v2(self.bot_identity, update)
-        return await self.ingest(projection.model_dump(), correlation_id)
+        return await self._ingest(
+            projection.model_dump(), correlation_id, own_text=is_own_client_text(update, projection)
+        )
 
     async def ingest(self, projection: dict[str, Any], correlation_id: UUID) -> TelegramReceipt:
+        return await self._ingest(projection, correlation_id, own_text=False)
+
+    async def _ingest(
+        self, projection: dict[str, Any], correlation_id: UUID, *, own_text: bool
+    ) -> TelegramReceipt:
         require_uuid(correlation_id)
         async with self.database._transaction() as connection:
+            capability = "telegram_ingest"
+            # Old migration lanes still accept/replay V2 without client-text authority.
+            if own_text and await call(
+                connection,
+                "SELECT to_regprocedure('platform.telegram_ingest_own_text(text,jsonb,uuid)') IS NOT NULL",
+                {},
+            ):
+                capability = "telegram_ingest_own_text"
             result = TelegramReceipt.model_validate(
                 await call(
                     connection,
-                    "SELECT platform.telegram_ingest(:bot, CAST(:projection AS jsonb), :correlation)",
+                    f"SELECT platform.{capability}(:bot, CAST(:projection AS jsonb), :correlation)",
                     {
                         "bot": self.bot_identity,
                         "projection": json.dumps(
