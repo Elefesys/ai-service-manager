@@ -172,8 +172,8 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    # The current catalog includes quote acceptance, order and planned session.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1357
+    # The catalog includes the two 0031 REVOKEs for scoped intake and work identity.
+    assert len(journal.catalog["nonfunction_ddl"]) == 1359
     journal.start(node)
     append = store.append
 

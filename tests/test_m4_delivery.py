@@ -494,7 +494,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         175,
         194,
         233,
-        407,
+        409,
     )
     assert (
         len(old["columns"]),
@@ -534,7 +534,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     body = current["functions"]["platform.service_intent_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 406,
+        "other_functions": 408,
         "tables": 86,
         "result": "PASS",
     }
