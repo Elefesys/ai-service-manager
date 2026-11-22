@@ -411,6 +411,7 @@ M6_INTENTS_IMPLEMENTATION_PATHS = {
     "tests/m5_knowledge_search_fixtures.py",
     "tests/m5_portfolio_fixtures.py",
     "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
     "tests/test_m2_3_db_postgres.py",
     "tests/test_m2_3_schema_postgres.py",
     "tests/test_m2_3_setup.py",
