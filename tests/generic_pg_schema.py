@@ -25,14 +25,14 @@ _catalog = runpy.run_path(
 
 @cache
 def current_source():
-    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], "0028")
+    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], "0029")
 
 
 async def assert_current_schema(c):
     assert (await c.execute(text("SELECT current_user"))).scalar_one() == "asm_migrator"
     assert (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-    ).scalar_one() == "0028"
+    ).scalar_one() == "0029"
     original_path = (await c.execute(text("SHOW search_path"))).scalar_one()
     await c.execute(text("SET LOCAL search_path=pg_catalog,pg_temp"))
     expected = current_source()
@@ -48,9 +48,7 @@ async def assert_current_schema(c):
         ).all()
     )
     full, nonfunction = (await c.execute(text(_catalog["CATALOG_SQL"]))).one()
-    profile = (
-        await c.execute(text("SELECT platform.owner_decision_schema_profile()"))
-    ).scalar_one()
+    profile = (await c.execute(text("SELECT platform.quote_schema_profile()"))).scalar_one()
     await c.execute(text("SELECT set_config('search_path',:path,true)"), {"path": original_path})
     _catalog["compare_catalog"](expected, functions, resolved, full, nonfunction, lambda: profile)
     return full
@@ -64,7 +62,7 @@ async def current_snapshot(c):
         values = (await c.execute(text(f"SELECT to_jsonb(t) FROM {table} AS t"))).scalars()
         canonical = sorted(json.dumps(v, sort_keys=True, separators=(",", ":")) for v in values)
         rows[table] = (len(canonical), hashlib.sha256("\n".join(canonical).encode()).hexdigest())
-    assert len(rows) == 79
+    assert len(rows) == 81
     return rows, catalog
 
 
@@ -83,7 +81,7 @@ async def historical_schema(h, revision):
             await h.runtime.check()
         yield
     finally:
-        await _migrate("upgrade", "0028")
+        await _migrate("upgrade", "0029")
         await h.runtime.engine.dispose()
         await h.runtime.check()
         with pytest.raises(RuntimeError, match="schema"):

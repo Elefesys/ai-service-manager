@@ -42,10 +42,11 @@ type SourcePreviewState =
 type PanelProps={
   session:Session;workspace:string;selected:ApprovalSelection|null;
   related:(ids:readonly string[])=>void;expired:()=>void;recover:()=>void;denied:()=>void;
+  changed?:(selection:ApprovalSelection)=>void;
 };
 type Attempt=Readonly<{scope:ApprovalSelection;body:ApprovalBody}>;
 
-export function OwnerApprovals({session,workspace,selected,related,expired,recover,denied}:PanelProps){
+export function OwnerApprovals({session,workspace,selected,related,expired,recover,denied,changed}:PanelProps){
   const [cards,setCards]=useState<ApprovalCard[]>([]);
   const [cursor,setCursor]=useState<string|null>(null);
   const [selection,setSelection]=useState<ApprovalSelection|null>(null);
@@ -126,6 +127,7 @@ export function OwnerApprovals({session,workspace,selected,related,expired,recov
       if(signal.aborted)return;
       attempt.current=null;
       update(result);
+      changed?.(draftApprovalSelection(result));
     }catch(cause){
       if(signal.aborted)return;
       if(cause instanceof EscalationError&&[404,409,422].includes(cause.status)){

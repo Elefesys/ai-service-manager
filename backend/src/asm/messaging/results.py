@@ -93,6 +93,7 @@ class JobClaim(Result):
         "SEND_GUARDED_TEXT",
         "SEND_AI_TEXT",
         "SEND_AI_PHOTO",
+        "SEND_QUOTE_TEXT",
         "FETCH_IMAGE",
         "PROCESS_TURN",
         "ESCALATION_TIMER",
@@ -136,7 +137,17 @@ class EscalationTimerClaim(JobClaim):
     file_id: None = None
 
 
+class QuoteSendJobClaim(JobClaim):
+    kind: Literal["SEND_QUOTE_TEXT"]
+    quote_id: UUID
+    outbox_id: UUID
+    inbox_id: None
+    file_id: None = None
+
+
 def parse_claim(value: object) -> JobClaim:
+    if isinstance(value, dict) and value.get("kind") == "SEND_QUOTE_TEXT":
+        return QuoteSendJobClaim.model_validate(value)
     if isinstance(value, dict) and value.get("kind") == "ESCALATION_TIMER":
         return EscalationTimerClaim.model_validate(value)
     if isinstance(value, dict) and value.get("kind") == "PROCESS_TURN":
@@ -220,6 +231,11 @@ class AISendPermit(SendPermit):
 
     ai_delivery: Literal[True]
     provider_session_id: UUID | None = None
+
+
+class QuoteSendPermit(SendPermit):
+    quote_delivery: Literal[True]
+    quote_id: UUID
 
 
 class FinalizeResult(Result):

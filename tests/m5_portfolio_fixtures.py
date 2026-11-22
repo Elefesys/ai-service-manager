@@ -41,7 +41,7 @@ async def portfolio_pg():
                     "SELECT current_user,current_database(),(SELECT version_num FROM platform.alembic_version)"
                 )
             )
-        ).one() == ("asm_migrator", "asm_test", "0028")
+        ).one() == ("asm_migrator", "asm_test", "0029")
         for actor in (h.actor, h.other_actor):
             await c.execute(
                 text("INSERT INTO platform.user_accounts(id) VALUES(:id)"), {"id": actor}

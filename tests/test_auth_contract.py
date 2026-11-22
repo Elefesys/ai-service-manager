@@ -118,6 +118,7 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/assessment",
         f"GET {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/pricing",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/pricing",
+        f"GET {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/quote",
         "GET /api/v1/workspaces/{workspace_id}/service-approvals",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/approvals",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/approvals/{{approval_id}}",

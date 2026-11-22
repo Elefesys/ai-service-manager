@@ -34,7 +34,7 @@ from test_m6_pricing_postgres import seeded as seeded
 from test_m6_pricing_postgres import service_request_pg as service_request_pg
 from test_m6_service_assessments_api_postgres import create_draft
 from test_m6_service_requests_api_postgres import route
-from test_m6_service_requests_postgres import revise_body, source_pin
+from test_m6_service_requests_postgres import clear_quote_rows, revise_body, source_pin
 from test_tenancy_postgres import BB, UA, A, B
 
 pytestmark = pytest.mark.integration
@@ -409,6 +409,7 @@ async def test_cross_scope_rights_revocation_and_durable_downgrade_refusal(appro
     url = endpoint(cid, request)
     card = await owner_open(auth, url, token)
     target = url + "/" + card["approval_id"]
+    await control(h, cid, "TAKEOVER")
     await owner_post(auth, target, token, CONFIRM)
     other, *_ = await application(h, {"idea": "separate client"})
     for foreign, status in (
@@ -424,6 +425,10 @@ async def test_cross_scope_rights_revocation_and_durable_downgrade_refusal(appro
             await auth.client.get(source_url(foreign_approval, card["basis"]["intent_source"]))
         ).status_code == status
         await assert_denial(auth, foreign + "/" + card["approval_id"], token, CONFIRM, status)
+    with pytest.raises(AssertionError, match="QUOTE_DURABLE_DATA"):
+        await _migrate("downgrade", "0028")
+    async with h.migrator.begin() as c:
+        await clear_quote_rows(c)
     with pytest.raises(AssertionError, match="OWNER_DECISION_DURABLE_DATA"):
         await _migrate("downgrade", "0027")
     async with h.migrator.begin() as c:

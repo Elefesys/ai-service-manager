@@ -3,16 +3,140 @@ import {randomUUID,webcrypto} from 'node:crypto';
 import {act,render,screen,waitFor,cleanup,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {IntakePanel} from './IntakePanel';
+import {QuotePanel} from './QuotePanel';
 import {intakeApi,IntakeError} from './intake-api';
-import type {PriceCalculation,PriceHistory,ServiceRequestDraft} from './intake-api';
-import {assessment,draft,intake,scope,session,message,listItem,lateSize} from './intake-fixtures.test-helper';
+import type {PriceCalculation,PriceHistory,QuoteDelivery,ServiceRequestDraft} from './intake-api';
+import {assessment,draft,intake,scope,session,message,listItem,lateSize,quoteDelivery} from './intake-fixtures.test-helper';
 beforeEach(()=>{
  vi.stubGlobal('crypto',{randomUUID,subtle:webcrypto.subtle});
  vi.spyOn(intakeApi,'draft').mockResolvedValue(null);
  vi.spyOn(intakeApi,'drafts').mockResolvedValue([]);
  vi.spyOn(intakeApi,'assessment').mockResolvedValue(null);
+ vi.spyOn(intakeApi,'quote').mockResolvedValue({quote:null,status:null,reason:null});
 });
 afterEach(()=>{cleanup();sessionStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();});
+
+it('shows exact versioned terms and keeps a late delivery read out of another request',async()=>{
+ const a=draft(),b={...draft(),request_id:message};
+ const held=quoteDelivery(a,'HELD','CHANNEL_WINDOW_CLOSED');
+ const unknown=quoteDelivery(a,'UNKNOWN','UNKNOWN_EXTERNAL_RESULT');
+ let finish!:(value:QuoteDelivery)=>void;
+ const read=vi.mocked(intakeApi.quote).mockResolvedValueOnce(held)
+  .mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}))
+  .mockResolvedValueOnce({quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'});
+ vi.spyOn(intakeApi,'summary').mockResolvedValue(intake());
+ vi.spyOn(intakeApi,'priceHistory').mockResolvedValue({items:[],next_before_id:null});
+ vi.mocked(intakeApi.draft).mockImplementation(async (_scope,id)=>id===b.request_id?b:a);
+ vi.mocked(intakeApi.drafts).mockResolvedValue([listItem(a),listItem(b)]);
+ render(<IntakePanel session={session()} scope={scope} expired={vi.fn()}/>);
+ const panel=within(await screen.findByRole('region',{name:'Предложение клиенту'}));
+ expect(await panel.findByText('Окно ответа в канале закрыто.')).toBeVisible();
+ expect(panel.getByRole('status')).toHaveTextContent('Отправка удержана');
+ expect(panel.getByTestId('quote-text').textContent).toBe(held.quote.text);
+ expect(panel.queryByRole('button',{name:/Отправить/})).not.toBeInTheDocument();
+ await userEvent.click(screen.getByRole('button',{name:'Обновить карточку заявки'}));
+ await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
+ await userEvent.selectOptions(screen.getByLabelText('Сохранённая заявка'),b.request_id);
+ await act(async()=>finish(unknown));
+ const selected=within(await screen.findByRole('region',{name:'Предложение клиенту'}));
+ expect(await selected.findByText(/Уточните точную цену/)).toBeVisible();
+ expect(selected.getByRole('status')).toHaveTextContent('Нужно уточнение');
+ expect(selected.queryByTestId('quote-text')).not.toBeInTheDocument();
+ expect(read.mock.calls[1][2]?.aborted).toBe(true);
+});
+
+it.each(['current','previous'] as const)('polls the %s quote through lease expiry and stops at the outcome',async(version)=>{
+ vi.useFakeTimers();
+ try{
+  const a=draft(),{quote}=quoteDelivery(a);
+  const clarification={quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'} as const;
+  const readTimes:number[]=[];
+  const openedAt=Date.now();
+  const read=vi.mocked(intakeApi.quote).mockImplementation(async()=>{
+   const elapsed=Date.now()-openedAt;
+   readTimes.push(elapsed);
+   const delivery=elapsed<30_000
+    ?{quote,status:'DISPATCHING',reason:null} as const
+    :{quote,status:'UNKNOWN',reason:'UNKNOWN_EXTERNAL_RESULT'} as const;
+   return version==='previous'?{...clarification,previous:delivery}:delivery;
+  });
+  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" approvalChange={null} expired={vi.fn()}/>);});
+  const card=screen.getByRole('region',{name:'Предложение клиенту'});
+  const delivery=within(version==='previous'?within(card).getByRole('region',{name:'Предыдущая версия'}):card);
+  const terms=delivery.getByRole('article',{name:'Условия предложения'});
+  expect(within(terms).getByText(quote.code,{exact:true})).toBeVisible();
+  expect(within(terms).getByTestId('quote-text').textContent).toBe(quote.text);
+  if(version==='previous')expect(within(card).getByText(/^Уточните точную цену\./)).toBeVisible();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(29_999);});
+  expect(delivery.getByRole('status')).toHaveTextContent('Отправка началась, ожидаем подтверждения');
+  await act(async()=>{await vi.advanceTimersByTimeAsync(3001);});
+  const outcome=delivery.getByRole('status');
+  expect(readTimes.at(-1),`Final GET since the card opened (ms). Card at 33000 ms: ${outcome.textContent}`).toBe(30_000);
+  expect(outcome).toHaveTextContent('UNKNOWN · Доставка не подтверждена');
+  expect(screen.getByRole('region',{name:'Предложение клиенту'})).toBe(card);
+  expect(delivery.getByRole('article',{name:'Условия предложения'})).toBe(terms);
+  expect(within(terms).getByText(quote.code,{exact:true})).toBeVisible();
+  expect(within(terms).getByTestId('quote-text').textContent).toBe(quote.text);
+  if(version==='previous')expect(within(card).getByText(/^Уточните точную цену\./)).toBeVisible();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(30_000);});
+  expect(read).toHaveBeenCalledTimes(16);
+  expect(read).toHaveBeenLastCalledWith(scope,a.request_id,expect.any(AbortSignal));
+ }finally{vi.useRealTimers();}
+});
+
+it('bounds quote polling while the delivery remains queued',async()=>{
+ vi.useFakeTimers();
+ try{
+  const a=draft();
+  const read=vi.mocked(intakeApi.quote).mockResolvedValue(quoteDelivery(a,'QUEUED'));
+  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" approvalChange={null} expired={vi.fn()}/>);});
+  await act(async()=>{await vi.advanceTimersByTimeAsync(40_000);});
+  expect(screen.getByRole('status')).toHaveTextContent('Предложение в очереди на отправку');
+  expect(read).toHaveBeenCalledTimes(9);
+ }finally{vi.useRealTimers();}
+});
+
+it.each([
+ ['closing','timer'],['closing','GET'],['switching','timer'],['switching','GET'],
+] as const)('cancels quote polling when %s the card with a pending %s',async(change,pending)=>{
+ vi.useFakeTimers();
+ try{
+  const a=draft(),b={...draft(),request_id:message};
+  const dispatching=quoteDelivery(a,'DISPATCHING');
+  const replacement={quote:null,status:'NEEDS_CLARIFICATION',reason:'EXACT_PRICE_REQUIRED'} as const;
+  let finish!:(value:QuoteDelivery)=>void;
+  const late=new Promise<QuoteDelivery>(resolve=>{finish=resolve;});
+  const read=vi.mocked(intakeApi.quote).mockResolvedValueOnce(dispatching).mockResolvedValue(replacement);
+  if(pending==='GET')read.mockReturnValueOnce(late);
+  const props={scope,refresh:'',approvalChange:null,expired:vi.fn()};
+  const view=render(<QuotePanel {...props} draft={a}/>);
+  await act(async()=>{});
+  expect(screen.getByRole('status')).toHaveTextContent('Отправка началась, ожидаем подтверждения');
+  if(pending==='GET')await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
+  const oldCalls=pending==='GET'?2:1;
+  expect(read).toHaveBeenCalledTimes(oldCalls);
+  const signal=read.mock.lastCall?.[2];
+  expect(signal?.aborted).toBe(false);
+
+  if(change==='closing')view.unmount();
+  else view.rerender(<QuotePanel {...props} draft={b}/>);
+  expect(signal?.aborted).toBe(true);
+  await act(async()=>finish(dispatching));
+  await act(async()=>{await vi.advanceTimersByTimeAsync(40_000);});
+
+  expect(read.mock.calls.filter(([,id])=>id===a.request_id)).toHaveLength(oldCalls);
+  if(change==='switching'){
+   expect(read).toHaveBeenCalledTimes(oldCalls+1);
+   expect(read).toHaveBeenLastCalledWith(scope,b.request_id,expect.any(AbortSignal));
+   expect(screen.getByRole('status')).toHaveTextContent('Нужно уточнение');
+  }else{
+   expect(read).toHaveBeenCalledTimes(oldCalls);
+   expect(screen.queryByRole('region',{name:'Предложение клиенту'})).not.toBeInTheDocument();
+  }
+  expect(screen.queryByTestId('quote-text')).not.toBeInTheDocument();
+ }finally{vi.useRealTimers();}
+});
+
 it('shows one missing question, a source link and confirms only the selected field',async()=>{
  const value=intake(),owner=session();vi.spyOn(intakeApi,'summary').mockResolvedValue(value);const command=vi.spyOn(intakeApi,'command').mockResolvedValue({outcome:'ACCEPTED',receipt_id:message,version:'2'});
  render(<IntakePanel session={owner} scope={scope} expired={vi.fn()}/>);expect(await screen.findByText(value.question!)).toBeVisible();expect(screen.getByRole('link',{name:'сообщение клиента'})).toHaveAttribute('href',`#message-${message}`);

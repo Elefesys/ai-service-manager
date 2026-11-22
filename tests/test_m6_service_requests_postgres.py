@@ -29,6 +29,20 @@ from test_tenancy_postgres import BA, BA2, BB, UA, UB, A, B
 pytestmark = pytest.mark.integration
 
 
+async def clear_quote_rows(connection):
+    if not (
+        await connection.execute(text("SELECT to_regclass('app.quotes') IS NOT NULL"))
+    ).scalar_one():
+        return
+    scope = {"a": A, "b": B}
+    await connection.execute(
+        text("DELETE FROM platform.quote_delivery_intents WHERE workspace_id IN (:a,:b)"), scope
+    )
+    await connection.execute(text("ALTER TABLE app.quotes DISABLE TRIGGER quote_immutable"))
+    await connection.execute(text("DELETE FROM app.quotes WHERE workspace_id IN (:a,:b)"), scope)
+    await connection.execute(text("ALTER TABLE app.quotes ENABLE TRIGGER quote_immutable"))
+
+
 @pytest_asyncio.fixture
 async def service_request_pg(intake_pg):
     h = intake_pg
@@ -36,6 +50,7 @@ async def service_request_pg(intake_pg):
         yield h
     finally:
         async with h.migrator.begin() as connection:
+            await clear_quote_rows(connection)
             await connection.execute(
                 text("DELETE FROM platform.service_request_receipts WHERE workspace_id IN (:a,:b)"),
                 {"a": A, "b": B},
@@ -727,4 +742,4 @@ async def test_0025_upgrade_preserves_0024_intake_and_rejects_downgrade_with_req
         updated = await read(h, cid, draft["request_id"])
         assert "idea" not in updated["missing"] and updated["question"] != old_question
     finally:
-        await _migrate("upgrade", "0028")
+        await _migrate("upgrade", "0029")

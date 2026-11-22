@@ -1,5 +1,5 @@
 import type {Session} from './api';
-import type {Intake,CaseInput,DraftListItem,DurationCase,ServiceAssessment,ServiceRequestDraft} from './intake-api';
+import type {Intake,CaseInput,DraftListItem,DurationCase,QuoteDelivery,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 import {blankCase} from './intake-api';
 export const w='018f0000-0000-7000-8000-000000000001',b='018f0000-0000-7000-8000-000000000002',c='018f0000-0000-7000-8000-000000000003',client='018f0000-0000-7000-8000-000000000004',actor='018f0000-0000-7000-8000-000000000005',message='018f0000-0000-7000-8000-000000000006';
 export const scope={workspace:w,business:b,conversation:c,client};
@@ -37,4 +37,23 @@ export function lateSize():Intake{
  return {...value,version:'3',fingerprint:'d'.repeat(64),facts:[size],sources:[
   ...value.sources,{message_id,source_version,text:'For the first flower, the size is 12 cm.'},
  ]};
+}
+
+export function quoteDelivery(card=draft(),status:QuoteDelivery['status']='SENT',reason:string|null=null){
+ const assessment_id=assessment().assessment_id,price_calculation_id='018f0000-0000-7000-8000-000000000015';
+ return {
+  status,reason,quote:{
+   quote_id:'018f0000-0000-7000-8000-000000000016',version:'1',code:'Q-012ABCD234',terms_sha256:'a'.repeat(64),
+   created_at:'2026-11-21T12:00:00.000000Z',expires_at:'2026-11-22T12:00:00.000000Z',
+   text:'Цена — 3\u202f500 ₽.\nДлительность следующего сеанса — 65 мин.\nПринимаю Q-012ABCD234',material:{
+    workspace_id:card.workspace_id,business_id:card.business_id,conversation_id:card.conversation_id,client_id:card.client_id,
+    request_id:card.request_id,request_revision:card.revision,service_id:card.service_id,service_name:card.service_name,
+    facts:card.facts,intent_source:card.intent_source,complex_work:null,release_id:card.release_id,activation_version:'1',
+    assessment_id,assessment_reason:'FIXED_DURATION',price_calculation_id,price_reason:'FIXED_PRICE',approval_id:null,
+    decision_id:null,price_reference_id:price_calculation_id,duration_reference_id:assessment_id,currency:'RUB' as const,
+    amount_minor:350000,price_range:null,occupied_minutes:65,deposit_terms_version:card.release_id,
+    deposit:{mode:'NONE',amount_minor:null,percent:null},conditions:[],
+   },
+  },
+ };
 }
