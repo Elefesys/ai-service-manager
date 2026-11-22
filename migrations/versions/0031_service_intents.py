@@ -1057,9 +1057,10 @@ SELECT (((p->>'prompt_revision'='conversation_v7' AND p->>'schema_revision'='con
             RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
           IF r.calls_used=0 OR previous.completed_at IS NULL OR previous.completion->>'kind'<>'OUTPUT' THEN RAISE EXCEPTION 'AI_INCOMPLETE' USING ERRCODE='P2001'; END IF;
           PERFORM platform.messaging_guard(p_job,p_claim);
-          PERFORM platform.intake_apply(r,p->'result'->'intake');
           IF r.config->>'prompt_revision'='conversation_v8' AND (p->'result') ? 'intents' THEN
             PERFORM platform.service_request_agent_begin(r,j,p->'result');
+          ELSE
+            PERFORM platform.intake_apply(r,p->'result'->'intake');
           END IF;
           UPDATE platform.ai_runs SET intake_pin=CASE WHEN r.config->>'prompt_revision' IN ('conversation_v7','conversation_v8') THEN platform.intake_runtime_pin(r.workspace_id,r.business_id,r.conversation_id,r.client_id) ELSE NULL END,result=p->'result',selected_at=clock_timestamp(),winning_claim_hash=sha256(convert_to(p_claim::text,'UTF8'))
             WHERE workspace_id=j.workspace_id AND id=r.id AND result IS NULL RETURNING * INTO r;
@@ -1312,65 +1313,8 @@ BEGIN
 END $$""",
     "platform.intake_apply": r"""CREATE OR REPLACE FUNCTION platform.intake_apply(r platform.ai_runs,p jsonb) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
-DECLARE projection jsonb; service jsonb; sources jsonb; facts jsonb; f jsonb; old jsonb; fact jsonb; source jsonb; pin jsonb; selected_service_id text;
 BEGIN
- IF r.config->>'prompt_revision' NOT IN ('conversation_v7','conversation_v8') THEN RETURN; END IF;
- IF platform.intake_candidates_valid(p) IS NOT TRUE OR platform.intake_current(r) IS NOT TRUE THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
- projection:=platform.intake_project(r.workspace_id,r.business_id,r.conversation_id,r.client_id);
- IF r.search_refs->>'status'='CONFLICT' AND (p->>'category'<>'OTHER_COMPLEX'
-  OR p->>'service_id' IS DISTINCT FROM projection->>'service_id'
-  OR p->'switch_request' IS DISTINCT FROM 'false'::jsonb OR p->'facts' IS DISTINCT FROM '[]'::jsonb) THEN
-  RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
- IF p->>'category'='FAQ_ONLY' THEN RETURN; END IF;
- SELECT x INTO service FROM jsonb_array_elements(r.active_projection->'bundle'->'services') x WHERE x->>'id'=p->>'service_id' AND x->>'active'='true';
- IF p->>'service_id' IS NOT NULL AND service IS NULL OR p->>'service_id' IS NULL AND p->>'category' NOT IN ('AMBIGUOUS','COVER_UP','OTHER_COMPLEX')
-  OR p->'facts'<>'[]'::jsonb AND platform.intake_template(service) IS NOT TRUE THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
- IF projection->>'service_id' IS NOT NULL AND p->>'service_id' IS DISTINCT FROM projection->>'service_id' AND p->>'switch_request'<>'true' AND p->>'category'<>'AMBIGUOUS' THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
- selected_service_id:=p->>'service_id';
- facts:=projection->'facts';
- IF p->>'category'='AMBIGUOUS' THEN
-  selected_service_id:=projection->>'service_id';
- ELSIF p->>'switch_request'='true' THEN
-  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p->'facts') x WHERE x->>'status'='client-stated') THEN
-   RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001';
-  END IF;
-  facts:='[]';
- END IF;
- sources:=platform.intake_turn_sources(r.snapshot,projection->'sources');
- FOR f IN SELECT value FROM jsonb_array_elements(p->'facts') LOOP
-  SELECT x INTO source FROM jsonb_array_elements(sources) x WHERE x->'message_id'=f->'source'->'message_id' AND x->'source_version'=f->'source'->'source_version';
-  IF source IS NULL THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
-  IF f->>'status'='client-stated' AND (f->'source'->>'analysis_id' IS NOT NULL OR length(f->'source'->>'quote')=0
-   OR position(f->'source'->>'quote' IN source->>'text')=0 OR position(f->>'value' IN f->'source'->>'quote')=0) THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
-  IF f->>'status'='observed' AND (f->>'field' IN ('approximate_size','placement') OR f->'source'->>'analysis_id' IS NULL
-   OR f->'source'->>'message_id' IS DISTINCT FROM r.media_pin->>'message_id' OR f->'source'->>'analysis_id' IS DISTINCT FROM r.media_pin->>'analysis_id' OR f->'source'->>'analysis_sha256' IS DISTINCT FROM r.media_pin->>'analysis_sha256') THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
-  SELECT x INTO old FROM jsonb_array_elements(facts) x WHERE x->'field'=f->'field';
-  IF old IS NOT NULL AND old->'value'=f->'value'
-   AND (old->>'status'<>'observed' OR old->>'conflict'='true' OR f->>'status'='observed') THEN
-   IF NOT (old->>'conflict'='true' AND f->>'status'='client-stated' AND f->>'explicit_correction'='true'
-    AND (old->'source'->>'message_id' IS DISTINCT FROM f->'source'->>'message_id')) THEN CONTINUE; END IF;
-   IF old->>'status'='owner-confirmed' THEN
-    -- Keep the confirmation and its source. The run retains the clarification.
-    SELECT jsonb_agg(CASE WHEN x->'field'=f->'field' THEN x||jsonb_build_object('conflict',false) ELSE x END ORDER BY ordinal)
-    INTO facts FROM jsonb_array_elements(facts) WITH ORDINALITY t(x,ordinal);
-    CONTINUE;
-   END IF;
-  END IF;
-  IF old IS NOT NULL AND old->'value' IS DISTINCT FROM f->'value'
-   AND (f->>'explicit_correction'<>'true' OR (old->>'conflict'='true' AND f->>'status'='observed')) THEN
-   SELECT coalesce(jsonb_agg(CASE WHEN x->'field'=f->'field' THEN x||jsonb_build_object('conflict',true) ELSE x END),'[]') INTO facts FROM jsonb_array_elements(facts) x;
-  ELSE
-   fact:=(f-'explicit_correction')||jsonb_build_object('confirmed_by',NULL,'conflict',false);
-   SELECT coalesce(jsonb_agg(x),'[]') INTO facts FROM jsonb_array_elements(facts) x WHERE x->'field'<>f->'field';facts:=facts||jsonb_build_array(fact);
-  END IF;
- END LOOP;
- pin:=jsonb_build_object('release_id',projection->'release_id','activation_version',projection->'activation_version','control_generation',projection->'control_generation');
- INSERT INTO platform.intake_state(workspace_id,business_id,conversation_id,client_id,service_id,pin,category,facts)
- VALUES(r.workspace_id,r.business_id,r.conversation_id,r.client_id,selected_service_id,pin,p->>'category',facts)
- ON CONFLICT(workspace_id,conversation_id) DO UPDATE
- SET service_id=excluded.service_id,pin=excluded.pin,category=excluded.category,facts=excluded.facts,version=platform.intake_state.version+1
- WHERE (platform.intake_state.service_id,platform.intake_state.pin,platform.intake_state.category,platform.intake_state.facts)
-  IS DISTINCT FROM (excluded.service_id,excluded.pin,excluded.category,excluded.facts);
+ PERFORM platform.intake_apply_scoped(r,p,NULL,false);
 END $$""",
     "platform.intake_delivery_guard": r"""CREATE OR REPLACE FUNCTION platform.intake_delivery_guard(r platform.ai_runs) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
@@ -1593,6 +1537,79 @@ CREATE TABLE platform.service_request_agent_intents (
 """
 
 AGENT_DOMAIN_FUNCTIONS = {
+    "platform.intake_apply_scoped(platform.ai_runs,jsonb,app.service_requests,boolean)": r"""CREATE FUNCTION platform.intake_apply_scoped(
+ r platform.ai_runs,p jsonb,p_draft app.service_requests,p_reset boolean
+) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+DECLARE projection jsonb; service jsonb; sources jsonb; facts jsonb; f jsonb; old jsonb; fact jsonb; source jsonb; pin jsonb; selected_service_id text;
+BEGIN
+ IF r.config->>'prompt_revision' NOT IN ('conversation_v7','conversation_v8') THEN RETURN; END IF;
+ IF platform.intake_candidates_valid(p) IS NOT TRUE OR platform.intake_current(r) IS NOT TRUE THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
+ projection:=platform.intake_project(r.workspace_id,r.business_id,r.conversation_id,r.client_id);
+ IF r.search_refs->>'status'='CONFLICT' AND (p->>'category'<>'OTHER_COMPLEX'
+  OR p->>'service_id' IS DISTINCT FROM projection->>'service_id'
+  OR p->'switch_request' IS DISTINCT FROM 'false'::jsonb OR p->'facts' IS DISTINCT FROM '[]'::jsonb) THEN
+  RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
+ IF p->>'category'='FAQ_ONLY' THEN RETURN; END IF;
+ SELECT x INTO service FROM jsonb_array_elements(r.active_projection->'bundle'->'services') x WHERE x->>'id'=p->>'service_id' AND x->>'active'='true';
+ IF p->>'service_id' IS NOT NULL AND service IS NULL OR p->>'service_id' IS NULL AND p->>'category' NOT IN ('AMBIGUOUS','COVER_UP','OTHER_COMPLEX')
+  OR p->'facts'<>'[]'::jsonb AND platform.intake_template(service) IS NOT TRUE THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
+ IF p_draft.id IS NOT NULL AND (r.config->>'prompt_revision' IS DISTINCT FROM 'conversation_v8'
+  OR (p_draft.workspace_id,p_draft.business_id,p_draft.conversation_id,p_draft.client_id,p_draft.service_id)
+      IS DISTINCT FROM (r.workspace_id,r.business_id,r.conversation_id,r.client_id,p->>'service_id')) THEN
+  RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
+ IF p_draft.id IS NULL AND NOT p_reset AND projection->>'service_id' IS NOT NULL AND p->>'service_id' IS DISTINCT FROM projection->>'service_id' AND p->>'switch_request'<>'true' AND p->>'category'<>'AMBIGUOUS' THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
+ selected_service_id:=p->>'service_id';
+ facts:=projection->'facts';
+ IF p->>'category'='AMBIGUOUS' THEN
+  selected_service_id:=projection->>'service_id';
+ ELSIF p_draft.id IS NOT NULL THEN
+  -- A commercial correction uses the chosen draft's own proven facts.
+  SELECT coalesce(jsonb_agg(x ORDER BY ordinal),'[]') INTO facts
+  FROM jsonb_array_elements(p_draft.facts) WITH ORDINALITY t(x,ordinal)
+  WHERE platform.intake_source_current(r.workspace_id,r.business_id,r.conversation_id,r.client_id,x->'source');
+ ELSIF p_reset OR p->>'switch_request'='true' THEN
+  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p->'facts') x WHERE x->>'status'='client-stated') THEN
+   RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001';
+  END IF;
+  facts:='[]';
+ END IF;
+ sources:=platform.intake_turn_sources(r.snapshot,projection->'sources');
+ FOR f IN SELECT value FROM jsonb_array_elements(p->'facts') LOOP
+  SELECT x INTO source FROM jsonb_array_elements(sources) x WHERE x->'message_id'=f->'source'->'message_id' AND x->'source_version'=f->'source'->'source_version';
+  IF source IS NULL THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
+  IF f->>'status'='client-stated' AND (f->'source'->>'analysis_id' IS NOT NULL OR length(f->'source'->>'quote')=0
+   OR position(f->'source'->>'quote' IN source->>'text')=0 OR position(f->>'value' IN f->'source'->>'quote')=0) THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
+  IF f->>'status'='observed' AND (f->>'field' IN ('approximate_size','placement') OR f->'source'->>'analysis_id' IS NULL
+   OR f->'source'->>'message_id' IS DISTINCT FROM r.media_pin->>'message_id' OR f->'source'->>'analysis_id' IS DISTINCT FROM r.media_pin->>'analysis_id' OR f->'source'->>'analysis_sha256' IS DISTINCT FROM r.media_pin->>'analysis_sha256') THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
+  SELECT x INTO old FROM jsonb_array_elements(facts) x WHERE x->'field'=f->'field';
+  IF old IS NOT NULL AND old->'value'=f->'value'
+   AND (old->>'status'<>'observed' OR old->>'conflict'='true' OR f->>'status'='observed') THEN
+   IF NOT (old->>'conflict'='true' AND f->>'status'='client-stated' AND f->>'explicit_correction'='true'
+    AND (old->'source'->>'message_id' IS DISTINCT FROM f->'source'->>'message_id')) THEN CONTINUE; END IF;
+   IF old->>'status'='owner-confirmed' THEN
+    -- Keep the confirmation and its source. The run retains the clarification.
+    SELECT jsonb_agg(CASE WHEN x->'field'=f->'field' THEN x||jsonb_build_object('conflict',false) ELSE x END ORDER BY ordinal)
+    INTO facts FROM jsonb_array_elements(facts) WITH ORDINALITY t(x,ordinal);
+    CONTINUE;
+   END IF;
+  END IF;
+  IF old IS NOT NULL AND old->'value' IS DISTINCT FROM f->'value'
+   AND (f->>'explicit_correction'<>'true' OR (old->>'conflict'='true' AND f->>'status'='observed')) THEN
+   SELECT coalesce(jsonb_agg(CASE WHEN x->'field'=f->'field' THEN x||jsonb_build_object('conflict',true) ELSE x END),'[]') INTO facts FROM jsonb_array_elements(facts) x;
+  ELSE
+   fact:=(f-'explicit_correction')||jsonb_build_object('confirmed_by',NULL,'conflict',false);
+   SELECT coalesce(jsonb_agg(x),'[]') INTO facts FROM jsonb_array_elements(facts) x WHERE x->'field'<>f->'field';facts:=facts||jsonb_build_array(fact);
+  END IF;
+ END LOOP;
+ pin:=jsonb_build_object('release_id',projection->'release_id','activation_version',projection->'activation_version','control_generation',projection->'control_generation');
+ INSERT INTO platform.intake_state(workspace_id,business_id,conversation_id,client_id,service_id,pin,category,facts)
+ VALUES(r.workspace_id,r.business_id,r.conversation_id,r.client_id,selected_service_id,pin,p->>'category',facts)
+ ON CONFLICT(workspace_id,conversation_id) DO UPDATE
+ SET service_id=excluded.service_id,pin=excluded.pin,category=excluded.category,facts=excluded.facts,version=platform.intake_state.version+1
+ WHERE (platform.intake_state.service_id,platform.intake_state.pin,platform.intake_state.category,platform.intake_state.facts)
+  IS DISTINCT FROM (excluded.service_id,excluded.pin,excluded.category,excluded.facts);
+END $$""",
     "platform.service_request_agent_pin(platform.ai_runs)": r"""
 CREATE FUNCTION platform.service_request_agent_pin(r platform.ai_runs)
 RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
@@ -1624,6 +1641,23 @@ RETURNS boolean LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog,pg_temp
       IN ' '||trim(regexp_replace(lower(message COLLATE pg_catalog.pg_c_utf8),'[^[:alnum:]]+',' ','g'))||' '
     )>0
 $$""",
+    "platform.service_request_agent_work_tail(text)": r"""
+CREATE FUNCTION platform.service_request_agent_work_tail(message text)
+RETURNS text LANGUAGE plpgsql IMMUTABLE STRICT SET search_path=pg_catalog,pg_temp AS $$
+DECLARE
+  marker constant text:='\m(отдельн(ая|ую)[[:space:]]+(татуировк[ау]|работ[ау])|ещ[её][[:space:]]+одн[ау][[:space:]]+(татуировк[ау]|работ[ау])|втор(ая|ую)[[:space:]]+(татуировк[ау]|работ[ау])|(separate|second|another)[[:space:]]+(tattoo|work))\M';
+  count_markers integer; introduction text;
+BEGIN
+  count_markers:=regexp_count(message COLLATE pg_catalog.pg_c_utf8,marker,1,'i');
+  IF count_markers=0 THEN RETURN NULL; END IF;
+  IF count_markers<>1 THEN RETURN ''; END IF;
+  introduction:=btrim(left(message,regexp_instr(message COLLATE pg_catalog.pg_c_utf8,marker,1,1,0,'i')-1));
+  IF introduction<>'' AND (
+    introduction COLLATE pg_catalog.pg_c_utf8 !~* '(^и$|\m(хочу|хотел[аи]?[[:space:]]+бы|нужн[аоу]|закажу|want( an?)?|need( an?)?)\M|[–—:])$'
+    OR introduction COLLATE pg_catalog.pg_c_utf8 ~* '\m(не|not|never|no)[[:space:]]+(хочу|хотел[аи]?[[:space:]]+бы|нужн[аоу]|закажу|want( an?)?|need( an?)?)\M$'
+  ) THEN RETURN ''; END IF;
+  RETURN btrim(substr(message,regexp_instr(message COLLATE pg_catalog.pg_c_utf8,marker,1,1,1,'i')));
+END $$""",
     "platform.service_request_agent_prepare(platform.ai_runs,app.conversations,jsonb,boolean)": r"""
 CREATE FUNCTION platform.service_request_agent_prepare(
   r platform.ai_runs,c app.conversations,p jsonb,p_prepare boolean
@@ -1631,12 +1665,13 @@ CREATE FUNCTION platform.service_request_agent_prepare(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
 DECLARE
   source jsonb:=p->'intents'->0->'source';
+  candidate jsonb:=p->'intake';
   projection jsonb; source_message app.messages%ROWTYPE;
   anchor app.messages%ROWTYPE; next_anchor app.messages%ROWTYPE;
-  d app.service_requests%ROWTYPE; source_text text; fact jsonb; fact_message app.messages%ROWTYPE;
-  intent_source jsonb; fields jsonb; target_ids uuid[]; saved_request uuid;
-  new_work boolean; has_work boolean; explicit_reference boolean;
-  work_prefix constant text:='^[[:space:]]*((хочу|и)[[:space:]]+)?(отдельн(ая|ую)[[:space:]]+(татуировк(а|у)|работ(а|у))|ещ[её][[:space:]]+одн(а|у)[[:space:]]+(татуировк(а|у)|работ(а|у))|втор(ая|ую)[[:space:]]+(татуировк(а|у)|работ(а|у))|separate tattoo|second tattoo|another tattoo)([^[:alnum:]]|$)';
+  d app.service_requests%ROWTYPE; source_text text; work_tail text;
+  fact jsonb; fact_message app.messages%ROWTYPE;
+  intent_source jsonb; pending_source jsonb; fields jsonb; target_ids uuid[]; saved_request uuid;
+  exact_source_request uuid; has_work boolean;
 BEGIN
   IF platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,source) IS NOT TRUE
     THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
@@ -1648,42 +1683,100 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
   source_text:=platform.message_effective(c.workspace_id,source_message.id)->>'text';
   projection:=platform.intake_project(c.workspace_id,c.business_id,c.id,c.client_id);
-  IF source_text IS NULL OR projection->>'category' IN ('FAQ_ONLY','AMBIGUOUS')
-    OR projection->>'service_id' IS NULL OR projection->>'template_revision' IS NULL
+  IF source_text IS NULL OR candidate->>'category' IS DISTINCT FROM 'NEW_TATTOO'
     OR projection->'release_id' IS DISTINCT FROM r.active_projection->'release_id'
     OR projection->'activation_version' IS DISTINCT FROM r.active_projection->'activation_version'
-    OR projection->'conflicts'<>'[]'::jsonb THEN RETURN NULL; END IF;
+    THEN RETURN NULL; END IF;
+  work_tail:=platform.service_request_agent_work_tail(source_text);
+  IF work_tail='' THEN RETURN NULL; END IF;
 
-  SELECT count(*)>0, array_agg(x.id) FILTER (WHERE x.intent_message_id=source_message.id OR EXISTS (
-    SELECT 1 FROM jsonb_array_elements(x.facts) f WHERE f->>'field'='idea' AND f->>'conflict'='false'
-      AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
-      AND platform.service_request_agent_mentions(source_text,f->>'value')
-  )) INTO has_work,target_ids
+  SELECT count(*)>0,
+    (array_agg(x.id) FILTER (WHERE x.intent_message_id=source_message.id))[1],
+    array_agg(x.id) FILTER (WHERE EXISTS (
+      SELECT 1 FROM jsonb_array_elements(x.facts) f WHERE f->>'field'='idea' AND f->>'conflict'='false'
+        AND f->>'status' IN ('client-stated','owner-confirmed')
+        AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
+        AND platform.service_request_agent_mentions(source_text,f->>'value')
+    )) INTO has_work,exact_source_request,target_ids
   FROM app.service_requests x
   WHERE (x.workspace_id,x.business_id,x.conversation_id,x.client_id)
     =(c.workspace_id,c.business_id,c.id,c.client_id);
 
-  new_work:=has_work AND coalesce(p->'intake'->>'switch_request'='true',false)
-    AND source_text COLLATE pg_catalog.pg_c_utf8 ~* work_prefix;
-  IF new_work THEN target_ids:=NULL; END IF;
-  IF coalesce(cardinality(target_ids),0)>1 THEN RETURN NULL; END IF;
-  IF target_ids IS NOT NULL THEN
-    SELECT * INTO STRICT d FROM app.service_requests WHERE (workspace_id,id)=(c.workspace_id,target_ids[1])
+  IF has_work AND exact_source_request IS NULL AND work_tail IS NULL
+    AND candidate->>'switch_request'='true' THEN RETURN NULL; END IF;
+  IF exact_source_request IS NULL AND work_tail IS NOT NULL THEN
+    -- A new, independently stated work can share the title of a previous work.
+    IF NOT p_prepare OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(candidate->'facts') f
+      WHERE f->>'field'='idea' AND f->>'status'='client-stated')
+      OR EXISTS(SELECT 1 FROM jsonb_array_elements(candidate->'facts') f
+        WHERE f->'source'->'message_id' IS DISTINCT FROM source->'message_id'
+          OR f->>'status'='client-stated' AND position(f->'source'->>'quote' IN work_tail)=0)
+      THEN RETURN NULL; END IF;
+    intent_source:=source;
+  ELSIF exact_source_request IS NULL THEN
+    -- A completed intake reply can anchor an unfinished work without creating a draft.
+    -- Its idea must still belong to the current intake focus and match this reply.
+    SELECT jsonb_build_object('message_id',f->'source'->'message_id','source_version',f->'source'->'source_version')
+      INTO pending_source
+      FROM jsonb_array_elements(projection->'facts') f
+      JOIN app.conversation_turn_messages tm ON (tm.workspace_id,tm.message_id)
+        =(c.workspace_id,(f->'source'->>'message_id')::uuid)
+      JOIN app.messages m ON (m.workspace_id,m.id)=(tm.workspace_id,tm.message_id)
+      JOIN platform.ai_runs prior ON (prior.workspace_id,prior.turn_id)=(tm.workspace_id,tm.turn_id)
+      WHERE (prior.business_id,prior.conversation_id,prior.client_id,prior.connection_id,prior.resume_receipt_id)
+        =(r.business_id,r.conversation_id,r.client_id,r.connection_id,r.resume_receipt_id)
+        AND prior.config->>'prompt_revision'='conversation_v8' AND prior.result->>'kind'='reply'
+        AND prior.result->'intake'->>'switch_request'='true'
+        AND prior.result->'intake'->>'category'='NEW_TATTOO'
+        AND (prior.active_projection->'release_id',prior.active_projection->'activation_version')
+          =(r.active_projection->'release_id',r.active_projection->'activation_version')
+        AND prior.result->'intake'->>'service_id'=candidate->>'service_id'
+        AND projection->>'service_id'=candidate->>'service_id' AND projection->>'category'='NEW_TATTOO'
+        AND f->>'field'='idea' AND f->>'status'='client-stated' AND f->>'conflict'='false'
+        AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
+        AND platform.service_request_agent_source_available(c,NULL,m.id)
+        AND (m.created_at,m.id)<(source_message.created_at,source_message.id)
+        AND platform.service_request_agent_mentions(source_text,f->>'value')
+        AND EXISTS(SELECT 1 FROM jsonb_array_elements(prior.result->'intake'->'facts') original
+          WHERE (original->>'field',original->>'status',original->>'value',original->'source')
+            =('idea','client-stated',f->>'value',f->'source')
+            AND position(original->'source'->>'quote' IN platform.service_request_agent_work_tail(
+              platform.message_effective(c.workspace_id,m.id)->>'text'))>0)
+      ORDER BY prior.turn_revision DESC LIMIT 1;
+    IF pending_source IS NOT NULL THEN
+      IF NOT p_prepare OR target_ids IS NOT NULL OR candidate->>'switch_request'='true'
+        OR EXISTS(SELECT 1 FROM jsonb_array_elements(candidate->'facts') f
+          WHERE f->'source'->'message_id' IS DISTINCT FROM source->'message_id')
+        THEN RETURN NULL; END IF;
+      intent_source:=pending_source;
+    ELSIF coalesce(cardinality(target_ids),0)>1 THEN RETURN NULL;
+    ELSE saved_request:=target_ids[1]; END IF;
+  END IF;
+
+  saved_request:=coalesce(exact_source_request,saved_request);
+  IF saved_request IS NOT NULL THEN
+    SELECT * INTO STRICT d FROM app.service_requests WHERE (workspace_id,id)=(c.workspace_id,saved_request)
       FOR NO KEY UPDATE;
-    IF d.service_id IS DISTINCT FROM projection->>'service_id' OR EXISTS(
+    IF d.service_id IS DISTINCT FROM candidate->>'service_id' OR EXISTS(
       SELECT 1 FROM app.quote_acceptances a WHERE (a.workspace_id,a.request_id)=(d.workspace_id,d.id)
     ) THEN RETURN NULL; END IF;
     intent_source:=jsonb_build_object('message_id',d.intent_message_id,'source_version',d.intent_source_version);
-  ELSIF p_prepare AND (NOT has_work OR new_work) THEN
+  ELSIF NOT p_prepare OR (has_work AND intent_source IS NULL) THEN RETURN NULL;
+  END IF;
+
+  PERFORM platform.intake_apply_scoped(r,candidate,d,d.id IS NULL AND work_tail IS NOT NULL);
+  projection:=platform.intake_project(c.workspace_id,c.business_id,c.id,c.client_id);
+  IF projection->>'status' IS DISTINCT FROM 'PRELIMINARILY_COMPLETE'
+    OR projection->>'category' IS DISTINCT FROM 'NEW_TATTOO' THEN RETURN NULL; END IF;
+
+  IF d.id IS NULL AND intent_source IS NULL THEN
     SELECT jsonb_build_object('message_id',f->'source'->'message_id','source_version',f->'source'->'source_version')
       INTO intent_source FROM jsonb_array_elements(projection->'facts') f
-      WHERE f->>'field'='idea' AND f->>'status'='client-stated' AND f->>'conflict'='false'
-        AND (NOT new_work OR f->'source'->>'message_id'=source_message.id::text);
-    IF intent_source IS NULL OR NOT EXISTS(
-      SELECT 1 FROM jsonb_array_elements(projection->'facts') f WHERE f->'source'->>'message_id'=source_message.id::text
-    ) THEN RETURN NULL; END IF;
-  ELSE RETURN NULL;
+      WHERE f->>'field'='idea' AND f->>'status'='client-stated' AND f->>'conflict'='false';
   END IF;
+  IF intent_source IS NULL OR (d.id IS NULL AND NOT EXISTS(
+      SELECT 1 FROM jsonb_array_elements(projection->'facts') f WHERE f->'source'->>'message_id'=source_message.id::text
+    )) THEN RETURN NULL; END IF;
 
   IF platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,intent_source) IS NOT TRUE
     THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
@@ -1695,12 +1788,9 @@ BEGIN
       AND (m.created_at,m.id)>(anchor.created_at,anchor.id)
     ORDER BY m.created_at,m.id LIMIT 1;
 
-  -- A later source needs an explicit reference to this work if another work
-  -- has started since its anchor. An exact match is resolved above under lock.
-  explicit_reference:=d.id IS NOT NULL AND source_message.id<>anchor.id;
   IF (source_message.created_at,source_message.id)<(anchor.created_at,anchor.id)
     OR (next_anchor.id IS NOT NULL AND (source_message.created_at,source_message.id)>=(next_anchor.created_at,next_anchor.id)
-      AND NOT explicit_reference)
+      AND d.id IS NULL)
     OR platform.service_request_agent_source_available(c,d.id,source_message.id) IS NOT TRUE
     THEN RETURN NULL; END IF;
 
@@ -1713,7 +1803,7 @@ BEGIN
     IF platform.service_request_agent_source_available(c,d.id,fact_message.id) IS NOT TRUE
       OR (fact_message.created_at,fact_message.id)<(anchor.created_at,anchor.id)
       OR (next_anchor.id IS NOT NULL AND (fact_message.created_at,fact_message.id)>=(next_anchor.created_at,next_anchor.id)
-        AND NOT (explicit_reference AND fact_message.id=source_message.id
+        AND NOT (d.id IS NOT NULL AND fact_message.id=source_message.id
           OR d.facts @> jsonb_build_array(jsonb_set(fact,'{source,quote}','""'))))
       THEN RETURN NULL; END IF;
   END LOOP;
@@ -1729,7 +1819,11 @@ BEGIN
     c.workspace_id,c.business_id,c.id,c.client_id,d.complex_work->'source'
   ) IS NOT TRUE THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
 
-  IF NOT p_prepare THEN RETURN d; END IF;
+  IF NOT p_prepare THEN
+    IF EXISTS(SELECT 1 FROM jsonb_array_elements(projection->'facts') f
+      WHERE NOT d.facts @> jsonb_build_array(jsonb_set(f,'{source,quote}','""'))) THEN RETURN NULL; END IF;
+    RETURN d;
+  END IF;
   IF d.id IS NULL THEN
     SELECT coalesce(jsonb_agg(f->'field' ORDER BY f->>'field'),'[]') INTO fields
       FROM jsonb_array_elements(projection->'facts') f;
@@ -1750,14 +1844,6 @@ BEGIN
     ));
     SELECT * INTO STRICT d FROM app.service_requests WHERE (workspace_id,id)=(c.workspace_id,d.id);
   END LOOP;
-  IF projection->>'category' IN ('COVER_UP','OTHER_COMPLEX')
-    AND platform.service_request_complex_work(c,d.id,d.service_id,jsonb_build_array(source)) IS NOT NULL THEN
-    PERFORM platform.service_request_revise_scoped(c,NULL,NULL,d.id,NULL,jsonb_build_object(
-      'expected_revision',d.revision::text,'expected_version',projection->'version',
-      'expected_fingerprint',projection->'fingerprint','field',NULL,'source',source,'selection','ONE_WORK'
-    ));
-    SELECT * INTO STRICT d FROM app.service_requests WHERE (workspace_id,id)=(c.workspace_id,d.id);
-  END IF;
   RETURN d;
 END $$""",
     "platform.service_request_agent_begin(platform.ai_runs,platform.messaging_jobs,jsonb)": r"""
@@ -1850,24 +1936,17 @@ BEGIN
   ELSIF p_step='ASSESS' AND a.phase='ASSESS' THEN
     PERFORM platform.service_assessment_record_scoped(d,NULL,j.correlation_id,p_payload);
     PERFORM platform.price_calculate_scoped(d,NULL,j.correlation_id,d.revision::text);
-    IF a.approval_requested THEN
-      current_basis:=platform.approval_basis(d);
-      IF current_basis->'can_approve'='true'::jsonb AND (current_basis->>'occupied_minutes' IS NULL
-        OR (current_basis->>'amount_minor' IS NULL AND current_basis->>'price_range' IS NULL)) THEN
-        SELECT p.id INTO chosen_approval FROM app.approval_requests p
-          JOIN platform.service_request_agent_intents prior ON (prior.workspace_id,prior.approval_id)=(p.workspace_id,p.id)
-          WHERE (p.workspace_id,p.request_id,p.request_revision,p.assignee_user_account_id)
-            =(d.workspace_id,d.id,d.revision,a.owner_user_account_id) AND p.basis=current_basis
-          ORDER BY p.created_at DESC,p.id DESC LIMIT 1;
-        IF chosen_approval IS NULL THEN
-          approval:=platform.approval_open_scoped(d,a.owner_user_account_id,d.revision::text);
-          chosen_approval:=(approval->>'approval_id')::uuid;
-        END IF;
-      END IF;
+    -- Readiness and reuse are domain decisions, independent of whether the model asked twice.
+    current_basis:=platform.approval_basis(d);
+    IF current_basis->'can_approve'='true'::jsonb AND (current_basis->>'occupied_minutes' IS NULL
+      OR (current_basis->>'amount_minor' IS NULL AND current_basis->>'price_range' IS NULL)) THEN
+      approval:=platform.approval_open_scoped(d,a.owner_user_account_id,d.revision::text);
+      chosen_approval:=(approval->>'approval_id')::uuid;
     END IF;
     IF a.prepare_requested THEN prepared_quote:=platform.quote_prepare_scoped(d); END IF;
     UPDATE platform.service_request_agent_intents
-      SET phase='QUOTE',quote_input=prepared_quote,approval_id=chosen_approval
+      SET phase='QUOTE',quote_input=prepared_quote,approval_id=chosen_approval,
+          approval_requested=approval_requested OR chosen_approval IS NOT NULL
       WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
     RETURN prepared_quote;
   ELSIF p_step='FINISH' AND a.phase='QUOTE' THEN
@@ -2588,7 +2667,7 @@ PROFILE = r"""CREATE FUNCTION platform.service_intent_schema_profile() RETURNS j
 ('platform.ai_reply_rights_current(uuid,uuid,uuid)','0c38889d00c0cf1415a890273eebd8f593ed40fe166436a5ad434079d1d30fe7','plpgsql',true,'v',false),
 ('platform.ai_reply_rights_probe(uuid,uuid,uuid)','9ca90da38d173e7294f77cd7dbdd25492f02fe2cd699562c823c42fbfcb3b01d','plpgsql',true,'v',true),
 ('platform.ai_reply_rights_schema_profile()','6b635b12b8d2e7f0f69500792d7ec3b1c71cd0f85c51e810e3332b910b6189c0','sql',true,'s',false),
-('platform.ai_runtime_command(uuid,uuid,text,jsonb)','fcbab61cea598ca651114ec95baa5e923053cbc7e1f8d85303074c098107b5a3','plpgsql',true,'v',true),
+('platform.ai_runtime_command(uuid,uuid,text,jsonb)','89c07d0f94a1fc6676bbb44b29fa62f00e7a855431817ac391f502b170b4d508','plpgsql',true,'v',true),
 ('platform.ai_runtime_completion_valid(jsonb)','4675d7ce837be36341cdc60deff5c216786ad7f42441bb4bda43bfe5e0dcfb0d','plpgsql',true,'i',false),
 ('platform.ai_runtime_config_valid(jsonb)','0301c3f9d568695e29eaee8fd0567979cd6a51c755a6245c2a2ba6ef0736bf23','sql',true,'i',false),
 ('platform.ai_runtime_current(platform.messaging_jobs,jsonb)','c86bbe138ddabb5197dfbe4453e5b3f4f586099ebdfc62e463814198f3973e86','plpgsql',true,'v',false),
@@ -2701,7 +2780,8 @@ PROFILE = r"""CREATE FUNCTION platform.service_intent_schema_profile() RETURNS j
 ('platform.initialize_local_billing(uuid,text,integer,text,text,text,timestamptz,timestamptz,text)','20b0e1ea5d37d8710b485232cff1441ea7c6998d431233877d2ab1814f620e83','plpgsql',true,'v',false),
 ('platform.initialize_local_messaging_billing(uuid,text,timestamptz,timestamptz)','2863259a15ff3178525d044704c26dbc57c35e4322f5412bed6dd13989098f7d','plpgsql',true,'v',false),
 ('platform.initialize_telegram_connection(uuid,uuid,text,text,text,jsonb)','bfae87784d2145810f9ed12f1dfab4416d8041c9d2044c1397204bbe0f8275bf','plpgsql',true,'v',false),
-('platform.intake_apply(platform.ai_runs,jsonb)','feb06ead89045199ae986f1da796faf3670a1f5e07aae70275145720ea17fb3b','plpgsql',true,'v',false),
+('platform.intake_apply(platform.ai_runs,jsonb)','9a8cdce7efff3396fbb59dd3e8d6e87acbea3d5b94aef9afc28da26cfafe8436','plpgsql',true,'v',false),
+('platform.intake_apply_scoped(platform.ai_runs,jsonb,app.service_requests,boolean)','67ff3c373b258354cae9fbeed383a8f469ba357c089ac5752fc3dcdc73049201','plpgsql',true,'v',false),
 ('platform.intake_candidates_valid(jsonb)','8341249f2e0a5b4a546b7685134aec687fb8065624c72acfea2700a13863632e','plpgsql',true,'i',false),
 ('platform.intake_current(platform.ai_runs)','180fc2562bcd5fc869269d1e3c489be4cde72a2cdb036de6b4e7c09f05bdea81','plpgsql',true,'s',false),
 ('platform.intake_delivery_guard(platform.ai_runs)','39be297435647f8884b2de99797b6e7b99b23333255e78aece06f99a0bcd1be6','plpgsql',true,'v',false),
@@ -2911,13 +2991,14 @@ PROFILE = r"""CREATE FUNCTION platform.service_intent_schema_profile() RETURNS j
 ('platform.service_assessment_scope(uuid,uuid,uuid)','b72a864f00155d155619709b948da072b15f72902c4c899c9229043ddbffba16','plpgsql',true,'v',false),
 ('platform.service_intent_result_valid(jsonb)','28daec93bf9fc3289228101392b61adc8d7997d49ee90690e27916f5413f8869','plpgsql',true,'i',false),
 ('platform.service_request_agent_begin(platform.ai_runs,platform.messaging_jobs,jsonb)','26dce9624a95b65acdc35f26bd0e750ebc6446849aee4765d72b275646d62dde','plpgsql',true,'v',false),
-('platform.service_request_agent_continue(uuid,uuid,uuid,text,jsonb)','ad849974bd8411cc01a4a6160098c2cf78796b1b0da6b2048e6b950b2952ebb0','plpgsql',true,'v',true),
+('platform.service_request_agent_continue(uuid,uuid,uuid,text,jsonb)','e5d3e80b8b78b661bc633c674f04ad642986a1e6bd14b17ee9e659813008753b','plpgsql',true,'v',true),
 ('platform.service_request_agent_mentions(text,text)','97c70308f40a345666e0acb1f7031c0a74ce96805293620fe803eba2cee6f33a','sql',false,'i',false),
 ('platform.service_request_agent_must_finish()','13bd81c537e2a36a70eb5e4b3d04a88724cc55134d10323049ad62d6da825cbd','plpgsql',true,'v',false),
 ('platform.service_request_agent_pin(platform.ai_runs)','a3f11e1d66132c3a46a32ada2d4681ffa0eca550a98da47b559b47fb87a71997','sql',true,'s',false),
-('platform.service_request_agent_prepare(platform.ai_runs,app.conversations,jsonb,boolean)','374e3e4c5282df8cf65376f0d45ed51783fb5ff5553ea1989f500dc341a3fdb0','plpgsql',true,'v',false),
+('platform.service_request_agent_prepare(platform.ai_runs,app.conversations,jsonb,boolean)','e85c30610f30062aa65968fb933a8c3ab0926a79bb81100e74648dcbc60ce8ef','plpgsql',true,'v',false),
 ('platform.service_request_agent_result(platform.ai_runs)','bcb3be996923062fec341f074743c803cc302719e7751d8f63bfb39ed3486915','sql',true,'s',false),
 ('platform.service_request_agent_source_available(app.conversations,uuid,uuid)','e3c88b4802a9e2a10609d709028d357c55cccc97ed25eb6d0b0981975df6e863','sql',true,'s',false),
+('platform.service_request_agent_work_tail(text)','71e8f1951f923c9d1b0c708780601ef0795f020859ec95d0804023afd24e4cab','plpgsql',false,'i',false),
 ('platform.service_request_command(app.conversations,text,text,uuid,jsonb)','0888dee140c0e7f35cf2a95a15709a9f040ce9447ca2f402be1ffa340858623f','plpgsql',true,'v',false),
 ('platform.service_request_complex_work(app.conversations,uuid,text,jsonb)','9a9db2ad05f6a6001fd822bfff5360ed0843e87f5ab49e40b7559a6fdea023db','plpgsql',true,'s',false),
 ('platform.service_request_create_scoped(app.conversations,uuid,uuid,text,jsonb)','434cca9a7cf8b6bc842bb3693aec20d3c95827c7bfeb25e2cc95684c0bd45c3a','plpgsql',true,'v',false),
@@ -3063,7 +3144,7 @@ columns_expected(table_name,column_names) AS (VALUES ('app.approval_requests',AR
         JOIN pg_attribute a ON a.attrelid=r.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname IN ('app','platform') AND r.relkind='r'
         GROUP BY r.oid,n.nspname,r.relname,r.relowner,r.relrowsecurity,r.relforcerowsecurity,r.relacl),
       validity AS MATERIALIZED (SELECT
-        (SELECT count(*) FROM functions)=407 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=406
+        (SELECT count(*) FROM functions)=409 AND (SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=408
         AND NOT EXISTS(SELECT 1 FROM expected e LEFT JOIN functions f ON f.oid=to_regprocedure(e.signature)
           WHERE f.oid IS NULL OR encode(sha256(convert_to(f.prosrc,'UTF8')),'hex')<>e.body_hash OR f.lanname<>e.language
             OR f.prosecdef<>e.security_definer OR f.provolatile::text<>e.volatility OR f.proowner<>'asm_migrator'::regrole

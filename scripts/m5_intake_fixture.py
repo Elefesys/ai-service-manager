@@ -65,8 +65,11 @@ INPUTS = {
     "price-size": "The swallow will be 21 mm",
     "price-oversize": "The swallow will be 100,1 cm",
     "quote-second": "Synthetic quote separate swallow shoulder 101 mm linework",
-    "agent-first": "Synthetic intake flower forearm 20 mm linework",
-    "agent-second": "Отдельная татуировка: swallow shoulder 101 mm linework",
+    "agent-first": "Хочу татуировку: роза, место — предплечье, 20 мм, стиль лайнворк",
+    "agent-start-second": "Отдельная татуировка: ласточка",
+    "agent-second": "Ласточка: место — плечо, 101 мм, стиль лайнворк",
+    "agent-correct-first": "Для тату „роза“ уточняю размер: 21 мм",
+    "agent-same-title": "На другом месте хочу отдельную татуировку: роза, место — плечо, 21 мм, стиль лайнворк",
 }
 QUOTE_JOURNEYS = {
     "quote-delivery",
@@ -77,7 +80,10 @@ QUOTE_JOURNEYS = {
 }
 AGENT_OPERATIONS = {
     "agent-first": ("prepare_service_request",),
-    "agent-second": ("prepare_service_request", "request_owner_decision"),
+    "agent-start-second": (),
+    "agent-second": ("prepare_service_request",),
+    "agent-correct-first": ("prepare_service_request",),
+    "agent-same-title": ("prepare_service_request",),
 }
 QUOTE_OPERATIONS = {"deliver-quote": OutcomeKind.SUCCESS, "lose-quote-ack": OutcomeKind.UNKNOWN}
 QUOTE_REPLIES = {"agree-quote", "repeat-agreement", "ambiguous-agreement", "decline-quote"}
@@ -111,8 +117,25 @@ VALUES = {
         ("style", "linework"),
     ),
 }
-VALUES["agent-first"] = VALUES["price-first"]
-VALUES["agent-second"] = VALUES["quote-second"]
+VALUES["agent-first"] = (
+    ("idea", "роза"),
+    ("placement", "предплечье"),
+    ("approximate_size", "20 мм"),
+    ("style", "лайнворк"),
+)
+VALUES["agent-start-second"] = (("idea", "ласточка"),)
+VALUES["agent-second"] = (
+    ("placement", "плечо"),
+    ("approximate_size", "101 мм"),
+    ("style", "лайнворк"),
+)
+VALUES["agent-correct-first"] = (("approximate_size", "21 мм"),)
+VALUES["agent-same-title"] = (
+    ("idea", "роза"),
+    ("placement", "плечо"),
+    ("approximate_size", "21 мм"),
+    ("style", "лайнворк"),
+)
 CATEGORIES = {
     "complex": "COVER_UP",
     "late-cover-up": "COVER_UP",
@@ -246,7 +269,8 @@ class IntakeModel(FakeAdapter):
                     analysis_id=None,
                     analysis_sha256=None,
                 ),
-                explicit_correction=self.operation in {"late-cover-up", "price-oversize"},
+                explicit_correction=self.operation
+                in {"late-cover-up", "price-oversize", "agent-correct-first"},
             )
             for field, value in VALUES.get(self.operation, ())
         ]
@@ -258,20 +282,25 @@ class IntakeModel(FakeAdapter):
                 service_id=self.service,
                 category=CATEGORIES.get(self.operation, "NEW_TATTOO"),
                 switch_request=self.operation
-                in {"second", "assess-second", "price-second", "quote-second", "agent-second"},
+                in {
+                    "second",
+                    "assess-second",
+                    "price-second",
+                    "quote-second",
+                    "agent-start-second",
+                    "agent-same-title",
+                },
                 facts=facts,
             ),
         )
-        if self.operation in AGENT_OPERATIONS:
+        intents = AGENT_OPERATIONS.get(self.operation, ())
+        if intents:
             source_pin = {field: source[field] for field in ("message_id", "source_version")}
             result.update(
                 kind="no_reply",
                 text=None,
                 reason="REQUEST_PREPARATION",
-                intents=[
-                    {"name": intent, "source": source_pin}
-                    for intent in AGENT_OPERATIONS[self.operation]
-                ],
+                intents=[{"name": intent, "source": source_pin} for intent in intents],
             )
         return response.model_copy(update={"output_json": json.dumps(result)})
 
@@ -332,6 +361,7 @@ async def run(args, diagnostic):
         diagnostic.stage = "CONFIGURATION"
         cid = UUID(args.conversation) if args.conversation else None
         service_intents = args.operation in AGENT_OPERATIONS
+        commercial = bool(AGENT_OPERATIONS.get(args.operation))
         profile = "SYNTHETIC_SERVICE_INTENTS_V1" if service_intents else "SYNTHETIC_INTAKE_V1"
         if args.operation != "seed" and cid is None:
             raise IntakeFixtureRefused("SEEDED_CONVERSATION_REQUIRED")
@@ -472,7 +502,7 @@ async def run(args, diagnostic):
                     if args.operation == "seed"
                     else seen_observer
                     and ai_claim is not None
-                    and (service_intents or owner_handoff or kernel.finalized is not None)
+                    and (commercial or owner_handoff or kernel.finalized is not None)
                 )
                 if not done:
                     continue
@@ -505,19 +535,20 @@ async def run(args, diagnostic):
                     if service_intents:
                         if (
                             not isinstance(receipt, ServiceIntentRuntimeReceipt)
-                            or receipt.result.kind != "no_reply"
-                            or receipt.service_intents is None
+                            or receipt.result.kind != ("no_reply" if commercial else "reply")
+                            or (receipt.service_intents is not None) != commercial
                         ):
                             raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
-                        commercial_result["service_intents"] = receipt.service_intents.model_dump(
-                            mode="json"
-                        )
+                        if receipt.service_intents is not None:
+                            commercial_result["service_intents"] = (
+                                receipt.service_intents.model_dump(mode="json")
+                            )
                     elif not isinstance(receipt, IntakeRuntimeReceipt) or receipt.result.kind != (
                         "handoff" if owner_handoff else "reply"
                     ):
                         raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
                 diagnostic.stage = "EFFECTS"
-                expected = 0 if service_intents or owner_handoff or args.operation == "seed" else 1
+                expected = 0 if commercial or owner_handoff or args.operation == "seed" else 1
                 if adapter.calls != expected or adapter.effects != expected:
                     raise IntakeFixtureRefused("EXTERNAL_EFFECT_COUNT_MISMATCH")
                 return dict(

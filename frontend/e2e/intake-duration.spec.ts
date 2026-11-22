@@ -6,7 +6,7 @@ import {createInterface} from 'node:readline';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
-import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,RequestQuote,ServiceAssessment} from '../src/intake-api';
+import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,RequestQuote,ServiceAssessment,ServiceRequestDraft} from '../src/intake-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
 if(!fixtureFile||!passwordFile)throw new Error('E2E_INTAKE_PRIVATE_FIXTURES_REQUIRED');
@@ -14,7 +14,7 @@ const fixture=JSON.parse(readFileSync(fixtureFile,'utf8')) as {messaging_fixture
 const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixtures.knowledge;
 
 type Viewport='desktop'|'narrow';
-type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second'|'agent-first'|'agent-second';
+type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second'|'agent-first'|'agent-start-second'|'agent-second'|'agent-correct-first'|'agent-same-title';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
 type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
 type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history';
@@ -122,8 +122,8 @@ async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,agent?0:1,agent?0:1,assessment||pricing?'PRELIMINARILY_COMPLETE':'CLARIFY']);
  const intake=page.getByRole('region',{name:'Предварительный запрос',exact:true});
  await refreshIntake(inbox,intake);
- await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue('flower');
- if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue(pricing?'20 mm':'8 cm');
+ await expect(intake.getByLabel('Идея',{exact:true})).toHaveValue(agent?'роза':'flower');
+ if(journey!=='intake')await expect(intake.getByLabel('Примерный размер',{exact:true})).toHaveValue(agent?'20 мм':pricing?'20 mm':'8 cm');
  else await expect(intake.getByText('Какой примерный размер вы представляете, в сантиметрах?',{exact:true})).toBeVisible();
  return {input,conversation:seed.conversation_id,collected,intake,inbox};
 }
@@ -1092,7 +1092,7 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:QuoteIntakeJ
  return {input,conversation,collected,intake,inbox,settings,serviceName,work,cardId,panel,firstId,endpoint,execute,read,readHistory,evaluateAndPrice,price};
 }
 
-test('@narrow M6.4A shows agent-created requests and sends after the owner decision',async({page},info)=>{
+test('@narrow M6.4A keeps separate work and lets the owner confirm the agent request',async({page},info)=>{
  test.setTimeout(120_000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const journey='quote-agent';
@@ -1107,6 +1107,11 @@ test('@narrow M6.4A shows agent-created requests and sends after the owner decis
  const history=`/api/v1/workspaces/${owner.workspace_id}/conversations/${conversation}/messages`;
  const work=intake.getByRole('region',{name:'Черновик заявки',exact:true});
  const quotePanel=work.getByRole('region',{name:'Предложение клиенту',exact:true});
+ async function readDraft(requestId:string){
+  const response=await page.request.get(`${endpoint}?request_id=${requestId}`);
+  expect(response.status()).toBe(200);
+  return await response.json() as ServiceRequestDraft;
+ }
  async function readQuote(requestId:string,status:QuoteDelivery['status']){
   const response=await page.request.get(`${endpoint}/${requestId}/quote`);
   expect(response.status()).toBe(200);
@@ -1126,8 +1131,17 @@ test('@narrow M6.4A shows agent-created requests and sends after the owner decis
  await page.reload();
  await openWorkspace(page);
  const inbox=await openConversation(page,conversation);
- await expect(work.getByTestId('service-request-id')).toHaveText(a.request_id);
- await expect(work.getByRole('link',{name:'Исходное сообщение',exact:true})).toHaveAttribute('href','#message-'+collected.message_id);
+ const requests=intake.getByLabel('Сохранённая заявка',{exact:true});
+ async function showDraft(requestId:string,revision:string,source:string){
+  await intake.getByRole('button',{name:'Обновить карточку заявки',exact:true}).click();
+  await expect(requests.locator(`option[value="${requestId}"]`)).toHaveCount(1);
+  await requests.selectOption(requestId);
+  await expect(work.getByTestId('service-request-id')).toHaveText(requestId);
+  await expect(work.getByTestId('service-request-revision')).toHaveText(revision);
+  await expect(work.getByRole('link',{name:'Исходное сообщение',exact:true})).toHaveAttribute('href','#message-'+source);
+ }
+ await showDraft(a.request_id,'1',collected.message_id);
+ const aDraft=await readDraft(a.request_id);
  const first=(await readQuote(a.request_id,'QUEUED')).quote!;
  expect(first).toMatchObject({quote_id:a.quote_id,material:{amount_minor:350000,occupied_minutes:65}});
  await expect(quotePanel.getByRole('status')).toHaveText('Предложение в очереди на отправку');
@@ -1135,27 +1149,50 @@ test('@narrow M6.4A shows agent-created requests and sends after the owner decis
  expect(sentA).toMatchObject({quote_id:a.quote_id,calls:1,effects:1,status:'SENT',text:first.text});
  await expect(quotePanel.getByRole('status')).toHaveText('Предложение отправлено клиенту');
 
- const separate=await input('agent-second',conversation);
- const b=separate.service_intents!;
- expect([separate.model_calls,separate.calls,separate.effects]).toEqual([1,0,0]);
+ const started=await input('agent-start-second',conversation);
+ expect([started.model_calls,started.calls,started.effects,started.status]).toEqual([1,1,1,'CLARIFY']);
+ const question='На каком месте тела вы хотите татуировку?';
+ expect((await readHistory()).filter(message=>message.direction==='OUTBOUND'&&message.text===question)).toHaveLength(1);
+ const completed=await input('agent-second',conversation);
+ const b=completed.service_intents!;
+ expect([completed.model_calls,completed.calls,completed.effects]).toEqual([1,0,0]);
  expect(b).toMatchObject({request_id:expect.any(String),approval_id:expect.any(String),quote_id:null});
  expect(b.request_id).not.toBe(a.request_id);
+ expect(await readDraft(a.request_id)).toEqual(aDraft);
+ const bDraft=await readDraft(b.request_id);
+ expect(bDraft.revision).toBe('1');
+ expect(bDraft.intent_source.message_id).toBe(started.message_id);
+ expect(Object.fromEntries(bDraft.facts.map(fact=>[fact.field,fact.source.message_id]))).toEqual({
+  idea:started.message_id,placement:completed.message_id,approximate_size:completed.message_id,style:completed.message_id,
+ });
+
+ const correction=await input('agent-correct-first',conversation);
+ const revised=correction.service_intents!;
+ expect(revised).toMatchObject({request_id:a.request_id,approval_id:null,quote_id:expect.any(String)});
+ expect(await readDraft(b.request_id)).toEqual(bDraft);
  await refreshIntake(inbox,intake);
- await intake.getByRole('button',{name:'Обновить карточку заявки',exact:true}).click();
- const requests=intake.getByLabel('Сохранённая заявка',{exact:true});
- await expect(requests.locator('option[value="'+b.request_id+'"]')).toHaveCount(1);
- await requests.selectOption(b.request_id);
- await expect(work.getByTestId('service-request-id')).toHaveText(b.request_id);
- await expect(work.getByRole('link',{name:'Исходное сообщение',exact:true})).toHaveAttribute('href','#message-'+separate.message_id);
+ await showDraft(a.request_id,'2',collected.message_id);
+ const revisedDraft=await readDraft(a.request_id);
+ expect(revisedDraft.facts.find(fact=>fact.field==='approximate_size')).toMatchObject({value:'21 мм',source:{message_id:correction.message_id}});
+ expect(revisedDraft.facts.filter(fact=>fact.field!=='approximate_size')).toEqual(aDraft.facts.filter(fact=>fact.field!=='approximate_size'));
+ await expect(work.getByRole('link',{name:'Сообщение для поля Примерный размер',exact:true})).toHaveAttribute('href','#message-'+correction.message_id);
+ const updated=(await readQuote(a.request_id,'QUEUED')).quote!;
+ expect(updated).toMatchObject({quote_id:revised.quote_id,version:'2',material:{amount_minor:400000,occupied_minutes:65}});
+ const sentRevision=await deliver(a.request_id);
+ expect(sentRevision).toMatchObject({quote_id:updated.quote_id,calls:1,effects:1,status:'SENT',text:updated.text});
+ await expect(quotePanel.getByRole('status')).toHaveText('Предложение отправлено клиенту');
+
+ await showDraft(b.request_id,'1',started.message_id);
+ await expect(work.getByRole('link',{name:'Сообщение для поля Место',exact:true})).toHaveAttribute('href','#message-'+completed.message_id);
  const center=page.getByRole('region',{name:'Решения по заявкам',exact:true});
  await center.getByRole('button',{name:'Обновить решения по заявкам',exact:true}).click();
  const card=center.getByTestId('approval-'+b.approval_id);
  await expect(card).toContainText('Ожидает решения мастера');
  await card.click();
  const detail=center.getByTestId('approval-detail-'+b.approval_id);
- await expect(detail.getByRole('list',{name:'Проверенные сведения'})).toContainText('swallow');
+ await expect(detail.getByRole('list',{name:'Проверенные сведения'})).toContainText('ласточка');
  await detail.getByRole('link',{name:'Исходная реплика заявки',exact:true}).click();
- await expect(detail.getByTestId('approval-source-'+separate.message_id)).toContainText('swallow shoulder 101 mm');
+ await expect(detail.getByTestId('approval-source-'+started.message_id)).toHaveText('Отдельная татуировка: ласточка');
  const pending=await page.request.get(`/api/v1/workspaces/${owner.workspace_id}/service-approvals`);
  expect(pending.status()).toBe(200);
  expect((await pending.json() as {items:ApprovalCard[]}).items
@@ -1180,12 +1217,28 @@ test('@narrow M6.4A shows agent-created requests and sends after the owner decis
  await expect(work.getByRole('region',{name:'Согласованный заказ',exact:true})).toHaveCount(0);
  const messages=await readHistory();
  expect(messages.filter(message=>message.direction==='INBOUND')).toEqual(before);
- expect(messages.filter(message=>message.direction==='OUTBOUND').map(message=>message.text).sort()).toEqual([first.text,second.text].sort());
+
+ const separate=await input('agent-same-title',conversation);
+ const c=separate.service_intents!;
+ expect(new Set([a.request_id,b.request_id,c.request_id]).size).toBe(3);
+ expect(c.approval_id).toBeNull();
+ expect(await readDraft(a.request_id)).toEqual(revisedDraft);
+ const cDraft=await readDraft(c.request_id);
+ expect(cDraft.facts.find(fact=>fact.field==='placement')).toMatchObject({value:'плечо',source:{message_id:separate.message_id}});
+ await refreshIntake(inbox,intake);
+ await showDraft(c.request_id,'1',separate.message_id);
+ const cQuote=(await readQuote(c.request_id,'QUEUED')).quote!;
+ expect(cQuote).toMatchObject({quote_id:c.quote_id,material:{amount_minor:400000,occupied_minutes:65}});
+ const sentC=await deliver(c.request_id);
+ expect(sentC).toMatchObject({quote_id:cQuote.quote_id,calls:1,effects:1,status:'SENT',text:cQuote.text});
+ await expect(quotePanel.getByRole('status')).toHaveText('Предложение отправлено клиенту');
+ expect((await readHistory()).filter(message=>message.direction==='OUTBOUND').map(message=>message.text).sort()).toEqual([first.text,question,updated.text,second.text,cQuote.text].sort());
  expect(writes).toEqual([decisionPath]);
- console.log('M6.4A Chromium '+info.project.name+' '+JSON.stringify({
+ console.log('M6.4A-R1 Chromium '+info.project.name+' '+JSON.stringify({
   conversation,
-  a:{request:a.request_id,source:collected.message_id,quote:sentA.quote_id,calls:sentA.calls,effects:sentA.effects},
-  b:{request:b.request_id,source:separate.message_id,approval:b.approval_id,decision:approved.decision?.decision_id,quote:sentB.quote_id,calls:sentB.calls,effects:sentB.effects},
+  a:{request:a.request_id,source:collected.message_id,revision:revisedDraft.revision,correction:correction.message_id,quotes:[sentA.quote_id,sentRevision.quote_id],calls:sentA.calls+sentRevision.calls,effects:sentA.effects+sentRevision.effects},
+  b:{request:b.request_id,source:started.message_id,completion:completed.message_id,revision:bDraft.revision,approval:b.approval_id,decision:approved.decision?.decision_id,quote:sentB.quote_id,calls:sentB.calls,effects:sentB.effects},
+  c:{request:c.request_id,source:separate.message_id,revision:cDraft.revision,quote:sentC.quote_id,calls:sentC.calls,effects:sentC.effects},
   inboundAfterDecision:0,orders:0,
  }));
 });

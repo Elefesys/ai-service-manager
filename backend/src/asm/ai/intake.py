@@ -184,10 +184,16 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                         self.active,
                     )
                     body = candidate.model_dump(mode="json")
-                    if (
-                        isinstance(candidate, ServiceIntentResult)
-                        and state == "PRELIMINARILY_COMPLETE"
+                    if isinstance(candidate, ServiceIntentResult) and (
+                        state == "PRELIMINARILY_COMPLETE"
+                        or state == "CLARIFY"
+                        and any(
+                            fact.status == "client-stated" and fact.explicit_correction
+                            for fact in candidate.intake.facts
+                        )
                     ):
+                        # The current projection can describe a different work. The domain
+                        # checks the named request and its own sources before revising it.
                         shown = self.shown
                         if (
                             candidate.intake.category != "NEW_TATTOO"

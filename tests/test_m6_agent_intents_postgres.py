@@ -10,8 +10,11 @@ from asm.ai.contracts import IntakeGatewayConfig, ServiceIntentGatewayConfig
 from asm.ai.runtime_contracts import ServiceIntentRuntimeReceipt
 from asm.ai.runtime_settings import IntakeRuntimeSettings
 from asm.foundation import create_worker
-from asm.intake.projection import AMBIGUOUS_QUESTION
+from asm.intake.projection import AMBIGUOUS_QUESTION, QUESTIONS
+from asm.messaging.adapter import ControlledAdapter
+from asm.messaging.results import AISendPermit
 from asm.messaging.worker import Worker
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from test_m2_1_postgres import query
 from test_m3_1_native_context_postgres import claim_job, control, incoming, reconcile, scalar
@@ -21,7 +24,14 @@ from test_m4_runtime_postgres import COUNTER, owner
 from test_m5_intake_postgres import Extractor, summary
 from test_m5_intake_v7_integration_postgres import session
 from test_m5_portfolio_runtime_postgres import PrivateBytes
-from test_m6_owner_decisions_postgres import AB, FIXED_DURATION, contract, owner_get, owner_post
+from test_m6_owner_decisions_postgres import (
+    AB,
+    FIXED_DURATION,
+    assert_denial,
+    contract,
+    owner_get,
+    owner_post,
+)
 from test_m6_owner_decisions_postgres import approval_pg as approval_pg
 from test_m6_owner_decisions_postgres import assessment_pg as assessment_pg
 from test_m6_owner_decisions_postgres import auth as auth
@@ -54,7 +64,7 @@ class IntentModel(Extractor):
 
     async def complete(self, request):
         response = await super().complete(request)
-        if request.config.prompt_revision == "conversation_v7":
+        if request.config.prompt_revision == "conversation_v7" or self.intents is None:
             return response
         result = json.loads(response.output_json)
         context = next(
@@ -411,6 +421,438 @@ async def test_agent_updates_selected_work_and_clarifies_an_ambiguous_reference(
         ambiguous_source=ambiguous_source,
         ambiguous_question=receipt.result.text,
         ambiguous_commercial_effects=0,
+    )
+
+
+ROSE = dict(idea="роза", placement="предплечье", approximate_size="20 мм", style="лайнворк")
+SECOND_ROSE = ROSE | {"placement": "плечо", "approximate_size": "21 мм"}
+SECOND_SWALLOW = dict(
+    idea="ласточка", placement="плечо", approximate_size="101 мм", style="лайнворк"
+)
+ROSE_TEXT = "Хочу татуировку: роза, место — предплечье, 20 мм, стиль лайнворк"
+SWALLOW_TEXT = "Отдельная татуировка: ласточка, место — плечо, 101 мм, стиль лайнворк"
+APPROVAL_TEXT = "Для тату «роза» прошу мастера подтвердить цену и длительность"
+
+
+class FollowupWire(ControlledAdapter):
+    def __init__(self):
+        super().__init__(environment="TEST")
+        self.texts = []
+
+    async def send(self, permit):
+        assert isinstance(permit, AISendPermit) and permit.provider == "CONTROLLED"
+        self.texts.append(permit.text)
+        return await super().send(permit)
+
+
+class R1Conversation:
+    @classmethod
+    async def open(cls, h, auth, *, manual=False):
+        await publish(h, contract() if manual else contract(formula_price(), FIXED_DURATION))
+        case = cls()
+        case.h, case.auth = h, auth
+        case.token = await sign_in(auth)
+        case.cid, case.scope, case.worker, case.model, case.wire = await application(h)
+        case.endpoint = route(case.cid)
+        case.followups = FollowupWire()
+        case.reply_worker = Worker(h.kernel, case.followups, ai=case.worker.ai)
+        return case
+
+    async def turn(self, message, facts, *, switch=False, correction=False, intents=(PREPARE,)):
+        self.model.values, self.model.switch, self.model.correction, self.model.intents = (
+            facts,
+            switch,
+            correction,
+            intents,
+        )
+        source, turn = await source_turn(self.h, self.worker, self.scope, message)
+        claim, selected = await run_turn(self.h, self.worker, turn)
+        receipt = await self.worker.ai.database.replay(claim, self.worker.ai.config)
+        assert isinstance(receipt, ServiceIntentRuntimeReceipt)
+        if selected["send_job_id"] is not None:
+            await self.reply_worker.execute(await claim_job(self.h, selected["send_job_id"]))
+        return source, receipt
+
+    async def commercial(self, *args, **kwargs):
+        source, receipt = await self.turn(*args, **kwargs)
+        assert receipt.result.kind == "no_reply"
+        result = receipt.service_intents
+        assert result is not None and result.request_id is not None
+        return source, result
+
+    async def cards(self):
+        return (await owner_get(self.auth, self.endpoint + "/cards"))["items"]
+
+    async def card(self, request_id):
+        return await owner_get(self.auth, f"{self.endpoint}?request_id={request_id}")
+
+    async def approvals(self):
+        rows = (await owner_get(self.auth, f"/api/v1/workspaces/{A}/service-approvals"))["items"]
+        return [row for row in rows if row["conversation_id"] == str(self.cid)]
+
+    def decision_url(self, request_id, approval_id):
+        return f"{self.endpoint}/{request_id}/approvals/{approval_id}"
+
+    async def quote_view(self, request_id):
+        return await owner_get(self.auth, f"{self.endpoint}/{request_id}/quote")
+
+    async def send_quote(self, request_id, amount, minutes):
+        view = await self.quote_view(request_id)
+        assert view["status"] == "QUEUED"
+        quote = view["quote"]
+        assert (quote["material"]["amount_minor"], quote["material"]["occupied_minutes"]) == (
+            amount,
+            minutes,
+        )
+        calls, effects_before = self.wire.calls, self.wire.effects
+        await run_quote(self.h, self.worker, quote)
+        assert (self.wire.calls, self.wire.effects) == (calls + 1, effects_before + 1)
+        assert self.wire.permits[-1].text == quote["text"]
+        delivered = await delivery(self.h, quote)
+        assert (delivered["status"], delivered["job_status"]) == ("SENT", "SUCCEEDED")
+        assert delivered["text"] == quote["text"]
+        assert (await self.quote_view(request_id))["status"] == "SENT"
+        assert quote["text"].endswith("\nПринимаю " + quote["code"])
+        return dict(
+            quote_id=quote["quote_id"],
+            outbox_id=delivered["outbox_id"],
+            message_id=delivered["message_id"],
+            amount_minor=amount,
+            occupied_minutes=minutes,
+            text=quote["text"],
+        )
+
+    async def first_rose(self):
+        source, result = await self.commercial(ROSE_TEXT, ROSE)
+        card = await self.card(result.request_id)
+        assert_source_map(card, ROSE, source)
+        assert card["revision"] == "1" and result.approval_id is None
+        quote = await self.send_quote(result.request_id, 350_000, 65)
+        assert quote["quote_id"] == str(result.quote_id)
+        return card, quote
+
+    async def approve_and_send(self, request_id, approval_id):
+        before = await input_count(self.h, self.cid)
+        decision = await owner_post(
+            self.auth,
+            self.decision_url(request_id, approval_id),
+            self.token,
+            AB | {"operation": "APPROVE", "amount_minor": 460_000, "occupied_minutes": 75},
+        )
+        assert decision["status"] == "APPROVED" and decision["authorization_current"]
+        quote = await self.send_quote(request_id, 460_000, 75)
+        material = (await self.quote_view(request_id))["quote"]["material"]
+        decision_id = decision["decision"]["decision_id"]
+        assert (
+            material["approval_id"],
+            material["price_reference_id"],
+            material["duration_reference_id"],
+        ) == (str(approval_id), decision_id, decision_id)
+        assert await input_count(self.h, self.cid) == before
+        return decision_id, quote
+
+    async def check_counts(self, *, requests, approvals, quotes, decisions=0, followups=()):
+        counts = await effects(self.h, self.cid)
+        assert counts == dict(
+            requests=requests,
+            approvals=approvals,
+            decisions=decisions,
+            quotes=quotes,
+            deliveries=quotes,
+            orders=0,
+        )
+        assert self.wire.calls == self.wire.effects == quotes
+        assert self.followups.calls == self.followups.effects == len(followups)
+        assert self.followups.texts == list(followups)
+        outbox = await query(
+            self.h,
+            """SELECT o.status FROM app.outbox_events o JOIN app.messages m
+            ON (m.workspace_id,m.id)=(o.workspace_id,o.message_id)
+            WHERE m.conversation_id=:c""",
+            c=self.cid,
+        )
+        assert [row["status"] for row in outbox] == ["SENT"] * (quotes + len(followups))
+        return dict(
+            counts=dict(counts),
+            calls=self.wire.calls,
+            effects=self.wire.effects,
+            followup_calls=self.followups.calls,
+            followup_effects=self.followups.effects,
+            followup_texts=self.followups.texts,
+        )
+
+
+def work_evidence(card):
+    return dict(
+        request_id=card["request_id"],
+        revision=card["revision"],
+        source=card["intent_source"]["message_id"],
+        facts=fact_evidence(card),
+    )
+
+
+def fact_evidence(card):
+    return {fact["field"]: (fact["value"], fact["source"]["message_id"]) for fact in card["facts"]}
+
+
+def assert_source_map(card, facts, source, **changed_sources):
+    assert card["intent_source"]["message_id"] == str(source)
+    assert fact_evidence(card) == {
+        field: (value, str(changed_sources.get(field, source))) for field, value in facts.items()
+    }
+
+
+async def test_r1_explicit_second_work_with_same_idea_keeps_original(approval_pg, auth):
+    case = await R1Conversation.open(approval_pg, auth)
+    original, quote_a = await case.first_rose()
+    source, b = await case.commercial(
+        "На другом месте хочу отдельную татуировку: роза, место — плечо, 21 мм, стиль лайнворк",
+        SECOND_ROSE,
+        switch=True,
+    )
+    second = await case.card(b.request_id)
+    assert second["revision"] == "1" and second["request_id"] != original["request_id"]
+    assert_source_map(second, SECOND_ROSE, source)
+    quote_b = await case.send_quote(b.request_id, 400_000, 65)
+    assert quote_b["quote_id"] == str(b.quote_id)
+    assert (await case.quote_view(original["request_id"]))["quote"]["quote_id"] == quote_a[
+        "quote_id"
+    ]
+
+    ambiguous_source, ambiguous = await case.turn(
+        "Для тату „роза“ уточняю размер: 23 мм", {"approximate_size": "23 мм"}, correction=True
+    )
+    assert ambiguous.service_intents is None and ambiguous.result.text == AMBIGUOUS_QUESTION
+    assert await case.card(original["request_id"]) == original
+    assert await case.card(b.request_id) == second
+    assert {row["request_id"] for row in await case.cards()} == {
+        original["request_id"],
+        second["request_id"],
+    }
+    assert not await case.approvals()
+    stats = await case.check_counts(
+        requests=2, approvals=0, quotes=2, followups=(AMBIGUOUS_QUESTION,)
+    )
+    report(
+        "R1_01_same_idea",
+        conversation=case.cid,
+        a=work_evidence(original),
+        b=work_evidence(second),
+        quotes=[quote_a, quote_b],
+        ambiguous_source=ambiguous_source,
+        **stats,
+    )
+
+
+async def test_r1_separate_work_keeps_anchor_across_clarification(approval_pg, auth):
+    case = await R1Conversation.open(approval_pg, auth)
+    original, quote_a = await case.first_rose()
+    source, incomplete = await case.turn(
+        "Отдельная татуировка: ласточка", {"idea": "ласточка"}, switch=True, intents=None
+    )
+    assert incomplete.service_intents is None and incomplete.result.text == QUESTIONS["placement"]
+    assert [row["request_id"] for row in await case.cards()] == [original["request_id"]]
+    await case.check_counts(requests=1, approvals=0, quotes=1, followups=(QUESTIONS["placement"],))
+
+    answer, b = await case.commercial(
+        "Для тату «ласточка»: место — плечо, 101 мм, стиль лайнворк",
+        SECOND_SWALLOW,
+        intents=(PREPARE, OWNER_DECISION),
+    )
+    second = await case.card(b.request_id)
+    assert second["revision"] == "1" and second["request_id"] != original["request_id"]
+    assert_source_map(
+        second,
+        SECOND_SWALLOW,
+        source,
+        placement=answer,
+        approximate_size=answer,
+        style=answer,
+    )
+    assert await case.card(original["request_id"]) == original
+    assert (await case.quote_view(original["request_id"]))["quote"]["quote_id"] == quote_a[
+        "quote_id"
+    ]
+    (approval,) = await case.approvals()
+    assert (approval["approval_id"], approval["request_id"], approval["status"]) == (
+        str(b.approval_id),
+        str(b.request_id),
+        "PENDING",
+    )
+    assert_source_map(
+        approval["basis"],
+        SECOND_SWALLOW,
+        source,
+        placement=answer,
+        approximate_size=answer,
+        style=answer,
+    )
+    assert b.quote_id is None
+    stats = await case.check_counts(
+        requests=2, approvals=1, quotes=1, followups=(QUESTIONS["placement"],)
+    )
+    report(
+        "R1_01_two_turns",
+        conversation=case.cid,
+        a=work_evidence(original),
+        b=work_evidence(second),
+        quotes=[quote_a],
+        approval_id=b.approval_id,
+        approval_status=approval["status"],
+        **stats,
+    )
+
+
+async def test_r1_updates_earlier_work_without_changing_later_approval(approval_pg, auth):
+    case = await R1Conversation.open(approval_pg, auth)
+    original, first_quote = await case.first_rose()
+    source_b, b = await case.commercial(
+        SWALLOW_TEXT, SECOND_SWALLOW, switch=True, intents=(PREPARE, OWNER_DECISION)
+    )
+    case_b = await case.card(b.request_id)
+    assert_source_map(case_b, SECOND_SWALLOW, source_b)
+    approval_url = case.decision_url(b.request_id, b.approval_id)
+    before = await owner_get(auth, approval_url)
+    assert before["status"] == "PENDING" and b.quote_id is None
+
+    source, updated = await case.commercial(
+        "Для тату „роза“ уточняю размер: 21 мм", {"approximate_size": "21 мм"}, correction=True
+    )
+    card = await case.card(updated.request_id)
+    assert original["request_id"] == card["request_id"] == str(updated.request_id)
+    assert card["revision"] == "2"
+    assert_source_map(
+        card,
+        ROSE | {"approximate_size": "21 мм"},
+        original["intent_source"]["message_id"],
+        approximate_size=source,
+    )
+    assert await case.card(b.request_id) == case_b
+    after = await owner_get(auth, approval_url)
+    for field in ("approval_id", "request_revision", "status", "basis"):
+        assert after[field] == before[field]
+    quote = await case.send_quote(updated.request_id, 400_000, 65)
+    assert quote["quote_id"] == str(updated.quote_id) != first_quote["quote_id"]
+    stats = await case.check_counts(requests=2, approvals=1, quotes=2)
+    report(
+        "R1_02_update_earlier",
+        conversation=case.cid,
+        a=work_evidence(card),
+        b=work_evidence(case_b),
+        quotes=[first_quote, quote],
+        approval_id=b.approval_id,
+        approval_status=after["status"],
+        **stats,
+    )
+
+
+async def test_r1_prepare_alone_opens_owner_request_when_both_values_missing(approval_pg, auth):
+    case = await R1Conversation.open(approval_pg, auth, manual=True)
+    source, prepared = await case.commercial(ROSE_TEXT, ROSE)
+    assert prepared.approval_id is not None and prepared.quote_id is None
+    card = await case.card(prepared.request_id)
+    assert_source_map(card, ROSE, source)
+    (approval,) = await case.approvals()
+    assert (approval["approval_id"], approval["request_id"], approval["status"]) == (
+        str(prepared.approval_id),
+        str(prepared.request_id),
+        "PENDING",
+    )
+    assert (
+        approval["basis"]["amount_minor"] is None and approval["basis"]["occupied_minutes"] is None
+    )
+    await case.check_counts(requests=1, approvals=1, quotes=0)
+    _, repeated = await case.commercial(APPROVAL_TEXT, {}, intents=(OWNER_DECISION,))
+    assert repeated == prepared
+    assert await case.card(prepared.request_id) == card
+    await case.check_counts(requests=1, approvals=1, quotes=0)
+
+    decision, quote = await case.approve_and_send(prepared.request_id, prepared.approval_id)
+    stats = await case.check_counts(requests=1, approvals=1, quotes=1, decisions=1)
+    report(
+        "R1_03_prepare_only",
+        conversation=case.cid,
+        work=work_evidence(card),
+        approval_id=prepared.approval_id,
+        approval_status="PENDING",
+        replay_approval_id=repeated.approval_id,
+        decision_id=decision,
+        inbound_after_approval=0,
+        quotes=[quote],
+        **stats,
+    )
+
+
+async def test_r1_expired_approval_is_replaced_and_remains_in_history(approval_pg, auth):
+    h = approval_pg
+    case = await R1Conversation.open(h, auth, manual=True)
+    source, initial = await case.commercial(ROSE_TEXT, ROSE, intents=(PREPARE, OWNER_DECISION))
+    card = await case.card(initial.request_id)
+    assert_source_map(card, ROSE, source)
+    assert initial.approval_id is not None and initial.quote_id is None
+    old_url = case.decision_url(initial.request_id, initial.approval_id)
+    _, repeated = await case.commercial(APPROVAL_TEXT, {}, intents=(OWNER_DECISION,))
+    assert repeated == initial and (await owner_get(auth, old_url))["status"] == "PENDING"
+    await case.check_counts(requests=1, approvals=1, quotes=0)
+
+    # Advance only this request's 24-hour window in the disposable test database.
+    async with h.migrator.begin() as connection:
+        await connection.execute(
+            text("ALTER TABLE app.approval_requests DISABLE TRIGGER owner_decision_immutable")
+        )
+        expired_id = (
+            await connection.execute(
+                text("""UPDATE app.approval_requests
+                    SET created_at=now()-interval '25 hours', expires_at=now()-interval '1 hour'
+                    WHERE workspace_id=:ws AND id=:id RETURNING id"""),
+                {"ws": A, "id": initial.approval_id},
+            )
+        ).scalar_one()
+        assert expired_id == initial.approval_id
+        await connection.execute(
+            text("ALTER TABLE app.approval_requests ENABLE TRIGGER owner_decision_immutable")
+        )
+    expired = await owner_get(auth, old_url)
+    assert expired["status"] == "EXPIRED" and not expired["authorization_current"]
+
+    renewal_source, renewed = await case.commercial(APPROVAL_TEXT, {}, intents=(OWNER_DECISION,))
+    assert renewed.request_id == initial.request_id and renewed.quote_id is None
+    assert renewed.approval_id is not None and renewed.approval_id != initial.approval_id
+    assert await case.card(initial.request_id) == card
+    approvals = await case.approvals()
+    assert [row["approval_id"] for row in approvals if row["status"] == "PENDING"] == [
+        str(renewed.approval_id)
+    ]
+    retained = await owner_get(auth, old_url)
+    assert (retained["status"], retained["basis"]) == ("EXPIRED", expired["basis"])
+    await assert_denial(
+        auth,
+        old_url,
+        case.token,
+        AB | {"operation": "APPROVE", "amount_minor": 460_000, "occupied_minutes": 75},
+        409,
+        "APPROVAL_EXPIRED",
+    )
+    _, repeat_renewal = await case.commercial(APPROVAL_TEXT, {}, intents=(OWNER_DECISION,))
+    assert repeat_renewal == renewed
+    await case.check_counts(requests=1, approvals=2, quotes=0)
+    decision, quote = await case.approve_and_send(initial.request_id, renewed.approval_id)
+    stats = await case.check_counts(requests=1, approvals=2, quotes=1, decisions=1)
+    assert (await owner_get(auth, old_url))["status"] == "EXPIRED"
+    report(
+        "R1_03_expired",
+        conversation=case.cid,
+        work=work_evidence(card),
+        expired_approval_id=expired_id,
+        expired_status="EXPIRED",
+        source_of_renewal=renewal_source,
+        new_approval_id=renewed.approval_id,
+        new_approval_status="PENDING",
+        replay_approval_id=repeat_renewal.approval_id,
+        decision_id=decision,
+        inbound_after_approval=0,
+        quotes=[quote],
+        **stats,
     )
 
 
