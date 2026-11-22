@@ -2,7 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3C REVIEW · R2 для C1 и C5 · 2026-11-22
+## CURRENT — M6.3C REVIEW · повторная проверка R2 у C8 · 2026-11-22
+
+C0 проверил R2 на head `63108151c1d8d8c8e5b20082b20691e9c40de497`, база `main` `3fa9af54225c7f0806aa0eb199441a0aa225b2d5`. На обычном и узком экранах один клик из A или B показывает точную реплику и переводит на неё фокус. Первый переход читает одну страницу истории, повторный обходится без запроса. CI 12/12 с первой попытки. Единственная активная задача — повторная проверка C8 по `C8-M6.3C-01`. [Поручение C8 и проверка C0](tasks/M6_HANDOFF.md#L3) · [PR #61](https://github.com/Elefesys/ai-service-manager/pull/61) · [Chromium](https://github.com/Elefesys/ai-service-manager/actions/runs/45011279141/artifacts/14751280224).
+
+## История — M6.3C-R2 · поручение C1 и C5 · 2026-11-22
 
 C8 подтвердил обработку согласий Q6 и транзакцию Q7. C0 принял `CHANGES_REQUESTED` по замечанию `C8-M6.3C-01`. Из карточки мастер сможет одним нажатием открыть ответ клиента за первой страницей Inbox. Единственная активная задача — M6.3C-R2 в Draft PR #61 от `5c1f5e96fa7b1a1b52f3d92d858308d71937f591`, база `main` `3fa9af54225c7f0806aa0eb199441a0aa225b2d5`. Ведущий C1, исправление карточки и навигации выполняет C5. [Поручение и воспроизведение C0](tasks/M6_HANDOFF.md#L3) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/61#pullrequestreview-6011587818).
 
