@@ -2,7 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3C REVIEW · независимая проверка C8 · 2026-11-22
+## CURRENT — M6.3C REVIEW · R2 для C1 и C5 · 2026-11-22
+
+C8 подтвердил обработку согласий Q6 и транзакцию Q7. C0 принял `CHANGES_REQUESTED` по замечанию `C8-M6.3C-01`. Из карточки мастер сможет одним нажатием открыть ответ клиента за первой страницей Inbox. Единственная активная задача — M6.3C-R2 в Draft PR #61 от `5c1f5e96fa7b1a1b52f3d92d858308d71937f591`, база `main` `3fa9af54225c7f0806aa0eb199441a0aa225b2d5`. Ведущий C1, исправление карточки и навигации выполняет C5. [Поручение и воспроизведение C0](tasks/M6_HANDOFF.md#L3) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/61#pullrequestreview-6011587818).
+
+## История — M6.3C-R1 · независимая проверка C8 · 2026-11-22
 
 C0 подтвердил исправление `C0-M6.3C-01` и `C0-M6.3C-02` на head `5c1f5e96fa7b1a1b52f3d92d858308d71937f591`, база `main` `3fa9af54225c7f0806aa0eb199441a0aa225b2d5`, схема `0030`. Итог CI — 12/12. Единственная активная задача C8 — проверить M6.3C по Q6/Q7 в synthetic LOCAL/TEST и оставить одно заключение в Draft PR #61. Решение о слиянии ждёт заключения C8 и разрешения владельца. [Поручение C8 и доказательства C0](tasks/M6_HANDOFF.md#L3) · [PR #61](https://github.com/Elefesys/ai-service-manager/pull/61) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/44994884740/attempts/2).
 
