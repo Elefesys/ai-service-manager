@@ -1,5 +1,6 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState,type MouseEvent} from 'react';
 import type {ApprovalSelection} from './escalation-api';
+import type {OpenMessage} from './MessagingPanel';
 import {IntakeError,intakeApi} from './intake-api';
 import type {IntakeScope,QuoteAgreement,QuoteDelivery,QuoteReplyNotice,QuoteStatus,RequestQuote,ServiceRequestDraft} from './intake-api';
 
@@ -41,7 +42,7 @@ const reasonText:Record<string,string>={
 
 type Props={
  scope:IntakeScope;draft:ServiceRequestDraft;refresh:string;
- approvalChange:ApprovalSelection|null;expired:()=>void;
+ approvalChange:ApprovalSelection|null;expired:()=>void;openMessage?:OpenMessage;
 };
 
 function DeliveryStatus({status,reason}:Pick<QuoteDelivery,'status'|'reason'>){
@@ -106,9 +107,23 @@ function Agreement({agreement,revision}:{agreement:QuoteAgreement;revision:strin
  </section>;
 }
 
-export function QuotePanel({scope,draft,refresh,approvalChange,expired}:Props){
+export function QuotePanel({scope,draft,refresh,approvalChange,expired,openMessage}:Props){
  const [delivery,setDelivery]=useState<QuoteDelivery|null>(null);
  const [error,setError]=useState(false);
+ const replyNavigation=useRef<AbortController|null>(null);
+
+ useLayoutEffect(()=>()=>replyNavigation.current?.abort(),[
+  scope.workspace,scope.business,scope.conversation,scope.client,draft.request_id,draft.revision,
+ ]);
+
+ function openReply(event:MouseEvent<HTMLAnchorElement>,messageId:string){
+  if(!openMessage||event.button!==0||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
+  event.preventDefault();
+  replyNavigation.current?.abort();
+  const navigation=new AbortController();
+  replyNavigation.current=navigation;
+  openMessage(messageId,navigation.signal);
+ }
 
  useEffect(()=>{
   const controller=new AbortController(),{signal}=controller;
@@ -138,6 +153,7 @@ export function QuotePanel({scope,draft,refresh,approvalChange,expired}:Props){
  },[draft,refresh,approvalChange]);
 
  const previous=delivery?.previous;
+ const reply=delivery?.reply_notice;
  return <section aria-label="Предложение клиенту" style={{overflowWrap:'anywhere'}}>
   <h4>Предложение клиенту</h4>
   {error&&<p role="alert">Не удалось обновить статус предложения.</p>}
@@ -145,8 +161,8 @@ export function QuotePanel({scope,draft,refresh,approvalChange,expired}:Props){
   {delivery&&<DeliveryStatus status={delivery.status} reason={delivery.reason}/>}
   {delivery?.quote&&<QuoteTerms quote={delivery.quote} revision={draft.revision}/>}
   {delivery?.agreement&&<Agreement key={delivery.agreement.acceptance_id} agreement={delivery.agreement} revision={draft.revision}/>}
-  {delivery?.reply_notice&&<p role="status">{replyText[delivery.reply_notice.outcome]}{' '}
-   <a href={`#message-${delivery.reply_notice.message_id}`}>Ответ клиента</a></p>}
+  {reply&&<p role="status">{replyText[reply.outcome]}{' '}
+   <a href={`#message-${reply.message_id}`} onClick={event=>openReply(event,reply.message_id)}>Ответ клиента</a></p>}
   {previous&&<section aria-label="Предыдущая версия">
    <h5>Предыдущая версия</h5>
    <DeliveryStatus status={previous.status} reason={previous.reason}/>

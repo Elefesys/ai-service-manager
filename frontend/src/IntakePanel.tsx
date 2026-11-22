@@ -6,9 +6,10 @@ import {approvalApi,draftApprovalSelection,EscalationError} from './escalation-a
 import type {ApprovalSelection} from './escalation-api';
 import {IntakeError,intakeApi,labels} from './intake-api';
 import type {CaseMatch,DraftCommand,DraftListItem,DraftRevisionCommand,Fact,FieldId,Intake,IntakeScope,PriceCalculation,PriceHistory,ServiceAssessment,ServiceRequestDraft} from './intake-api';
+import type {OpenMessage} from './MessagingPanel';
 import {QuotePanel} from './QuotePanel';
 
-export function IntakePanel({session,scope,expired,refresh=0,approvalOpened,approvalChanged}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number;approvalOpened?:(selection:ApprovalSelection)=>void;approvalChanged?:ApprovalSelection|null}){
+export function IntakePanel({session,scope,expired,refresh=0,approvalOpened,approvalChanged,openMessage}:{session:Session|null;scope:IntakeScope|null;expired:()=>void;refresh?:number;approvalOpened?:(selection:ApprovalSelection)=>void;approvalChanged?:ApprovalSelection|null;openMessage?:OpenMessage}){
  const key=scope?JSON.stringify({...scope,refresh}):'',current=useRef({key,session,epoch:0});
  if(current.current.key!==key||current.current.session!==session)current.current={key,session,epoch:current.current.epoch+1};
  const [view,setView]=useState<{key:string;session:Session|null;value:Intake|null;error:string;busy:boolean}>({key:'',session:null,value:null,error:'',busy:false});
@@ -28,7 +29,7 @@ export function IntakePanel({session,scope,expired,refresh=0,approvalOpened,appr
  if(!permitted||!scope||!session)return null;
  const draftScopeKey=JSON.stringify([scope.workspace,scope.business,scope.conversation,scope.client,session.user_account_id,session.csrf_token]);
  return <section className="intake-card" aria-label="Предварительный запрос"><div className="billing-heading"><h3>Предварительный запрос</h3><button className="secondary" onClick={()=>void load()} disabled={visible&&view.busy}>Обновить сводку</button></div><p>Мастер проверяет детали. Цена, длительность и запись ещё не согласованы.</p>{visible&&view.error&&<p role="alert">{view.error}</p>}{intent.current&&visible&&!view.busy&&<button onClick={()=>void send()}>Проверить ту же команду</button>}{data&&<><p role="status">{({NOT_STARTED:'Сбор ещё не начат',CLARIFY:'Нужно уточнение',OWNER_HANDOFF:'Требуется решение мастера',PRELIMINARILY_COMPLETE:'Предварительно собрано'})[data.status]}</p>{data.question&&<p>{data.question}</p>}{data.facts.map(f=><article key={f.field}><label>{labels[f.field]}<input disabled={view.busy||!!intent.current} maxLength={300} value={edits[f.field]??f.value} onChange={e=>setEdits(v=>({...v,[f.field]:e.target.value}))}/></label><p>{f.status==='owner-confirmed'?'Подтверждено мастером':f.status==='observed'?'Наблюдение изображения':'Со слов клиента'}{f.conflict?' · есть противоречие':''}</p><p className="muted">Источник: <a href={`#message-${f.source.message_id}`}>сообщение клиента</a> · {f.source.quote||'текущий анализ изображения'}</p><button disabled={view.busy||!!intent.current||!(edits[f.field]??f.value).trim()} onClick={()=>void save(f)}>Подтвердить поле {labels[f.field]}</button></article>)}{data.missing.length>0&&<p>Неизвестно: {data.missing.map(f=>labels[f]).join(', ')}</p>}<button className="secondary" disabled={compared&&comparisons.busy} onClick={()=>void compare()}>Сравнить с примерами мастера</button>{compared&&<div aria-label="Сравнение примеров мастера"><p>Время прошлых работ видно только мастеру. Это не оценка нового запроса.</p>{comparisons.error&&<p role="alert">{comparisons.error}</p>}{!comparisons.busy&&!comparisons.error&&comparisons.items.length===0&&<p>Подтверждённых текущих примеров нет.</p>}{comparisons.items.map(m=><article key={m.case.case_id}><h4>{m.case.data.description}</h4><p>Совпадает: {m.matches.map(f=>labels[f]??f).join(', ')||'нет'} · различается: {m.differences.map(f=>labels[f]??f).join(', ')||'нет'} · неизвестно: {m.unknown.map(f=>labels[f]??f).join(', ')||'нет'}</p><p>Источник: подтверждённый пример, версия {m.case.version}. Рабочее время: {m.case.data.working_minutes??'неизвестно'}, занятое: {m.case.data.occupied_minutes??'неизвестно'} мин.</p></article>)}</div>}</>}{scope.conversation&&
-  <RequestDraftPanel key={draftScopeKey} selectionScope={draftScopeKey} scope={scope} data={data} summaryRefresh={summaryRefresh} csrf={session.csrf_token} expired={expired} approvalOpened={approvalOpened} approvalChanged={approvalChanged}/>
+  <RequestDraftPanel key={draftScopeKey} selectionScope={draftScopeKey} scope={scope} data={data} summaryRefresh={summaryRefresh} csrf={session.csrf_token} expired={expired} approvalOpened={approvalOpened} approvalChanged={approvalChanged} openMessage={openMessage}/>
  }</section>;
 }
 
@@ -339,7 +340,7 @@ function OpenOwnerApproval({scope,draft,csrf,locked,expired,opened,termsChanged}
  </div>;
 }
 
-function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expired,approvalOpened,approvalChanged}:{scope:IntakeScope;selectionScope:string;data:Intake|null;summaryRefresh:number;csrf:string;expired:()=>void;approvalOpened?:(selection:ApprovalSelection)=>void;approvalChanged?:ApprovalSelection|null}){
+function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expired,approvalOpened,approvalChanged,openMessage}:{scope:IntakeScope;selectionScope:string;data:Intake|null;summaryRefresh:number;csrf:string;expired:()=>void;approvalOpened?:(selection:ApprovalSelection)=>void;approvalChanged?:ApprovalSelection|null;openMessage?:OpenMessage}){
  const sourceId=useId();
  const cardId=useId();
  const revisionFieldId=useId();
@@ -496,7 +497,7 @@ function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expire
    </select>
   </section>}
   {draft&&<DraftCard draft={draft}>
-   <QuotePanel key={`quote:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} refresh={`${summaryRefresh}:${termsRefresh}`} approvalChange={quoteApproval} expired={expired}/>
+   <QuotePanel key={`quote:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} refresh={`${summaryRefresh}:${termsRefresh}`} approvalChange={quoteApproval} expired={expired} openMessage={openMessage}/>
    <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired} termsChanged={termsChanged}/>
    <PricingPanel key={`price:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} summaryRefresh={summaryRefresh} locked={locked} expired={expired} termsChanged={termsChanged}/>
    {approvalOpened&&scope.conversation&&scope.client&&<OpenOwnerApproval key={'approval:'+draft.request_id+':'+draft.revision} scope={scope} draft={draft} csrf={csrf} locked={locked} expired={expired} opened={approvalOpened} termsChanged={termsChanged}/>}

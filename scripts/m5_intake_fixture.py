@@ -69,6 +69,7 @@ INPUTS = {
 QUOTE_JOURNEYS = {"quote-delivery", "quote-guard", "quote-acceptance", "quote-clarification"}
 QUOTE_OPERATIONS = {"deliver-quote": OutcomeKind.SUCCESS, "lose-quote-ack": OutcomeKind.UNKNOWN}
 QUOTE_REPLIES = {"agree-quote", "repeat-agreement", "ambiguous-agreement", "decline-quote"}
+QUOTE_HISTORY = "page-reply-history"
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
     "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
@@ -292,7 +293,7 @@ async def run(args, diagnostic):
             await native_schema_readiness(c)
         tenancy = TenantDatabase(engine)
         kernel = IntakeBrowserKernel(engine, environment="TEST")
-        if args.operation in QUOTE_OPERATIONS or args.operation in QUOTE_REPLIES:
+        if args.operation in QUOTE_OPERATIONS or args.operation in QUOTE_REPLIES | {QUOTE_HISTORY}:
             return await run_quote(
                 args, diagnostic, engine, tenancy, kernel, actor, workspace, business
             )
@@ -557,39 +558,54 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
         if job.workspace_id != workspace:
             raise IntakeFixtureRefused("JOB_WORKSPACE_MISMATCH")
 
-    if args.operation in QUOTE_REPLIES:
+    if args.operation in QUOTE_REPLIES | {QUOTE_HISTORY}:
         if (
             args.journey not in {"quote-acceptance", "quote-clarification"}
             or before.status != "SENT"
         ):
             raise IntakeFixtureRefused("SENT_SYNTHETIC_QUOTE_REQUIRED")
-        diagnostic.stage = "INGEST"
-        async with engine.connect() as connection:
-            cutoff = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
         adapter = ControlledAdapter(environment="TEST")
+
+        async def process_reply(suffix: str, body: str):
+            diagnostic.stage = "INGEST"
+            async with engine.connect() as connection:
+                cutoff = (await connection.execute(text("SELECT clock_timestamp()"))).scalar_one()
+            value = replace(
+                event("knowledge", f"{scenario}-{quote_id}-{suffix}", conversation=scenario),
+                text=body,
+                occurred_at=datetime.now(UTC),
+            )
+            incoming = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
+            if incoming.code != "ACCEPTED" or incoming.workspace_id != workspace:
+                raise IntakeFixtureRefused("FRESH_CANONICAL_INGEST_REQUIRED")
+            diagnostic.stage = "CLAIM"
+            claim = await kernel.claim_intake(
+                cutoff, lambda job: job.job_id == incoming.job_id, validate_claim, diagnostic
+            )
+            if claim is None:
+                raise IntakeFixtureRefused("INGEST_JOB_MISMATCH")
+            diagnostic.stage = "EXECUTE"
+            result = await kernel.process_inbox(claim)
+            if result.code != "PROCESSED" or result.message_id is None:
+                raise IntakeFixtureRefused("CANONICAL_QUOTE_REPLY_REQUIRED")
+            return result
+
+        if args.operation == QUOTE_HISTORY:
+            if args.journey != "quote-clarification":
+                raise IntakeFixtureRefused("SENT_SYNTHETIC_QUOTE_REQUIRED")
+            count = 25
+            for index in range(1, count + 1):
+                result = await process_reply(f"history-{index}", f"Synthetic reply history {index}")
+                if result.quote_reply is not None:
+                    raise IntakeFixtureRefused("UNEXPECTED_QUOTE_REPLY")
+            return {"count": count, "last_message_id": str(result.message_id)}
+
         body = {
             "ambiguous-agreement": "да",
             "decline-quote": f"Отклоняю {quote.code}",
         }.get(args.operation, f"Принимаю {quote.code}")
-        value = replace(
-            event("knowledge", f"{scenario}-{quote_id}-{args.operation}", conversation=scenario),
-            text=body,
-            occurred_at=datetime.now(UTC),
-        )
-        incoming = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
-        if incoming.code != "ACCEPTED" or incoming.workspace_id != workspace:
-            raise IntakeFixtureRefused("FRESH_CANONICAL_INGEST_REQUIRED")
-        diagnostic.stage = "CLAIM"
-        claim = await kernel.claim_intake(
-            cutoff, lambda job: job.job_id == incoming.job_id, validate_claim, diagnostic
-        )
-        if claim is None:
-            raise IntakeFixtureRefused("INGEST_JOB_MISMATCH")
-        diagnostic.stage = "EXECUTE"
-        result = await kernel.process_inbox(claim)
-        reply = getattr(result, "quote_reply", None)
-        if result.code != "PROCESSED" or result.message_id is None:
-            raise IntakeFixtureRefused("CANONICAL_QUOTE_REPLY_REQUIRED")
+        result = await process_reply(args.operation, body)
+        reply = result.quote_reply
         if reply is None:
             if args.operation != "ambiguous-agreement":
                 raise IntakeFixtureRefused("CANONICAL_QUOTE_REPLY_REQUIRED")
@@ -658,7 +674,7 @@ def main():
         parser = PrivateArgumentParser()
         parser.add_argument(
             "--operation",
-            choices=(*INPUTS, *QUOTE_OPERATIONS, *sorted(QUOTE_REPLIES)),
+            choices=(*INPUTS, *QUOTE_OPERATIONS, *sorted(QUOTE_REPLIES), QUOTE_HISTORY),
             required=True,
         )
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)

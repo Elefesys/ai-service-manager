@@ -1,4 +1,4 @@
-import {expect,test,type Locator,type Page,type Route} from '@playwright/test';
+import {expect,test,type Locator,type Page,type Request,type Route} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -17,12 +17,13 @@ type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
 type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
+type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history';
 type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
 type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification';
 type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|QuoteIntakeJourney;
 
-function intakeChildFailure(error:unknown,operation:IntakeOperation|QuoteOperation|QuoteReply,journey:IntakeJourney,variant:Viewport):Error {
+function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:IntakeJourney,variant:Viewport):Error {
  const result=error as {code?:unknown;stderr?:unknown;killed?:boolean;signal?:string};
  const exit=typeof result.code==='number'?String(result.code):'UNKNOWN';
  const request=`operation=${operation};journey=${journey};variant=${variant}`;
@@ -75,7 +76,7 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  return {...await collectIntake(page,variant,journey),serviceName};
 }
 
-async function intakeFixture<T>(operation:IntakeOperation|QuoteOperation|QuoteReply,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
+async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
  const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
@@ -1419,4 +1420,57 @@ test('@narrow M6.3C-R1 keeps A declined and asks for the code only on open B',as
  expect(aView.reply_notice).toEqual({outcome:'DECLINED',message_id:decline.message_id});
  expect(bView.reply_notice).toEqual({outcome:'NEEDS_CLARIFICATION',message_id:openYes.message_id});
  console.log('M6.3C-R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,a:aView.reply_notice,b:bView.reply_notice,closedYes:closedYes.message_id,orders:0}));
+
+ const newer=await intakeFixture<{count:number;last_message_id:string}>('page-reply-history',journey,variant,conversation,secondId);
+ expect(newer.count).toBe(25);
+ const history=inbox.getByRole('region',{name:'История сообщений',exact:true}).locator('ol.message-list');
+ const historyPath=`/api/v1/workspaces/${owner.workspace_id}/conversations/${conversation}/messages`;
+ const historyReads:boolean[]=[];
+ function recordHistory(request:Request){
+  const url=new URL(request.url());
+  if(request.method()==='GET'&&url.pathname===historyPath)historyReads.push(url.searchParams.has('cursor'));
+ }
+ page.on('request',recordHistory);
+ try{
+  for(const [work,requestId,messageId,expectedText] of [
+   ['A',firstId,decline.message_id,`Отклоняю ${a.code}`],
+   ['B',secondId,openYes.message_id,'да'],
+  ]){
+   await page.goto('/');
+   await openWorkspace(page);
+   await openConversation(page,conversation);
+   await expect(page.getByTestId(`conversation-${conversation}`)).toHaveAttribute('aria-pressed','true');
+   await expect(history.getByTestId(`message-${newer.last_message_id}`)).toHaveText(/Synthetic reply history 25/);
+   await expect(history.getByRole('listitem')).toHaveCount(25);
+   await requests.selectOption(requestId);
+   await expect(cardId).toHaveText(requestId);
+   const elementId=`message-${messageId}`;
+   const row=history.getByTestId(elementId);
+   await expect(row).toHaveCount(0);
+   await expect(source).toHaveAttribute('href',`#${elementId}`);
+   const beforeClick=historyReads.length;
+   await source.click();
+   await expect.soft(row,`${work} opens and focuses the older reply`).toBeFocused();
+   const activeId=await page.evaluate(()=>document.activeElement?.id||null);
+   const observed=await row.evaluateAll(rows=>rows.map(row=>({
+    id:row.id,text:row.querySelector('.message-text')?.textContent,
+   })));
+   const reads=historyReads.slice(beforeClick);
+   let repeatGets:number|null=null;
+   if(observed.length){
+    await expect.soft(row.locator('.message-text')).toHaveText(expectedText);
+    await expect.soft(row).toBeInViewport();
+    const beforeRepeat=historyReads.length;
+    await source.click();
+    await expect.soft(row,`${work} refocuses the loaded reply`).toBeFocused();
+    repeatGets=historyReads.length-beforeRepeat;
+   }
+   console.log('M6.3C-R2 Chromium '+info.project.name+' '+JSON.stringify({work,requestId,messageId,expectedText,newer:newer.count,observed,activeId,historyGets:reads.length,cursorGets:reads.filter(Boolean).length,repeatGets}));
+   expect.soft(observed).toEqual([{id:elementId,text:expectedText}]);
+   expect.soft(reads).toEqual([true]);
+   expect.soft(repeatGets).toBe(0);
+  }
+ }finally{
+  page.off('request',recordHistory);
+ }
 });

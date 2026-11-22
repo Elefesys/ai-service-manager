@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { escalationApi, EscalationError } from './escalation-api';
@@ -33,8 +34,8 @@ beforeEach(() => {
   vi.spyOn(messagingApi,'grant').mockResolvedValue({ url:'https://files.example/private?sig=opaque', expires_at:'2030-01-01T00:00:00.000000Z' });
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
-function setup() {
-  const props={session:session(),workspace:ws,recover:vi.fn(),expired:vi.fn()};
+function setup(portfolio?: ComponentProps<typeof MessagingPanel>['portfolio']) {
+  const props={session:session(),workspace:ws,recover:vi.fn(),expired:vi.fn(),portfolio};
   return { ...render(<MessagingPanel {...props}/>), props };
 }
 const ready = () => waitFor(() => expect(screen.getByRole('button',{name:'Проверить и отправить'})).toBeEnabled());
@@ -73,6 +74,52 @@ describe('manual/control intent coordination',()=>{
 });
 
 describe('owner conversation view and private reads', () => {
+  it('follows each history cursor until the reply is loaded and reuses the row on repeat', async()=>{
+    const reply=message(41,'Отклоняю Q-123');
+    const read=vi.mocked(messagingApi.messages)
+      .mockResolvedValueOnce({items:[message()],next_cursor:'first'})
+      .mockResolvedValueOnce({items:[message(40)],next_cursor:'second'})
+      .mockResolvedValueOnce({items:[reply],next_cursor:'third'});
+    setup((context,_,_refresh,openMessage)=>context&&<button onClick={()=>openMessage(reply.message_id,new AbortController().signal)}>Ответ клиента</button>);
+    const link=await screen.findByRole('button',{name:'Ответ клиента'});
+    await userEvent.click(link);
+    const row=await screen.findByTestId(`message-${reply.message_id}`);
+    expect(row).toHaveFocus();
+    expect(row.querySelector('.message-text')?.textContent).toBe(reply.text);
+    expect(read.mock.calls.map(([,conversation,cursor])=>[conversation,cursor])).toEqual([
+      [conversationId,null],[conversationId,'first'],[conversationId,'second'],
+    ]);
+    await userEvent.click(link);
+    expect(row).toHaveFocus();
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['work','conversation'])('ignores an old reply returned after switching %s',async change=>{
+    const other=conversation(25), navigation=new AbortController();
+    const late=deferred<ReturnType<typeof page<Message>>>();
+    vi.mocked(messagingApi.conversations).mockResolvedValue(page(conversation(),other));
+    const read=vi.mocked(messagingApi.messages)
+      .mockResolvedValueOnce({items:[message()],next_cursor:'older'})
+      .mockReturnValueOnce(late.promise)
+      .mockResolvedValueOnce(page({...message(43),conversation_id:other.conversation_id}));
+    const reply=message(42,'Отклоняю Q-123');
+    setup((context,_,_refresh,openMessage)=>context?.conversation_id===conversationId&&<>
+      <button onClick={()=>openMessage(reply.message_id,navigation.signal)}>Ответ клиента</button>
+      <button onClick={()=>navigation.abort()}>Выбрать другую заявку</button>
+    </>);
+    await userEvent.click(await screen.findByRole('button',{name:'Ответ клиента'}));
+    expect(read).toHaveBeenLastCalledWith(ws,conversationId,'older',expect.any(AbortSignal));
+    const control=change==='work'
+      ?screen.getByRole('button',{name:'Выбрать другую заявку'})
+      :screen.getByTestId(`conversation-${other.conversation_id}`);
+    await userEvent.click(control);
+    if(change==='work')expect(read.mock.calls[1][3]?.aborted).toBe(true);
+    await act(async()=>late.resolve(page(reply)));
+    expect(screen.queryByTestId(`message-${reply.message_id}`)).not.toBeInTheDocument();
+    expect(control).toHaveFocus();
+    expect(screen.getByRole('button',{name:'Обновить сообщения'})).toBeEnabled();
+  });
+
   it('uses OWNER role with frozen permissions and shows safe exact text', async()=>{
     const v=setup(); await ready();
     expect(screen.getByText('CONTROLLED · LOCAL/TEST · Доступно по наблюдению')).toBeVisible();
