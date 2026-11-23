@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4A REVIEW · C8 · 2026-11-23
+## CURRENT — M6.4A REVIEW · ожидается разрешение владельца на слияние · 2026-11-23
 
-C0 принял R3 на `5b4983a1b4c67703195c56c61c07de0096d673d1` и закрыл свои четыре замечания. Единственная активная задача — независимая проверка M6.4A в Draft PR #62, ведущий C8. База `main` — `202816a5b0a9dc30e9161a94184813eb9f1c06fd`. На PostgreSQL 18.6 у C0 прошли 18/18 штатных проверок. Смешанная реплика дала один вопрос. После отдельной поправки новое предложение ушло только по ласточке. CI — 12/12, Chromium — 97/97 при повторе только браузерного задания. [Поручение C8](tasks/M6_HANDOFF.md#L3) · [Выдача R3](https://github.com/Elefesys/ai-service-manager/blob/5e5c08ce402e4219945d9af3b0b0d427d95999df/docs/tasks/M6_HANDOFF.md#L3) · [PR](https://github.com/Elefesys/ai-service-manager/pull/62) · [Итог CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45103016698/attempts/2).
+C0 принял независимое заключение C8 `PASS` в synthetic LOCAL/TEST на `5b4983a1b4c67703195c56c61c07de0096d673d1`, база `main` `202816a5b0a9dc30e9161a94184813eb9f1c06fd`. PR #62 переведён в Ready for review. C8 подтвердил одну доставку после решения мастера без нового сообщения клиента и исправление только ласточки после отдельного уточнения. Адресные проверки C8 — 18/18 на PostgreSQL и 3/3 в Chromium. Штатный CI — 12/12, при повторе браузерного задания прошли 97/97. Следующее действие — решение владельца о слиянии. [Решение C0](tasks/M6_HANDOFF.md#L3) · [Поручение C8](https://github.com/Elefesys/ai-service-manager/blob/fb16fcff761373e6014ca849e46581b1a4589119/docs/tasks/M6_HANDOFF.md#L3) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/62#pullrequestreview-6017107339) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45103016698/attempts/2).
 
 ## История — M6.3C INTEGRATED / VERIFIED · 2026-11-22
 
