@@ -6,6 +6,7 @@ import {createInterface} from 'node:readline';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
+import {parseReceipt} from '../src/messaging-api';
 import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,RequestQuote,ServiceAssessment,ServiceRequestDraft} from '../src/intake-api';
 
 const fixtureFile=process.env.ASM_BROWSER_FIXTURE_FILE,passwordFile=process.env.ASM_BROWSER_PASSWORD_FILE;
@@ -17,11 +18,11 @@ type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second'|'agent-first'|'agent-start-second'|'agent-second'|'agent-exclude-first'|'agent-correct-first'|'agent-same-title';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
 type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
-type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history';
+type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history'|'pilot-cover-up'|'deliver-pilot-question';
 type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
-type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent';
-type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|QuoteIntakeJourney;
+type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot';
+type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'pilot-complex'|QuoteIntakeJourney;
 
 function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:IntakeJourney,variant:Viewport):Error {
  const result=error as {code?:unknown;stderr?:unknown;killed?:boolean;signal?:string};
@@ -76,11 +77,11 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  return {...await collectIntake(page,variant,journey),serviceName};
 }
 
-async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,requestId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
+async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,targetId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
  const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
-  ...(conversation?['--conversation',conversation]:[]),...(requestId?['--request',requestId]:[]),...(observe?['--observe-dispatch']:[])];
+  ...(conversation?['--conversation',conversation]:[]),...(targetId?[operation==='deliver-pilot-question'?'--receipt-key':'--request',targetId]:[]),...(observe?['--observe-dispatch']:[])];
  const child=promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384});
  const completed=child.then(result=>({stdout:result.stdout}),error=>({error:intakeChildFailure(error,operation,journey,variant)}));
  let checkpoints=0;
@@ -116,7 +117,7 @@ async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  const control=page.getByRole('region',{name:'Управление диалогом',exact:true});await expect(control.getByRole('button',{name:'Разрешить автоматику',exact:true})).toBeEnabled();await control.getByRole('button',{name:'Разрешить автоматику',exact:true}).click();await expect(control.getByText('Автоматика разрешена',{exact:true})).toBeVisible();
  const assessment=journey.startsWith('assessment');
  const pricing=journey==='pricing'||journey.startsWith('owner-decision')||journey.startsWith('quote-');
- const agent=journey==='quote-agent';
+ const agent=journey==='quote-agent'||journey==='quote-pilot';
  const operation=agent?'agent-first':journey==='intake'?'collect':pricing?'price-first':assessment?'assess-first':'collect-sized';
  const collected=await input(operation,seed.conversation_id);
  expect([collected.model_calls,collected.calls,collected.effects,collected.status]).toEqual([1,agent?0:1,agent?0:1,assessment||pricing?'PRELIMINARILY_COMPLETE':'CLARIFY']);
@@ -1043,13 +1044,14 @@ async function configureQuoteService(page:Page,variant:Viewport,journey:QuoteInt
  for(let i=await rules.count()-1;i>=0;i--)await rules.nth(i).click();
  await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('CONFIGURED_FORMULA');
  await settings.getByLabel('Режим длительности 1',{exact:true}).selectOption('FIXED');
- await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('NONE');
+ const fixedDeposit=journey==='quote-pilot';
+ await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption(fixedDeposit?'FIXED_DEPOSIT':'NONE');
  const range=journey==='quote-acceptance'||journey==='quote-clarification';
  for(const [label,value] of [
   ['База, копейки 1','250000'],['За начатый шаг, копейки 1','50000'],
   ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',range?'1000':'100'],
   ['Прибавка к верхней границе, копейки 1',range?'50000':''],['Длительность, минуты 1','65'],
-  ['Предоплата, копейки 1',''],['Предоплата, процент 1',''],
+  ['Предоплата, копейки 1',fixedDeposit?'50000':''],['Предоплата, процент 1',''],
  ])await settings.getByLabel(label,{exact:true}).fill(value);
  await publishIntakeService(settings,serviceName);
  return {settings,serviceName};
@@ -1641,4 +1643,185 @@ test('@narrow M6.3C-R1 keeps A declined and asks for the code only on open B',as
  }finally{
   page.off('request',recordHistory);
  }
+});
+
+test('M6.4B follows automatic and owner quotes to two planned sessions and clarifies a cover-up', async ({page}, info) => {
+  test.setTimeout(150_000);
+  const variant: Viewport = info.project.name === 'chromium-narrow' ? 'narrow' : 'desktop';
+  const journey = 'quote-pilot';
+  await configureQuoteService(page, variant, journey);
+  const {conversation, input, collected, inbox, intake} = await collectIntake(page, variant, journey);
+  const workspace = '/api/v1/workspaces/' + owner.workspace_id;
+  const requests = (conversationId: string) =>
+    workspace + '/businesses/' + owner.business_id + '/intake/conversations/' + conversationId + '/service-requests';
+  async function get<T>(path: string): Promise<T> {
+    const response = await page.request.get(path);
+    expect(response.status()).toBe(200);
+    return response.json();
+  }
+  type HistoryMessage = {message_id: string; direction: string; text: string; delivery: {status: string} | null};
+  const history = async (id: string) =>
+    (await get<{items: HistoryMessage[]}>(workspace + '/conversations/' + id + '/messages')).items;
+  const quoteView = (id: string) => get<QuoteDelivery>(requests(conversation) + '/' + id + '/quote');
+  const transport = (id: string) => intakeFixture<QuoteAttempt>('deliver-quote', journey, variant, conversation, id);
+  const work = intake.getByRole('region', {name: 'Черновик заявки', exact: true});
+  const selection = intake.getByLabel('Сохранённая заявка', {exact: true});
+  const a = collected.service_intents!;
+  expect(a).toMatchObject({approval_id: null, quote_id: expect.any(String)});
+
+  type PilotQuote = RequestQuote & {material: {
+    facts: ServiceRequestDraft['facts']; release_id: string; deposit_terms_version: string;
+    deposit: {mode: string; amount_minor: number};
+  }};
+  async function deliver(id: string, idea: string, size: string, origin: string, sizeSource: string, price: number) {
+    const view = await quoteView(id);
+    expect(view.status).toBe('QUEUED');
+    expect(view.agreement).toBeUndefined();
+    const quote = view.quote as PilotQuote;
+    const material = quote.material;
+    expect(material).toMatchObject({
+      conversation_id: conversation, request_id: id, request_revision: '1',
+      amount_minor: price, occupied_minutes: 65, duration_reference_id: material.assessment_id,
+      intent_source: {message_id: origin}, deposit: {mode: 'FIXED_DEPOSIT', amount_minor: 50000},
+      deposit_terms_version: material.release_id,
+    });
+    expect(material.facts.find(f => f.field === 'idea')).toMatchObject({value: idea, source: {message_id: origin}});
+    expect(material.facts.find(f => f.field === 'approximate_size')).toMatchObject({value: size, source: {message_id: sizeSource}});
+    expect(quote.text).toContain('Предоплата — 500 ₽.');
+    expect(quote.text).toContain('Принимаю ' + quote.code);
+    const sent = await transport(id);
+    expect(sent).toMatchObject({quote_id: quote.quote_id, status: 'SENT', calls: 1, effects: 1, text: quote.text});
+    const replay = await transport(id);
+    expect(replay).toMatchObject({quote_id: quote.quote_id, status: 'SENT', job_claimed: false, calls: 0, effects: 0});
+    return quote;
+  }
+
+  const rose = await deliver(a.request_id, 'роза', '20 мм', collected.message_id, collected.message_id, 350000);
+  expect(rose.quote_id).toBe(a.quote_id);
+  expect(rose.material.price_reference_id).toBe(rose.material.price_calculation_id);
+  const started = await input('agent-start-second', conversation);
+  expect([started.calls, started.effects, started.status]).toEqual([1, 1, 'CLARIFY']);
+  const completed = await input('agent-second', conversation);
+  expect([completed.calls, completed.effects]).toEqual([0, 0]);
+  const b = completed.service_intents!;
+  expect(b).toMatchObject({approval_id: expect.any(String), quote_id: null});
+  expect(b.request_id).not.toBe(a.request_id);
+  expect((await quoteView(b.request_id)).quote).toBeNull();
+
+  const center = page.getByRole('region', {name: 'Решения по заявкам', exact: true});
+  await center.getByRole('button', {name: 'Обновить решения по заявкам'}).click();
+  await center.getByTestId('approval-' + b.approval_id).click();
+  const detail = center.getByTestId('approval-detail-' + b.approval_id);
+  await expect(detail.getByRole('list', {name: 'Проверенные сведения'})).toContainText('ласточка');
+  const beforeDecision = (await history(conversation)).filter(m => m.direction === 'INBOUND');
+  const decisionPath = requests(conversation) + '/' + b.request_id + '/approvals/' + b.approval_id;
+  const saved = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === decisionPath);
+  await detail.getByLabel('Цена, ₽', {exact: true}).fill('4600');
+  await detail.getByRole('button', {name: 'Подтвердить условия'}).click();
+  const response = await saved;
+  expect(response.status()).toBe(200);
+  const approved = await response.json() as ApprovalCard;
+  expect(approved.decision).toMatchObject({submitted: {amount_minor: 460000, occupied_minutes: null}});
+  const swallow = await deliver(b.request_id, 'ласточка', '101 мм', started.message_id, completed.message_id, 460000);
+  expect(swallow.material.price_reference_id).toBe(approved.decision!.decision_id);
+  expect(swallow.material.duration_reference_id).toBe(approved.basis.assessment_id);
+  expect(swallow.material.client_id).toBe(rose.material.client_id);
+  const deliveredHistory = await history(conversation);
+  expect(deliveredHistory.filter(m => m.direction === 'INBOUND')).toEqual(beforeDecision);
+  const outbound = deliveredHistory.filter(m => m.direction === 'OUTBOUND');
+  expect(outbound.map(m => m.text).sort()).toEqual([rose.text, swallow.text, 'На каком месте тела вы хотите татуировку?'].sort());
+  for (const m of outbound) expect(m.delivery?.status).toBe('SENT');
+  for (const id of [a.request_id, b.request_id]) expect((await quoteView(id)).agreement).toBeUndefined();
+
+  async function accept(quote: PilotQuote) {
+    const id = quote.material.request_id;
+    const reply = await intakeFixture<QuoteReplyResult>('agree-quote', journey, variant, conversation, id);
+    expect(reply).toMatchObject({outcome: 'ACCEPTED', quote_id: quote.quote_id, source_message_id: reply.message_id});
+    const agreement = (await quoteView(id)).agreement!;
+    expect(agreement).toMatchObject({
+      quote, acceptance_id: reply.acceptance_id, order_id: reply.order_id, session_id: reply.session_id,
+      status: 'PLANNED', scheduled_at: null,
+      source: {message_id: reply.message_id, text: 'Принимаю ' + quote.code, status: 'AVAILABLE'},
+    });
+    await refreshIntake(inbox, intake);
+    await intake.getByRole('button', {name: 'Обновить карточку заявки'}).click();
+    await selection.selectOption(id);
+    const order = work.getByRole('region', {name: 'Согласованный заказ', exact: true});
+    await expect(work.getByTestId('service-request-id')).toHaveText(id);
+    await expect(order.getByTestId('quote-acceptance-id')).toHaveText(agreement.acceptance_id);
+    await expect(order.getByTestId('service-order-id')).toHaveText(agreement.order_id);
+    await expect(order.getByTestId('service-session-id')).toHaveText(agreement.session_id);
+    await expect(order.getByText(/Запланирован без даты · 65 мин/)).toBeVisible();
+    await order.getByRole('link', {name: 'Первая подтверждающая реплика'}).click();
+    await expect(order.getByText('Принимаю ' + quote.code, {exact: true})).toBeVisible();
+    await order.getByText('Принятые условия · ' + quote.code, {exact: true}).click();
+    await expect(order.getByTestId('quote-text')).toHaveText(quote.text);
+
+    const repeat = await intakeFixture<QuoteReplyResult>('repeat-agreement', journey, variant, conversation, id);
+    expect(repeat.message_id).not.toBe(reply.message_id);
+    expect(repeat).toMatchObject({source_message_id: reply.message_id, quote_id: quote.quote_id,
+      acceptance_id: reply.acceptance_id, order_id: reply.order_id, session_id: reply.session_id});
+    expect((await quoteView(id)).agreement).toEqual(agreement);
+    return {request: id, quote: quote.quote_id, code: quote.code, version: quote.version,
+      release: quote.material.release_id, priceBasis: quote.material.price_reference_id,
+      durationBasis: quote.material.duration_reference_id, original: reply, repeat,
+      outboundMessage: outbound.find(m => m.text === quote.text)!.message_id};
+  }
+  const acceptedB = await accept(swallow);
+  expect((await quoteView(a.request_id)).agreement).toBeUndefined();
+  const acceptedA = await accept(rose);
+  expect(new Set([acceptedA, acceptedB].flatMap(({original}) =>
+    [original.acceptance_id, original.order_id, original.session_id])).size).toBe(6);
+  expect((await history(conversation)).filter(m => m.direction === 'OUTBOUND')).toEqual(outbound);
+  console.log('M6.4B GJ-AB ' + JSON.stringify({variant, conversation, client: rose.material.client_id,
+    rose: acceptedA, roseSource: collected.message_id, swallow: acceptedB, swallowOrigin: started.message_id,
+    swallowSizeSource: completed.message_id, approval: b.approval_id, decision: approved.decision!.decision_id,
+    inboundBefore: beforeDecision.length, inboundAfter: deliveredHistory.filter(m => m.direction === 'INBOUND').length}));
+
+  const complexJourney = 'pilot-complex';
+  const c = await intakeFixture<{conversation_id: string}>('seed', complexJourney, variant);
+  expect(c.conversation_id).not.toBe(conversation);
+  const complexInbox = await openConversation(page, c.conversation_id);
+  const controls = page.getByRole('region', {name: 'Управление диалогом', exact: true});
+  await controls.getByRole('button', {name: 'Разрешить автоматику'}).click();
+  await expect(controls.getByText('Автоматика разрешена', {exact: true})).toBeVisible();
+  const handoff = await intakeFixture<{message_id: string; status: string; calls: number; effects: number}>(
+    'pilot-cover-up', complexJourney, variant, c.conversation_id);
+  expect(handoff).toMatchObject({status: 'OWNER_HANDOFF', calls: 0, effects: 0});
+  await refreshIntake(complexInbox, intake);
+  await expect(complexInbox.getByTestId('message-' + handoff.message_id)).toContainText('перекрыть старую татуировку');
+  const cards = requests(c.conversation_id) + '/cards';
+  expect((await get<{items: unknown[]}>(cards)).items).toHaveLength(0);
+  expect((await history(c.conversation_id)).filter(m => m.direction === 'OUTBOUND')).toHaveLength(0);
+  const queue = page.getByRole('region', {name: 'Запросы владельцу', exact: true});
+  await queue.getByRole('button', {name: 'Обновить очередь'}).click();
+  const open = (await get<{items: {conversation_id: string; escalation_id: string; status: string}[]}>(workspace + '/escalations?status=PENDING'))
+    .items.filter(item => item.conversation_id === c.conversation_id);
+  expect(open).toHaveLength(1);
+  await queue.getByTestId('escalation-' + open[0].escalation_id).click();
+  const ownerQuestion = 'Мастер, уточните, можно ли продолжить консультацию по этому запросу.';
+  await expect(queue.getByText(ownerQuestion, {exact: true})).toBeVisible();
+  await expect(queue.getByLabel('Сводка запроса для решения')).toContainText('пион');
+  await expect(queue.getByLabel('Сводка запроса для решения')).toContainText(handoff.message_id);
+  const clientQuestion = 'Пришлите фото старой татуировки при дневном свете, чтобы мастер оценил перекрытие.';
+  await complexInbox.getByLabel('Ручной текстовый ответ').fill(clientQuestion);
+  const sent = page.waitForResponse(r => r.request().method() === 'POST' &&
+    new URL(r.url()).pathname === workspace + '/conversations/' + c.conversation_id + '/messages');
+  await complexInbox.getByRole('button', {name: 'Проверить и отправить'}).click();
+  const manual = await sent;
+  expect(manual.status()).toBe(202);
+  const receipt = parseReceipt(await manual.json());
+  const key = await manual.request().headerValue('Idempotency-Key');
+  expect(key).toBeTruthy();
+  const delivery = await intakeFixture<{message_id: string; outbox_id: string; calls: number; effects: number}>(
+    'deliver-pilot-question', complexJourney, variant, c.conversation_id, key!);
+  expect(delivery).toMatchObject({message_id: receipt.message_id, calls: 1, effects: 1});
+  const clientInbox = (await history(c.conversation_id)).filter(m => m.direction === 'OUTBOUND');
+  expect(clientInbox).toHaveLength(1);
+  expect(clientInbox[0]).toMatchObject({message_id: receipt.message_id, text: clientQuestion, delivery: {status: 'SENT'}});
+  expect((await get<{items: unknown[]}>(cards)).items).toHaveLength(0);
+  await complexInbox.getByRole('button', {name: 'Обновить сообщения'}).click();
+  await expect(complexInbox.getByTestId('message-' + receipt.message_id)).toContainText(clientQuestion);
+  console.log('M6.4B GJ-C ' + JSON.stringify({variant, conversation: c.conversation_id, source: handoff.message_id,
+    escalation: open[0].escalation_id, ownerQuestion, clientQuestion, manual: delivery}));
 });
