@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4B REVIEW · C8 проверяет исправление допуска CI · 2026-11-24
+## CURRENT — M6.4B REVIEW · ожидается разрешение владельца на слияние · 2026-11-24
 
-C0 принял R1 от C6 на `b1b9647cfa47f69fe1e9dccf90b7cd57dcf2f872` для повторной проверки C8. Ветка `c8/m6-4b-acceptance`, база `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, Draft PR #63. Открыто одно замечание `C8-M6.4B-01`. Адресные тесты C0 прошли 17/17. Штатный CI завершился 12/12 с первой попытки. PostgreSQL 18.6 — 160/160 с проверками схемы и каталога `0031`. C8 сверяет исправление и возвращает итоговое заключение по M6.4B на новом head. [Поручение C8](tasks/M6_HANDOFF.md#L3) · [Исходное замечание](https://github.com/Elefesys/ai-service-manager/pull/63#issue-6555991440) · [Поручение R1](https://github.com/Elefesys/ai-service-manager/blob/b54f40209e1babcb1449b00afad9e09e3b98418a/docs/tasks/M6_HANDOFF.md#L3) · [Артефакт PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45210390119/artifacts/14834599900) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45210390119).
+C0 принял итоговое заключение C8 `PASS` на `b1b9647cfa47f69fe1e9dccf90b7cd57dcf2f872`, база `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`. C8 закрыл `C8-M6.4B-01`. Три сквозных сценария GJ-A/B/C и критерии Q1–Q8 приняты для кандидата в synthetic LOCAL/TEST. PR #63 переведён в Ready for review. CI прошёл 12/12 с первой попытки, PostgreSQL 18.6 — 160/160, Chromium — 98/98. Следующий шаг — решение владельца о слиянии. Для завершения M6 C0 после слияния сверит фактический коммит и результат отдельного `push/main`. [Решение C0](tasks/M6_HANDOFF.md#L3) · [Итоговое заключение C8](https://github.com/Elefesys/ai-service-manager/pull/63#pullrequestreview-6026123124) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45210390119).
 
 ## История — M6.4A INTEGRATED / VERIFIED · 2026-11-23
 
