@@ -3777,3 +3777,143 @@ def test_m6_slice_cannot_change_its_protected_assignment(r11_event, monkeypatch,
     with pytest.raises(carrier.Refusal, match=f"M6_{feature.upper()}_WRITE_SET"):
         r["run"]()
     assert not r["boundary"]
+
+
+def prepare_m6_4b_event(r, monkeypatch, route, *, damage=None):
+    f = r["f"]
+    migration = f.root / "migrations/versions/0031_service_intents.py"
+    migration.parent.mkdir(parents=True)
+    migration.write_text("revision = '0031'\n")
+    f.git("add", str(migration))
+    f.git("commit", "-qm", "accepted 0031 base")
+    r["source"] = f.git("rev-parse", "HEAD")
+    monkeypatch.setattr(carrier, "M6_4B_BASE", r["source"])
+    base_tree = f.git("rev-parse", "HEAD^{tree}")
+    monkeypatch.setattr(carrier, "M6_4B_TREE", "f" * 40 if damage == "base_tree" else base_tree)
+    monkeypatch.setattr(carrier, "M5_V7_FIX_BASE", r["base"])
+
+    if damage == "assignment_parent":
+        f.git("commit", "--allow-empty", "-qm", "unexpected assignment parent")
+    documents = {"docs/TASK_REGISTER.md", "docs/tasks/M6_HANDOFF.md"}
+    for relative in sorted(documents):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("C0 assignment\n")
+    if damage == "assignment_paths":
+        (f.root / "unexpected-assignment.md").write_text("outside assignment scope\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "original M6.4B assignment")
+    monkeypatch.setattr(carrier, "M6_4B_ASSIGNMENT", f.git("rev-parse", "HEAD"))
+    assignment_tree = f.git("rev-parse", "HEAD^{tree}")
+    monkeypatch.setattr(
+        carrier,
+        "M6_4B_ASSIGNMENT_TREE",
+        "f" * 40 if damage == "assignment_tree" else assignment_tree,
+    )
+    if damage == "assignment_ancestry":
+        f.git("checkout", "--detach", r["source"])
+
+    implementation = {
+        "docs/tasks/M6_4B_ACCEPTANCE.md",
+        "frontend/e2e/intake-duration.spec.ts",
+        "scripts/m4_runtime_db.py",
+        "scripts/m5_intake_fixture.py",
+        "tests/test_m4_runtime_db_runner.py",
+        "tests/test_m6_quote_delivery_postgres.py",
+    }
+    if damage in documents | {"backend/src/asm/foundation.py"}:
+        implementation.add(damage)
+    for relative in sorted(implementation):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("M6.4B candidate delta\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "M6.4B candidate")
+    head = f.git("rev-parse", "HEAD")
+    branch = "c8/m6-other" if damage == "branch" else carrier.M6_4B_BRANCH
+    merge = capability_checkout(
+        r, monkeypatch, route, head, branch=branch, wrong_base=damage == "base"
+    )
+    if route == "same-repository-pr-merge":
+        number = 64 if damage == "pr_number" else 63
+        r["payload"]["number"] = r["payload"]["pull_request"]["number"] = number
+        monkeypatch.setenv("GITHUB_REF", f"refs/pull/{number}/merge")
+        if damage == "second_parent":
+            r["payload"]["pull_request"]["head"]["sha"] = r["source"]
+    if damage in {"merge_tree", "single_parent"}:
+        tree = assignment_tree if damage == "merge_tree" else f.git("rev-parse", head + "^{tree}")
+        parents = ["-p", r["source"]]
+        if damage == "merge_tree":
+            parents.extend(["-p", head])
+        merge = f.git("commit-tree", tree, *parents, "-m", "damaged M6.4B merge")
+        f.git("reset", "--hard", merge)
+        monkeypatch.setenv("GITHUB_SHA", merge)
+        if route == "main-push":
+            r["payload"].update(after=merge, head_commit={"id": merge})
+    return head, merge, documents | implementation
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m6_4b_admits_0031_and_reads_bound_source(aggregate_driver, monkeypatch, route):
+    r = aggregate_driver["r"]
+    head, merge, paths = prepare_m6_4b_event(r, monkeypatch, route)
+    r["run"]()
+    evidence = r["root"] / "evidence"
+    admitted = json.loads((evidence / "source-admission.json").read_text())
+    source_path = evidence / "source.json"
+    source = json.loads(source_path.read_text())
+    tree = r["f"].git("rev-parse", head + "^{tree}")
+    assignment = carrier.m6_4b_assignment_proof()
+    candidate = {"sha": head, "tree": tree, "merge_parents": [r["source"], head]}
+    assert admitted["result"] == "PASS"
+    assert admitted["m6_4b_assignment"] == source["m6_4b_assignment"] == assignment
+    assert admitted["m6_4b_candidate"] == source["m6_4b_candidate"] == candidate
+    assert admitted["paths"] == source["paths"] == sorted(paths)
+    assert admitted["source"] == source["source"] == merge
+    assert source["branch"] == carrier.M6_4B_BRANCH
+    assert source["event"] == ("pull_request" if route == "same-repository-pr-merge" else "push")
+    for key, value in {
+        "SOURCE_SHA": merge,
+        "SOURCE_TREE": tree,
+        "RUN_ID": "123",
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, value)
+    assert carrier.source_tree_from_evidence(source_path) == tree
+    source["m6_4b_candidate"]["merge_parents"].reverse()
+    carrier.write(source_path, source)
+    with pytest.raises(carrier.Refusal, match="^SOURCE_IDENTITY_M6_4B_CANDIDATE$"):
+        carrier.source_tree_from_evidence(source_path)
+    phases = {label for _, label, _ in aggregate_driver["calls"]}
+    assert {"schema-0031", "catalog-0031", "readiness"} <= phases
+
+
+@pytest.mark.parametrize(
+    "route,damage,reason",
+    [
+        ("same-repository-pr-merge", "branch", "POLZA_RUNTIME_EVENT_BRANCH"),
+        ("same-repository-pr-merge", "pr_number", "M6_4B_PR_NUMBER"),
+        ("same-repository-pr-merge", "base", "M6_4B_EVENT"),
+        ("same-repository-pr-merge", "base_tree", "BASE_TREE"),
+        ("same-repository-pr-merge", "second_parent", "EVENT_PR_HEAD_PARENT"),
+        ("same-repository-pr-merge", "merge_tree", "M6_4B_MERGE_TREE"),
+        ("same-repository-pr-merge", "assignment_tree", "M6_4B_ASSIGNMENT_IDENTITY"),
+        ("main-push", "single_parent", "M6_4B_MERGE_PARENTS"),
+        ("main-push", "merge_tree", "M6_4B_MERGE_TREE"),
+        ("main-push", "assignment_parent", "M6_4B_ASSIGNMENT_IDENTITY"),
+        ("main-push", "assignment_ancestry", "M6_4B_ASSIGNMENT_ANCESTRY"),
+        ("main-push", "assignment_paths", "M6_4B_ASSIGNMENT_WRITE_SET"),
+        ("main-push", "backend/src/asm/foundation.py", "M6_4B_WRITE_SET"),
+        ("main-push", "docs/TASK_REGISTER.md", "M6_4B_WRITE_SET"),
+        ("same-repository-pr-merge", "docs/tasks/M6_HANDOFF.md", "M6_4B_WRITE_SET"),
+    ],
+)
+def test_m6_4b_refuses_invalid_source_before_resources(
+    r11_event, monkeypatch, route, damage, reason
+):
+    r = r11_event
+    prepare_m6_4b_event(r, monkeypatch, route, damage=damage)
+    with pytest.raises((carrier.Refusal, catalog.Refusal), match=f"^{reason}$"):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+    assert not (r["root"] / "evidence/source-admission.json").exists()
