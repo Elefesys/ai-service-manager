@@ -4,7 +4,7 @@
 
 ## CURRENT — M7.0 REVIEW · реализация M7 TODO · 2026-11-24
 
-C0 принимает [план M7 и первую задачу](tasks/M7_HANDOFF.md) и [предложения IMPL-007](decisions/IMPL-007-m7-pilot-scheduling.md). Для разработки используется synthetic LOCAL/TEST; активных поручений исполнителям пока нет. После разрешённого слияния плана и зелёного CI на фактическом main выдать только M7.1A (C1 с C2/C5). Принятая база приложения — ниже; SHA ветки планирования не является исходным SHA кода.
+C0 принял [план M7](tasks/M7_HANDOFF.md) и [IMPL-007](decisions/IMPL-007-m7-pilot-scheduling.md) для synthetic LOCAL/TEST. На M7.0 в [PR #64](https://github.com/Elefesys/ai-service-manager/pull/64) также исправляется допуск к проверке PostgreSQL на `0031` и увеличиваются бюджеты `browser` и `foundation`. Интеграция ожидает разрешения владельца. После разрешённого слияния плана и зелёного CI на фактическом main выдать только M7.1A (C1 с C2/C5). Принятая база приложения — ниже; SHA ветки планирования не является исходным SHA кода.
 
 ## История — M6 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
 

@@ -17,6 +17,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
+from typing import NamedTuple
 from uuid import UUID
 
 # C0's exact M5.3A assignment; historical task routes remain unchanged.
@@ -291,24 +292,86 @@ M5_PLAN_PATHS = {
     "scripts/m4_runtime_db.py",
     "tests/test_m4_runtime_db_runner.py",
 }
-# PR55 carries the M5 closure and planning documents on the accepted 0024 tree.
-M6_PLAN_BASE = "aee17b90ca2283688904da0d07992d9504f4dc33"
-M6_PLAN_TREE = "cf2710c69fdd3823ed0a8b12b89d139b509ea13f"
-M6_PLAN_INITIAL = "65471bc23ec4ceb69fa603237d0b2a4b51dc271c"
-M6_PLAN_BRANCH = "c0/m6-pilot-plan-20261119"
-M6_PLAN_REVIEW_PATHS = {
-    "docs/TASK_REGISTER.md",
-    "docs/tasks/M6_HANDOFF.md",
-    "docs/decisions/IMPL-006-m6-pilot-agreement.md",
-    "scripts/m4_runtime_db.py",
-    "tests/test_m4_runtime_db_runner.py",
-}
-M6_PLAN_PATHS = M6_PLAN_REVIEW_PATHS | {
-    "AGENTS.md",
-    "README.md",
-    "docs/tasks/M5_HANDOFF.md",
-    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
-}
+
+
+class PlanningSource(NamedTuple):
+    prefix: str
+    pr: int
+    branch: str
+    base: str
+    base_tree: str
+    initial: str
+    revision: str
+    review_paths: frozenset[str]
+    inherited_paths: frozenset[str]
+
+    @property
+    def candidate_key(self):
+        return self.prefix.lower() + "_candidate"
+
+    @property
+    def paths(self):
+        return self.review_paths | self.inherited_paths
+
+
+# The pinned initial commit includes the previous milestone's handoff. Only
+# review_paths may change between that plan and the candidate being merged.
+M6_PLAN = PlanningSource(
+    prefix="M6_PLAN",
+    pr=55,
+    branch="c0/m6-pilot-plan-20261119",
+    base="aee17b90ca2283688904da0d07992d9504f4dc33",
+    base_tree="cf2710c69fdd3823ed0a8b12b89d139b509ea13f",
+    initial="65471bc23ec4ceb69fa603237d0b2a4b51dc271c",
+    revision="0024",
+    review_paths=frozenset(
+        {
+            "docs/TASK_REGISTER.md",
+            "docs/tasks/M6_HANDOFF.md",
+            "docs/decisions/IMPL-006-m6-pilot-agreement.md",
+            "scripts/m4_runtime_db.py",
+            "tests/test_m4_runtime_db_runner.py",
+        }
+    ),
+    inherited_paths=frozenset(
+        {
+            "AGENTS.md",
+            "README.md",
+            "docs/tasks/M5_HANDOFF.md",
+            "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+        }
+    ),
+)
+M7_PLAN = PlanningSource(
+    prefix="M7_PLAN",
+    pr=64,
+    branch="c0/m7-pilot-plan-20261124",
+    base="6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7",
+    base_tree="169c8928c206f01e2892a6e02172dbeb8aad8147",
+    initial="6aee5e8b0d1660ac494444b57b09c9df4e3fb568",
+    revision="0031",
+    review_paths=frozenset(
+        {
+            "AGENTS.md",
+            "README.md",
+            "docs/TASK_REGISTER.md",
+            "docs/tasks/M7_HANDOFF.md",
+            "docs/decisions/IMPL-007-m7-pilot-scheduling.md",
+            ".github/workflows/ci.yml",
+            "scripts/m4_runtime_db.py",
+            "scripts/native_context_db_catalog.py",
+            "scripts/test_browser.sh",
+            "tests/test_m4_runtime_db_runner.py",
+            "tests/test_native_context_db_runner.py",
+        }
+    ),
+    inherited_paths=frozenset(
+        {
+            "docs/tasks/M6_HANDOFF.md",
+            "docs/decisions/IMPL-006-m6-pilot-agreement.md",
+        }
+    ),
+)
 M6_REQUEST_BASE = "67129e43a5947f6eadea88b268b603fec5f22949"
 M6_REQUEST_TREE = "2c235f6551524450a27bb7cd01959228ec06ac3c"
 M6_REQUEST_ASSIGNMENT = "5c5c1b07ba34d37d8ef1486fbbba18efd93fad77"
@@ -1566,14 +1629,14 @@ def source_tree_from_evidence(path=None):
     m6_pricing = value.get("branch") == M6_PRICING_BRANCH
     m6_assessment = value.get("branch") == M6_ASSESSMENT_BRANCH
     m6_request = value.get("branch") == M6_REQUEST_BRANCH
-    m6_plan = value.get("branch") == M6_PLAN_BRANCH
+    plan = plan_for_branch(value.get("branch"))
     v7_fix = value.get("branch") == M5_V7_FIX_BRANCH
     intake = value.get("branch") == M5_INTAKE_BRANCH
     delivery = value.get("branch") == M5_DELIVERY_BRANCH
     if v7_fix:
         keys.update({"v7_fix_assignment", "v7_fix_candidate"})
-    if m6_plan:
-        keys.add("m6_plan_candidate")
+    if plan:
+        keys.add(plan.candidate_key)
     if m6_4b:
         keys.update({"m6_4b_assignment", "m6_4b_candidate"})
     if m6_intents:
@@ -1643,10 +1706,10 @@ def source_tree_from_evidence(path=None):
             value["v7_fix_assignment"] == v7_fix_assignment_proof(),
             "SOURCE_IDENTITY_V7_FIX_ASSIGNMENT",
         )
-    if m6_plan or v7_fix:
-        candidate = value["m6_plan_candidate" if m6_plan else "v7_fix_candidate"]
-        candidate_base = M6_PLAN_BASE if m6_plan else M5_V7_FIX_BASE
-        initial = M6_PLAN_INITIAL if m6_plan else M5_V7_FIX_ASSIGNMENT
+    if plan or v7_fix:
+        candidate = value[plan.candidate_key if plan else "v7_fix_candidate"]
+        candidate_base = plan.base if plan else M5_V7_FIX_BASE
+        initial = plan.initial if plan else M5_V7_FIX_ASSIGNMENT
         require(
             type(candidate) is dict
             and set(candidate) == {"sha", "tree", "merge_parents"}
@@ -1655,7 +1718,7 @@ def source_tree_from_evidence(path=None):
             and candidate["sha"] not in (candidate_base, initial, value["source"])
             and candidate["tree"] == value["tree"]
             and candidate["merge_parents"] == [candidate_base, candidate["sha"]],
-            "SOURCE_IDENTITY_M6_PLAN_CANDIDATE" if m6_plan else "SOURCE_IDENTITY_V7_FIX_CANDIDATE",
+            f"SOURCE_IDENTITY_{plan.prefix if plan else 'V7_FIX'}_CANDIDATE",
         )
     if intake:
         require(
@@ -1702,8 +1765,8 @@ def source_tree_from_evidence(path=None):
         if m6_assessment
         else (M6_REQUEST_BASE, M6_REQUEST_TREE)
         if m6_request
-        else (M6_PLAN_BASE, M6_PLAN_TREE)
-        if m6_plan
+        else (plan.base, plan.base_tree)
+        if plan
         else (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
         if v7_fix
         else (M5_INTAKE_BASE, M5_INTAKE_TREE)
@@ -1768,7 +1831,7 @@ def source_tree_from_evidence(path=None):
             or (
                 intake
                 or v7_fix
-                or m6_plan
+                or plan
                 or m6_request
                 or m6_assessment
                 or m6_pricing
@@ -1858,8 +1921,8 @@ def source_tree_from_evidence(path=None):
             <= M6_REQUEST_DOCS | M6_REQUEST_IMPLEMENTATION_PATHS,
             "SOURCE_IDENTITY_WRITE_SET",
         )
-    elif m6_plan:
-        require(set(paths) <= M6_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif plan:
+        require(set(paths) <= plan.paths, "SOURCE_IDENTITY_WRITE_SET")
     elif v7_fix:
         require(M5_V7_FIX_DOCS <= set(paths) <= M5_V7_FIX_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     elif intake:
@@ -2364,12 +2427,15 @@ def v7_fix_candidate(event):
     return merge_candidate(event, M5_V7_FIX_BASE, M5_V7_FIX_BRANCH, M5_V7_FIX_ASSIGNMENT, "V7_FIX")
 
 
-def m6_plan_event(event):
-    return event.get("head_ref") == M6_PLAN_BRANCH or (
-        event.get("event") == "push"
-        and event["ref"] == "refs/heads/main"
-        and commit_parents("HEAD")[:1] == [M6_PLAN_BASE]
-    )
+def plan_for_branch(branch):
+    return next((plan for plan in (M6_PLAN, M7_PLAN) if plan.branch == branch), None)
+
+
+def plan_for_event(event):
+    if event.get("event") == "push" and event["ref"] == "refs/heads/main":
+        parents = commit_parents("HEAD")
+        return next((plan for plan in (M6_PLAN, M7_PLAN) if parents[:1] == [plan.base]), None)
+    return plan_for_branch(event.get("head_ref"))
 
 
 def m6_request_event(event):
@@ -2643,30 +2709,33 @@ def m6_pricing_candidate(event):
     )
 
 
-def m6_plan_candidate(event):
-    return merge_candidate(event, M6_PLAN_BASE, M6_PLAN_BRANCH, M6_PLAN_INITIAL, "M6_PLAN")
+def plan_candidate(plan, event):
+    return merge_candidate(event, plan.base, plan.branch, plan.initial, plan.prefix)
 
 
-def admit_m6_plan_source(event, evidence):
+def admit_plan_source(plan, event, evidence):
     require(event["attempt"] == "1", "RUN_ATTEMPT")
-    require(event["event"] != "pull_request" or event["pr_number"] == 55, "M6_PLAN_PR_NUMBER")
-    require(capture(["git", "rev-parse", M6_PLAN_BASE + "^{tree}"]) == M6_PLAN_TREE, "BASE_TREE")
-    candidate = m6_plan_candidate(event)
+    require(
+        event["event"] != "pull_request" or event["pr_number"] == plan.pr,
+        plan.prefix + "_PR_NUMBER",
+    )
+    require(capture(["git", "rev-parse", plan.base + "^{tree}"]) == plan.base_tree, "BASE_TREE")
+    candidate = plan_candidate(plan, event)
     diff = ["git", "diff", "--no-renames", "--name-only"]
-    review_paths = capture([*diff, M6_PLAN_INITIAL, candidate["sha"]]).splitlines()
-    require(set(review_paths) <= M6_PLAN_REVIEW_PATHS, "M6_PLAN_REVIEW_WRITE_SET")
-    paths = capture([*diff, M6_PLAN_BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= M6_PLAN_PATHS, "M6_PLAN_WRITE_SET")
+    review_paths = capture([*diff, plan.initial, candidate["sha"]]).splitlines()
+    require(set(review_paths) <= plan.review_paths, plan.prefix + "_REVIEW_WRITE_SET")
+    paths = capture([*diff, plan.base, "HEAD"]).splitlines()
+    require(bool(paths) and set(paths) <= plan.paths, plan.prefix + "_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
-            "base": M6_PLAN_BASE,
-            "base_tree": M6_PLAN_TREE,
+            "base": plan.base,
+            "base_tree": plan.base_tree,
             "source": event["head"],
             "tree": event["tree"],
             "paths": paths,
             "result": "PASS",
-            "m6_plan_candidate": candidate,
+            plan.candidate_key: candidate,
         },
     )
 
@@ -2990,8 +3059,9 @@ def admit_source(evidence):
             event, evidence, assessment=assessment, pricing=pricing, decision=decision
         )
         return event, manifest
-    if m6_plan_event(event):
-        admit_m6_plan_source(event, evidence)
+    plan = plan_for_event(event)
+    if plan:
+        admit_plan_source(plan, event, evidence)
         return event, manifest
     if v7_fix_event(event):
         return admit_v7_fix_source(event, manifest, evidence)
@@ -4069,7 +4139,7 @@ def run(root):
             or m6_pricing_event(event)
             or m6_assessment_event(event)
             or m6_request_event(event)
-            or m6_plan_event(event)
+            or plan_for_event(event)
             or v7_fix_event(event)
             or intake_event(event)
             or delivery_event(event)
@@ -4120,10 +4190,10 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or m6_assessment
         or m6_request
     )
-    m6_plan = not m6_slice and m6_plan_event(event)
-    v7_fix = not (m6_slice or m6_plan) and v7_fix_event(event)
-    intake = not (m6_slice or m6_plan or v7_fix) and intake_event(event)
-    intake_carrier = intake or v7_fix or m6_plan or m6_slice
+    plan = None if m6_slice else plan_for_event(event)
+    v7_fix = not (m6_slice or plan) and v7_fix_event(event)
+    intake = not (m6_slice or plan or v7_fix) and intake_event(event)
+    intake_carrier = intake or v7_fix or plan or m6_slice
     delivery = not intake_carrier and delivery_event(event)
     foundation_budget = not (intake_carrier or delivery) and foundation_budget_event(event)
     portfolio = not (intake_carrier or delivery or foundation_budget) and portfolio_event(event)
@@ -4177,8 +4247,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         if m6_assessment
         else (M6_REQUEST_BASE, M6_REQUEST_TREE)
         if m6_request
-        else (M6_PLAN_BASE, M6_PLAN_TREE)
-        if m6_plan
+        else (plan.base, plan.base_tree)
+        if plan
         else (M5_V7_FIX_BASE, M5_V7_FIX_TREE)
         if v7_fix
         else (M5_INTAKE_BASE, M5_INTAKE_TREE)
@@ -4232,8 +4302,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             if m6_assessment
             else M6_REQUEST_BRANCH
             if m6_request
-            else M6_PLAN_BRANCH
-            if m6_plan
+            else plan.branch
+            if plan
             else M5_V7_FIX_BRANCH
             if v7_fix
             else M5_INTAKE_BRANCH
@@ -4281,8 +4351,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     if m6_request:
         source["m6_request_assignment"] = m6_request_assignment_proof()
         source["m6_request_candidate"] = m6_request_candidate(event)
-    if m6_plan:
-        source["m6_plan_candidate"] = m6_plan_candidate(event)
+    if plan:
+        source[plan.candidate_key] = plan_candidate(plan, event)
     if v7_fix:
         source["v7_fix_assignment"] = v7_fix_assignment_proof()
         source["v7_fix_candidate"] = v7_fix_candidate(event)
@@ -4464,8 +4534,10 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
                     if m6_assessment
                     else "0025"
                     if m6_request
+                    else plan.revision
+                    if plan
                     else "0024"
-                    if m6_plan or v7_fix
+                    if v7_fix
                     else "0023"
                     if intake
                     else "0022"

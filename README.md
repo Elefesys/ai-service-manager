@@ -1,7 +1,7 @@
 # AI Service Manager
 
 Modular monolith; architecture v0.28. Stack decision: `docs/decisions/IMPL-001-stack.md`.
-M6 is integrated and verified in synthetic LOCAL/TEST. Each explicitly accepted offer is linked to its service request, the client's confirming message, an order and one unscheduled session. The [M6 handoff](docs/tasks/M6_HANDOFF.md) records the verified application commit and the data available to M7. The [M7 pilot plan](docs/tasks/M7_HANDOFF.md) and [proposed scheduling decisions](docs/decisions/IMPL-007-m7-pilot-scheduling.md) are under review; scheduling has not been implemented. The [task register](docs/TASK_REGISTER.md) tracks execution status.
+M6 is integrated and verified in synthetic LOCAL/TEST. Each explicitly accepted offer is linked to its service request, the client's confirming message, an order and one unscheduled session. The [M6 handoff](docs/tasks/M6_HANDOFF.md) records the verified application commit and the data available to M7. C0 accepted the [M7 pilot plan](docs/tasks/M7_HANDOFF.md) and [scheduling decisions](docs/decisions/IMPL-007-m7-pilot-scheduling.md). Implementation starts after the plan merges and CI passes on main. The [task register](docs/TASK_REGISTER.md) tracks execution status.
 All eleven canonical architecture documents are in `docs/architecture/`, byte-identical to the approved project attachments. Their historical pre-implementation/Freeze-pending wording is preserved; current implementation status belongs in the task register, not in a rewritten historical snapshot.
 
 ## Scope

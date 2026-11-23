@@ -3,6 +3,7 @@
 import itertools
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -2712,10 +2713,19 @@ def prepare_m5_foundation_budget_event(
     """Real Git 45-minute base, C0 assignment, exact CI fix and merge event."""
     f = r["f"]
     workflow = f.root / ".github/workflows/ci.yml"
-    current_workflow = workflow.read_text()
+    # Reconstruct the reviewed M5 workflow even when the current job budgets change.
+    historical_workflow = re.sub(
+        r"(?m)(^  (browser|foundation):\n(?:    needs: \[foundation-durable\]\n)?"
+        r"    runs-on: ubuntu-24\.04\n    timeout-minutes: )\d+$",
+        lambda m: m[1] + {"browser": "30", "foundation": "60"}[m[2]],
+        workflow.read_text(),
+    )
+    historical_pin = "f5b67834ace38286e28b3ad8299f3a66078090e895fd22c5ad31c9b4e9e98f0b"
+    assert catalog.sha256(historical_workflow.encode()) == historical_pin
+    monkeypatch.setitem(catalog.CI_INPUT_SHA256, ".github/workflows/ci.yml", historical_pin)
     current = "  foundation:\n    needs: [foundation-durable]\n    runs-on: ubuntu-24.04\n    timeout-minutes: 60"
-    assert current_workflow.count(current) == 1
-    workflow.write_text(current_workflow.replace(current, current.replace(": 60", ": 45")))
+    assert historical_workflow.count(current) == 1
+    workflow.write_text(historical_workflow.replace(current, current.replace(": 60", ": 45")))
     f.git("add", ".")
     f.git("commit", "-qm", "constructed reviewed application with foundation45")
     r["source"] = f.git("rev-parse", "HEAD")
@@ -2738,7 +2748,7 @@ def prepare_m5_foundation_budget_event(
         path = f.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         if path == workflow:
-            path.write_text(current_workflow)
+            path.write_text(historical_workflow)
         else:
             path.write_text((path.read_text() if path.exists() else "") + "\n# bounded CI fix\n")
     f.git("add", ".")
@@ -3589,25 +3599,33 @@ def test_v7_fix_refuses_other_pr_branch(r11_event, monkeypatch):
     assert not r["boundary"]
 
 
-def prepare_m6_plan_event(r, monkeypatch, route, *, damage=None):
+def prepare_plan_event(r, monkeypatch, route, milestone, *, damage=None):
     f = r["f"]
-    monkeypatch.setattr(carrier, "M6_PLAN_BASE", r["source"])
-    monkeypatch.setattr(carrier, "M6_PLAN_TREE", f.git("rev-parse", "HEAD^{tree}"))
-    # An earlier M5 route also matches the ancestry of a real post-merge main.
+    name = milestone + "_PLAN"
+    plan = getattr(carrier, name)
+    base_tree = f.git("rev-parse", "HEAD^{tree}")
+    # The generic M5 route also recognizes this ancestry on a main push.
     monkeypatch.setattr(carrier, "M5_V7_FIX_BASE", r["base"])
-    plan = f.root / "docs/tasks/M6_HANDOFF.md"
-    plan.parent.mkdir(parents=True)
-    plan.write_text("M6 plan\n")
+    handoff = f"docs/tasks/{milestone}_HANDOFF.md"
+    document = f.root / handoff
+    document.parent.mkdir(parents=True)
+    document.write_text("initial plan\n")
     f.git("add", ".")
     f.git("commit", "-qm", "initial plan")
     initial = f.git("rev-parse", "HEAD")
-    monkeypatch.setattr(carrier, "M6_PLAN_INITIAL", initial)
+    plan = plan._replace(
+        base=r["source"],
+        base_tree="f" * 40 if damage == "base_tree" else base_tree,
+        initial=initial,
+    )
+    monkeypatch.setattr(carrier, name, plan)
     if damage == "lineage":
         f.git("checkout", "--detach", r["source"])
     changed = {
         "application": "backend/src/asm/ai/runtime.py",
-        "migration": "migrations/versions/0025_future.py",
-        "history": "docs/tasks/M5_HANDOFF.md",
+        "migration": "migrations/versions/future.py",
+        "history": "docs/tasks/M6_HANDOFF.md" if milestone == "M7" else "docs/tasks/M5_HANDOFF.md",
+        "other_workflow": ".github/workflows/other.yml",
     }.get(damage, "scripts/m4_runtime_db.py")
     path = f.root / changed
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -3615,34 +3633,54 @@ def prepare_m6_plan_event(r, monkeypatch, route, *, damage=None):
     f.git("add", ".")
     f.git("commit", "-qm", "reviewed plan")
     head = f.git("rev-parse", "HEAD")
-    branch = "c0/m6-other" if damage == "branch" else carrier.M6_PLAN_BRANCH
+    branch = "c0/other-plan" if damage == "branch" else plan.branch
     merge = capability_checkout(
         r, monkeypatch, route, head, branch=branch, wrong_base=damage == "base"
     )
-    if route == "same-repository-pr-merge" and damage != "pr_number":
-        r["payload"]["number"] = r["payload"]["pull_request"]["number"] = 55
-        monkeypatch.setenv("GITHUB_REF", "refs/pull/55/merge")
-    return head, merge
+    if route == "same-repository-pr-merge":
+        number = 42 if damage == "pr_number" else plan.pr
+        r["payload"]["number"] = r["payload"]["pull_request"]["number"] = number
+        monkeypatch.setenv("GITHUB_REF", f"refs/pull/{number}/merge")
+        if damage == "head":
+            r["payload"]["pull_request"]["head"]["sha"] = initial
+    if damage in {"merge_tree", "single_parent"}:
+        tree = base_tree if damage == "merge_tree" else f.git("rev-parse", head + "^{tree}")
+        parents = ["-p", plan.base] if damage == "single_parent" else ["-p", plan.base, "-p", head]
+        merge = f.git("commit-tree", tree, *parents, "-m", "damaged merge")
+        f.git("reset", "--hard", merge)
+        monkeypatch.setenv("GITHUB_SHA", merge)
+        if route == "main-push":
+            r["payload"].update(after=merge, head_commit={"id": merge})
+    return plan, head, merge
 
 
+@pytest.mark.parametrize("milestone,revision", [("M6", "0024"), ("M7", "0031")])
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
-def test_m6_plan_uses_reviewed_merge_and_0024_runtime(aggregate_driver, monkeypatch, route):
+def test_planning_source_runs_accepted_schema(
+    aggregate_driver, monkeypatch, route, milestone, revision
+):
     r = aggregate_driver["r"]
-    head, merge = prepare_m6_plan_event(r, monkeypatch, route)
+    plan, head, merge = prepare_plan_event(r, monkeypatch, route, milestone)
     r["run"]()
     evidence = r["root"] / "evidence"
     admitted = json.loads((evidence / "source-admission.json").read_text())
     source = json.loads((evidence / "source.json").read_text())
     tree = r["f"].git("rev-parse", head + "^{tree}")
     candidate = {"sha": head, "tree": tree, "merge_parents": [r["source"], head]}
-    assert admitted["m6_plan_candidate"] == source["m6_plan_candidate"] == candidate
+    assert admitted[plan.candidate_key] == source[plan.candidate_key] == candidate
     assert (
         admitted["paths"]
         == source["paths"]
-        == ["docs/tasks/M6_HANDOFF.md", "scripts/m4_runtime_db.py"]
+        == [f"docs/tasks/{milestone}_HANDOFF.md", "scripts/m4_runtime_db.py"]
     )
     assert admitted["base"] == source["base"] == r["source"]
-    assert source["branch"] == carrier.M6_PLAN_BRANCH and source["source"] == merge
+    assert (
+        admitted["base_tree"]
+        == source["base_tree"]
+        == r["f"].git("rev-parse", plan.base + "^{tree}")
+    )
+    assert source["branch"] == plan.branch and admitted["source"] == source["source"] == merge
+    assert source["event"] == ("pull_request" if route == "same-repository-pr-merge" else "push")
     for key, val in {
         "SOURCE_SHA": merge,
         "SOURCE_TREE": tree,
@@ -3651,33 +3689,46 @@ def test_m6_plan_uses_reviewed_merge_and_0024_runtime(aggregate_driver, monkeypa
     }.items():
         monkeypatch.setenv("ASM_M4_" + key, val)
     assert carrier.source_tree_from_evidence(evidence / "source.json") == tree
-    source["m6_plan_candidate"]["merge_parents"].reverse()
+    source[plan.candidate_key]["merge_parents"].reverse()
     carrier.write(evidence / "source.json", source)
-    with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_M6_PLAN_CANDIDATE"):
+    with pytest.raises(carrier.Refusal, match=f"^SOURCE_IDENTITY_{plan.prefix}_CANDIDATE$"):
         carrier.source_tree_from_evidence(evidence / "source.json")
-    phases = [label for _, label, _ in aggregate_driver["calls"]]
-    assert "schema-0024" in phases and "catalog-0024" in phases and "readiness" in phases
+    phases = {label for _, label, _ in aggregate_driver["calls"]}
+    assert {"schema-" + revision, "catalog-" + revision, "readiness"} <= phases
     summary = json.loads((evidence / "summary.json").read_text())
     assert summary["result"] == "PASS" and summary["sql_test_budget_seconds"] == 900
 
 
+@pytest.mark.parametrize("milestone", ["M6", "M7"])
 @pytest.mark.parametrize(
     "route,damage,reason",
     [
         ("same-repository-pr-merge", "branch", "POLZA_RUNTIME_EVENT_BRANCH"),
-        ("same-repository-pr-merge", "pr_number", "M6_PLAN_PR_NUMBER"),
-        ("same-repository-pr-merge", "base", "M6_PLAN_EVENT"),
-        ("same-repository-pr-merge", "application", "M6_PLAN_REVIEW_WRITE_SET"),
-        ("main-push", "migration", "M6_PLAN_REVIEW_WRITE_SET"),
-        ("main-push", "history", "M6_PLAN_REVIEW_WRITE_SET"),
-        ("main-push", "lineage", "M6_PLAN_ASSIGNMENT_ANCESTRY"),
+        ("same-repository-pr-merge", "pr_number", "{prefix}_PR_NUMBER"),
+        ("same-repository-pr-merge", "base", "{prefix}_EVENT"),
+        ("same-repository-pr-merge", "base_tree", "BASE_TREE"),
+        ("same-repository-pr-merge", "head", "EVENT_PR_HEAD_PARENT"),
+        ("same-repository-pr-merge", "merge_tree", "{prefix}_MERGE_TREE"),
+        ("same-repository-pr-merge", "application", "{prefix}_REVIEW_WRITE_SET"),
+        ("main-push", "migration", "{prefix}_REVIEW_WRITE_SET"),
+        ("main-push", "history", "{prefix}_REVIEW_WRITE_SET"),
+        ("main-push", "other_workflow", "{prefix}_REVIEW_WRITE_SET"),
+        ("main-push", "lineage", "{prefix}_ASSIGNMENT_ANCESTRY"),
+        ("main-push", "single_parent", "{prefix}_MERGE_PARENTS"),
+        ("main-push", "merge_tree", "{prefix}_MERGE_TREE"),
     ],
 )
-def test_m6_plan_rejects_unapproved_source(r11_event, monkeypatch, route, damage, reason):
-    prepare_m6_plan_event(r11_event, monkeypatch, route, damage=damage)
-    with pytest.raises(carrier.Refusal, match=reason):
-        r11_event["run"]()
-    assert not r11_event["boundary"]
+def test_planning_source_refuses_before_resources(
+    r11_event, monkeypatch, route, damage, reason, milestone
+):
+    r = r11_event
+    plan, _, _ = prepare_plan_event(r, monkeypatch, route, milestone, damage=damage)
+    with pytest.raises(
+        (carrier.Refusal, catalog.Refusal), match=f"^{reason.format(prefix=plan.prefix)}$"
+    ):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+    assert not (r["root"] / "evidence/source-admission.json").exists()
 
 
 def prepare_m6_slice_event(r, monkeypatch, route, feature, revision, *, protected=False):

@@ -378,7 +378,7 @@ def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_g
     }
     assert len(jobs) - 1 + 6 == 12
     for job, digest in {
-        "browser": "c1513cf8054ef2ffecaf99ba11ca9f67e6395b764314625191a6883b9e84a81a",
+        "browser": "e307c25b9c6ec819fc5d6d160358cbbd5c2e73d4469fee24552a5a50c89effcc",
         "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
         "connect5-migration": "940bc041722d35488f6bc5b148e87793eebda363df6aa572762f5ed4f2de2100",
         "native-context-db": "ab14f25d082e830a8be35422a7ae4f0fc7d8f7092ec992fcbde703751b2fe78b",
@@ -391,7 +391,7 @@ def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_g
     assert "needs: [foundation-durable]" in jobs["foundation"]
     for job, cap, route in (
         ("foundation-durable", 25, "normal-durable"),
-        ("foundation", 60, "foundation-core"),
+        ("foundation", 90, "foundation-core"),
     ):
         block = jobs[job]
         assert (
