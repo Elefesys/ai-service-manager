@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4B IN_PROGRESS · независимая сквозная приёмка · 2026-11-23
+## CURRENT — M6.4B REVIEW · C8 проверяет исправление допуска CI · 2026-11-24
 
-Ведущий C8, приёмка C0. Ветка `c8/m6-4b-acceptance` от проверенного `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, схема `0031`. В synthetic LOCAL/TEST проверить GJ-A с автоматическим предложением, GJ-B с решением мастера и явным согласием и GJ-C с передачей сложной работы. Сопоставить Q1–Q8 с доказательствами на одном кандидате и подготовить данные согласованного заказа для M7. [Поручение C0](tasks/M6_HANDOFF.md#L3) · [Принятая выборка Q1–Q8](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/tasks/M6_HANDOFF.md#L269).
+C0 принял R1 от C6 на `b1b9647cfa47f69fe1e9dccf90b7cd57dcf2f872` для повторной проверки C8. Ветка `c8/m6-4b-acceptance`, база `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, Draft PR #63. Открыто одно замечание `C8-M6.4B-01`. Адресные тесты C0 прошли 17/17. Штатный CI завершился 12/12 с первой попытки. PostgreSQL 18.6 — 160/160 с проверками схемы и каталога `0031`. C8 сверяет исправление и возвращает итоговое заключение по M6.4B на новом head. [Поручение C8](tasks/M6_HANDOFF.md#L3) · [Исходное замечание](https://github.com/Elefesys/ai-service-manager/pull/63#issue-6555991440) · [Поручение R1](https://github.com/Elefesys/ai-service-manager/blob/b54f40209e1babcb1449b00afad9e09e3b98418a/docs/tasks/M6_HANDOFF.md#L3) · [Артефакт PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45210390119/artifacts/14834599900) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45210390119).
 
 ## История — M6.4A INTEGRATED / VERIFIED · 2026-11-23
 
