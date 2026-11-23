@@ -2,7 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.0 REVIEW · реализация M7 TODO · 2026-11-24
+
+C0 принимает [план M7 и первую задачу](tasks/M7_HANDOFF.md) и [предложения IMPL-007](decisions/IMPL-007-m7-pilot-scheduling.md). Для разработки используется synthetic LOCAL/TEST; активных поручений исполнителям пока нет. После разрешённого слияния плана и зелёного CI на фактическом main выдать только M7.1A (C1 с C2/C5). Принятая база приложения — ниже; SHA ветки планирования не является исходным SHA кода.
+
+## История — M6 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
 
 C0 принял M6.4B и M6 целиком на фактическом `main` `6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7` после слияния PR #63. Дерево `169c8928c206f01e2892a6e02172dbeb8aad8147` совпало с принятым C8 кандидатом `b1b9647cfa47f69fe1e9dccf90b7cd57dcf2f872`. Q1–Q8 приняты, `C8-M6.4B-01` закрыто. [PR #63](https://github.com/Elefesys/ai-service-manager/pull/63) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/63#pullrequestreview-6026123124).
 
