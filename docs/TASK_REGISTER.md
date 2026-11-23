@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4A IN_PROGRESS · 2026-11-22
+## CURRENT — M6.4B IN_PROGRESS · независимая сквозная приёмка · 2026-11-23
 
-C4 подключает два типизированных намерения агента к принятым командам M6. C1 отвечает за доменную команду и её полномочия, C3 — за штатный путь Turn/worker и доставку. Проверяем автоматическую заявку, запрос мастеру, восстановление по прежним ID и ноль коммерческих действий при отказе в допуске. База `main` `202816a5b0a9dc30e9161a94184813eb9f1c06fd`, ветка `c4/m6-4a-agent-intents`. [Поручение C0 и критерии](tasks/M6_HANDOFF.md#L3).
+Ведущий C8, приёмка C0. Ветка `c8/m6-4b-acceptance` от проверенного `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, схема `0031`. В synthetic LOCAL/TEST проверить GJ-A с автоматическим предложением, GJ-B с решением мастера и явным согласием и GJ-C с передачей сложной работы. Сопоставить Q1–Q8 с доказательствами на одном кандидате и подготовить данные согласованного заказа для M7. [Поручение C0](tasks/M6_HANDOFF.md#L3) · [Принятая выборка Q1–Q8](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/tasks/M6_HANDOFF.md#L269).
+
+## История — M6.4A INTEGRATED / VERIFIED · 2026-11-23
+
+PR #62 слит в `main` на `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, родители `202816a5b0a9dc30e9161a94184813eb9f1c06fd` и `5b4983a1b4c67703195c56c61c07de0096d673d1`, дерево `3690ac13e799237affdf973399fe075f71eb494e` совпало с принятым кандидатом. C8 дал PASS в synthetic LOCAL/TEST. Отдельный CI `push/main` на этом SHA прошёл 12/12. В первой попытке `foundation` получил `cancelled`, во второй повторилось только это задание. [PR #62](https://github.com/Elefesys/ai-service-manager/pull/62) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/62#pullrequestreview-6017107339) · [CI фактического main](https://github.com/Elefesys/ai-service-manager/actions/runs/45120922120/attempts/2).
 
 ## История — M6.3C INTEGRATED / VERIFIED · 2026-11-22
 

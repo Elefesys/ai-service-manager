@@ -33,7 +33,7 @@ from test_m6_owner_decisions_postgres import pricing_pg as pricing_pg
 from test_m6_owner_decisions_postgres import search_pg as search_pg
 from test_m6_owner_decisions_postgres import seeded as seeded
 from test_m6_owner_decisions_postgres import service_request_pg as service_request_pg
-from test_m6_pricing_postgres import draft_for_size, formula_price, price, publish, sign_in
+from test_m6_pricing_postgres import FIXED, draft_for_size, formula_price, price, publish, sign_in
 from test_m6_service_assessments_api_postgres import create_draft, request_assessment
 from test_m6_service_requests_api_postgres import route
 from test_tenancy_postgres import A
@@ -113,6 +113,64 @@ async def exact_ready(h, auth, *, use_telegram=False):
 
 def report(label, **data):
     print("M63B", json.dumps({"check": label, **data}, ensure_ascii=False), flush=True)
+
+
+@pytest.mark.parametrize(
+    ("price_policy", "duration_policy", "deposit", "amount", "minutes"),
+    [
+        pytest.param(
+            FIXED,
+            FIXED_DURATION,
+            {"mode": "FIXED_DEPOSIT", "amount_minor": 50_000},
+            120_001,
+            65,
+            id="fixed-price-minutes-and-deposit",
+        ),
+        pytest.param(
+            formula_price(),
+            {
+                "mode": "CONFIGURED_RULE",
+                "minutes": None,
+                "rule_note": None,
+                "size_rule": {"threshold_mm": 20, "at_or_below_minutes": 90, "above_minutes": 120},
+            },
+            {"mode": "PERCENT_DEPOSIT", "percent": 25},
+            350_000,
+            90,
+            id="size-formula-duration-rule-and-percent",
+        ),
+    ],
+)
+async def test_q2_quote_freezes_the_three_published_policies(
+    approval_pg, auth, price_policy, duration_policy, deposit, amount, minutes
+):
+    bundle = contract(price_policy, duration_policy, deposit["mode"])
+    bundle["services"][0]["deposit"].update(deposit)
+    release = await publish(approval_pg, bundle)
+    token = await sign_in(auth)
+    cid, _, _, _, request = await draft_for_size(approval_pg, auth, token, "20 mm")
+    url = f"{route(cid)}/{request}"
+    assessment = await request_assessment(auth, url + "/assessment", token)
+    calculation = await price(auth, url + "/pricing", token)
+    view = await owner_get(auth, url + "/quote")
+    assert view["status"] == "QUEUED"
+    quote = view["quote"]
+    terms = quote["material"]
+    assert terms["amount_minor"] == calculation["amount_minor"] == amount
+    assert terms["occupied_minutes"] == assessment["occupied_minutes"] == minutes
+    assert terms["price_reference_id"] == calculation["calculation_id"]
+    assert terms["duration_reference_id"] == assessment["assessment_id"]
+    assert terms["deposit"] == bundle["services"][0]["deposit"]
+    assert terms["release_id"] == terms["deposit_terms_version"] == release["release_id"]
+    report(
+        "Q2 published policies",
+        request=request,
+        quote=quote["quote_id"],
+        amount=amount,
+        minutes=minutes,
+        deposit=terms["deposit"],
+        release=release["release_id"],
+    )
 
 
 async def test_two_quotes_same_conversation_owner_continuation_without_inbound(approval_pg, auth):

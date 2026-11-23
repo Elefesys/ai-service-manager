@@ -375,6 +375,20 @@ M6_REQUEST_IMPLEMENTATION_PATHS = {
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
 }
+M6_4B_BASE = "5d4b773c977eadcf9ccaa002c3c41aa213b097fa"
+M6_4B_TREE = "3690ac13e799237affdf973399fe075f71eb494e"
+M6_4B_ASSIGNMENT = "16f44e57816bd53386f0e578042e559790d3c87d"
+M6_4B_ASSIGNMENT_TREE = "1623c4e0cfeab8746ac125fc7492d35ff6648627"
+M6_4B_BRANCH = "c8/m6-4b-acceptance"
+M6_4B_DOCS = {"docs/TASK_REGISTER.md", "docs/tasks/M6_HANDOFF.md"}
+M6_4B_IMPLEMENTATION_PATHS = {
+    "docs/tasks/M6_4B_ACCEPTANCE.md",
+    "frontend/e2e/intake-duration.spec.ts",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m6_quote_delivery_postgres.py",
+}
 M6_INTENTS_BASE = "202816a5b0a9dc30e9161a94184813eb9f1c06fd"
 M6_INTENTS_TREE = "8de3c811f872cbd921260b684e655e998505d972"
 M6_INTENTS_ASSIGNMENT = "802d4b58de84034566463b12870f0056254c752c"
@@ -1544,6 +1558,7 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
+    m6_4b = value.get("branch") == M6_4B_BRANCH
     m6_intents = value.get("branch") == M6_INTENTS_BRANCH
     m6_acceptance = value.get("branch") == M6_ACCEPTANCE_BRANCH
     m6_quote = value.get("branch") == M6_QUOTE_BRANCH
@@ -1559,6 +1574,8 @@ def source_tree_from_evidence(path=None):
         keys.update({"v7_fix_assignment", "v7_fix_candidate"})
     if m6_plan:
         keys.add("m6_plan_candidate")
+    if m6_4b:
+        keys.update({"m6_4b_assignment", "m6_4b_candidate"})
     if m6_intents:
         keys.update({"m6_intents_assignment", "m6_intents_candidate"})
     if m6_acceptance:
@@ -1581,7 +1598,8 @@ def source_tree_from_evidence(path=None):
         keys.add("scope_amendment_02")
     require(set(value) == keys, "SOURCE_IDENTITY_SHAPE")
     if (
-        m6_intents
+        m6_4b
+        or m6_intents
         or m6_acceptance
         or m6_quote
         or m6_decision
@@ -1589,7 +1607,9 @@ def source_tree_from_evidence(path=None):
         or m6_assessment
         or m6_request
     ):
-        if m6_intents:
+        if m6_4b:
+            prefix, assignment = "m6_4b", m6_4b_assignment_proof()
+        elif m6_intents:
             prefix, assignment = "m6_intents", m6_intents_assignment_proof()
         elif m6_acceptance:
             prefix, assignment = "m6_acceptance", m6_acceptance_assignment_proof()
@@ -1666,7 +1686,9 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M6_INTENTS_BASE, M6_INTENTS_TREE)
+        (M6_4B_BASE, M6_4B_TREE)
+        if m6_4b
+        else (M6_INTENTS_BASE, M6_INTENTS_TREE)
         if m6_intents
         else (M6_ACCEPTANCE_BASE, M6_ACCEPTANCE_TREE)
         if m6_acceptance
@@ -1754,6 +1776,7 @@ def source_tree_from_evidence(path=None):
                 or m6_quote
                 or m6_acceptance
                 or m6_intents
+                or m6_4b
             )
             and value["event"] in {"pull_request", "push"}
             or delivery
@@ -1781,7 +1804,12 @@ def source_tree_from_evidence(path=None):
         and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
         "SOURCE_IDENTITY_SHAPE",
     )
-    if m6_intents:
+    if m6_4b:
+        require(
+            M6_4B_DOCS < set(paths) <= M6_4B_DOCS | M6_4B_IMPLEMENTATION_PATHS,
+            "SOURCE_IDENTITY_WRITE_SET",
+        )
+    elif m6_intents:
         require(
             M6_INTENTS_DOCS | {M6_INTENTS_MIGRATION}
             <= set(paths)
@@ -2400,9 +2428,16 @@ def admit_m6_slice_source(
     quote=False,
     acceptance=False,
     intents=False,
+    m6_4b=False,
 ):
     require(event["attempt"] == "1", "RUN_ATTEMPT")
-    if intents:
+    if m6_4b:
+        prefix, base_tree = "m6_4b", M6_4B_TREE
+        # The accepted base already carries 0031.
+        migration, allowed = None, M6_4B_IMPLEMENTATION_PATHS
+        assignment = m6_4b_assignment_proof()
+        candidate = m6_4b_candidate(event)
+    elif intents:
         prefix, base_tree = "m6_intents", M6_INTENTS_TREE
         migration, allowed = M6_INTENTS_MIGRATION, M6_INTENTS_IMPLEMENTATION_PATHS
         assignment = m6_intents_assignment_proof()
@@ -2451,7 +2486,10 @@ def admit_m6_slice_source(
     )
     implementation = set(capture([*diff, assignment_sha, candidate["sha"]]).splitlines())
     require(
-        migration in implementation and implementation <= allowed, f"{prefix.upper()}_WRITE_SET"
+        bool(implementation)
+        and (migration is None or migration in implementation)
+        and implementation <= allowed,
+        f"{prefix.upper()}_WRITE_SET",
     )
     paths = capture([*diff, base, "HEAD"]).splitlines()
     require(set(paths) == docs | implementation, f"{prefix.upper()}_MERGE_WRITE_SET")
@@ -2468,6 +2506,28 @@ def admit_m6_slice_source(
             prefix + "_candidate": candidate,
         },
     )
+
+
+def m6_4b_event(event):
+    return event.get("head_ref") == M6_4B_BRANCH or (
+        event.get("event") == "push"
+        and event["ref"] == "refs/heads/main"
+        and commit_parents("HEAD")[:1] == [M6_4B_BASE]
+    )
+
+
+def m6_4b_assignment_proof():
+    return {
+        "sha": M6_4B_ASSIGNMENT,
+        "tree": M6_4B_ASSIGNMENT_TREE,
+        "parent": M6_4B_BASE,
+        "paths": sorted(M6_4B_DOCS),
+    }
+
+
+def m6_4b_candidate(event):
+    require(event["event"] != "pull_request" or event["pr_number"] == 63, "M6_4B_PR_NUMBER")
+    return merge_candidate(event, M6_4B_BASE, M6_4B_BRANCH, M6_4B_ASSIGNMENT, "M6_4B")
 
 
 def m6_intents_event(event):
@@ -2910,6 +2970,9 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    if m6_4b_event(event):
+        admit_m6_slice_source(event, evidence, m6_4b=True)
+        return event, manifest
     if m6_intents_event(event):
         admit_m6_slice_source(event, evidence, intents=True)
         return event, manifest
@@ -3998,7 +4061,8 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            m6_intents_event(event)
+            m6_4b_event(event)
+            or m6_intents_event(event)
             or m6_acceptance_event(event)
             or m6_quote_event(event)
             or m6_decision_event(event)
@@ -4034,7 +4098,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    m6_intents = m6_intents_event(event)
+    m6_4b = m6_4b_event(event)
+    m6_intents = not m6_4b and m6_intents_event(event)
     m6_acceptance = not m6_intents and m6_acceptance_event(event)
     m6_quote = not m6_acceptance and m6_quote_event(event)
     m6_decision = not (m6_acceptance or m6_quote) and m6_decision_event(event)
@@ -4046,7 +4111,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         m6_acceptance or m6_quote or m6_decision or m6_pricing or m6_assessment
     ) and m6_request_event(event)
     m6_slice = (
-        m6_intents
+        m6_4b
+        or m6_intents
         or m6_acceptance
         or m6_quote
         or m6_decision
@@ -4095,7 +4161,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M6_INTENTS_BASE, M6_INTENTS_TREE)
+        (M6_4B_BASE, M6_4B_TREE)
+        if m6_4b
+        else (M6_INTENTS_BASE, M6_INTENTS_TREE)
         if m6_intents
         else (M6_ACCEPTANCE_BASE, M6_ACCEPTANCE_TREE)
         if m6_acceptance
@@ -4148,6 +4216,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
+            else M6_4B_BRANCH
+            if m6_4b
             else M6_INTENTS_BRANCH
             if m6_intents
             else M6_ACCEPTANCE_BRANCH
@@ -4187,6 +4257,9 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
+    if m6_4b:
+        source["m6_4b_assignment"] = m6_4b_assignment_proof()
+        source["m6_4b_candidate"] = m6_4b_candidate(event)
     if m6_intents:
         source["m6_intents_assignment"] = m6_intents_assignment_proof()
         source["m6_intents_candidate"] = m6_intents_candidate(event)
@@ -4378,7 +4451,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             if module == "preflight":
                 current_revision = (
                     "0031"
-                    if m6_intents
+                    if m6_4b or m6_intents
                     else "0030"
                     if m6_acceptance
                     else "0029"

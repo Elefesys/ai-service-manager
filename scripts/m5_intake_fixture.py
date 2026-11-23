@@ -24,7 +24,7 @@ from asm.intake.templates import template_revision
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import call
 from asm.messaging.errors import MessagingError
-from asm.messaging.http_service import OwnerAPIRepository
+from asm.messaging.http_service import OwnerAPIRepository, prepare
 from asm.messaging.models import OutcomeKind
 from asm.messaging.results import (
     AIJobClaim,
@@ -33,6 +33,7 @@ from asm.messaging.results import (
     QuoteSendPermit,
     ScanStep,
     SendPermit,
+    SendReceipt,
     parse_claim,
 )
 from asm.messaging.worker import Worker
@@ -71,13 +72,18 @@ INPUTS = {
     "agent-exclude-first": "Это не для тату „роза“. У второй работы уточняю размер: 21 мм.",
     "agent-correct-first": "Для тату „роза“ уточняю размер: 21 мм",
     "agent-same-title": "На другом месте хочу отдельную татуировку: роза, место — плечо, 21 мм, стиль лайнворк",
+    "pilot-cover-up": "Хочу перекрыть старую татуировку: пион, место — плечо.",
 }
+PILOT_QUESTION = (
+    "Пришлите фото старой татуировки при дневном свете, чтобы мастер оценил перекрытие."
+)
 QUOTE_JOURNEYS = {
     "quote-delivery",
     "quote-guard",
     "quote-acceptance",
     "quote-clarification",
     "quote-agent",
+    "quote-pilot",
 }
 AGENT_OPERATIONS = {
     "agent-first": ("prepare_service_request",),
@@ -139,7 +145,9 @@ VALUES["agent-same-title"] = (
     ("approximate_size", "21 мм"),
     ("style", "лайнворк"),
 )
+VALUES["pilot-cover-up"] = (("idea", "пион"), ("placement", "плечо"))
 CATEGORIES = {
+    "pilot-cover-up": "COVER_UP",
     "complex": "COVER_UP",
     "late-cover-up": "COVER_UP",
     "complex-message": "COVER_UP",
@@ -193,6 +201,12 @@ class Diagnostic:
 
 
 class IntakeBrowserKernel(KnowledgeBrowserKernel):
+    last_inbox_result = None
+
+    async def process_inbox(self, claim):
+        self.last_inbox_result = await super().process_inbox(claim)
+        return self.last_inbox_result
+
     async def claim_intake(
         self,
         cutoff: datetime,
@@ -355,6 +369,10 @@ async def run(args, diagnostic):
             await native_schema_readiness(c)
         tenancy = TenantDatabase(engine)
         kernel = IntakeBrowserKernel(engine, environment="TEST")
+        if args.operation == "deliver-pilot-question":
+            return await deliver_pilot_question(
+                args, diagnostic, engine, tenancy, kernel, actor, workspace
+            )
         if args.operation in QUOTE_OPERATIONS or args.operation in QUOTE_REPLIES | {QUOTE_HISTORY}:
             return await run_quote(
                 args, diagnostic, engine, tenancy, kernel, actor, workspace, business
@@ -368,7 +386,7 @@ async def run(args, diagnostic):
         observer = Worker(kernel, adapter)
         diagnostic.stage = "CONFIGURATION"
         cid = UUID(args.conversation) if args.conversation else None
-        service_intents = args.operation in AGENT_OPERATIONS
+        service_intents = args.operation in AGENT_OPERATIONS or args.operation == "pilot-cover-up"
         commercial = (
             bool(AGENT_OPERATIONS.get(args.operation)) and args.operation != "agent-exclude-first"
         )
@@ -543,9 +561,12 @@ async def run(args, diagnostic):
                     if len(model.requests) != 1:
                         raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
                     if service_intents:
+                        expected_kind = (
+                            "handoff" if owner_handoff else "no_reply" if commercial else "reply"
+                        )
                         if (
                             not isinstance(receipt, ServiceIntentRuntimeReceipt)
-                            or receipt.result.kind != ("no_reply" if commercial else "reply")
+                            or receipt.result.kind != expected_kind
                             or (receipt.service_intents is not None) != commercial
                         ):
                             raise IntakeFixtureRefused("DURABLE_MODEL_RESULT_MISMATCH")
@@ -577,6 +598,71 @@ async def run(args, diagnostic):
         await engine.dispose()
 
 
+async def deliver_pilot_question(args, diagnostic, engine, tenancy, kernel, actor, workspace):
+    diagnostic.stage = "OWNER_READ"
+    conversation = UUID(args.conversation)
+    scenario = f"pilot-complex-{args.variant}"
+    recipient = event("knowledge", f"{scenario}-seed", conversation=scenario).chat_id
+    async with tenancy.transaction(AuthenticatedAccount(actor), workspace, uuid4()) as unit:
+        receipt = await prepare(unit, conversation, PILOT_QUESTION, str(UUID(args.receipt_key)))
+        messages = await OwnerAPIRepository(unit).messages(conversation, 100, None)
+    if not isinstance(receipt, SendReceipt) or receipt.code != "REPLAY":
+        raise IntakeFixtureRefused("SAVED_OWNER_QUESTION_REQUIRED")
+    if not any(
+        m.direction == "INBOUND" and m.text == INPUTS["pilot-cover-up"] for m in messages.items
+    ):
+        raise IntakeFixtureRefused("COMPLEX_SOURCE_REQUIRED")
+    questions = [
+        m for m in messages.items if m.direction == "OUTBOUND" and m.text == PILOT_QUESTION
+    ]
+    if (
+        len(questions) != 1
+        or questions[0].message_id != str(receipt.message_id)
+        or questions[0].delivery is None
+        or questions[0].delivery.status != "PENDING"
+    ):
+        raise IntakeFixtureRefused("PENDING_OWNER_QUESTION_REQUIRED")
+
+    class QuestionAdapter(ControlledAdapter):
+        async def send(self, permit):
+            if (
+                type(permit) is not SendPermit
+                or permit.workspace_id != workspace
+                or permit.provider != "CONTROLLED"
+                or permit.bot_identity != bot("knowledge")
+                or permit.external_connection_id != route("knowledge", 0)
+                or permit.chat_id != recipient
+                or permit.text != PILOT_QUESTION
+                or engine.pool.checkedout() != 0
+            ):
+                raise IntakeFixtureRefused("MANUAL_SEND_SCOPE_MISMATCH")
+            return await super().send(permit)
+
+    diagnostic.stage = "CLAIM"
+    claim = await kernel.claim_intake(
+        datetime.fromisoformat(questions[0].created_at) - timedelta(seconds=1),
+        lambda job: (
+            job.kind == "SEND_MANUAL_TEXT"
+            and job.workspace_id == workspace
+            and job.outbox_id == receipt.outbox_id
+        ),
+        lambda job: None,
+        diagnostic,
+        scan_until=datetime.now(UTC),
+    )
+    if claim is None:
+        raise IntakeFixtureRefused("MISSING_OWNER_QUESTION_JOB")
+    transport = QuestionAdapter(environment="TEST", outcome=OutcomeKind.SUCCESS)
+    diagnostic.stage = "EXECUTE"
+    await Worker(kernel, transport).execute(claim)
+    return dict(
+        message_id=str(receipt.message_id),
+        outbox_id=str(receipt.outbox_id),
+        calls=transport.calls,
+        effects=transport.effects,
+    )
+
+
 async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace, business):
     diagnostic.stage = "OWNER_READ"
     if args.journey not in QUOTE_JOURNEYS or not args.conversation or not args.request:
@@ -601,7 +687,7 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
         messages = await OwnerAPIRepository(unit).messages(conversation, 100, None)
     allowed_sources = (
         tuple(INPUTS[operation] for operation in AGENT_OPERATIONS)
-        if args.journey == "quote-agent"
+        if args.journey in {"quote-agent", "quote-pilot"}
         else (INPUTS["price-first"], INPUTS["quote-second"])
     )
     if not any(
@@ -651,7 +737,7 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
 
     if args.operation in QUOTE_REPLIES | {QUOTE_HISTORY}:
         if (
-            args.journey not in {"quote-acceptance", "quote-clarification"}
+            args.journey not in {"quote-acceptance", "quote-clarification", "quote-pilot"}
             or before.status != "SENT"
         ):
             raise IntakeFixtureRefused("SENT_SYNTHETIC_QUOTE_REQUIRED")
@@ -676,8 +762,14 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
             if claim is None:
                 raise IntakeFixtureRefused("INGEST_JOB_MISMATCH")
             diagnostic.stage = "EXECUTE"
-            result = await kernel.process_inbox(claim)
-            if result.code != "PROCESSED" or result.message_id is None:
+            await Worker(kernel, adapter).execute(claim)
+            result = kernel.last_inbox_result
+            if (
+                result is None
+                or result.inbox_id != incoming.inbox_id
+                or result.code != "PROCESSED"
+                or result.message_id is None
+            ):
                 raise IntakeFixtureRefused("CANONICAL_QUOTE_REPLY_REQUIRED")
             return result
 
@@ -765,7 +857,13 @@ def main():
         parser = PrivateArgumentParser()
         parser.add_argument(
             "--operation",
-            choices=(*INPUTS, *QUOTE_OPERATIONS, *sorted(QUOTE_REPLIES), QUOTE_HISTORY),
+            choices=(
+                *INPUTS,
+                *QUOTE_OPERATIONS,
+                *sorted(QUOTE_REPLIES),
+                QUOTE_HISTORY,
+                "deliver-pilot-question",
+            ),
             required=True,
         )
         parser.add_argument("--variant", choices=("desktop", "narrow"), required=True)
@@ -782,6 +880,7 @@ def main():
                 "owner-decision",
                 "owner-decision-partial",
                 "owner-source-other",
+                "pilot-complex",
                 *sorted(QUOTE_JOURNEYS),
             ),
             default="intake",
@@ -790,9 +889,28 @@ def main():
             parser.add_argument("--" + name, required=True)
         parser.add_argument("--conversation")
         parser.add_argument("--request")
+        parser.add_argument("--receipt-key")
         parser.add_argument("--observe-dispatch", action="store_true")
         args = parser.parse_args()
-        if args.journey == "quote-agent":
+        if (args.operation == "deliver-pilot-question") != bool(args.receipt_key):
+            raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        if args.journey == "pilot-complex":
+            if args.operation not in {"seed", "pilot-cover-up", "deliver-pilot-question"}:
+                raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        elif args.operation in {"pilot-cover-up", "deliver-pilot-question"}:
+            raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        elif args.journey == "quote-pilot":
+            if args.operation not in {
+                "seed",
+                "agent-first",
+                "agent-start-second",
+                "agent-second",
+                "deliver-quote",
+                "agree-quote",
+                "repeat-agreement",
+            }:
+                raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        elif args.journey == "quote-agent":
             if args.operation not in {"seed", "deliver-quote", *AGENT_OPERATIONS}:
                 raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         elif args.operation in AGENT_OPERATIONS:
