@@ -212,6 +212,15 @@ class WorkerUnitOfWork:
             {"run": run, "pin": json.dumps(pin, allow_nan=False)},
         )
 
+    async def continue_service_intents(
+        self, run: UUID, stage: str, payload: dict[str, object]
+    ) -> object:
+        require_uuid(run)
+        return await self._execute(
+            "SELECT platform.service_request_agent_continue(:job,:token,:run,:stage,CAST(:payload AS jsonb))",
+            {"run": run, "stage": stage, "payload": json.dumps(payload, allow_nan=False)},
+        )
+
     async def knowledge_query_apply(
         self, run: UUID, call_id: UUID, ticket: UUID, vectors: list[list[float]]
     ) -> Any:

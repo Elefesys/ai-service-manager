@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.3C IN_PROGRESS · 2026-11-22
+## CURRENT — M6.4A IN_PROGRESS · 2026-11-22
 
-Единственная активная задача — M6.3C, явное согласие на конкретную отправленную версию предложения. Ведущий C1, C2 отвечает за атомарную запись и миграцию `0030` от `0029`, C3 — за доказуемое входящее сообщение, C5 — за карточку заказа и одного следующего сеанса без даты. База `main` `3fa9af54225c7f0806aa0eb199441a0aa225b2d5`, ветка `c1/m6-3c-quote-acceptance`. [Поручение C0 и критерии Q6/Q7](tasks/M6_HANDOFF.md#L3).
+C4 подключает два типизированных намерения агента к принятым командам M6. C1 отвечает за доменную команду и её полномочия, C3 — за штатный путь Turn/worker и доставку. Проверяем автоматическую заявку, запрос мастеру, восстановление по прежним ID и ноль коммерческих действий при отказе в допуске. База `main` `202816a5b0a9dc30e9161a94184813eb9f1c06fd`, ветка `c4/m6-4a-agent-intents`. [Поручение C0 и критерии](tasks/M6_HANDOFF.md#L3).
+
+## История — M6.3C INTEGRATED / VERIFIED · 2026-11-22
+
+PR #61 слит в `main` на `202816a5b0a9dc30e9161a94184813eb9f1c06fd`, родители `3fa9af54225c7f0806aa0eb199441a0aa225b2d5` и `63108151c1d8d8c8e5b20082b20691e9c40de497`. Дерево `8de3c811f872cbd921260b684e655e998505d972` совпало с принятым кандидатом. Штатный `push/main` CI прошёл 12/12 с первой попытки. Q6/Q7 приняты в synthetic LOCAL/TEST, C8 закрыл `C8-M6.3C-01`. [PR #61](https://github.com/Elefesys/ai-service-manager/pull/61) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/61#pullrequestreview-6012039242) · [CI фактического main](https://github.com/Elefesys/ai-service-manager/actions/runs/45019345047).
 
 ## История — M6.3B INTEGRATED / VERIFIED · 2026-11-22
 

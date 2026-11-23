@@ -50,7 +50,15 @@ async def approval_pg(pricing_pg):
         yield pricing_pg
     finally:
         async with pricing_pg.migrator.begin() as c:
-            await c.execute(text("TRUNCATE app.approval_requests,app.owner_decisions"))
+            has_agent_receipts = (
+                await c.execute(
+                    text("SELECT to_regclass('platform.service_request_agent_intents') IS NOT NULL")
+                )
+            ).scalar_one()
+            tables = "app.approval_requests,app.owner_decisions"
+            if has_agent_receipts:
+                tables += ",platform.service_request_agent_intents"
+            await c.execute(text(f"TRUNCATE {tables}"))
 
 
 def contract(price=MANUAL, duration=OWNER_DURATION, deposit="NONE"):

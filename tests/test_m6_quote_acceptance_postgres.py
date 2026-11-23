@@ -639,8 +639,8 @@ async def test_upgrade_from_0029_preserves_sent_quote_without_promoting_waiting_
         assert (await scalar(h, "SELECT platform.quote_schema_profile()"))["valid"] is True
         pending = await telegram_inbox(h, pending_event)
     finally:
-        await _migrate("upgrade", "0030")
-    assert (await scalar(h, "SELECT platform.quote_acceptance_schema_profile()"))["valid"] is True
+        await _migrate("upgrade", "0031")
+    assert (await scalar(h, "SELECT platform.service_intent_schema_profile()"))["valid"] is True
     assert (await read(h, auth, url))["quote"] == quote
     assert (await telegram_inbox(h, pending_event)).code == "DUPLICATE"
     assert (await process(h, pending)).quote_reply is None

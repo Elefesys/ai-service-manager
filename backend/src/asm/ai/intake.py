@@ -1,5 +1,6 @@
 """Explicit v7 candidate extraction, sharing the bounded knowledge/photo agent."""
 
+from json import dumps
 from typing import Literal
 
 from pydantic import Field
@@ -14,6 +15,8 @@ from asm.ai.contracts import (
     IntakePhoto,
     IntakeReply,
     Message,
+    ServiceIntentName,
+    ServiceIntentResult,
 )
 from asm.ai.knowledge import KnowledgeFailure
 from asm.ai.portfolio_delivery import (
@@ -45,8 +48,17 @@ class IntakeContextView(PortfolioDeliveryContextView):
         return super().messages() + (Message(role="context", text=self.intake.model_dump_json()),)
 
 
+class ServiceIntentContextView(IntakeContextView):
+    available_intents: tuple[ServiceIntentName, ...]
+
+    def messages(self) -> tuple[Message, ...]:
+        return super().messages() + (
+            Message(role="context", text=dumps({"available_intents": self.available_intents})),
+        )
+
+
 class PreparedIntakeContext(PreparedPortfolioDeliveryContext):
-    view: IntakeContextView = Field(repr=False)
+    view: ServiceIntentContextView | IntakeContextView = Field(repr=False)
 
 
 class IntakeContextRead(PortfolioDeliveryContextRead):
@@ -56,6 +68,11 @@ class IntakeContextRead(PortfolioDeliveryContextRead):
 class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
     prompt_revision = "conversation_v7"
     intake: IntakeProjection
+
+    def _intake_view(
+        self, base: PortfolioDeliveryContextView, intake: ClientIntakeView
+    ) -> IntakeContextView:
+        return IntakeContextView(**base.model_dump(), intake=intake)
 
     def _project(self, snapshot: object, binding: ContextBinding) -> PreparedIntakeContext:
         base = self._delivery_projection(snapshot, binding)
@@ -93,9 +110,9 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                     }
                 )
             )
-        view = IntakeContextView(
-            **base.view.model_dump(),
-            intake=ClientIntakeView(
+        view = self._intake_view(
+            base.view,
+            ClientIntakeView(
                 service_id=current.service_id,
                 template_revision=current.template_revision,
                 facts=tuple(facts),
@@ -167,7 +184,32 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                         self.active,
                     )
                     body = candidate.model_dump(mode="json")
-                    if state == "OWNER_HANDOFF" and candidate.intake.category != "FAQ_ONLY":
+                    if isinstance(candidate, ServiceIntentResult) and (
+                        state == "PRELIMINARILY_COMPLETE"
+                        or state == "CLARIFY"
+                        and any(
+                            fact.status == "client-stated" and fact.explicit_correction
+                            for fact in candidate.intake.facts
+                        )
+                    ):
+                        # The current projection can describe a different work. The domain
+                        # checks the named request and its own sources before revising it.
+                        shown = self.shown
+                        if (
+                            candidate.intake.category != "NEW_TATTOO"
+                            or not isinstance(shown, ServiceIntentContextView)
+                            or any(
+                                intent.name not in shown.available_intents
+                                or not any(
+                                    intent.source.message_id == s.message_id
+                                    and intent.source.source_version == s.source_version
+                                    for s in shown.intake.sources
+                                )
+                                for intent in candidate.intents
+                            )
+                        ):
+                            raise ValueError("Commercial intent requires a current work source")
+                    elif state == "OWNER_HANDOFF" and candidate.intake.category != "FAQ_ONLY":
                         body = {
                             "kind": "handoff",
                             "text": None,
@@ -202,3 +244,22 @@ class IntakeConversationAgent(PortfolioDeliveryConversationAgent):
                 except ValueError:
                     reason, candidate = "INVALID_OUTPUT", None
         return ConversationAgent._outcome(self, reason=reason, candidate=candidate)
+
+
+class ServiceIntentConversationAgent(IntakeConversationAgent):
+    prompt_revision = "conversation_v8"
+
+    def _intake_view(
+        self, base: PortfolioDeliveryContextView, intake: ClientIntakeView
+    ) -> IntakeContextView:
+        available: tuple[ServiceIntentName, ...] = ()
+        if (
+            any(source.text.strip() for source in intake.sources)
+            and self.search.status != "CONFLICT"
+            and self.active.bundle is not None
+            and any(s.active and template_revision(s) for s in self.active.bundle.services)
+        ):
+            available = ("prepare_service_request", "request_owner_decision")
+        return ServiceIntentContextView(
+            **base.model_dump(), intake=intake, available_intents=available
+        )

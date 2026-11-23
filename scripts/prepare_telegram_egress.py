@@ -2021,15 +2021,18 @@ SCHEMA_TABLES["0030"] = SCHEMA_TABLES["0029"] | {
 }
 
 
+SCHEMA_TABLES["0031"] = SCHEMA_TABLES["0030"] | {"platform.service_request_agent_intents"}
+
+
 def native_source_profile():
     """Current inventory including accepted quotes, orders and their planned sessions."""
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT, "0030")
-    schema_inventory("0030", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0031")
+    schema_inventory("0031", profile["columns"])
     require(
-        len(profile["functions"]) == 390 and sum(map(len, profile["columns"].values())) == 1225,
+        len(profile["functions"]) == 409 and sum(map(len, profile["columns"].values())) == 1241,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -2057,7 +2060,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0030",
+            "schema_revision": "0031",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

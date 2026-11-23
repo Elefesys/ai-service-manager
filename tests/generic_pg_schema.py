@@ -25,14 +25,14 @@ _catalog = runpy.run_path(
 
 @cache
 def current_source():
-    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], "0030")
+    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], "0031")
 
 
 async def assert_current_schema(c):
     assert (await c.execute(text("SELECT current_user"))).scalar_one() == "asm_migrator"
     assert (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-    ).scalar_one() == "0030"
+    ).scalar_one() == "0031"
     original_path = (await c.execute(text("SHOW search_path"))).scalar_one()
     await c.execute(text("SET LOCAL search_path=pg_catalog,pg_temp"))
     expected = current_source()
@@ -49,7 +49,7 @@ async def assert_current_schema(c):
     )
     full, nonfunction = (await c.execute(text(_catalog["CATALOG_SQL"]))).one()
     profile = (
-        await c.execute(text("SELECT platform.quote_acceptance_schema_profile()"))
+        await c.execute(text("SELECT platform.service_intent_schema_profile()"))
     ).scalar_one()
     await c.execute(text("SELECT set_config('search_path',:path,true)"), {"path": original_path})
     _catalog["compare_catalog"](expected, functions, resolved, full, nonfunction, lambda: profile)
@@ -64,7 +64,7 @@ async def current_snapshot(c):
         values = (await c.execute(text(f"SELECT to_jsonb(t) FROM {table} AS t"))).scalars()
         canonical = sorted(json.dumps(v, sort_keys=True, separators=(",", ":")) for v in values)
         rows[table] = (len(canonical), hashlib.sha256("\n".join(canonical).encode()).hexdigest())
-    assert len(rows) == 85
+    assert len(rows) == 86
     return rows, catalog
 
 
@@ -83,7 +83,7 @@ async def historical_schema(h, revision):
             await h.runtime.check()
         yield
     finally:
-        await _migrate("upgrade", "0030")
+        await _migrate("upgrade", "0031")
         await h.runtime.engine.dispose()
         await h.runtime.check()
         with pytest.raises(RuntimeError, match="schema"):

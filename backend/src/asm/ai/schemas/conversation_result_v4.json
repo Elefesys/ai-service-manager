@@ -1,0 +1,472 @@
+{
+  "$defs": {
+    "CandidateFact": {
+      "additionalProperties": false,
+      "properties": {
+        "explicit_correction": {
+          "title": "Explicit Correction",
+          "type": "boolean"
+        },
+        "field": {
+          "enum": [
+            "idea",
+            "placement",
+            "approximate_size",
+            "style",
+            "references"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "status": {
+          "enum": [
+            "client-stated",
+            "observed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 300,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "status",
+        "source",
+        "explicit_correction"
+      ],
+      "title": "CandidateFact",
+      "type": "object"
+    },
+    "CandidateSet": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "NEW_TATTOO",
+            "COVER_UP",
+            "OTHER_COMPLEX",
+            "FAQ_ONLY",
+            "AMBIGUOUS"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/CandidateFact"
+          },
+          "maxItems": 5,
+          "title": "Facts",
+          "type": "array"
+        },
+        "service_id": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "pattern": "^[a-z][a-z0-9_-]{0,39}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Service Id"
+        },
+        "switch_request": {
+          "title": "Switch Request",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "service_id",
+        "category",
+        "switch_request",
+        "facts"
+      ],
+      "title": "CandidateSet",
+      "type": "object"
+    },
+    "IntakeHandoff": {
+      "additionalProperties": false,
+      "properties": {
+        "intake": {
+          "$ref": "#/$defs/CandidateSet"
+        },
+        "kind": {
+          "const": "handoff",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Text"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "reason",
+        "intake"
+      ],
+      "title": "IntakeHandoff",
+      "type": "object"
+    },
+    "IntakeNoReply": {
+      "additionalProperties": false,
+      "properties": {
+        "intake": {
+          "$ref": "#/$defs/CandidateSet"
+        },
+        "kind": {
+          "const": "no_reply",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "null"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "reason",
+        "intake"
+      ],
+      "title": "IntakeNoReply",
+      "type": "object"
+    },
+    "IntakePhoto": {
+      "additionalProperties": false,
+      "properties": {
+        "caption": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Caption",
+          "type": "string"
+        },
+        "intake": {
+          "$ref": "#/$defs/CandidateSet"
+        },
+        "kind": {
+          "const": "portfolio_photo",
+          "title": "Kind",
+          "type": "string"
+        },
+        "selection": {
+          "$ref": "#/$defs/PortfolioPhotoSelection"
+        }
+      },
+      "required": [
+        "kind",
+        "selection",
+        "caption",
+        "intake"
+      ],
+      "title": "IntakePhoto",
+      "type": "object"
+    },
+    "IntakeReply": {
+      "additionalProperties": false,
+      "properties": {
+        "intake": {
+          "$ref": "#/$defs/CandidateSet"
+        },
+        "kind": {
+          "const": "reply",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "null"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "reason",
+        "intake"
+      ],
+      "title": "IntakeReply",
+      "type": "object"
+    },
+    "PortfolioPhotoSelection": {
+      "additionalProperties": false,
+      "description": "Only a source identity; never destination, storage access, or a permit.",
+      "properties": {
+        "asset_version_id": {
+          "format": "uuid",
+          "title": "Asset Version Id",
+          "type": "string"
+        },
+        "item_id": {
+          "format": "uuid",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "title": "Revision Id",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "revision_id",
+        "asset_version_id",
+        "source_sha256"
+      ],
+      "title": "PortfolioPhotoSelection",
+      "type": "object"
+    },
+    "PrepareServiceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "prepare_service_request",
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ServiceIntentSource"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "PrepareServiceRequest",
+      "type": "object"
+    },
+    "RequestOwnerDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "request_owner_decision",
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ServiceIntentSource"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "RequestOwnerDecision",
+      "type": "object"
+    },
+    "ServiceIntentResult": {
+      "additionalProperties": false,
+      "properties": {
+        "intake": {
+          "$ref": "#/$defs/CandidateSet"
+        },
+        "intents": {
+          "anyOf": [
+            {
+              "maxItems": 1,
+              "minItems": 1,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/PrepareServiceRequest"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 1,
+              "minItems": 1,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/RequestOwnerDecision"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/PrepareServiceRequest"
+                },
+                {
+                  "$ref": "#/$defs/RequestOwnerDecision"
+                }
+              ],
+              "type": "array"
+            }
+          ],
+          "title": "Intents"
+        },
+        "kind": {
+          "const": "no_reply",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "null"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "reason",
+        "intake",
+        "intents"
+      ],
+      "title": "ServiceIntentResult",
+      "type": "object"
+    },
+    "ServiceIntentSource": {
+      "additionalProperties": false,
+      "properties": {
+        "message_id": {
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Message Id",
+          "type": "string"
+        },
+        "source_version": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "source_version"
+      ],
+      "title": "ServiceIntentSource",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "analysis_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analysis Id"
+        },
+        "analysis_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analysis Sha256"
+        },
+        "message_id": {
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Message Id",
+          "type": "string"
+        },
+        "quote": {
+          "maxLength": 500,
+          "title": "Quote",
+          "type": "string"
+        },
+        "source_version": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "source_version",
+        "quote",
+        "analysis_id",
+        "analysis_sha256"
+      ],
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/IntakeReply"
+    },
+    {
+      "$ref": "#/$defs/IntakeHandoff"
+    },
+    {
+      "$ref": "#/$defs/IntakeNoReply"
+    },
+    {
+      "$ref": "#/$defs/IntakePhoto"
+    },
+    {
+      "$ref": "#/$defs/ServiceIntentResult"
+    }
+  ]
+}

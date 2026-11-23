@@ -20,6 +20,7 @@ from asm.ai.contracts import (
     Money,
     PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
+    ServiceIntentGatewayConfig,
 )
 from asm.ai.polza import RuntimeRoute, fingerprint
 
@@ -203,18 +204,18 @@ class PortfolioDeliveryRuntimeSettings(DTO):
 
 
 class IntakeRuntimeSettings(DTO):
-    """New synthetic photo-profile anchor; previous image/text sessions stay closed."""
+    """Finite synthetic admission for one conversation and contract."""
 
     session_id: UUID
     workspace_id: UUID
     business_id: UUID
     client_id: UUID
     conversation_id: UUID
-    data_profile: Literal["SYNTHETIC_INTAKE_V1"]
+    data_profile: Literal["SYNTHETIC_INTAKE_V1", "SYNTHETIC_SERVICE_INTENTS_V1"]
     expires_at: datetime
     max_calls: int = Field(ge=1, le=4)
     max_cost: Money
-    config: IntakeGatewayConfig
+    config: IntakeGatewayConfig | ServiceIntentGatewayConfig
 
     @model_validator(mode="after")
     def finite(self) -> Self:
@@ -224,6 +225,8 @@ class IntakeRuntimeSettings(DTO):
             or not Decimal(0) < self.max_cost <= Decimal(10)
             or self.config.limits.cost_budget > self.max_cost
             or self.config.limits.model_calls > self.max_calls
+            or (self.data_profile == "SYNTHETIC_SERVICE_INTENTS_V1")
+            != isinstance(self.config, ServiceIntentGatewayConfig)
         ):
             raise ValueError("INTAKE_ADMISSION_INVALID")
         return self

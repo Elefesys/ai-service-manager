@@ -9,7 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
-from asm.intake.models import CandidateSet
+from asm.billing.validation import CanonicalUUID
+from asm.intake.models import CandidateSet, Digest
 
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_.:/-]+$")]
 Text = Annotated[str, Field(min_length=1, max_length=4000, pattern=r"\S")]
@@ -152,13 +153,9 @@ class PortfolioDeliveryGatewayConfig(DTO):
         return self
 
 
-class IntakeGatewayConfig(DTO):
-    """Explicit v6 selection proposal; no historical config gains send authority."""
-
+class _IntakeGatewayConfig(DTO):
     revision: Identifier
     route: Route
-    prompt_revision: Literal["conversation_v7"]
-    schema_revision: Literal["conversation_result_v3"]
     limits: Limits
 
     @model_validator(mode="after")
@@ -176,6 +173,20 @@ class IntakeGatewayConfig(DTO):
         return self
 
 
+class IntakeGatewayConfig(_IntakeGatewayConfig):
+    """Historical v7 candidate extraction."""
+
+    prompt_revision: Literal["conversation_v7"]
+    schema_revision: Literal["conversation_result_v3"]
+
+
+class ServiceIntentGatewayConfig(_IntakeGatewayConfig):
+    """Finite synthetic contract for commercial intent proposals."""
+
+    prompt_revision: Literal["conversation_v8"]
+    schema_revision: Literal["conversation_result_v4"]
+
+
 AnyGatewayConfig = (
     GatewayConfig
     | KnowledgeGatewayConfig
@@ -183,10 +194,13 @@ AnyGatewayConfig = (
     | PortfolioGatewayConfig
     | PortfolioDeliveryGatewayConfig
     | IntakeGatewayConfig
+    | ServiceIntentGatewayConfig
 )
 
 
 def validate_gateway_config(value: object) -> AnyGatewayConfig:
+    if isinstance(value, ServiceIntentGatewayConfig):
+        return ServiceIntentGatewayConfig.model_validate(value)
     if isinstance(value, IntakeGatewayConfig):
         return IntakeGatewayConfig.model_validate(value)
     if isinstance(value, PortfolioDeliveryGatewayConfig):
@@ -313,10 +327,53 @@ class IntakePhoto(PortfolioPhoto):
 
 ConversationResultV3 = IntakeReply | IntakeHandoff | IntakeNoReply | IntakePhoto
 CONVERSATION_RESULT_V3: TypeAdapter[ConversationResultV3] = TypeAdapter(ConversationResultV3)
-AnyConversationResult = ConversationResult | ConversationResultV2 | ConversationResultV3
+
+ServiceIntentName = Literal["prepare_service_request", "request_owner_decision"]
+
+
+class ServiceIntentSource(DTO):
+    message_id: CanonicalUUID
+    source_version: Digest
+
+
+class PrepareServiceRequest(DTO):
+    name: Literal["prepare_service_request"]
+    source: ServiceIntentSource
+
+
+class RequestOwnerDecision(DTO):
+    name: Literal["request_owner_decision"]
+    source: ServiceIntentSource
+
+
+class ServiceIntentResult(IntakeNoReply):
+    intents: (
+        tuple[PrepareServiceRequest]
+        | tuple[RequestOwnerDecision]
+        | tuple[PrepareServiceRequest, RequestOwnerDecision]
+    ) = Field(repr=False)
+
+    @model_validator(mode="after")
+    def one_work_source(self) -> Self:
+        if len(self.intents) == 2 and self.intents[0].source != self.intents[1].source:
+            raise ValueError("Commercial intents must share one current source")
+        return self
+
+
+ConversationResultV4 = ConversationResultV3 | ServiceIntentResult
+CONVERSATION_RESULT_V4: TypeAdapter[ConversationResultV4] = TypeAdapter(ConversationResultV4)
+AnyConversationResult = ConversationResult | ConversationResultV2 | ConversationResultV4
 
 
 def validate_conversation_result(config: AnyGatewayConfig, value: object) -> AnyConversationResult:
+    if isinstance(config, ServiceIntentGatewayConfig):
+        if isinstance(value, dict):
+            return CONVERSATION_RESULT_V4.validate_json(
+                json.dumps(value, ensure_ascii=False, allow_nan=False)
+            )
+        return CONVERSATION_RESULT_V4.validate_python(value)
+    if isinstance(value, ServiceIntentResult):
+        raise ValueError("Service intents require the v8 contract")
     if isinstance(config, IntakeGatewayConfig):
         if isinstance(value, dict):
             return CONVERSATION_RESULT_V3.validate_json(
@@ -508,7 +565,16 @@ class IntakeGatewayResult(_GatewayResult[ConversationResultV3]):
     """Only the new v7 path can return candidate facts."""
 
 
-AnyGatewayResult = GatewayResult | PortfolioDeliveryGatewayResult | IntakeGatewayResult
+class ServiceIntentGatewayResult(_GatewayResult[ConversationResultV4]):
+    """Typed proposals for the admitted v8 runtime."""
+
+
+AnyGatewayResult = (
+    GatewayResult
+    | PortfolioDeliveryGatewayResult
+    | IntakeGatewayResult
+    | ServiceIntentGatewayResult
+)
 
 
 def strict_json(raw: str) -> Any:

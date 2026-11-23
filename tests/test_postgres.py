@@ -176,6 +176,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "saas_plans",
             "service_assessments",
             "service_orders",
+            "service_request_agent_intents",
             "service_request_receipts",
             "service_requests",
             "service_sessions",
@@ -191,7 +192,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M6.3C material tables are allowed"
+        ], "The material tables must match schema 0031"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

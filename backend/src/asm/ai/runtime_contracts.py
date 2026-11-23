@@ -14,6 +14,7 @@ from asm.ai.contracts import (
     ConversationResult,
     ConversationResultV2,
     ConversationResultV3,
+    ConversationResultV4,
     Cost,
     GatewayConfig,
     IntakeGatewayConfig,
@@ -22,6 +23,8 @@ from asm.ai.contracts import (
     PortfolioGatewayConfig,
     PortfolioPhotoSelection,
     SearchGatewayConfig,
+    ServiceIntentGatewayConfig,
+    ServiceIntentResult,
     Usage,
 )
 from asm.ai.knowledge import KnowledgePin, SearchPin, SearchProjection, SearchRefs
@@ -218,7 +221,7 @@ class PreparedPortfolioDeliveryRun(_PreparedRun):
 class PreparedIntakeRun(_PreparedRun):
     """One explicit synthetic intake run, scoped independently of older DTOs."""
 
-    config: IntakeGatewayConfig = Field(repr=False)
+    config: IntakeGatewayConfig | ServiceIntentGatewayConfig = Field(repr=False)
     knowledge_pin: KnowledgePin = Field(repr=False)
     active_projection: ActiveProjection = Field(repr=False)
     search_pin: SearchPin = Field(repr=False)
@@ -486,7 +489,7 @@ class PortfolioDeliveryRuntimeReceipt(_RuntimeReceipt[ConversationResultV2]):
         return self
 
 
-class IntakeRuntimeReceipt(_RuntimeReceipt[ConversationResultV3]):
+class _IntakeRuntimeReceipt[Candidate](_RuntimeReceipt[Candidate]):
     knowledge_pin: KnowledgePin = Field(repr=False)
     search_pin: SearchPin = Field(repr=False)
     search_refs: SearchRefs = Field(repr=False)
@@ -510,7 +513,32 @@ class IntakeRuntimeReceipt(_RuntimeReceipt[ConversationResultV3]):
         return self
 
 
-AnyRuntimeReceipt = RuntimeReceipt | PortfolioDeliveryRuntimeReceipt | IntakeRuntimeReceipt
+class IntakeRuntimeReceipt(_IntakeRuntimeReceipt[ConversationResultV3]):
+    """An immutable receipt for v7 candidate extraction."""
+
+
+class ServiceIntentReceipt(DTO):
+    request_id: UUID
+    approval_id: UUID | None
+    quote_id: UUID | None
+
+
+class ServiceIntentRuntimeReceipt(_IntakeRuntimeReceipt[ConversationResultV4]):
+    service_intents: ServiceIntentReceipt | None
+
+    @model_validator(mode="after")
+    def matching_intents(self) -> Self:
+        if isinstance(self.result, ServiceIntentResult) != (self.service_intents is not None):
+            raise ValueError("Commercial result and receipt disagree")
+        return self
+
+
+AnyRuntimeReceipt = (
+    RuntimeReceipt
+    | PortfolioDeliveryRuntimeReceipt
+    | IntakeRuntimeReceipt
+    | ServiceIntentRuntimeReceipt
+)
 
 
 class CallCompletion(DTO):

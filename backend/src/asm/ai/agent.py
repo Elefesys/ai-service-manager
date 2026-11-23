@@ -33,6 +33,7 @@ from asm.ai.contracts import (
     ConversationResult,
     ConversationResultV2,
     ConversationResultV3,
+    ConversationResultV4,
     Cost,
     ErrorCode,
     GatewayRequest,
@@ -40,6 +41,7 @@ from asm.ai.contracts import (
     IntakeGatewayConfig,
     PortfolioDeliveryGatewayConfig,
     ReadTool,
+    ServiceIntentGatewayConfig,
     ToolResult,
     Usage,
     validate_conversation_result,
@@ -156,7 +158,13 @@ class IntakeAgentOutcome(_AgentOutcome[ConversationResultV3]):
     """Server-checked candidate, still without mutation authority."""
 
 
-AnyAgentOutcome = AgentOutcome | PortfolioDeliveryAgentOutcome | IntakeAgentOutcome
+class ServiceIntentAgentOutcome(_AgentOutcome[ConversationResultV4]):
+    """An uncommitted proposal from the v8 agent."""
+
+
+AnyAgentOutcome = (
+    AgentOutcome | PortfolioDeliveryAgentOutcome | IntakeAgentOutcome | ServiceIntentAgentOutcome
+)
 
 
 class AuthorityFailure(Exception):
@@ -212,7 +220,9 @@ class ConversationAgent:
             )
         )
         model = (
-            IntakeAgentOutcome
+            ServiceIntentAgentOutcome
+            if isinstance(self.config, ServiceIntentGatewayConfig)
+            else IntakeAgentOutcome
             if isinstance(self.config, IntakeGatewayConfig)
             else PortfolioDeliveryAgentOutcome
             if isinstance(self.config, PortfolioDeliveryGatewayConfig)
