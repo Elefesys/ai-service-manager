@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4B IN_PROGRESS · независимая сквозная приёмка · 2026-11-23
+## CURRENT — M6.4B-R1 IN_PROGRESS · допуск ветки приёмки в CI · 2026-11-23
 
-Ведущий C8, приёмка C0. Ветка `c8/m6-4b-acceptance` от проверенного `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, схема `0031`. В synthetic LOCAL/TEST проверить GJ-A с автоматическим предложением, GJ-B с решением мастера и явным согласием и GJ-C с передачей сложной работы. Сопоставить Q1–Q8 с доказательствами на одном кандидате и подготовить данные согласованного заказа для M7. [Поручение C0](tasks/M6_HANDOFF.md#L3) · [Принятая выборка Q1–Q8](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/tasks/M6_HANDOFF.md#L269).
+C0 подтвердил единственное открытое замечание C8 `C8-M6.4B-01`. Ведущий R1 — C6, тот же Draft PR #63, ветка `c8/m6-4b-acceptance`, head `0a04d50410cbfee39786f26f7e9afb7fd91ecec7`, база `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`. Три сквозных пути подтверждены в synthetic LOCAL/TEST. Штатный Chromium прошёл 98/98. В CI прошли 11/12 заданий. `m4-runtime-db` остановился до PostgreSQL с `POLZA_RUNTIME_EVENT_BRANCH`. Требуется ограниченный допуск PR и последующего `push/main` с проверками схемы `0031`. C0 ждёт результат C6 на новом head для возврата в C8. [Поручение R1](tasks/M6_HANDOFF.md#L3) · [Отчёт C8](https://github.com/Elefesys/ai-service-manager/pull/63#issue-6555991440) · [Шаг CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45150298693/job/137609856699#step:3:1).
 
 ## История — M6.4A INTEGRATED / VERIFIED · 2026-11-23
 
