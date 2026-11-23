@@ -1671,10 +1671,11 @@ DECLARE
   candidate jsonb:=p->'intake';
   projection jsonb; source_message app.messages%ROWTYPE;
   anchor app.messages%ROWTYPE; next_anchor app.messages%ROWTYPE;
-  d app.service_requests%ROWTYPE; source_text text; work_tail text;
+  d app.service_requests%ROWTYPE; source_text text; source_words text; work_tail text;
   fact jsonb; fact_message app.messages%ROWTYPE;
   intent_source jsonb; pending_source jsonb; fields jsonb; target_ids uuid[]; saved_request uuid;
-  exact_source_request uuid; work_count bigint; ordinal_count integer; second_reply boolean;
+  exact_source_request uuid; work_count bigint; mentioned_work_count bigint;
+  ordinal_count integer; second_reply boolean; pending_affirmed boolean;
   ordinal_reference constant text:='\m((для|у|по)[[:space:]]+(первой|второй|третьей)[[:space:]]+(татуировки|работы)|(for|of)[[:space:]]+(the[[:space:]]+)?(first|second|third)[[:space:]]+(tattoo|work))\M';
   second_address constant text:='^[[:space:]]*(для[[:space:]]+второй[[:space:]]+(татуировки|работы)|for[[:space:]]+(the[[:space:]]+)?second[[:space:]]+(tattoo|work))\M';
 BEGIN
@@ -1704,15 +1705,22 @@ BEGIN
     IF work_tail='' THEN RETURN NULL; END IF;
   END IF;
 
+  source_words:=' '||trim(regexp_replace(lower(source_text COLLATE pg_catalog.pg_c_utf8),'[^[:alnum:]]+',' ','g'))||' ';
   SELECT count(*),
     (array_agg(x.id) FILTER (WHERE x.intent_message_id=source_message.id))[1],
-    array_agg(x.id) FILTER (WHERE EXISTS (
-      SELECT 1 FROM jsonb_array_elements(x.facts) f WHERE f->>'field'='idea' AND f->>'conflict'='false'
-        AND f->>'status' IN ('client-stated','owner-confirmed')
-        AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
-        AND platform.service_request_agent_mentions(source_text,f->>'value')
-    )) INTO work_count,exact_source_request,target_ids
+    count(*) FILTER (WHERE titles.mentioned),array_agg(x.id) FILTER (WHERE titles.affirmed)
+    INTO work_count,exact_source_request,mentioned_work_count,target_ids
   FROM app.service_requests x
+  CROSS JOIN LATERAL (
+    SELECT bool_or(length(name)>=2 AND position(' '||name||' ' IN source_words)>0) AS mentioned,
+      bool_or(platform.service_request_agent_mentions(source_text,f->>'value')) AS affirmed
+    FROM jsonb_array_elements(x.facts) f
+    CROSS JOIN LATERAL (SELECT trim(regexp_replace(lower((f->>'value') COLLATE pg_catalog.pg_c_utf8),
+      '[^[:alnum:]]+',' ','g')) AS name) title
+    WHERE f->>'field'='idea' AND f->>'conflict'='false'
+      AND f->>'status' IN ('client-stated','owner-confirmed')
+      AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
+  ) titles
   WHERE (x.workspace_id,x.business_id,x.conversation_id,x.client_id)
     =(c.workspace_id,c.business_id,c.id,c.client_id);
 
@@ -1728,11 +1736,16 @@ BEGIN
       THEN RETURN NULL; END IF;
     intent_source:=source;
   ELSIF exact_source_request IS NULL THEN
+    -- Excluding one title cannot make another title in the same correction uniquely proven.
+    IF mentioned_work_count>1 THEN RETURN NULL; END IF;
     -- A completed intake reply can anchor an unfinished work without creating a draft.
     -- Its idea must still belong to the current intake focus and match this reply.
-    SELECT jsonb_build_object('message_id',f->'source'->'message_id','source_version',f->'source'->'source_version')
-      INTO pending_source
+    SELECT jsonb_build_object('message_id',f->'source'->'message_id','source_version',f->'source'->'source_version'),
+      ordinal_count>0 OR platform.service_request_agent_mentions(source_text,f->>'value')
+      INTO pending_source,pending_affirmed
       FROM jsonb_array_elements(projection->'facts') f
+      CROSS JOIN LATERAL (SELECT trim(regexp_replace(lower((f->>'value') COLLATE pg_catalog.pg_c_utf8),
+        '[^[:alnum:]]+',' ','g')) AS name) title
       JOIN app.conversation_turn_messages tm ON (tm.workspace_id,tm.message_id)
         =(c.workspace_id,(f->'source'->>'message_id')::uuid)
       JOIN app.messages m ON (m.workspace_id,m.id)=(tm.workspace_id,tm.message_id)
@@ -1752,7 +1765,7 @@ BEGIN
         AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
         AND platform.service_request_agent_source_available(c,NULL,m.id)
         AND (m.created_at,m.id)<(source_message.created_at,source_message.id)
-        AND ((ordinal_count=0 AND platform.service_request_agent_mentions(source_text,f->>'value')) OR (
+        AND ((ordinal_count=0 AND length(title.name)>=2 AND position(' '||title.name||' ' IN source_words)>0) OR (
           -- An ordinal-only reply belongs to the single pending work behind a delivered question.
           second_reply AND work_count=1 AND projection->>'status'='CLARIFY'
           AND projection->'conflicts'='[]'::jsonb
@@ -1783,12 +1796,12 @@ BEGIN
               platform.message_effective(c.workspace_id,m.id)->>'text'))>0)
       ORDER BY prior.turn_revision DESC LIMIT 1;
     IF pending_source IS NOT NULL THEN
-      IF NOT p_prepare OR target_ids IS NOT NULL OR candidate->>'switch_request'='true'
+      IF pending_affirmed IS NOT TRUE OR NOT p_prepare OR mentioned_work_count>0 OR candidate->>'switch_request'='true'
         OR EXISTS(SELECT 1 FROM jsonb_array_elements(candidate->'facts') f
           WHERE f->'source'->'message_id' IS DISTINCT FROM source->'message_id')
         THEN RETURN NULL; END IF;
       intent_source:=pending_source;
-    ELSIF ordinal_count>0 OR coalesce(cardinality(target_ids),0)>1 THEN RETURN NULL;
+    ELSIF ordinal_count>0 THEN RETURN NULL;
     ELSE saved_request:=target_ids[1]; END IF;
   END IF;
 
@@ -3034,7 +3047,7 @@ PROFILE = r"""CREATE FUNCTION platform.service_intent_schema_profile() RETURNS j
 ('platform.service_request_agent_mentions(text,text)','aa618129d36a4c7fd5ccf073ec1b85920b0b05c6cf93d7c141cf9f5708445450','sql',false,'i',false),
 ('platform.service_request_agent_must_finish()','13bd81c537e2a36a70eb5e4b3d04a88724cc55134d10323049ad62d6da825cbd','plpgsql',true,'v',false),
 ('platform.service_request_agent_pin(platform.ai_runs)','a3f11e1d66132c3a46a32ada2d4681ffa0eca550a98da47b559b47fb87a71997','sql',true,'s',false),
-('platform.service_request_agent_prepare(platform.ai_runs,app.conversations,jsonb,boolean)','fcea987d895a6ba024a0774a2158da0d2bdc2fb1700d4547b59da53781ceace4','plpgsql',true,'v',false),
+('platform.service_request_agent_prepare(platform.ai_runs,app.conversations,jsonb,boolean)','de65d0b173b32d1ece6869e02103267fb464764f50f578885469a3a6533e7a6b','plpgsql',true,'v',false),
 ('platform.service_request_agent_result(platform.ai_runs)','bcb3be996923062fec341f074743c803cc302719e7751d8f63bfb39ed3486915','sql',true,'s',false),
 ('platform.service_request_agent_source_available(app.conversations,uuid,uuid)','e3c88b4802a9e2a10609d709028d357c55cccc97ed25eb6d0b0981975df6e863','sql',true,'s',false),
 ('platform.service_request_agent_work_tail(text)','71e8f1951f923c9d1b0c708780601ef0795f020859ec95d0804023afd24e4cab','plpgsql',false,'i',false),

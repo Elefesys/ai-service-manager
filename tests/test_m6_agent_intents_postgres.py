@@ -983,6 +983,124 @@ async def test_r2_ordinal_answer_finishes_the_single_pending_second_work(approva
     )
 
 
+async def test_r3_two_named_works_require_clarification_before_correcting_swallow(
+    approval_pg, auth
+):
+    case = await R1Conversation.open(approval_pg, auth)
+    a, quote_a = await case.first_rose()
+    _, prepared = await case.commercial(
+        SWALLOW_TEXT, SECOND_SWALLOW, switch=True, intents=(PREPARE, OWNER_DECISION)
+    )
+    assert prepared.approval_id is not None and prepared.quote_id is None
+    a_id, b_id = a["request_id"], str(prepared.request_id)
+    b = await case.card(b_id)
+
+    def size(card):
+        return next(fact for fact in card["facts"] if fact["field"] == "approximate_size")
+
+    a_quote_view, b_quote_view = await case.quote_view(a_id), await case.quote_view(b_id)
+    (pending,) = await case.approvals()
+    approval_url = case.decision_url(b_id, prepared.approval_id)
+    assert pending == await owner_get(auth, approval_url)
+    assert (pending["approval_id"], pending["request_id"], pending["status"]) == (
+        str(prepared.approval_id),
+        b_id,
+        "PENDING",
+    )
+    assert pending["can_resolve"]
+    before = await quote_counts_by_request(case)
+    assert before == {
+        a_id: dict(quotes=1, deliveries=1, sent=1),
+        b_id: dict(quotes=0, deliveries=0, sent=0),
+    }
+    mixed, receipt = await case.turn(
+        "У тату «роза» размер не меняем. Для тату «ласточка» уточняю размер: 21 мм.",
+        {"approximate_size": "21 мм"},
+        correction=True,
+    )
+    assert receipt.service_intents is None
+    assert (receipt.result.kind, receipt.result.text) == ("reply", AMBIGUOUS_QUESTION)
+    assert await case.card(a_id) == a and await case.card(b_id) == b
+    assert await case.quote_view(a_id) == a_quote_view
+    assert await case.quote_view(b_id) == b_quote_view
+    assert await case.approvals() == [pending] and await owner_get(auth, approval_url) == pending
+    after_mixed = await quote_counts_by_request(case)
+    assert after_mixed == before
+    stats = await case.check_counts(
+        requests=2, approvals=1, quotes=1, followups=(AMBIGUOUS_QUESTION,)
+    )
+    report(
+        "R3_mixed_clarification",
+        conversation=case.cid,
+        incoming_id=mixed,
+        a=work_evidence(a),
+        b=work_evidence(b),
+        a_size=size(a),
+        b_size=size(b),
+        quote_a=quote_a,
+        approval_id=pending["approval_id"],
+        approval_status=pending["status"],
+        before_per_work=before,
+        after_per_work=after_mixed,
+        **stats,
+    )
+
+    explicit, updated = await case.commercial(
+        "Для тату «ласточка» уточняю размер: 21 мм.",
+        {"approximate_size": "21 мм"},
+        correction=True,
+    )
+    assert str(updated.request_id) == b_id and updated.approval_id is None
+    b_after = await case.card(b_id)
+    assert b["revision"] == "1" and b_after["revision"] == "2"
+    assert b_after["intent_source"] == b["intent_source"]
+    assert [fact for fact in b_after["facts"] if fact["field"] != "approximate_size"] == [
+        fact for fact in b["facts"] if fact["field"] != "approximate_size"
+    ]
+    assert size(b_after)["value"] == "21 мм"
+    projection = await summary(approval_pg, case.cid)
+    source = next(item for item in projection["sources"] if item["message_id"] == str(explicit))
+    assert (size(b_after)["source"]["message_id"], size(b_after)["source"]["source_version"]) == (
+        str(explicit),
+        source["source_version"],
+    )
+    quote_b = await case.send_quote(b_id, 400_000, 65)
+    assert quote_b["quote_id"] == str(updated.quote_id)
+    assert await case.card(a_id) == a and await case.quote_view(a_id) == a_quote_view
+    history = await owner_get(auth, approval_url)
+    assert (history["approval_id"], history["request_revision"], history["status"]) == (
+        pending["approval_id"],
+        "1",
+        "STALE",
+    )
+    assert history["basis"] == pending["basis"]
+    assert not history["can_resolve"] and not history["authorization_current"]
+    assert not [row for row in await case.approvals() if row["status"] == "PENDING"]
+    after = await quote_counts_by_request(case)
+    assert after == before | {b_id: dict(quotes=1, deliveries=1, sent=1)}
+    stats = await case.check_counts(
+        requests=2, approvals=1, quotes=2, followups=(AMBIGUOUS_QUESTION,)
+    )
+    report(
+        "R3_explicit_swallow",
+        conversation=case.cid,
+        incoming_id=explicit,
+        a=work_evidence(a),
+        b=work_evidence(b_after),
+        a_size=size(a),
+        b_size_before=size(b),
+        b_size_after=size(b_after),
+        quote_a=quote_a,
+        quote_b=quote_b,
+        historical_approval_id=history["approval_id"],
+        historical_approval_status=history["status"],
+        pending_approvals=0,
+        before_per_work=after_mixed,
+        after_per_work=after,
+        **stats,
+    )
+
+
 @pytest.mark.parametrize(
     "fence", ["HUMAN", "REVOKED", "STALE_TURN", "FOREIGN", "STALE_SOURCE", "AMOUNT", "V7"]
 )
