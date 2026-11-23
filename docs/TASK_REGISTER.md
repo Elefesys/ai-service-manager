@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4A IN_PROGRESS · 2026-11-22
+## CURRENT — M6.4A REVIEW · R3 для C4 · 2026-11-23
 
-C4 подключает два типизированных намерения агента к принятым командам M6. C1 отвечает за доменную команду и её полномочия, C3 — за штатный путь Turn/worker и доставку. Проверяем автоматическую заявку, запрос мастеру, восстановление по прежним ID и ноль коммерческих действий при отказе в допуске. База `main` `202816a5b0a9dc30e9161a94184813eb9f1c06fd`, ветка `c4/m6-4a-agent-intents`. [Поручение C0 и критерии](tasks/M6_HANDOFF.md#L3).
+Единственная активная задача — R3 по `C0-M6.4A-04` в Draft PR #62 на `9ac68660a70b6cc06951b58a4916535bac954788`, база `202816a5b0a9dc30e9161a94184813eb9f1c06fd`. Исходные диалоги R2 прошли, CI 12/12. В отдельной реплике клиент сохранил прежний размер розы и изменил размер ласточки. Worker изменил розу и отправил новое предложение по ней. C4 ведёт исправление вместе с C1 и C3. [Поручение и результаты до и после R2](tasks/M6_HANDOFF.md#L3) · [Предыдущая выдача](https://github.com/Elefesys/ai-service-manager/blob/e6ed24cf9c504fdd490671bede3a16e949d590e7/docs/tasks/M6_HANDOFF.md#L3) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45093450603/attempts/1).
 
 ## История — M6.3C INTEGRATED / VERIFIED · 2026-11-22
 
