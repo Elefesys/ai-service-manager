@@ -950,6 +950,8 @@ test('@narrow asks only for the missing term and retains its independent basis',
  ])await settings.getByLabel(label,{exact:true}).fill(value);
  await durationMode.selectOption('OWNER_DEFINED');
  await depositMode.selectOption('NONE');
+ await settings.getByLabel('Предоплата, копейки 1',{exact:true}).fill('');
+ await settings.getByLabel('Предоплата, процент 1',{exact:true}).fill('');
  await publishIntakeService(settings,serviceName);
  const {conversation,collected,intake}=await collectIntake(page,variant,'owner-decision-partial');
  await (await chooseWork(page,collected.message_id,'flower','forearm','20 mm','linework')).click();
