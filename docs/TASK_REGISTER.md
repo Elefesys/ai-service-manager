@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4A IN_PROGRESS · 2026-11-22
+## CURRENT — M6.4A REVIEW · C8 · 2026-11-23
 
-C4 подключает два типизированных намерения агента к принятым командам M6. C1 отвечает за доменную команду и её полномочия, C3 — за штатный путь Turn/worker и доставку. Проверяем автоматическую заявку, запрос мастеру, восстановление по прежним ID и ноль коммерческих действий при отказе в допуске. База `main` `202816a5b0a9dc30e9161a94184813eb9f1c06fd`, ветка `c4/m6-4a-agent-intents`. [Поручение C0 и критерии](tasks/M6_HANDOFF.md#L3).
+C0 принял R3 на `5b4983a1b4c67703195c56c61c07de0096d673d1` и закрыл свои четыре замечания. Единственная активная задача — независимая проверка M6.4A в Draft PR #62, ведущий C8. База `main` — `202816a5b0a9dc30e9161a94184813eb9f1c06fd`. На PostgreSQL 18.6 у C0 прошли 18/18 штатных проверок. Смешанная реплика дала один вопрос. После отдельной поправки новое предложение ушло только по ласточке. CI — 12/12, Chromium — 97/97 при повторе только браузерного задания. [Поручение C8](tasks/M6_HANDOFF.md#L3) · [Выдача R3](https://github.com/Elefesys/ai-service-manager/blob/5e5c08ce402e4219945d9af3b0b0d427d95999df/docs/tasks/M6_HANDOFF.md#L3) · [PR](https://github.com/Elefesys/ai-service-manager/pull/62) · [Итог CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45103016698/attempts/2).
 
 ## История — M6.3C INTEGRATED / VERIFIED · 2026-11-22
 
