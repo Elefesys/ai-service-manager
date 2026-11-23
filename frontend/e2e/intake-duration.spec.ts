@@ -14,7 +14,7 @@ const fixture=JSON.parse(readFileSync(fixtureFile,'utf8')) as {messaging_fixture
 const password=readFileSync(passwordFile,'utf8'),owner=fixture.messaging_fixtures.knowledge;
 
 type Viewport='desktop'|'narrow';
-type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second'|'agent-first'|'agent-start-second'|'agent-second'|'agent-correct-first'|'agent-same-title';
+type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second'|'agent-first'|'agent-start-second'|'agent-second'|'agent-exclude-first'|'agent-correct-first'|'agent-same-title';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
 type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
 type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history';
@@ -1092,7 +1092,7 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:QuoteIntakeJ
  return {input,conversation,collected,intake,inbox,settings,serviceName,work,cardId,panel,firstId,endpoint,execute,read,readHistory,evaluateAndPrice,price};
 }
 
-test('@narrow M6.4A keeps separate work and lets the owner confirm the agent request',async({page},info)=>{
+test('@narrow M6.4A-R2 binds a follow-up to the second work and preserves the excluded request',async({page},info)=>{
  test.setTimeout(120_000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const journey='quote-agent';
@@ -1166,6 +1166,15 @@ test('@narrow M6.4A keeps separate work and lets the owner confirm the agent req
   idea:started.message_id,placement:completed.message_id,approximate_size:completed.message_id,style:completed.message_id,
  });
 
+ const excluded=await input('agent-exclude-first',conversation);
+ const clarification='Уточните, к какой услуге или отдельной идее относится сообщение.';
+ expect([excluded.model_calls,excluded.calls,excluded.effects,excluded.status]).toEqual([1,1,1,'CLARIFY']);
+ expect(excluded.service_intents).toBeUndefined();
+ expect(await readDraft(a.request_id)).toEqual(aDraft);
+ expect(await readDraft(b.request_id)).toEqual(bDraft);
+ expect((await readQuote(a.request_id,'SENT')).quote).toEqual(first);
+ expect((await readHistory()).filter(message=>message.direction==='OUTBOUND'&&message.text===clarification)).toHaveLength(1);
+
  const correction=await input('agent-correct-first',conversation);
  const revised=correction.service_intents!;
  expect(revised).toMatchObject({request_id:a.request_id,approval_id:null,quote_id:expect.any(String)});
@@ -1232,10 +1241,11 @@ test('@narrow M6.4A keeps separate work and lets the owner confirm the agent req
  const sentC=await deliver(c.request_id);
  expect(sentC).toMatchObject({quote_id:cQuote.quote_id,calls:1,effects:1,status:'SENT',text:cQuote.text});
  await expect(quotePanel.getByRole('status')).toHaveText('Предложение отправлено клиенту');
- expect((await readHistory()).filter(message=>message.direction==='OUTBOUND').map(message=>message.text).sort()).toEqual([first.text,question,updated.text,second.text,cQuote.text].sort());
+ expect((await readHistory()).filter(message=>message.direction==='OUTBOUND').map(message=>message.text).sort()).toEqual([first.text,question,clarification,updated.text,second.text,cQuote.text].sort());
  expect(writes).toEqual([decisionPath]);
- console.log('M6.4A-R1 Chromium '+info.project.name+' '+JSON.stringify({
+ console.log('M6.4A-R2 Chromium '+info.project.name+' '+JSON.stringify({
   conversation,
+  excluded:{source:excluded.message_id,calls:excluded.calls,effects:excluded.effects},
   a:{request:a.request_id,source:collected.message_id,revision:revisedDraft.revision,correction:correction.message_id,quotes:[sentA.quote_id,sentRevision.quote_id],calls:sentA.calls+sentRevision.calls,effects:sentA.effects+sentRevision.effects},
   b:{request:b.request_id,source:started.message_id,completion:completed.message_id,revision:bDraft.revision,approval:b.approval_id,decision:approved.decision?.decision_id,quote:sentB.quote_id,calls:sentB.calls,effects:sentB.effects},
   c:{request:c.request_id,source:separate.message_id,revision:cDraft.revision,quote:sentC.quote_id,calls:sentC.calls,effects:sentC.effects},

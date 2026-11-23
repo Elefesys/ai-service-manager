@@ -1635,11 +1635,14 @@ $$""",
     "platform.service_request_agent_mentions(text,text)": r"""
 CREATE FUNCTION platform.service_request_agent_mentions(message text,idea text)
 RETURNS boolean LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog,pg_temp AS $$
-  SELECT length(trim(regexp_replace(idea COLLATE pg_catalog.pg_c_utf8,'[^[:alnum:]]+',' ','g')))>=2
-    AND position(
-      ' '||trim(regexp_replace(lower(idea COLLATE pg_catalog.pg_c_utf8),'[^[:alnum:]]+',' ','g'))||' '
-      IN ' '||trim(regexp_replace(lower(message COLLATE pg_catalog.pg_c_utf8),'[^[:alnum:]]+',' ','g'))||' '
-    )>0
+  WITH reference AS (
+    SELECT trim(regexp_replace(lower(idea COLLATE pg_catalog.pg_c_utf8),'[^[:alnum:]]+',' ','g')) AS name,
+      ' '||trim(regexp_replace(lower(message COLLATE pg_catalog.pg_c_utf8),'[^[:alnum:]]+',' ','g'))||' ' AS words
+  )
+  SELECT length(name)>=2 AND position(' '||name||' ' IN words)>0
+    AND words !~ (' (не|ни|not|never|no|кроме|вместо|без|except|excluding) (.* )?'||name||' ')
+    AND words !~ (' '||name||' ((это|is) )?(не|not|isn t) (для|про|эта|этот|моя|мой|нужна|нужно|подходит|for|my|our|the|this|that) ')
+  FROM reference
 $$""",
     "platform.service_request_agent_work_tail(text)": r"""
 CREATE FUNCTION platform.service_request_agent_work_tail(message text)
@@ -1671,7 +1674,9 @@ DECLARE
   d app.service_requests%ROWTYPE; source_text text; work_tail text;
   fact jsonb; fact_message app.messages%ROWTYPE;
   intent_source jsonb; pending_source jsonb; fields jsonb; target_ids uuid[]; saved_request uuid;
-  exact_source_request uuid; has_work boolean;
+  exact_source_request uuid; work_count bigint; ordinal_count integer; second_reply boolean;
+  ordinal_reference constant text:='\m((для|у|по)[[:space:]]+(первой|второй|третьей)[[:space:]]+(татуировки|работы)|(for|of)[[:space:]]+(the[[:space:]]+)?(first|second|third)[[:space:]]+(tattoo|work))\M';
+  second_address constant text:='^[[:space:]]*(для[[:space:]]+второй[[:space:]]+(татуировки|работы)|for[[:space:]]+(the[[:space:]]+)?second[[:space:]]+(tattoo|work))\M';
 BEGIN
   IF platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,source) IS NOT TRUE
     THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
@@ -1687,22 +1692,31 @@ BEGIN
     OR projection->'release_id' IS DISTINCT FROM r.active_projection->'release_id'
     OR projection->'activation_version' IS DISTINCT FROM r.active_projection->'activation_version'
     THEN RETURN NULL; END IF;
-  work_tail:=platform.service_request_agent_work_tail(source_text);
-  IF work_tail='' THEN RETURN NULL; END IF;
+  ordinal_count:=regexp_count(source_text COLLATE pg_catalog.pg_c_utf8,ordinal_reference,1,'i');
+  second_reply:=ordinal_count=1 AND source_text COLLATE pg_catalog.pg_c_utf8 ~* second_address
+    AND source_text COLLATE pg_catalog.pg_c_utf8 !~* '\m(не|ни|not|never|no|кроме|except|вместо|excluding)\M'
+    AND platform.service_request_agent_work_tail(regexp_replace(
+      source_text COLLATE pg_catalog.pg_c_utf8,second_address,'','i')) IS NULL;
+  IF ordinal_count>0 THEN
+    IF NOT second_reply THEN RETURN NULL; END IF;
+  ELSE
+    work_tail:=platform.service_request_agent_work_tail(source_text);
+    IF work_tail='' THEN RETURN NULL; END IF;
+  END IF;
 
-  SELECT count(*)>0,
+  SELECT count(*),
     (array_agg(x.id) FILTER (WHERE x.intent_message_id=source_message.id))[1],
     array_agg(x.id) FILTER (WHERE EXISTS (
       SELECT 1 FROM jsonb_array_elements(x.facts) f WHERE f->>'field'='idea' AND f->>'conflict'='false'
         AND f->>'status' IN ('client-stated','owner-confirmed')
         AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
         AND platform.service_request_agent_mentions(source_text,f->>'value')
-    )) INTO has_work,exact_source_request,target_ids
+    )) INTO work_count,exact_source_request,target_ids
   FROM app.service_requests x
   WHERE (x.workspace_id,x.business_id,x.conversation_id,x.client_id)
     =(c.workspace_id,c.business_id,c.id,c.client_id);
 
-  IF has_work AND exact_source_request IS NULL AND work_tail IS NULL
+  IF work_count>0 AND exact_source_request IS NULL AND work_tail IS NULL
     AND candidate->>'switch_request'='true' THEN RETURN NULL; END IF;
   IF exact_source_request IS NULL AND work_tail IS NOT NULL THEN
     -- A new, independently stated work can share the title of a previous work.
@@ -1723,6 +1737,8 @@ BEGIN
         =(c.workspace_id,(f->'source'->>'message_id')::uuid)
       JOIN app.messages m ON (m.workspace_id,m.id)=(tm.workspace_id,tm.message_id)
       JOIN platform.ai_runs prior ON (prior.workspace_id,prior.turn_id)=(tm.workspace_id,tm.turn_id)
+      JOIN app.conversation_turn_messages answer ON (answer.workspace_id,answer.message_id,answer.turn_id)
+        =(c.workspace_id,source_message.id,r.turn_id)
       WHERE (prior.business_id,prior.conversation_id,prior.client_id,prior.connection_id,prior.resume_receipt_id)
         =(r.business_id,r.conversation_id,r.client_id,r.connection_id,r.resume_receipt_id)
         AND prior.config->>'prompt_revision'='conversation_v8' AND prior.result->>'kind'='reply'
@@ -1736,7 +1752,30 @@ BEGIN
         AND platform.intake_source_current(c.workspace_id,c.business_id,c.id,c.client_id,f->'source')
         AND platform.service_request_agent_source_available(c,NULL,m.id)
         AND (m.created_at,m.id)<(source_message.created_at,source_message.id)
-        AND platform.service_request_agent_mentions(source_text,f->>'value')
+        AND ((ordinal_count=0 AND platform.service_request_agent_mentions(source_text,f->>'value')) OR (
+          -- An ordinal-only reply belongs to the single pending work behind a delivered question.
+          second_reply AND work_count=1 AND projection->>'status'='CLARIFY'
+          AND projection->'conflicts'='[]'::jsonb
+          AND prior.result->>'text'=projection->>'question'
+          AND EXISTS(SELECT 1 FROM jsonb_array_elements(candidate->'facts') supplied
+            WHERE supplied->>'field'=projection->'missing'->>0 AND supplied->>'status'='client-stated')
+          AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(candidate->'facts') supplied
+            WHERE supplied->>'field'='idea' AND (supplied->>'value',supplied->>'status')
+              IS DISTINCT FROM (f->>'value','client-stated'))
+          AND EXISTS(SELECT 1 FROM platform.ai_deliveries delivery
+            JOIN app.outbox_events sent ON (sent.workspace_id,sent.id,sent.connection_id,sent.message_id)
+              =(delivery.workspace_id,delivery.outbox_id,delivery.connection_id,delivery.message_id)
+            WHERE (delivery.workspace_id,delivery.job_id,delivery.run_id,delivery.connection_id)
+              =(prior.workspace_id,prior.job_id,prior.id,prior.connection_id)
+              AND delivery.selected_kind='reply' AND sent.status='SENT'
+              AND sent.completed_at<=answer.turn_ingress_at)
+          AND NOT EXISTS(SELECT 1 FROM app.conversation_turn_messages other
+            WHERE (other.workspace_id,other.conversation_id,other.connection_id)
+              =(c.workspace_id,c.id,c.connection_id)
+              AND other.message_id NOT IN (tm.message_id,answer.message_id)
+              AND (other.turn_id IN (tm.turn_id,answer.turn_id)
+                OR other.turn_ingress_seq BETWEEN tm.turn_ingress_seq AND answer.turn_ingress_seq))
+        ))
         AND EXISTS(SELECT 1 FROM jsonb_array_elements(prior.result->'intake'->'facts') original
           WHERE (original->>'field',original->>'status',original->>'value',original->'source')
             =('idea','client-stated',f->>'value',f->'source')
@@ -1749,7 +1788,7 @@ BEGIN
           WHERE f->'source'->'message_id' IS DISTINCT FROM source->'message_id')
         THEN RETURN NULL; END IF;
       intent_source:=pending_source;
-    ELSIF coalesce(cardinality(target_ids),0)>1 THEN RETURN NULL;
+    ELSIF ordinal_count>0 OR coalesce(cardinality(target_ids),0)>1 THEN RETURN NULL;
     ELSE saved_request:=target_ids[1]; END IF;
   END IF;
 
@@ -1761,7 +1800,7 @@ BEGIN
       SELECT 1 FROM app.quote_acceptances a WHERE (a.workspace_id,a.request_id)=(d.workspace_id,d.id)
     ) THEN RETURN NULL; END IF;
     intent_source:=jsonb_build_object('message_id',d.intent_message_id,'source_version',d.intent_source_version);
-  ELSIF NOT p_prepare OR (has_work AND intent_source IS NULL) THEN RETURN NULL;
+  ELSIF NOT p_prepare OR (work_count>0 AND intent_source IS NULL) THEN RETURN NULL;
   END IF;
 
   PERFORM platform.intake_apply_scoped(r,candidate,d,d.id IS NULL AND work_tail IS NOT NULL);
@@ -2992,10 +3031,10 @@ PROFILE = r"""CREATE FUNCTION platform.service_intent_schema_profile() RETURNS j
 ('platform.service_intent_result_valid(jsonb)','28daec93bf9fc3289228101392b61adc8d7997d49ee90690e27916f5413f8869','plpgsql',true,'i',false),
 ('platform.service_request_agent_begin(platform.ai_runs,platform.messaging_jobs,jsonb)','26dce9624a95b65acdc35f26bd0e750ebc6446849aee4765d72b275646d62dde','plpgsql',true,'v',false),
 ('platform.service_request_agent_continue(uuid,uuid,uuid,text,jsonb)','e5d3e80b8b78b661bc633c674f04ad642986a1e6bd14b17ee9e659813008753b','plpgsql',true,'v',true),
-('platform.service_request_agent_mentions(text,text)','97c70308f40a345666e0acb1f7031c0a74ce96805293620fe803eba2cee6f33a','sql',false,'i',false),
+('platform.service_request_agent_mentions(text,text)','aa618129d36a4c7fd5ccf073ec1b85920b0b05c6cf93d7c141cf9f5708445450','sql',false,'i',false),
 ('platform.service_request_agent_must_finish()','13bd81c537e2a36a70eb5e4b3d04a88724cc55134d10323049ad62d6da825cbd','plpgsql',true,'v',false),
 ('platform.service_request_agent_pin(platform.ai_runs)','a3f11e1d66132c3a46a32ada2d4681ffa0eca550a98da47b559b47fb87a71997','sql',true,'s',false),
-('platform.service_request_agent_prepare(platform.ai_runs,app.conversations,jsonb,boolean)','e85c30610f30062aa65968fb933a8c3ab0926a79bb81100e74648dcbc60ce8ef','plpgsql',true,'v',false),
+('platform.service_request_agent_prepare(platform.ai_runs,app.conversations,jsonb,boolean)','fcea987d895a6ba024a0774a2158da0d2bdc2fb1700d4547b59da53781ceace4','plpgsql',true,'v',false),
 ('platform.service_request_agent_result(platform.ai_runs)','bcb3be996923062fec341f074743c803cc302719e7751d8f63bfb39ed3486915','sql',true,'s',false),
 ('platform.service_request_agent_source_available(app.conversations,uuid,uuid)','e3c88b4802a9e2a10609d709028d357c55cccc97ed25eb6d0b0981975df6e863','sql',true,'s',false),
 ('platform.service_request_agent_work_tail(text)','71e8f1951f923c9d1b0c708780601ef0795f020859ec95d0804023afd24e4cab','plpgsql',false,'i',false),

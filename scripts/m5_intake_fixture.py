@@ -67,7 +67,8 @@ INPUTS = {
     "quote-second": "Synthetic quote separate swallow shoulder 101 mm linework",
     "agent-first": "Хочу татуировку: роза, место — предплечье, 20 мм, стиль лайнворк",
     "agent-start-second": "Отдельная татуировка: ласточка",
-    "agent-second": "Ласточка: место — плечо, 101 мм, стиль лайнворк",
+    "agent-second": "Для второй татуировки: место — плечо, 101 мм, стиль лайнворк.",
+    "agent-exclude-first": "Это не для тату „роза“. У второй работы уточняю размер: 21 мм.",
     "agent-correct-first": "Для тату „роза“ уточняю размер: 21 мм",
     "agent-same-title": "На другом месте хочу отдельную татуировку: роза, место — плечо, 21 мм, стиль лайнворк",
 }
@@ -81,7 +82,8 @@ QUOTE_JOURNEYS = {
 AGENT_OPERATIONS = {
     "agent-first": ("prepare_service_request",),
     "agent-start-second": (),
-    "agent-second": ("prepare_service_request",),
+    "agent-second": ("prepare_service_request", "request_owner_decision"),
+    "agent-exclude-first": ("prepare_service_request",),
     "agent-correct-first": ("prepare_service_request",),
     "agent-same-title": ("prepare_service_request",),
 }
@@ -130,6 +132,7 @@ VALUES["agent-second"] = (
     ("style", "лайнворк"),
 )
 VALUES["agent-correct-first"] = (("approximate_size", "21 мм"),)
+VALUES["agent-exclude-first"] = (("approximate_size", "21 мм"),)
 VALUES["agent-same-title"] = (
     ("idea", "роза"),
     ("placement", "плечо"),
@@ -270,7 +273,12 @@ class IntakeModel(FakeAdapter):
                     analysis_sha256=None,
                 ),
                 explicit_correction=self.operation
-                in {"late-cover-up", "price-oversize", "agent-correct-first"},
+                in {
+                    "late-cover-up",
+                    "price-oversize",
+                    "agent-correct-first",
+                    "agent-exclude-first",
+                },
             )
             for field, value in VALUES.get(self.operation, ())
         ]
@@ -361,7 +369,9 @@ async def run(args, diagnostic):
         diagnostic.stage = "CONFIGURATION"
         cid = UUID(args.conversation) if args.conversation else None
         service_intents = args.operation in AGENT_OPERATIONS
-        commercial = bool(AGENT_OPERATIONS.get(args.operation))
+        commercial = (
+            bool(AGENT_OPERATIONS.get(args.operation)) and args.operation != "agent-exclude-first"
+        )
         profile = "SYNTHETIC_SERVICE_INTENTS_V1" if service_intents else "SYNTHETIC_INTAKE_V1"
         if args.operation != "seed" and cid is None:
             raise IntakeFixtureRefused("SEEDED_CONVERSATION_REQUIRED")

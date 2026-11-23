@@ -602,6 +602,24 @@ def assert_source_map(card, facts, source, **changed_sources):
     }
 
 
+async def quote_counts_by_request(case):
+    rows = await query(
+        case.h,
+        """SELECT r.id AS request_id, count(q.id) AS quotes, count(i.quote_id) AS deliveries,
+                  count(o.id) FILTER (WHERE o.status='SENT') AS sent
+             FROM app.service_requests r
+             LEFT JOIN app.quotes q ON (q.workspace_id,q.request_id)=(r.workspace_id,r.id)
+             LEFT JOIN platform.quote_delivery_intents i ON (i.workspace_id,i.quote_id)=(q.workspace_id,q.id)
+             LEFT JOIN app.outbox_events o ON (o.workspace_id,o.id)=(i.workspace_id,i.outbox_id)
+            WHERE r.conversation_id=:c GROUP BY r.id""",
+        c=case.cid,
+    )
+    return {
+        str(row["request_id"]): {key: row[key] for key in ("quotes", "deliveries", "sent")}
+        for row in rows
+    }
+
+
 async def test_r1_explicit_second_work_with_same_idea_keeps_original(approval_pg, auth):
     case = await R1Conversation.open(approval_pg, auth)
     original, quote_a = await case.first_rose()
@@ -852,6 +870,115 @@ async def test_r1_expired_approval_is_replaced_and_remains_in_history(approval_p
         decision_id=decision,
         inbound_after_approval=0,
         quotes=[quote],
+        **stats,
+    )
+
+
+async def test_r2_excluded_work_requires_clarification_without_new_commercial_effect(
+    approval_pg, auth
+):
+    case = await R1Conversation.open(approval_pg, auth)
+    a, quote = await case.first_rose()
+    _, b = await case.commercial(
+        SWALLOW_TEXT, SECOND_SWALLOW, switch=True, intents=(PREPARE, OWNER_DECISION)
+    )
+    assert b.approval_id is not None and b.quote_id is None
+    b_id = str(b.request_id)
+    b_before = await case.card(b_id)
+    a_quote_before = await case.quote_view(a["request_id"])
+    b_quote_before = await case.quote_view(b_id)
+    (approval,) = await case.approvals()
+    assert (approval["approval_id"], approval["request_id"], approval["status"]) == (
+        str(b.approval_id),
+        b_id,
+        "PENDING",
+    )
+    before = await quote_counts_by_request(case)
+    assert before == {
+        a["request_id"]: dict(quotes=1, deliveries=1, sent=1),
+        b_id: dict(quotes=0, deliveries=0, sent=0),
+    }
+
+    source, receipt = await case.turn(
+        "Это не для тату „роза“. У второй работы уточняю размер: 21 мм.",
+        {"approximate_size": "21 мм"},
+        correction=True,
+    )
+    assert receipt.service_intents is None
+    assert (receipt.result.kind, receipt.result.text) == ("reply", AMBIGUOUS_QUESTION)
+    assert await case.card(a["request_id"]) == a
+    assert await case.card(b_id) == b_before
+    assert await case.quote_view(a["request_id"]) == a_quote_before
+    assert await case.quote_view(b_id) == b_quote_before
+    assert await case.approvals() == [approval]
+    after = await quote_counts_by_request(case)
+    assert after == before
+    stats = await case.check_counts(
+        requests=2, approvals=1, quotes=1, followups=(AMBIGUOUS_QUESTION,)
+    )
+    report(
+        "R2_excluded_work",
+        conversation=case.cid,
+        source=source,
+        a=work_evidence(a),
+        b=work_evidence(b_before),
+        quote_a=quote,
+        approval_id=b.approval_id,
+        approval_status=approval["status"],
+        before_per_work=before,
+        after_per_work=after,
+        **stats,
+    )
+
+
+async def test_r2_ordinal_answer_finishes_the_single_pending_second_work(approval_pg, auth):
+    case = await R1Conversation.open(approval_pg, auth)
+    a, quote = await case.first_rose()
+    a_quote_before = await case.quote_view(a["request_id"])
+    anchor, incomplete = await case.turn(
+        "Отдельная татуировка: ласточка", {"idea": "ласточка"}, switch=True, intents=None
+    )
+    assert incomplete.service_intents is None and incomplete.result.text == QUESTIONS["placement"]
+    await case.check_counts(requests=1, approvals=0, quotes=1, followups=(QUESTIONS["placement"],))
+    before = await quote_counts_by_request(case)
+    assert before == {a["request_id"]: dict(quotes=1, deliveries=1, sent=1)}
+
+    answer, b = await case.commercial(
+        "Для второй татуировки: место — плечо, 101 мм, стиль лайнворк.",
+        {field: value for field, value in SECOND_SWALLOW.items() if field != "idea"},
+        intents=(PREPARE, OWNER_DECISION),
+    )
+    b_id = str(b.request_id)
+    second = await case.card(b_id)
+    assert b_id != a["request_id"] and second["revision"] == "1"
+    answer_sources = dict(placement=answer, approximate_size=answer, style=answer)
+    assert_source_map(second, SECOND_SWALLOW, anchor, **answer_sources)
+    assert await case.card(a["request_id"]) == a
+    assert await case.quote_view(a["request_id"]) == a_quote_before
+    assert b.approval_id is not None and b.quote_id is None
+    (approval,) = await case.approvals()
+    assert (approval["approval_id"], approval["request_id"], approval["status"]) == (
+        str(b.approval_id),
+        b_id,
+        "PENDING",
+    )
+    assert_source_map(approval["basis"], SECOND_SWALLOW, anchor, **answer_sources)
+    after = await quote_counts_by_request(case)
+    assert after == before | {b_id: dict(quotes=0, deliveries=0, sent=0)}
+    stats = await case.check_counts(
+        requests=2, approvals=1, quotes=1, followups=(QUESTIONS["placement"],)
+    )
+    report(
+        "R2_ordinal_answer",
+        conversation=case.cid,
+        source=answer,
+        a=work_evidence(a),
+        b=work_evidence(second),
+        quote_a=quote,
+        approval_id=b.approval_id,
+        approval_status=approval["status"],
+        before_per_work=before,
+        after_per_work=after,
         **stats,
     )
 
