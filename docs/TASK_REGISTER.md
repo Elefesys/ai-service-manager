@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.1B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.1B-R1 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
 
-Из двух клиентов, выбравших пересекающиеся окна одного мастера, только один получает удержание со сроком. Второй получает доступные варианты. Разовый блок мастера защищает тот же интервал. C2 ведёт единственную задачу, C1 отвечает за команды. База `main` — `0574c8c033d6508341fb34cbdc2c572c7de91633`, ветка `c2/m7-1b-offer-hold-allocation`. C0 выделил `0033_scheduling_holds.py` поверх `0032`. [Поручение C2, разрешённые пути и S3–S4](tasks/M7_HANDOFF.md#m71b--поручение-c2).
+Клиент, уступивший окно другому, должен иметь возможность выбрать любое время из ответного списка. Повтор команды выдачи, которая вернула пустой список, должен сохранять её результат. C0 воспроизвёл два расхождения на PostgreSQL. Единственная задача — R1 в Draft PR #66. Ведёт C2, команды у C1. Ветка `c2/m7-1b-offer-hold-allocation`, head `9cc699b0c1dbdf5a96b3a99e85ab454a69bd3458`, база `0574c8c033d6508341fb34cbdc2c572c7de91633`, схема кандидата `0033`. На этом head CI прошёл 12/12, включая семь S3–S4. [Поручение R1 и результаты C0](tasks/M7_HANDOFF.md#m71b-r1) · [PR #66](https://github.com/Elefesys/ai-service-manager/pull/66) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45400986415).
 
 ## История — M7.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
 
