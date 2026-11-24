@@ -194,7 +194,7 @@ def local_interval(window):
     }
 
 
-@pytest.mark.parametrize("second_option", [1, 5], ids=["visit-overlap", "buffer-only-overlap"])
+@pytest.mark.parametrize("second_option", [0, 5], ids=["visit-overlap", "buffer-only-overlap"])
 async def test_s3_two_clients_choose_overlapping_options(clients, auth, second_option):
     h, token, a, b = clients
     day, preview = await configure(h, auth, token, a)
@@ -221,7 +221,28 @@ async def test_s3_two_clients_choose_overlapping_options(clients, auth, second_o
     assert isinstance(win, HoldResult) and win.outcome == "HELD"
     assert isinstance(lost, SelectionUnavailable) and lost.outcome == "OPTION_UNAVAILABLE"
     assert blocked < win.expires_at
-    assert await occupancy(h) == {"offers": 2, "options": 16, "holds": 1, "active_allocations": 1}
+    assert lost.expires_at is not None and blocked < lost.expires_at
+    after_conflict = {"offers": 3, "options": 24, "holds": 1, "active_allocations": 1}
+    assert await occupancy(h) == after_conflict
+    assert await pick(h, b, choice(offer_b, second_option), "hold-b") == lost
+    assert await occupancy(h) == after_conflict
+
+    stored = await scalar(
+        h,
+        """SELECT jsonb_build_object(
+          'client',f.client_id,'session',f.session_id,'expires',f.expires_at,
+          'options',jsonb_agg(o.id ORDER BY o.visit_start))
+        FROM app.availability_offers f JOIN app.availability_options o
+          ON (o.workspace_id,o.business_id,o.offer_id)=(f.workspace_id,f.business_id,f.id)
+        WHERE (f.workspace_id,f.business_id,f.session_id)=(:ws,:business,:session)
+          AND f.command_key IS NULL GROUP BY f.client_id,f.session_id,f.expires_at""",
+        ws=A,
+        business=BA,
+        session=UUID(b.selection.session_id),
+    )
+    assert stored["client"] == b.identity.client_id and stored["session"] == b.selection.session_id
+    assert stored["options"] == [window.option_id for window in lost.windows]
+    assert datetime.fromisoformat(stored["expires"]) == lost.expires_at
     first, second = offer_a.options[0], offer_b.options[second_option]
     if second_option == 5:
         assert first.visit_end <= second.visit_start
@@ -244,7 +265,10 @@ async def test_s3_two_clients_choose_overlapping_options(clients, auth, second_o
             first.option_id,
         )
     )
-    assert all(set(row) == {"visit_start", "visit_end"} for row in lost.model_dump()["windows"])
+    assert all(
+        set(row) == {"option_id", "visit_start", "visit_end"}
+        for row in lost.model_dump()["windows"]
+    )
 
     # The second application check is only one line of defence. Verify the
     # exclusion constraint itself with an independent direct transaction.
@@ -276,25 +300,74 @@ async def test_s3_two_clients_choose_overlapping_options(clients, auth, second_o
             async with owner_unit(h) as unit:
                 await select_option(unit, identity, selection, option_id, "wrong-client")
         assert denied.value.code is ServiceRequestCode.NOT_FOUND
-    effects = await assert_no_client_effects(h, before)
+    # 11:45 proves exact adjacency in the buffer-only case. For overlapping
+    # visits choose 12:15, which exists only in the returned alternatives.
+    wanted = "11:45" if second_option == 5 else "12:15"
+    chosen = next(
+        window for window in lost.windows if window.visit_start.strftime("%H:%M") == wanted
+    )
+    assert chosen.option_id not in {option.option_id for option in offer_b.options}
+    if second_option != 5:
+        assert chosen.visit_start not in {option.visit_start for option in offer_b.options}
+    with pytest.raises(ServiceRequestError) as denied:
+        await pick(h, a, UUID(chosen.option_id), "other-customer-alternative")
+    assert denied.value.code is ServiceRequestCode.NOT_FOUND
+
+    next_hold = await pick(h, b, UUID(chosen.option_id), "pick-alternative")
+    assert isinstance(next_hold, HoldResult) and next_hold.outcome == "HELD"
+    assert next_hold.visit_start == chosen.visit_start
+    assert await pick(h, b, UUID(chosen.option_id), "pick-alternative") == next_hold
+    assert await pick(h, b, choice(offer_b, second_option), "hold-b") == lost
+    assert await pick(h, a, choice(offer_a, 0), "hold-a") == win
+    after_pick = after_conflict | {"holds": 2, "active_allocations": 2}
+    assert await occupancy(h) == after_pick
+
+    active = await scalar(
+        h,
+        """SELECT jsonb_agg(jsonb_build_object(
+          'hold_id',h.id,'allocation_id',r.id,'option_id',h.option_id,
+          'busy_start',lower(r.occupied),'busy_end',upper(r.occupied),'expires',h.expires_at)
+          ORDER BY lower(r.occupied))
+        FROM app.resource_allocations r JOIN app.reservation_holds h
+          ON (h.workspace_id,h.business_id,h.allocation_id)=(r.workspace_id,r.business_id,r.id)
+        WHERE (r.workspace_id,r.business_id)=(:ws,:business) AND r.released_at IS NULL""",
+        ws=A,
+        business=BA,
+    )
+    for row, result, option_id in zip(
+        active, (win, next_hold), (first.option_id, chosen.option_id), strict=True
+    ):
+        assert (row["hold_id"], row["allocation_id"], row["option_id"]) == (
+            result.hold_id,
+            result.allocation_id,
+            option_id,
+        )
+        assert datetime.fromisoformat(row["expires"]) == result.expires_at
+        for bound in ("busy_start", "busy_end"):
+            row[bound] = datetime.fromisoformat(row[bound]).astimezone(ZoneInfo(ZONE)).isoformat()
+    if second_option == 5:
+        assert active[0]["busy_end"] == active[1]["busy_start"]
+    else:
+        assert active[0]["busy_end"] < active[1]["busy_start"]
     receipt(
-        "S3-buffer-only" if second_option == 5 else "S3-visit-overlap",
+        "R1-buffer-competition-adjacent" if second_option == 5 else "C0-M7.1B-01",
         first_client=a.identity.client_id,
         second_client=b.identity.client_id,
-        winner=win.model_dump(mode="json"),
-        first=local_interval(first),
-        second=local_interval(second),
-        alternative=lost.windows[0].model_dump(mode="json"),
+        original_b=[
+            window.visit_start.astimezone(ZoneInfo(ZONE)).isoformat() for window in offer_b.options
+        ],
+        conflict_second=local_interval(second),
+        alternative_expiry=lost.expires_at,
+        offered_option_ids=stored["options"],
+        chosen=chosen.model_dump(mode="json"),
+        active=active,
+        exact_replay=True,
         wait_observed_at=blocked,
         exclusion=collision.value.orig.sqlstate,
-        counts=await occupancy(h),
-        **effects,
+        after_conflict=after_conflict,
+        after_pick=after_pick,
+        **(await assert_no_client_effects(h, before)),
     )
-
-    # Exact [end,start) adjacency works through the same real client command.
-    adjacent = await pick(h, b, choice(offer_b, 6), "adjacent")
-    assert isinstance(adjacent, HoldResult) and adjacent.outcome == "HELD"
-    assert offer_b.options[6].busy_start == first.busy_end
 
     # A simultaneous window in a different business has a different resource,
     # even inside the same workspace.
@@ -313,11 +386,151 @@ async def test_s3_two_clients_choose_overlapping_options(clients, auth, second_o
         )
     assert isinstance(independent, CalendarBlock) and independent.outcome == "BLOCKED"
     receipt(
-        "S3-adjacent-and-other-business",
-        adjacent=adjacent.hold_id,
-        adjacent_window=local_interval(offer_b.options[6]),
+        "S3-other-business",
+        exact_adjacency=second_option == 5,
+        second_hold=next_hold.hold_id,
+        second_busy_start=active[1]["busy_start"],
         other_business_block=independent.block_id,
         interval=local_interval(first),
+        **(await assert_no_client_effects(h, before)),
+    )
+
+
+async def test_r1_fully_occupied_day_returns_empty_alternatives(clients, auth):
+    h, token, a, b = clients
+    day, configured = await configure(h, auth, token, a)
+    await owner_post(
+        auth,
+        a.preview_url(day=day),
+        token,
+        {
+            "action": "exception",
+            "date": str(day),
+            "windows": [{"start_minute": 600, "end_minute": 690}],
+            "expected_version": configured["schedule_version"],
+        },
+    )
+    before = await client_effects(h)
+    first = await offer(h, a, day, "only-window-a")
+    second = await offer(h, b, day, "only-window-b")
+    assert len(first.options) == len(second.options) == 1
+    winner, lost, _ = await compete(
+        h,
+        selecting(a, choice(first, 0), "only-hold-a"),
+        selecting(b, choice(second, 0), "only-hold-b"),
+    )
+    assert isinstance(winner, HoldResult) and winner.outcome == "HELD"
+    assert isinstance(lost, SelectionUnavailable) and lost.outcome == "OPTION_UNAVAILABLE"
+    assert (
+        lost.date == day
+        and lost.timezone == ZONE
+        and lost.expires_at is None
+        and lost.windows == []
+    )
+    assert all(
+        identifier not in lost.model_dump_json()
+        for identifier in (
+            winner.hold_id,
+            winner.allocation_id,
+            a.selection.session_id,
+            first.options[0].option_id,
+        )
+    )
+    assert await pick(h, b, choice(second, 0), "only-hold-b") == lost
+    counts = await occupancy(h)
+    assert counts == {"offers": 2, "options": 2, "holds": 1, "active_allocations": 1}
+    receipt(
+        "R1-fully-occupied-day",
+        allocated=local_interval(first.options[0]),
+        response=lost.model_dump(mode="json"),
+        exact_replay=True,
+        counts=counts,
+        **(await assert_no_client_effects(h, before)),
+    )
+
+
+async def test_r1_empty_issuance_is_idempotent_after_opening_day(clients, auth):
+    h, token, a, _ = clients
+    endpoint = offer_http(a)
+    references = a.selection.model_dump(include={"client_id", "quote_id", "order_id"})
+    before = await client_effects(h)
+    zero = {"offers": 0, "options": 0, "holds": 0, "active_allocations": 0}
+    missing = await command_http(auth, token, endpoint, "before-calendar", references)
+    assert missing.status_code == 200, missing.text
+    assert missing.json()["timezone"] is None and missing.json()["options"] == []
+    assert await occupancy(h) == zero
+
+    day, configured = await configure(h, auth, token, a)
+    earlier = await command_http(auth, token, endpoint, "before-calendar", references)
+    assert earlier.status_code == 200 and earlier.json() == missing.json()
+    request = references | {"date": str(day)}
+    preview_url = a.preview_url(day=day)
+    closed = await owner_post(
+        auth,
+        preview_url,
+        token,
+        {
+            "action": "exception",
+            "date": str(day),
+            "windows": [],
+            "expected_version": configured["schedule_version"],
+        },
+    )
+    empty = await command_http(auth, token, endpoint, "closed-day", request)
+    assert empty.status_code == 200, empty.text
+    assert empty.json() == {
+        "offer_id": None,
+        "date": str(day),
+        "timezone": ZONE,
+        "expires_at": None,
+        "options": [],
+    }
+    assert await occupancy(h) == zero
+    await owner_post(
+        auth,
+        preview_url,
+        token,
+        {
+            "action": "exception",
+            "date": str(day),
+            "windows": None,
+            "expected_version": closed["schedule_version"],
+        },
+    )
+
+    repeated = await command_http(auth, token, endpoint, "closed-day", request)
+    assert repeated.status_code == 200 and repeated.json() == empty.json()
+    assert await occupancy(h) == zero
+    changed = await command_http(
+        auth,
+        token,
+        endpoint,
+        "closed-day",
+        request | {"date": str(day + timedelta(days=1))},
+    )
+    assert (
+        changed.status_code == 409 and changed.json()["error"]["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    )
+    assert await occupancy(h) == zero
+    fresh = await command_http(auth, token, endpoint, "reopened-day", request)
+    assert fresh.status_code == 200, fresh.text
+    issued = AvailabilityOffer.model_validate_json(fresh.content)
+    assert issued.date == day and issued.expires_at is not None and len(issued.options) == 8
+    counts = await occupancy(h)
+    assert counts == zero | {"offers": 1, "options": 8}
+    receipt(
+        "C0-M7.1B-02",
+        date=str(day),
+        closed=empty.status_code,
+        exact_repeat_status=repeated.status_code,
+        exact_repeat_options=len(repeated.json()["options"]),
+        different_date_status=changed.status_code,
+        different_date_error=changed.json()["error"]["code"],
+        new_key_status=fresh.status_code,
+        new_key_first=local_interval(issued.options[0]),
+        expiry=issued.expires_at,
+        before=zero,
+        after=counts,
         **(await assert_no_client_effects(h, before)),
     )
 

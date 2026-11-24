@@ -24,7 +24,7 @@ TABLES = {
       duration_reference_id uuid NOT NULL,
       terms_sha256 text NOT NULL CHECK(terms_sha256 ~ '^[0-9a-f]{64}$'),
       deposit jsonb NOT NULL CHECK(jsonb_typeof(deposit)='object'),
-      command_key text NOT NULL CHECK(command_key ~ '^[A-Za-z0-9._:-]{1,128}$'),
+      command_key text CHECK(command_key ~ '^[A-Za-z0-9._:-]{1,128}$'),
       issued_at timestamptz NOT NULL CHECK(isfinite(issued_at)),
       expires_at timestamptz NOT NULL CHECK(isfinite(expires_at) AND expires_at>issued_at),
       PRIMARY KEY(workspace_id,business_id,id),
@@ -92,8 +92,8 @@ TABLES = {
         REFERENCES app.resource_allocations(workspace_id,business_id,resource_id,id,session_id)
     )""",
     "platform.scheduling_command_receipts": r"""CREATE TABLE platform.scheduling_command_receipts (
-      workspace_id uuid NOT NULL, business_id uuid NOT NULL, resource_id uuid NOT NULL,
-      subject_kind text NOT NULL CHECK(subject_kind IN ('CLIENT','OWNER')),
+      workspace_id uuid NOT NULL, business_id uuid NOT NULL, resource_id uuid,
+      subject_kind text NOT NULL CHECK(subject_kind IN ('CLIENT','OWNER','OWNER_OFFER')),
       subject_id uuid NOT NULL,
       command_key text NOT NULL CHECK(command_key ~ '^[A-Za-z0-9._:-]{1,128}$'),
       action text NOT NULL,
@@ -101,10 +101,13 @@ TABLES = {
       result jsonb NOT NULL CHECK(jsonb_typeof(result)='object'),
       recorded_at timestamptz NOT NULL CHECK(isfinite(recorded_at)),
       PRIMARY KEY(workspace_id,business_id,subject_kind,subject_id,command_key),
+      FOREIGN KEY(workspace_id,business_id) REFERENCES app.businesses(workspace_id,id),
       FOREIGN KEY(workspace_id,business_id,resource_id)
         REFERENCES app.scheduling_resources(workspace_id,business_id,id),
+      CHECK(subject_kind='OWNER_OFFER' OR resource_id IS NOT NULL),
       CHECK((subject_kind='CLIENT' AND action IN ('select','release'))
-        OR (subject_kind='OWNER' AND action IN ('block','unblock')))
+        OR (subject_kind='OWNER' AND action IN ('block','unblock'))
+        OR (subject_kind='OWNER_OFFER' AND action='issue'))
     )""",
 }
 
@@ -223,31 +226,17 @@ FUNCTIONS = {
           WHERE (o.workspace_id,o.business_id,o.offer_id)=(offer.workspace_id,offer.business_id,offer.id)
         ),'[]'::jsonb))
     $$""",
-    "platform.scheduling_owner_offer(jsonb,text,date,text,jsonb)": r"""CREATE FUNCTION platform.scheduling_owner_offer(
-      p_selection jsonb,p_action text,p_day date,p_key text,p_options jsonb
-    ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
-    DECLARE business uuid:=(p_selection->>'business_id')::uuid;
-      ws uuid:=platform.scheduling_owner_scope(business,'schedule');
-      q app.quotes%ROWTYPE:=platform.scheduling_agreement(ws,p_selection);
-      r app.scheduling_resources%ROWTYPE; p app.scheduling_policy_revisions%ROWTYPE;
-      offer app.availability_offers%ROWTYPE; session uuid:=(p_selection->>'session_id')::uuid;
-      moment timestamptz; chosen_date date; snapshot jsonb; minutes integer; duration_ref uuid;
+    "platform.scheduling_save_offer(app.quotes,app.scheduling_resources,uuid,uuid,date,text,jsonb,timestamptz)": r"""CREATE FUNCTION platform.scheduling_save_offer(
+      q app.quotes,r app.scheduling_resources,p_order uuid,p_session uuid,
+      p_day date,p_key text,p_options jsonb,moment timestamptz
+    ) RETURNS jsonb LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE ws uuid:=q.workspace_id; business uuid:=q.business_id;
+      p app.scheduling_policy_revisions%ROWTYPE; offer app.availability_offers%ROWTYPE;
+      chosen_date date; snapshot jsonb; minutes integer; duration_ref uuid;
     BEGIN
-      SELECT * INTO r FROM app.scheduling_resources
-        WHERE (workspace_id,business_id)=(ws,business) FOR UPDATE;
-      moment:=clock_timestamp();
-      snapshot:=platform.scheduling_snapshot(ws,business,q.material->>'service_id',p_day,moment);
-      IF p_action='state' THEN RETURN snapshot; END IF;
-      IF p_action IS DISTINCT FROM 'issue' OR p_key IS NULL OR p_key !~ '^[A-Za-z0-9._:-]{1,128}$'
-        OR jsonb_typeof(p_options) IS DISTINCT FROM 'array' OR jsonb_array_length(p_options)>8
+      IF jsonb_typeof(p_options) IS DISTINCT FROM 'array' OR jsonb_array_length(p_options)>8
         THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
-      SELECT * INTO offer FROM app.availability_offers o
-        WHERE (o.workspace_id,o.business_id,o.session_id,o.command_key)=(ws,business,session,p_key);
-      IF FOUND THEN
-        IF offer.requested_date IS DISTINCT FROM p_day
-          THEN RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE='P3101'; END IF;
-        RETURN platform.scheduling_offer_view(offer);
-      END IF;
+      snapshot:=platform.scheduling_snapshot(ws,business,q.material->>'service_id',p_day,moment);
       chosen_date:=(snapshot->>'date')::date;
       IF p_options='[]'::jsonb THEN RETURN jsonb_build_object(
         'offer_id',NULL,'date',chosen_date,'timezone',r.timezone,'expires_at',NULL,'options','[]'::jsonb);
@@ -282,7 +271,7 @@ FUNCTIONS = {
         local_date,requested_date,timezone,occupied_minutes,duration_reference_id,terms_sha256,deposit,
         command_key,issued_at,expires_at)
       VALUES(ws,business,r.id,q.client_id,q.conversation_id,q.request_id,q.id,
-        (p_selection->>'order_id')::uuid,session,p.service_id,p.id,r.schedule_version,
+        p_order,p_session,p.service_id,p.id,r.schedule_version,
         chosen_date,p_day,r.timezone,minutes,duration_ref,q.terms_sha256,q.material->'deposit',
         p_key,moment,moment+make_interval(mins=>p.offer_ttl_minutes))
       RETURNING * INTO offer;
@@ -290,6 +279,53 @@ FUNCTIONS = {
         SELECT ws,business,offer.id,x.* FROM jsonb_to_recordset(p_options) x(
           visit_start timestamptz,visit_end timestamptz,busy_start timestamptz,busy_end timestamptz);
       RETURN platform.scheduling_offer_view(offer);
+    END $$""",
+    "platform.scheduling_owner_offer(jsonb,text,date,text,jsonb)": r"""CREATE FUNCTION platform.scheduling_owner_offer(
+      p_selection jsonb,p_action text,p_day date,p_key text,p_options jsonb
+    ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE business uuid:=(p_selection->>'business_id')::uuid;
+      ws uuid:=platform.scheduling_owner_scope(business,'schedule');
+      q app.quotes%ROWTYPE:=platform.scheduling_agreement(ws,p_selection);
+      r app.scheduling_resources%ROWTYPE; offer app.availability_offers%ROWTYPE;
+      session uuid:=(p_selection->>'session_id')::uuid;
+      prior platform.scheduling_command_receipts%ROWTYPE; moment timestamptz; response jsonb;
+      request jsonb:=jsonb_build_object('date',p_day);
+    BEGIN
+      -- Serialize issuance even when the resource has not been configured yet.
+      -- NO KEY UPDATE remains compatible with foreign keys taken by selection.
+      PERFORM 1 FROM app.service_sessions s WHERE (s.workspace_id,s.id)=(ws,session) FOR NO KEY UPDATE;
+      SELECT * INTO r FROM app.scheduling_resources
+        WHERE (workspace_id,business_id)=(ws,business) FOR UPDATE;
+      moment:=clock_timestamp();
+      IF p_action='state'
+        THEN RETURN platform.scheduling_snapshot(ws,business,q.material->>'service_id',p_day,moment); END IF;
+      IF p_action IS DISTINCT FROM 'issue' OR p_key IS NULL OR p_key !~ '^[A-Za-z0-9._:-]{1,128}$'
+        THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
+
+      SELECT * INTO prior FROM platform.scheduling_command_receipts c
+        WHERE (c.workspace_id,c.business_id,c.subject_kind,c.subject_id,c.command_key)
+          =(ws,business,'OWNER_OFFER',session,p_key);
+      IF FOUND THEN
+        IF prior.payload IS DISTINCT FROM request
+          THEN RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE='P3101'; END IF;
+        RETURN prior.result;
+      END IF;
+      SELECT * INTO offer FROM app.availability_offers o
+        WHERE (o.workspace_id,o.business_id,o.session_id,o.command_key)=(ws,business,session,p_key);
+      IF FOUND THEN
+        IF offer.requested_date IS DISTINCT FROM p_day
+          THEN RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE='P3101'; END IF;
+        RETURN platform.scheduling_offer_view(offer);
+      END IF;
+
+      response:=platform.scheduling_save_offer(q,r,(p_selection->>'order_id')::uuid,
+        session,p_day,p_key,p_options,moment);
+      IF response->>'offer_id' IS NULL THEN
+        INSERT INTO platform.scheduling_command_receipts(workspace_id,business_id,resource_id,subject_kind,
+          subject_id,command_key,action,payload,result,recorded_at)
+          VALUES(ws,business,r.id,'OWNER_OFFER',session,p_key,'issue',request,response,moment);
+      END IF;
+      RETURN response;
     END $$""",
     "platform.scheduling_hold_view(app.reservation_holds,timestamptz)": r"""CREATE FUNCTION platform.scheduling_hold_view(
       h app.reservation_holds,moment timestamptz
@@ -304,8 +340,9 @@ FUNCTIONS = {
       JOIN app.availability_offers f ON (f.workspace_id,f.business_id,f.id)=(o.workspace_id,o.business_id,o.offer_id)
       WHERE (a.workspace_id,a.business_id,a.id)=(h.workspace_id,h.business_id,h.allocation_id)
     $$""",
-    "platform.scheduling_client_command(jsonb,uuid,uuid,text,uuid,text,boolean)": r"""CREATE FUNCTION platform.scheduling_client_command(
-      p_selection jsonb,p_client uuid,p_conversation uuid,p_action text,p_target uuid,p_key text,p_eligible boolean
+    "platform.scheduling_client_command(jsonb,uuid,uuid,text,uuid,text,boolean,jsonb)": r"""CREATE FUNCTION platform.scheduling_client_command(
+      p_selection jsonb,p_client uuid,p_conversation uuid,p_action text,p_target uuid,p_key text,
+      p_eligible boolean,p_options jsonb
     ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
     DECLARE business uuid:=(p_selection->>'business_id')::uuid;
       session uuid:=(p_selection->>'session_id')::uuid;
@@ -323,7 +360,7 @@ FUNCTIONS = {
         THEN RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE='P3101'; END IF;
       IF (p_client,p_conversation) IS DISTINCT FROM (q.client_id,q.conversation_id)
         THEN RAISE EXCEPTION 'NOT_FOUND' USING ERRCODE='P3101'; END IF;
-      IF p_action IS NULL OR p_action NOT IN ('state','select','release') OR p_target IS NULL OR
+      IF p_action IS NULL OR p_action NOT IN ('state','select','release','alternatives') OR p_target IS NULL OR
         (p_action<>'state' AND (p_key IS NULL OR p_key !~ '^[A-Za-z0-9._:-]{1,128}$'))
         THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
 
@@ -337,13 +374,22 @@ FUNCTIONS = {
           WHERE (c.workspace_id,c.business_id,c.subject_kind,c.subject_id,c.command_key)
             =(ws,business,'CLIENT',session,p_key);
         IF FOUND THEN
-          IF (p_action,request) IS DISTINCT FROM (prior.action,prior.payload)
+          IF (CASE WHEN p_action='alternatives' THEN 'select' ELSE p_action END,request)
+            IS DISTINCT FROM (prior.action,prior.payload)
             THEN RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT' USING ERRCODE='P3101'; END IF;
-          IF NOT (prior.result ? 'hold_id') THEN RETURN prior.result; END IF;
-          SELECT * INTO STRICT hold FROM app.reservation_holds h
-            WHERE (h.workspace_id,h.business_id,h.id,h.session_id)
-              =(ws,business,(prior.result->>'hold_id')::uuid,session);
-          RETURN platform.scheduling_hold_view(hold,moment);
+          IF p_action='alternatives' THEN
+            IF prior.result->>'outcome' IS DISTINCT FROM 'OPTION_UNAVAILABLE'
+              THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
+            IF prior.result ? 'alternatives' THEN RETURN prior.result->'alternatives'; END IF;
+          ELSE
+            IF NOT (prior.result ? 'hold_id') THEN RETURN prior.result; END IF;
+            SELECT * INTO STRICT hold FROM app.reservation_holds h
+              WHERE (h.workspace_id,h.business_id,h.id,h.session_id)
+                =(ws,business,(prior.result->>'hold_id')::uuid,session);
+            RETURN platform.scheduling_hold_view(hold,moment);
+          END IF;
+        ELSIF p_action='alternatives' THEN
+          RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101';
         END IF;
       END IF;
 
@@ -370,6 +416,15 @@ FUNCTIONS = {
           'terms',q.material,'option',jsonb_build_object('option_id',option_row.id,
             'visit_start',option_row.visit_start,'visit_end',option_row.visit_end,
             'busy_start',option_row.busy_start,'busy_end',option_row.busy_end)); END IF;
+
+        IF p_action='alternatives' THEN
+          response:=platform.scheduling_save_offer(q,r,offer.order_id,session,offer.local_date,NULL,p_options,moment);
+          UPDATE platform.scheduling_command_receipts c
+            SET result=prior.result||jsonb_build_object('alternatives',response)
+            WHERE (c.workspace_id,c.business_id,c.subject_kind,c.subject_id,c.command_key)
+              =(ws,business,'CLIENT',session,p_key);
+          RETURN response;
+        END IF;
 
         SELECT * INTO hold FROM app.reservation_holds h
           WHERE (h.workspace_id,h.business_id,h.option_id)=(ws,business,option_row.id);
@@ -491,7 +546,7 @@ FUNCTIONS = {
 RUNTIME_FUNCTIONS = {
     "platform.scheduling_owner_read(uuid,text,date)",
     "platform.scheduling_owner_offer(jsonb,text,date,text,jsonb)",
-    "platform.scheduling_client_command(jsonb,uuid,uuid,text,uuid,text,boolean)",
+    "platform.scheduling_client_command(jsonb,uuid,uuid,text,uuid,text,boolean,jsonb)",
     "platform.scheduling_owner_block(uuid,text,timestamptz,timestamptz,uuid)",
 }
 
@@ -500,7 +555,7 @@ OWNER_READ = "platform.scheduling_owner_read(uuid,text,date)"
 SNAPSHOT = "platform.scheduling_snapshot(uuid,uuid,text,date,timestamptz)"
 PREVIOUS_PROFILE = "platform.scheduling_availability_schema_profile()"
 THIS_PROFILE = "platform.scheduling_hold_schema_profile()"
-NONFUNCTION_SHA256 = "aaee2b7f8bf6f434abeaa37058d2b048fd1e534c9e4421fa68116da2d568024b"
+NONFUNCTION_SHA256 = "7cddc57567ccbe5ce8d185b83b7b0205948b77ade4d7cbefa6f0bb313518fc88"
 PROFILE_CALLERS = (
     "platform.ai_provider_session(jsonb,boolean)",
     "platform.human_context_policy_command(uuid,uuid,text,text,text,bigint,jsonb,jsonb)",

@@ -68,6 +68,27 @@ class OfferStore:
             )
         )
 
+    async def alternatives(
+        self,
+        selection: SelectedSession,
+        client_id: UUID,
+        conversation_id: UUID,
+        option_id: UUID,
+        key: str,
+        windows: list[TimeWindow],
+    ) -> dict[str, Any]:
+        return _object(
+            await self.unit.scheduling_client_action(
+                selection.model_dump(mode="json"),
+                client_id,
+                conversation_id,
+                "alternatives",
+                option_id,
+                key,
+                options=[window.model_dump(mode="json") for window in windows],
+            )
+        )
+
     async def release(
         self,
         selection: SelectedSession,

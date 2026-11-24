@@ -449,10 +449,11 @@ class TenantUnitOfWork:
         target: UUID,
         key: str | None = None,
         eligible: bool | None = None,
+        options: list[dict[str, object]] | None = None,
     ) -> Any:
         return await self._service_request_execute(
             "SELECT platform.scheduling_client_command(CAST(:selection AS jsonb),:client,"
-            ":conversation,:action,:target,:key,:eligible)",
+            ":conversation,:action,:target,:key,:eligible,CAST(:options AS jsonb))",
             {
                 "selection": json.dumps(selection, ensure_ascii=False, allow_nan=False),
                 "client": client,
@@ -461,6 +462,7 @@ class TenantUnitOfWork:
                 "target": target,
                 "key": key,
                 "eligible": eligible,
+                "options": json.dumps(options, ensure_ascii=False, allow_nan=False),
             },
         )
 

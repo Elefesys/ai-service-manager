@@ -173,7 +173,7 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
     # Include the 0033 allocation constraints, tables and capabilities.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1443
+    assert len(journal.catalog["nonfunction_ddl"]) == 1444
     journal.start(node)
     append = store.append
 

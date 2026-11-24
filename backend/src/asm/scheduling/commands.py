@@ -5,6 +5,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal, Self
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from pydantic import BeforeValidator, Field, model_validator
 
@@ -62,14 +63,29 @@ class ClientTime(ConfigurationModel):
     visit_end: Instant
 
 
+class ClientOption(ClientTime):
+    option_id: CanonicalUUID
+
+
 class SelectionUnavailable(ConfigurationModel):
     outcome: Literal["OPTION_UNAVAILABLE", "SESSION_HELD"]
     date: LocalDate
     timezone: TimeZoneName | None
+
+
+class AlternativeOptions(SelectionUnavailable):
+    outcome: Literal["OPTION_UNAVAILABLE"] = "OPTION_UNAVAILABLE"
+    expires_at: Instant | None
+    windows: list[ClientOption] = Field(max_length=OFFER_OPTION_LIMIT)
+
+
+class SessionHeld(SelectionUnavailable):
+    outcome: Literal["SESSION_HELD"] = "SESSION_HELD"
+    expires_at: None = None
     windows: list[ClientTime] = Field(max_length=OFFER_OPTION_LIMIT)
 
 
-type SelectionResult = HoldResult | SelectionUnavailable
+type SelectionResult = HoldResult | AlternativeOptions | SessionHeld
 
 
 def _explicit_instant(value: object) -> object:
@@ -153,6 +169,28 @@ def _absolute_times(window: TimeWindow) -> tuple[datetime, ...]:
     )
 
 
+def _client_alternatives(offer: AvailabilityOffer) -> AlternativeOptions:
+    windows: list[ClientOption] = []
+    if offer.options:
+        if offer.expires_at is None or offer.timezone is None or offer.offer_id is None:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        zone = ZoneInfo(offer.timezone)
+        windows.extend(
+            ClientOption(
+                option_id=option.option_id,
+                visit_start=option.visit_start.astimezone(zone),
+                visit_end=option.visit_end.astimezone(zone),
+            )
+            for option in offer.options
+        )
+    return AlternativeOptions(
+        date=offer.date,
+        timezone=offer.timezone,
+        windows=windows,
+        expires_at=offer.expires_at,
+    )
+
+
 async def issue_offer(
     unit: TenantUnitOfWork, selection: SelectedSession, day: date | None, key: str
 ) -> AvailabilityOffer:
@@ -193,13 +231,21 @@ async def select_option(
     outcome = result.get("outcome")
     if outcome not in ("OPTION_UNAVAILABLE", "SESSION_HELD"):
         return _stored(HoldResult, result)
+    if outcome == "OPTION_UNAVAILABLE" and "alternatives" in result:
+        return _client_alternatives(_stored(AvailabilityOffer, result["alternatives"]))
 
-    # The response contains the remaining times for this session alone.
+    # Build alternatives from the current locked calendar, then save them
+    # on the selection receipt before the same transaction commits.
     current = await store.client_state(selection, client_id, conversation_id, option_id)
     schedule = _stored(ScheduleSnapshot, current.get("schedule"))
     windows = calculate_windows(schedule, minutes)[:OFFER_OPTION_LIMIT]
-    return SelectionUnavailable(
-        outcome=outcome,
+    if outcome == "OPTION_UNAVAILABLE":
+        saved = await store.alternatives(
+            selection, client_id, conversation_id, option_id, key, windows
+        )
+        return _client_alternatives(_stored(AvailabilityOffer, saved))
+
+    return SessionHeld(
         date=schedule.date,
         timezone=schedule.timezone,
         windows=[

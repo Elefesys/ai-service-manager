@@ -117,7 +117,7 @@ SERVICE_INTENT_NONFUNCTION_SHA256 = (
     "102f76177a579c854fafc90752f6dce2a1a57c98c0a82a657de79fa4570b2a39"
 )
 SCHEDULING_NONFUNCTION_SHA256 = "b31332ca0d1cfb8298e6955cac0bb686746c3a6d7a2708a7de50b9a4f81fc728"
-HOLD_NONFUNCTION_SHA256 = "aaee2b7f8bf6f434abeaa37058d2b048fd1e534c9e4421fa68116da2d568024b"
+HOLD_NONFUNCTION_SHA256 = "7cddc57567ccbe5ce8d185b83b7b0205948b77ade4d7cbefa6f0bb313518fc88"
 QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
 OWNER_DECISION_NONFUNCTION_SHA256 = (
     "fc25cd353f880f250d226f00e0f0accb25b9f340e5bab7daa21b3aef6f64810d"
@@ -558,7 +558,7 @@ def source_catalog(root, revision="0013"):
             "0030": 390,
             "0031": 409,
             "0032": 416,
-            "0033": 429,
+            "0033": 430,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -886,7 +886,7 @@ def compare_embedded_profile(expected):
             "0030": 389,
             "0031": 408,
             "0032": 415,
-            "0033": 428,
+            "0033": 429,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
