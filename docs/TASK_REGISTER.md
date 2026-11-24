@@ -2,9 +2,19 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M6.4B IN_PROGRESS · независимая сквозная приёмка · 2026-11-23
+## CURRENT — M7.0 REVIEW · реализация M7 TODO · 2026-11-24
 
-Ведущий C8, приёмка C0. Ветка `c8/m6-4b-acceptance` от проверенного `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, схема `0031`. В synthetic LOCAL/TEST проверить GJ-A с автоматическим предложением, GJ-B с решением мастера и явным согласием и GJ-C с передачей сложной работы. Сопоставить Q1–Q8 с доказательствами на одном кандидате и подготовить данные согласованного заказа для M7. [Поручение C0](tasks/M6_HANDOFF.md#L3) · [Принятая выборка Q1–Q8](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/tasks/M6_HANDOFF.md#L269).
+C0 принял [план M7](tasks/M7_HANDOFF.md) и [IMPL-007](decisions/IMPL-007-m7-pilot-scheduling.md) для synthetic LOCAL/TEST. На M7.0 в [PR #64](https://github.com/Elefesys/ai-service-manager/pull/64) также исправляется допуск к проверке PostgreSQL на `0031` и увеличиваются бюджеты `browser` и `foundation`. Интеграция ожидает разрешения владельца. После разрешённого слияния плана и зелёного CI на фактическом main выдать только M7.1A (C1 с C2/C5). Принятая база приложения — ниже; SHA ветки планирования не является исходным SHA кода.
+
+## История — M6 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
+
+C0 принял M6.4B и M6 целиком на фактическом `main` `6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7` после слияния PR #63. Дерево `169c8928c206f01e2892a6e02172dbeb8aad8147` совпало с принятым C8 кандидатом `b1b9647cfa47f69fe1e9dccf90b7cd57dcf2f872`. Q1–Q8 приняты, `C8-M6.4B-01` закрыто. [PR #63](https://github.com/Elefesys/ai-service-manager/pull/63) · [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/63#pullrequestreview-6026123124).
+
+Штатный CI — 12/12. PostgreSQL 18.6 прошёл 160/160 на схеме `0031`. В первой попытке браузерное задание достигло лимита времени после 92 тестов. Повторили только это задание, Chromium прошёл 98/98. В двух согласованных заказах зафиксированы принятые версии предложений и по одному сеансу `PLANNED` без даты. Сложная работа передана мастеру. [CI на main](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/attempts/2) · [Итог и данные для M7](tasks/M6_HANDOFF.md#передача-в-m7).
+
+## История — поручение на приёмку M6.4B · 2026-11-23
+
+Ведущий C8, приёмка C0. Ветка `c8/m6-4b-acceptance` от проверенного `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, схема `0031`. В synthetic LOCAL/TEST проверить GJ-A с автоматическим предложением, GJ-B с решением мастера и явным согласием и GJ-C с передачей сложной работы. Сопоставить Q1–Q8 с доказательствами на одном кандидате и подготовить данные согласованного заказа для M7. [Поручение C0](https://github.com/Elefesys/ai-service-manager/blob/16f44e57816bd53386f0e578042e559790d3c87d/docs/tasks/M6_HANDOFF.md#L3) · [Принятая выборка Q1–Q8](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/tasks/M6_HANDOFF.md#L269).
 
 ## История — M6.4A INTEGRATED / VERIFIED · 2026-11-23
 

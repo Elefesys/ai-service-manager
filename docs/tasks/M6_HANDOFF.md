@@ -1,6 +1,40 @@
 # M6 — от сведений в диалоге до согласованного заказа
 
-## CURRENT — M6.4B IN_PROGRESS · сквозная приёмка M6
+## CURRENT — M6 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
+
+C0 принял M6 по результатам проверки фактического `main`. В одной переписке клиент согласовал две разные работы. Для каждой работы сохранились своя заявка, отправленная версия предложения и первая реплика с явным согласием. Сложную работу мастер получил в Action Center. Критерии Q1–Q8 приняты, замечание `C8-M6.4B-01` закрыто. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/63#pullrequestreview-6026123124) · [Матрица Q1–Q8](https://github.com/Elefesys/ai-service-manager/blob/6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7/docs/tasks/M6_4B_ACCEPTANCE.md#L65).
+
+### Слияние и CI
+
+[PR #63](https://github.com/Elefesys/ai-service-manager/pull/63) вошёл в `main` коммитом `6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7`. Первый родитель — предыдущий `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, второй — принятый C8 кандидат `b1b9647cfa47f69fe1e9dccf90b7cd57dcf2f872`. Дерево `169c8928c206f01e2892a6e02172dbeb8aad8147` совпало с деревом кандидата.
+
+Штатный CI на событие `push` в `main` прошёл 12/12. В первой попытке 11 заданий прошли, а `browser` остановился по лимиту 1 560 с после 92 успешных тестов (код выхода 124). На том же SHA повторили только `browser`. Во второй попытке Chromium прошёл 98/98. Сквозные цепочки A/B/C на desktop прошли в обеих попытках. Отдельный прогон C8 для narrow сохранён с его исходными результатами. [Первая попытка](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/attempts/1) · [Итог CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/attempts/2) · [Журнал Chromium](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/artifacts/14852573410) · [Проверка narrow](https://github.com/Elefesys/ai-service-manager/blob/6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7/docs/tasks/M6_4B_ACCEPTANCE.md#L41).
+
+Задание `m4-runtime-db` прошло в первой попытке. В `event.json` указан `refs/heads/main`, в `source.json` и `source-admission.json` совпадают SHA слияния, родители и дерево. PostgreSQL 18.6 прошёл 160/160 тестов в семи группах. `schema-0031`, `catalog-0031` и `readiness` завершились с кодом 0. Каталог сверил 86 таблиц и 409 функций, проверка готовности вернула ревизию `0031`. [Артефакт PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/artifacts/14845796697).
+
+### Передача в M7
+
+Ниже приведены записи из успешного прогона Chromium на слитом `main`. У обеих работ один клиент `01a209c5-6c1e-7b2a-ada5-c5f807ed7a3b` и один диалог `01a209c5-6c1f-709d-9ac1-c5bf9332b927`. Фиксированная предоплата 500 ₽ указана в обеих принятых версиях предложения. Версия опубликованных условий — `01a209c5-6077-7631-a5ac-d7efcb479b1f`. Это значения синтетического примера. [Журнал на main](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/artifacts/14852573410).
+
+| Данные из принятой версии | Роза, 20 мм, предплечье | Ласточка, 101 мм, плечо |
+| --- | --- | --- |
+| Заявка, ревизия 1 | `01a209c5-8aa8-704c-8740-562611fff57e` | `01a209c5-d015-7c19-ae7b-4dd6bd7258fe` |
+| Quote, версия 1 | `01a209c5-8ac7-79de-9e92-40fc4f486af1` | `01a209c5-d2b2-7da1-8274-5465879b7309` |
+| Код в доставленном предложении | `Q-EB01651AAA` | `Q-5B7C5B979D` |
+| Основание цены | `01a209c5-8ac1-7288-b874-487c2fc4dcb4` | `01a209c5-d2a7-79ec-8abe-858f96fd29a7` |
+| Основание длительности (Assessment) | `01a209c5-8abf-727d-b072-9837a874226b` | `01a209c5-d02d-7bcf-b11a-059675e2168c` |
+| Первая реплика с явным согласием | `01a209c6-1223-76bb-8b6c-13109c5d3815` | `01a209c5-f76a-7352-82e7-2fe7d8b7538b` |
+| QuoteAcceptance | `01a209c6-1243-71fc-b34f-ea15044cb697` | `01a209c5-f78a-7421-94f7-cfd0bc24c7e4` |
+| ServiceOrder | `01a209c6-1243-724c-a424-a171f20fbb8c` | `01a209c5-f78a-7477-95f7-764046cc9739` |
+| Следующая ServiceSession | `01a209c6-1243-7263-b86c-a30f48ae9fa7` | `01a209c5-f78a-748d-bf2b-56f08a547974` |
+
+В GJ-A формула дала 3 500 ₽. В GJ-B мастер ввёл 4 600 ₽, исходная оценка длительности сохранилась. Между решением мастера и отправкой число входящих осталось равным четырём. Каждое предложение доставлено один раз. Клиент сначала принял B, затем A полной командой с кодом. Повтор каждой команды сохранил первое сообщение, согласие, заказ и сеанс. Объём для каждой работы — один следующий сеанс длительностью 65 минут, статус `PLANNED`, `scheduled_at = NULL`. Броней и платёжных эффектов — 0. [Условия, доставка и повторы](https://github.com/Elefesys/ai-service-manager/blob/6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7/docs/tasks/M6_4B_ACCEPTANCE.md#L7).
+
+В GJ-C мастер получил запрос о перекрытии `01a209c6-4b09-7350-b593-c2c13532ba84`. Клиенту доставили один ручной вопрос о фотографии. Автономных отправок, предложений и заказов — 0. [Исходный сценарий](https://github.com/Elefesys/ai-service-manager/blob/6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7/docs/tasks/M6_4B_ACCEPTANCE.md#L15) · [Журнал на main](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/artifacts/14852573410).
+
+Для live нужны подтверждённые мастером правила цены, длительности и предоплаты, допуск к реальным данным и фотографиям, а также отдельная проверка Telegram, получения сообщения адресатом, HUMAN/Resume и прежних UNKNOWN/holds. [Границы live](https://github.com/Elefesys/ai-service-manager/blob/6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7/docs/tasks/M6_4B_ACCEPTANCE.md#L82).
+
+## Исходное поручение M6.4B · завершено
 
 **Ведущий C8, результат принимает C0.** Для одной версии приложения проследить путь от переписки до согласованного заказа и следующего сеанса без даты. Для сложной работы показать, какой вопрос видит мастер и что получает клиент. Репозиторий `Elefesys/ai-service-manager`, ветка `c8/m6-4b-acceptance`, принятый `main` `5d4b773c977eadcf9ccaa002c3c41aa213b097fa`, схема `0031`. Среда — synthetic LOCAL/TEST. [План и критерии Q1–Q8](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/tasks/M6_HANDOFF.md#L269) · [Сценарии GJ-A/B/C](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/architecture/06_MVP_SPEC.md#L464) · [Принятые решения IMPL-006](https://github.com/Elefesys/ai-service-manager/blob/5d4b773c977eadcf9ccaa002c3c41aa213b097fa/docs/decisions/IMPL-006-m6-pilot-agreement.md#L19).
 

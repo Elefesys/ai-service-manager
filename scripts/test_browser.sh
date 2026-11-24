@@ -106,7 +106,7 @@ print("BROWSER_STACK_READINESS: PASS")
 PY
 # Run the intake journeys after the finite messaging workers. Intake exercises
 # the shared TEST queue and can leave scheduled work for later processing.
-ASM_BROWSER_FIXTURE_FILE="$tmp/fixture.json" ASM_BROWSER_MESSAGING_FILE="$tmp/messaging.json" ASM_BROWSER_COUNTER_DIR="$counter_dir" ASM_BROWSER_ENV_FILE="$tmp/private/test.env" ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" step browser-tests 1560 sh -c '
+ASM_BROWSER_FIXTURE_FILE="$tmp/fixture.json" ASM_BROWSER_MESSAGING_FILE="$tmp/messaging.json" ASM_BROWSER_COUNTER_DIR="$counter_dir" ASM_BROWSER_ENV_FILE="$tmp/private/test.env" ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" step browser-tests 2160 sh -c '
   status=0
   npm --prefix frontend run test:e2e -- --grep-invert "intake-duration[.]spec[.]ts" || status=$?
   npm --prefix frontend run test:e2e -- intake-duration.spec.ts || status=$?

@@ -1,6 +1,8 @@
 # IMPL-006 — заявка, решение мастера и согласие клиента в M6
 
-2026-11-19 · **ACCEPTED / LOCKED для пилота в synthetic LOCAL/TEST**. C0 принял решения 1–6 и указанные ниже уточнения к порядку реализации. M6.0 проходит интеграцию в [PR #55](https://github.com/Elefesys/ai-service-manager/pull/55). Первая выдача возможна после разрешённого слияния и успешного CI фактического `main`. [Порядок реализации и приёмка](../tasks/M6_HANDOFF.md).
+2026-11-19 · **ACCEPTED / LOCKED для пилота в synthetic LOCAL/TEST**. C0 принял решения 1–6 и уточнения к порядку реализации в [PR #55](https://github.com/Elefesys/ai-service-manager/pull/55).
+
+2026-11-24 · **M6 INTEGRATED / VERIFIED в synthetic LOCAL/TEST** на `main` `6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7`, схема `0031`. [Итог C0 и передача в M7](../tasks/M6_HANDOFF.md) · [CI после слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45227433232/attempts/2).
 
 ## Основание
 
