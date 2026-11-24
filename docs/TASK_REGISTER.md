@@ -2,9 +2,15 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.1B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.2A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
 
-Из двух клиентов, выбравших пересекающиеся окна одного мастера, только один получает удержание со сроком. Второй получает доступные варианты. Разовый блок мастера защищает тот же интервал. C2 ведёт единственную задачу, C1 отвечает за команды. База `main` — `0574c8c033d6508341fb34cbdc2c572c7de91633`, ветка `c2/m7-1b-offer-hold-allocation`. C0 выделил `0033_scheduling_holds.py` поверх `0032`. [Поручение C2, разрешённые пути и S3–S4](tasks/M7_HANDOFF.md#m71b--поручение-c2).
+Один выбор клиента на согласованный сеанс при `NONE` создаёт подтверждённую запись. При обязательной предоплате мастер и клиент видят действующее удержание и его срок. C1 ведёт единственное поручение, C2 отвечает за PostgreSQL, C5 — за карточку. База `main` — `daf0e97920ff73cde9c3b5f137c26761cf246fe1`, ветка `c1/m7-2a-hold-to-appointment`, миграция `0034_scheduling_appointments.py` поверх `0033`. [Поручение C1, разрешённые пути и приёмка](tasks/M7_HANDOFF.md#m72a--поручение-c1).
+
+## История — M7.1B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
+
+Владелец слил PR #66. Фактический `main` — `daf0e97920ff73cde9c3b5f137c26761cf246fe1`, родители — прежний `main` `0574c8c033d6508341fb34cbdc2c572c7de91633` и кандидат C8 `51a7e2488e1edd79ba9830de06dfa4157f8f4c01`. Дерево `8f1c2a7a2e69075a7170d15dcceb973be271fc23` совпало с принятым кандидатом. Отдельный `push/main` прошёл 12/12 с первой попытки. На PostgreSQL 18.6 схема `0033` прошла 160/160 проверок, каталог и готовность. В `foundation` прошли девять сценариев S3–S4 и R1. [PR #66](https://github.com/Elefesys/ai-service-manager/pull/66) · [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45449621080) · [PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45449621080/artifacts/14949215432) · [Журнал foundation](https://github.com/Elefesys/ai-service-manager/actions/runs/45449621080/artifacts/14955371040).
+
+При пересечении даже одних буферов окно досталось одному клиенту. Другой выбрал 12:15 по ID из ответа. На границе срока место освободилось без scheduler, поздний повтор сохранил новое удержание. При повторе пустой выдачи вернулся исходный результат. C0-M7.1B-01 и C0-M7.1B-02 закрыты. [C8 PASS](https://github.com/Elefesys/ai-service-manager/pull/66#pullrequestreview-6044008174) · [Приёмка C0 до слияния](https://github.com/Elefesys/ai-service-manager/blob/3165d5fd6b61087c9d98bd4f0eb4ed0427e55c2d/docs/tasks/M7_HANDOFF.md#L9).
 
 ## История — M7.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
 
