@@ -85,8 +85,8 @@ it('reloads the saved date after one rejected edit and discards the stale values
 
 it.each([
  [409,'DURATION_UNAVAILABLE','Длительность согласованного сеанса не подтверждена.'],
- [403,'ACCESS_DENIED','Не удалось обновить статус предложения.'],
- [404,'NOT_FOUND','Не удалось обновить статус предложения.'],
+ [403,'ACCESS_DENIED','Работа недоступна. Откройте список работ заново.'],
+ [404,'NOT_FOUND','Работа недоступна. Откройте список работ заново.'],
  [503,'UNAVAILABLE','Не удалось обновить статус предложения.'],
  [401,'AUTH_REQUIRED','Не удалось обновить статус предложения.'],
 ] as const)('shows the selected work error for %d %s',async(status,code,message)=>{
@@ -94,7 +94,7 @@ it.each([
  const quote=vi.spyOn(intakeApi,'quote').mockRejectedValue(new IntakeError(status,code));
  const preview=vi.spyOn(schedulingApi,'preview');
  render(<QuotePanel scope={scope} draft={work} refresh="" csrf="csrf" approvalChange={null} expired={expired}/>);
- expect(await screen.findByRole('alert')).toHaveTextContent(message);
+ expect((await screen.findByRole('alert')).textContent).toBe(message);
  expect(quote).toHaveBeenCalledExactlyOnceWith(scope,work.request_id,expect.any(AbortSignal));
  expect(screen.queryByRole('button',{name:'Варианты времени'})).not.toBeInTheDocument();
  expect(preview).not.toHaveBeenCalled();

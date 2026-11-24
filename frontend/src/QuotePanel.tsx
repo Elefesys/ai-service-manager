@@ -152,6 +152,8 @@ export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,open
     const failure=cause instanceof IntakeError?cause:null;
     if(failure?.status===409&&failure.code==='DURATION_UNAVAILABLE'){
      setError('Длительность согласованного сеанса не подтверждена.');
+    }else if(failure?.status===403||failure?.status===404){
+     setError('Работа недоступна. Откройте список работ заново.');
     }else{
      setError('Не удалось обновить статус предложения.');
     }
