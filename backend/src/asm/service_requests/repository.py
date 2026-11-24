@@ -246,7 +246,9 @@ class ServiceRequestRepository:
         self, business: UUID, conversation: UUID, request_id: UUID
     ) -> QuoteDeliveryView:
         raw = await self.unit.quote_owner_read(business, conversation, request_id)
-        return self._quote_view(raw, business, conversation, request_id)
+        return self._quote_view(
+            raw, business, conversation, request_id, report_missing_duration=True
+        )
 
     async def _prepare_quote(self, business: UUID, conversation: UUID, request_id: UUID) -> None:
         raw = await self.unit.quote_owner_prepare(business, conversation, request_id)
@@ -266,12 +268,23 @@ class ServiceRequestRepository:
         self._quote_view(saved, business, conversation, request_id)
 
     def _quote_view(
-        self, raw: object, business: UUID, conversation: UUID, request_id: UUID
+        self,
+        raw: object,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+        *,
+        report_missing_duration: bool = False,
     ) -> QuoteDeliveryView:
         try:
             view = QuoteDeliveryView.model_validate(raw)
-        except ValidationError:
-            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+        except ValidationError as error:
+            code = ServiceRequestCode.UNAVAILABLE
+            if report_missing_duration and self._missing_agreed_duration(
+                raw, error, business, conversation, request_id
+            ):
+                code = ServiceRequestCode.DURATION_UNAVAILABLE
+            raise ServiceRequestError(code) from None
         if view.quote is not None:
             self._quote_scope(view.quote.material, business, conversation, request_id)
         if view.previous is not None:
@@ -279,6 +292,52 @@ class ServiceRequestRepository:
         if view.agreement is not None:
             self._quote_scope(view.agreement.quote.material, business, conversation, request_id)
         return view
+
+    def _missing_agreed_duration(
+        self,
+        raw: object,
+        error: ValidationError,
+        business: UUID,
+        conversation: UUID,
+        request_id: UUID,
+    ) -> bool:
+        # QuoteDeliveryView remains strict. The owner read can explain a legacy
+        # agreement when the only validation errors are its absent duration facts.
+        agreement_path = ("agreement", "quote", "material")
+        current_path = ("quote", "material")
+        previous_path = ("previous", "quote", "material")
+        duration_fields = {"occupied_minutes", "duration_reference_id"}
+        issues = error.errors(include_context=False, include_url=False)
+        missing_paths = {issue["loc"][:-1] for issue in issues}
+        if not isinstance(raw, dict) or agreement_path not in missing_paths:
+            return False
+        if not missing_paths <= {agreement_path, current_path, previous_path} or any(
+            issue["loc"][-1] not in duration_fields
+            or (issue["type"] != "missing" and issue["input"] is not None)
+            for issue in issues
+        ):
+            return False
+
+        agreed = raw["agreement"]["quote"]
+        if current_path in missing_paths and raw["quote"]["quote_id"] != agreed["quote_id"]:
+            return False
+        if (
+            previous_path in missing_paths
+            and raw["previous"]["quote"]["quote_id"] != agreed["quote_id"]
+        ):
+            return False
+        material = agreed["material"]
+        return (
+            material["workspace_id"],
+            material["business_id"],
+            material["conversation_id"],
+            material["request_id"],
+        ) == (
+            str(self.unit.context.workspace_id),
+            str(business),
+            str(conversation),
+            str(request_id),
+        )
 
     def _quote_scope(
         self, material: QuoteMaterial, business: UUID, conversation: UUID, request_id: UUID

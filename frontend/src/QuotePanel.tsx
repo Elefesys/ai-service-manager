@@ -114,7 +114,7 @@ function Agreement({agreement,draft,csrf,expired}:{agreement:QuoteAgreement;draf
 
 export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,openMessage}:Props){
  const [delivery,setDelivery]=useState<QuoteDelivery|null>(null);
- const [error,setError]=useState(false);
+ const [error,setError]=useState('');
  const replyNavigation=useRef<AbortController|null>(null);
 
  useLayoutEffect(()=>()=>replyNavigation.current?.abort(),[
@@ -134,7 +134,7 @@ export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,open
   const controller=new AbortController(),{signal}=controller;
   let timer:ReturnType<typeof setTimeout>|undefined;
   let queuedRefreshes=0;
-  setDelivery(null);setError(false);
+  setDelivery(null);setError('');
 
   async function load(){
    try{
@@ -148,8 +148,14 @@ export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,open
     timer=setTimeout(()=>void load(),2000);
    }catch(cause){
     if(signal.aborted)return;
-    setDelivery(null);setError(true);
-    if(cause instanceof IntakeError&&cause.status===401)expired();
+    setDelivery(null);
+    const failure=cause instanceof IntakeError?cause:null;
+    if(failure?.status===409&&failure.code==='DURATION_UNAVAILABLE'){
+     setError('Длительность согласованного сеанса не подтверждена.');
+    }else{
+     setError('Не удалось обновить статус предложения.');
+    }
+    if(failure?.status===401)expired();
    }
   }
 
@@ -161,7 +167,7 @@ export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,open
  const reply=delivery?.reply_notice;
  return <section aria-label="Предложение клиенту" style={{overflowWrap:'anywhere'}}>
   <h4>Предложение клиенту</h4>
-  {error&&<p role="alert">Не удалось обновить статус предложения.</p>}
+  {error&&<p role="alert">{error}</p>}
   {!error&&!delivery&&<p role="status">Проверяем статус предложения…</p>}
   {delivery&&<DeliveryStatus status={delivery.status} reason={delivery.reason}/>}
   {delivery?.quote&&<QuoteTerms quote={delivery.quote} revision={draft.revision}/>}

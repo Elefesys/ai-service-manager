@@ -32,6 +32,7 @@ def snapshot(
         date=day,
         timezone=timezone,
         resource_id=RESOURCE,
+        schedule_version=1,
         week=[
             WeeklyInterval(weekday=day.weekday(), start_minute=start, end_minute=end)
             for start, end in intervals

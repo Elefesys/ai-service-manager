@@ -55,6 +55,52 @@ it.each([403,404,422])('reports an owner API refusal without showing old windows
  expect(screen.queryByRole('list',{name:'Подходящие окна'})).not.toBeInTheDocument();
 });
 
+it('reloads the saved date after one rejected edit and discards the stale values',async()=>{
+ const user=userEvent.setup();
+ const initial=availability(schedulingScope,{resource_id:schedulingScope.session,schedule_version:4,
+  timezone:'Asia/Novosibirsk',week:[{weekday:3,start_minute:600,end_minute:720}]});
+ const saved=availability(schedulingScope,{...initial,schedule_version:5,reason:'DATE_CLOSED',
+  exception:{date:initial.date,windows:[]}});
+ const preview=vi.spyOn(schedulingApi,'preview').mockResolvedValueOnce(initial).mockResolvedValueOnce(saved);
+ const change=vi.spyOn(schedulingApi,'change').mockRejectedValue(new IntakeError(409,'STALE_STATE'));
+ render(<SchedulingAvailability scope={schedulingScope} csrf="csrf" expired={vi.fn()}/>);
+ await user.click(screen.getByRole('button',{name:'Варианты времени'}));
+ await user.click(await screen.findByText('Задать часы на эту дату',{exact:true}));
+ const hours=within(screen.getByRole('group',{name:'Часы на выбранную дату'}));
+ await user.click(hours.getByRole('button',{name:'Добавить интервал'}));
+ await user.type(hours.getByLabelText('Начало'),'10:00');
+ await user.type(hours.getByLabelText('Окончание'),'12:30');
+ await user.click(hours.getByRole('button',{name:'Сохранить часы на дату'}));
+ expect(await screen.findByRole('alert')).toHaveTextContent('Проверьте сохранённые значения перед новой правкой.');
+ expect(screen.getByText('На эту дату отмечен выходной.',{exact:true})).toBeVisible();
+ expect(screen.getByRole('button',{name:'Отметить выходной'})).toBeDisabled();
+ expect(screen.queryByRole('list',{name:'Подходящие окна'})).not.toBeInTheDocument();
+ await user.click(screen.getByText('Задать часы на эту дату',{exact:true}));
+ expect(screen.getByRole('button',{name:'Сохранить часы на дату'})).toBeDisabled();
+ expect(change).toHaveBeenCalledExactlyOnceWith(schedulingScope,initial.date,{action:'exception',date:initial.date,
+  windows:[{start_minute:600,end_minute:750}],expected_version:4},'csrf',expect.any(AbortSignal));
+ expect(preview).toHaveBeenCalledTimes(2);
+ expect(preview).toHaveBeenLastCalledWith(schedulingScope,initial.date,expect.any(AbortSignal));
+});
+
+it.each([
+ [409,'DURATION_UNAVAILABLE','Длительность согласованного сеанса не подтверждена.'],
+ [403,'ACCESS_DENIED','Не удалось обновить статус предложения.'],
+ [404,'NOT_FOUND','Не удалось обновить статус предложения.'],
+ [503,'UNAVAILABLE','Не удалось обновить статус предложения.'],
+ [401,'AUTH_REQUIRED','Не удалось обновить статус предложения.'],
+] as const)('shows the selected work error for %d %s',async(status,code,message)=>{
+ const work=draft(),expired=vi.fn();
+ const quote=vi.spyOn(intakeApi,'quote').mockRejectedValue(new IntakeError(status,code));
+ const preview=vi.spyOn(schedulingApi,'preview');
+ render(<QuotePanel scope={scope} draft={work} refresh="" csrf="csrf" approvalChange={null} expired={expired}/>);
+ expect(await screen.findByRole('alert')).toHaveTextContent(message);
+ expect(quote).toHaveBeenCalledExactlyOnceWith(scope,work.request_id,expect.any(AbortSignal));
+ expect(screen.queryByRole('button',{name:'Варианты времени'})).not.toBeInTheDocument();
+ expect(preview).not.toHaveBeenCalled();
+ expect(expired).toHaveBeenCalledTimes(status===401?1:0);
+});
+
 it('shows two starts with the same clock time and distinct UTC offsets',async()=>{
  const date='2026-11-01';
  vi.spyOn(schedulingApi,'preview').mockResolvedValue(availability(schedulingScope,{

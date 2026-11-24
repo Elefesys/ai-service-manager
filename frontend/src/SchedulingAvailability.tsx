@@ -2,7 +2,7 @@ import {useEffect, useId, useRef, useState} from 'react';
 import type {FormEvent} from 'react';
 import {IntakeError} from './intake-api';
 import {policyFields, policyLimits, schedulingApi} from './scheduling-api';
-import type {Availability, DayInterval, PolicyField, PolicySettings, ScheduleChange, SchedulingScope} from './scheduling-api';
+import type {Availability, DayInterval, PolicyField, PolicySettings, ScheduleChange, ScheduleCommand, SchedulingScope} from './scheduling-api';
 
 const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
 const policyLabels: Record<PolicyField, string> = {
@@ -149,25 +149,39 @@ function AvailabilityPanel({scope, workName, csrf, expired, id}: Props & {id: st
   const [date, setDate] = useState('');
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
+  const [formReset, setFormReset] = useState(0);
 
-  async function load(day?: string, change?: ScheduleChange) {
+  async function load(day?: string, command?: ScheduleCommand) {
     if (active.current) return;
     const controller = new AbortController();
     active.current = controller;
     const {signal} = controller;
     setBusy(true);
     setError('');
+    let reloading = false;
     try {
-      const result = change && day
-        ? await schedulingApi.change(scope, day, change, csrf, signal)
-        : await schedulingApi.preview(scope, day, signal);
+      let result: Availability;
+      try {
+        result = command && day
+          ? await schedulingApi.change(scope, day, command, csrf, signal)
+          : await schedulingApi.preview(scope, day, signal);
+      } catch (cause) {
+        if (signal.aborted || !command || !(cause instanceof IntakeError) ||
+            cause.status !== 409 || cause.code !== 'STALE_STATE') throw cause;
+        reloading = true;
+        result = await schedulingApi.preview(scope, day, signal);
+      }
       if (signal.aborted) return;
       setView(result);
       setDate(result.date);
+      if (reloading) {
+        setFormReset(value => value + 1);
+        setError('Расписание уже изменилось. Проверьте сохранённые значения перед новой правкой.');
+      }
     } catch (cause) {
       if (signal.aborted) return;
       const status = cause instanceof IntakeError ? cause.status : null;
-      if (!change || status !== 422) setView(null);
+      if (!command || reloading || status !== 422) setView(null);
       if (status === 401) expired();
       setError(status === 403 || status === 404 ? 'Сеанс недоступен. Откройте карточку работы заново.' :
         status === 422 ? 'Проверьте дату и значения настроек.' : 'Не удалось получить актуальное расписание. Обновите варианты.');
@@ -184,7 +198,9 @@ function AvailabilityPanel({scope, workName, csrf, expired, id}: Props & {id: st
     return () => {active.current?.abort(); active.current = null;};
   }, []);
 
-  const save = (change: ScheduleChange) => {if (view && view.date === date) void load(view.date, change);};
+  const save = (change: ScheduleChange) => {
+    if (view && view.date === date) void load(view.date, {...change, expected_version: view.schedule_version});
+  };
 
   return <section id={id} className="scheduling-availability" aria-label="Варианты времени выбранного сеанса" aria-busy={busy}>
     {view && <p>{workName && <><strong>{workName}</strong> · </>}{view.service_name}{view.occupied_minutes !== null && ` · ${view.occupied_minutes} мин`}</p>}
@@ -206,9 +222,9 @@ function AvailabilityPanel({scope, workName, csrf, expired, id}: Props & {id: st
           <span>Занятость {timeInterval(window.busy_start, window.busy_end, view.date)}</span>
         </li>)}
       </ol>)}
-      {view.resource_id && <DateException key={JSON.stringify([view.date, view.exception])} view={view} busy={busy} save={save}/>}
-      <WorkingHours key={JSON.stringify([view.timezone, view.week])} view={view} busy={busy} save={save}/>
-      <Policy key={view.policy?.policy_id ?? ''} view={view} busy={busy} save={save}/>
+      {view.resource_id && <DateException key={JSON.stringify([formReset, view.date, view.exception])} view={view} busy={busy} save={save}/>}
+      <WorkingHours key={JSON.stringify([formReset, view.timezone, view.week])} view={view} busy={busy} save={save}/>
+      <Policy key={JSON.stringify([formReset, view.policy?.policy_id])} view={view} busy={busy} save={save}/>
     </>}
   </section>;
 }

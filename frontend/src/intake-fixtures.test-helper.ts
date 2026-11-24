@@ -63,7 +63,7 @@ export const schedulingScope:SchedulingScope={...scope,request:draft().request_i
  order:'018f0000-0000-7000-8000-000000000020',session:'018f0000-0000-7000-8000-000000000021'};
 
 export function availability(selected=schedulingScope,patch:Partial<Availability>={}):Availability{
- return {request_id:selected.request,quote_id:selected.quote,order_id:selected.order,session_id:selected.session,resource_id:null,
+ return {request_id:selected.request,quote_id:selected.quote,order_id:selected.order,session_id:selected.session,resource_id:null,schedule_version:0,
   service_name:draft().service_name,occupied_minutes:65,duration_reference_id:assessment().assessment_id,
   deposit:{mode:'FIXED_DEPOSIT',amount_minor:50000,percent:null},date:'2026-11-26',timezone:null,week:[],policy:null,exception:null,
   reason:'NO_WORKING_HOURS',windows:[],...patch};

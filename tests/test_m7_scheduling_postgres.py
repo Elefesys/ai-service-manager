@@ -1,11 +1,12 @@
 """Real PostgreSQL and Console owner API proof for the M7.1A slice."""
 
+import asyncio
 import json
 from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
-from m7_scheduling_fixtures import POLICY, WEEK, ZONE, Work, accept_pair
+from m7_scheduling_fixtures import POLICY, WEEK, ZONE, Work, accept_pair, remove_historical_duration
 from m7_scheduling_fixtures import scheduling_pg as scheduling_pg
 from sqlalchemy import text
 from test_m2_1_schema_postgres import _migrate
@@ -29,6 +30,15 @@ pytestmark = pytest.mark.integration
 
 def proof(label, **fields):
     print("M7.1A PostgreSQL", json.dumps({"case": label, **fields}, ensure_ascii=False))
+
+
+def at_version(command, snapshot):
+    return command | {"expected_version": snapshot["schedule_version"]}
+
+
+def assert_stale(reply):
+    assert reply.status_code == 409 and reply.json() == {"error": {"code": "STALE_STATE"}}
+    assert reply.headers["cache-control"] == "no-store"
 
 
 async def effects(harness):
@@ -60,11 +70,12 @@ async def test_m7_owner_scope_buffers_and_persisted_day_off(scheduling_pg, auth)
     for work in (left, right):
         empty = await owner_get(auth, work.preview_url())
         assert empty["reason"] == "NO_WORKING_HOURS" and empty["windows"] == []
+        assert empty["schedule_version"] == 0
         assert empty["occupied_minutes"] == 65 and empty["deposit"] == work.material["deposit"]
         assert {key: empty[key] for key in work.proof()} == work.proof()
 
     before, triples = await effects(h), await counts(h)
-    body = {"action": "schedule", "timezone": ZONE, "week": WEEK}
+    body = {"action": "schedule", "timezone": ZONE, "week": WEEK, "expected_version": 0}
     missing_csrf = await auth.client.post(
         left.preview_url(), headers={"Origin": token["Origin"]}, json=body
     )
@@ -94,8 +105,8 @@ async def test_m7_owner_scope_buffers_and_persisted_day_off(scheduling_pg, auth)
     assert scheduled["reason"] == "NO_ACTIVE_POLICY"
     day = date.fromisoformat(scheduled["date"])
     endpoint = left.preview_url(day=day)
-    configured = await owner_post(auth, endpoint, token, POLICY)
-    assert (await owner_post(auth, endpoint, token, POLICY))["policy"] == configured["policy"]
+    configured = await owner_post(auth, endpoint, token, at_version(POLICY, scheduled))
+    assert await owner_post(auth, endpoint, token, at_version(POLICY, configured)) == configured
     assert configured["reason"] is None and configured["timezone"] == ZONE
     windows = configured["windows"]
     assert [value["visit_start"] for value in windows] == [
@@ -111,7 +122,10 @@ async def test_m7_owner_scope_buffers_and_persisted_day_off(scheduling_pg, auth)
     assert second["windows"] == windows
     assert {key: second[key] for key in right.proof()} == right.proof()
     closed = await owner_post(
-        auth, left.preview_url(), token, {"action": "exception", "date": str(day), "windows": []}
+        auth,
+        left.preview_url(),
+        token,
+        at_version({"action": "exception", "date": str(day), "windows": []}, configured),
     )
     assert closed == (await owner_get(auth, endpoint))
     assert closed["reason"] == "DATE_CLOSED" and closed["windows"] == []
@@ -133,7 +147,8 @@ async def test_m7_owner_scope_buffers_and_persisted_day_off(scheduling_pg, auth)
         )
     try:
         assert (await auth.client.get(endpoint)).status_code == 403
-        assert (await auth.client.post(endpoint, headers=token, json=POLICY)).status_code == 403
+        denied = await auth.client.post(endpoint, headers=token, json=at_version(POLICY, closed))
+        assert denied.status_code == 403
     finally:
         async with h.migrator.begin() as connection:
             await connection.execute(
@@ -164,17 +179,126 @@ async def test_m7_owner_scope_buffers_and_persisted_day_off(scheduling_pg, auth)
     )
 
 
+async def test_m7_stale_date_week_and_policy_preserve_first_save(scheduling_pg, auth):
+    h = scheduling_pg
+    token, left, right = await accept_pair(h, auth)
+    initial = await owner_get(auth, left.preview_url())
+    assert initial["schedule_version"] == 0
+    assert (await owner_get(auth, right.preview_url()))["schedule_version"] == 0
+    schedule = {"action": "schedule", "timezone": ZONE, "week": WEEK}
+    first_saves = await asyncio.gather(
+        auth.client.post(left.preview_url(), headers=token, json=at_version(schedule, initial)),
+        auth.client.post(right.preview_url(), headers=token, json=at_version(schedule, initial)),
+    )
+    created, rejected = sorted(first_saves, key=lambda reply: reply.status_code)
+    assert created.status_code == 200 and created.json()["schedule_version"] == 1
+    assert_stale(rejected)
+    assert await scalar(h, "SELECT count(*) FROM app.scheduling_resources") == 1
+
+    day = date.fromisoformat(created.json()["date"])
+    left_url, right_url = left.preview_url(day=day), right.preview_url(day=day)
+    configured = await owner_post(auth, left_url, token, at_version(POLICY, created.json()))
+    stale_date = await owner_get(auth, right_url)
+    assert stale_date["schedule_version"] == configured["schedule_version"] == 2
+    assert [row["visit_start"][11:16] for row in stale_date["windows"]] == [
+        "10:15",
+        "10:30",
+        "10:45",
+    ]
+    first_date = {"action": "exception", "date": str(day), "windows": []}
+    closed = await owner_post(auth, left_url, token, at_version(first_date, configured))
+    replacement = first_date | {"windows": [{"start_minute": 600, "end_minute": 750}]}
+    date_reply = await auth.client.post(
+        right_url, headers=token, json=at_version(replacement, stale_date)
+    )
+    assert_stale(date_reply)
+    reloaded_date = await owner_get(auth, right_url)
+    assert reloaded_date["schedule_version"] == closed["schedule_version"] == 3
+    assert reloaded_date["reason"] == "DATE_CLOSED" and not reloaded_date["windows"]
+    assert reloaded_date["exception"] == closed["exception"] == {"date": str(day), "windows": []}
+
+    first_week = [
+        row | {"end_minute": 660} if row["weekday"] == day.weekday() else row for row in WEEK
+    ]
+    next_weekday = (day + timedelta(days=1)).weekday()
+    second_week = [
+        row | {"end_minute": 750} if row["weekday"] == next_weekday else row for row in WEEK
+    ]
+    changed_week = await owner_post(
+        auth,
+        left_url,
+        token,
+        at_version(schedule | {"timezone": "UTC", "week": first_week}, closed),
+    )
+    week_reply = await auth.client.post(
+        right_url,
+        headers=token,
+        json=at_version(schedule | {"week": second_week}, reloaded_date),
+    )
+    assert_stale(week_reply)
+    reloaded_week = await owner_get(auth, right_url)
+    assert reloaded_week["week"] == first_week and reloaded_week["timezone"] == "UTC"
+    assert reloaded_week["schedule_version"] == changed_week["schedule_version"] == 4
+    assert reloaded_week["exception"] == closed["exception"]
+
+    first_policy = POLICY | {"buffer_before_minutes": 25}
+    changed_policy = await owner_post(auth, left_url, token, at_version(first_policy, changed_week))
+    policy_reply = await auth.client.post(
+        right_url,
+        headers=token,
+        json=at_version(POLICY | {"buffer_after_minutes": 20}, reloaded_week),
+    )
+    assert_stale(policy_reply)
+    reloaded_policy = await owner_get(auth, right_url)
+    assert reloaded_policy["policy"] == changed_policy["policy"]
+    assert reloaded_policy["policy"]["buffer_before_minutes"] == 25
+    assert reloaded_policy["policy"]["buffer_after_minutes"] == 5
+    assert reloaded_policy["schedule_version"] == changed_policy["schedule_version"] == 5
+    assert (
+        await owner_post(auth, right_url, token, at_version(first_policy, reloaded_policy))
+        == reloaded_policy
+    )
+    assert await scalar(h, "SELECT count(*) FROM app.scheduling_policy_revisions") == 2
+    proof(
+        "C0-M7.1A-01",
+        A=left.proof(),
+        B=right.proof(),
+        first_saves=[created.status_code, rejected.status_code],
+        stale_codes={
+            "exception": date_reply.status_code,
+            "schedule": week_reply.status_code,
+            "policy": policy_reply.status_code,
+        },
+        date={
+            "local_date": str(day),
+            "version": reloaded_date["schedule_version"],
+            "reason": reloaded_date["reason"],
+            "windows": len(reloaded_date["windows"]),
+        },
+        week={
+            "version": reloaded_week["schedule_version"],
+            "timezone": reloaded_week["timezone"],
+            "week": reloaded_week["week"],
+        },
+        policy={"version": reloaded_policy["schedule_version"], **reloaded_policy["policy"]},
+    )
+
+
 async def test_m7_preview_replacement_break_notice_horizon_and_missing_duration(
     scheduling_pg, auth
 ):
     h = scheduling_pg
     token, work, _ = await accept_pair(h, auth)
+    empty = await owner_get(auth, work.preview_url())
     opened = await owner_post(
-        auth, work.preview_url(), token, {"action": "schedule", "timezone": ZONE, "week": WEEK}
+        auth,
+        work.preview_url(),
+        token,
+        at_version({"action": "schedule", "timezone": ZONE, "week": WEEK}, empty),
     )
     day = date.fromisoformat(opened["date"])
     endpoint = work.preview_url(day=day)
-    await owner_post(auth, endpoint, token, POLICY)
+    configured = await owner_post(auth, endpoint, token, at_version(POLICY, opened))
     replace = {
         "action": "exception",
         "date": str(day),
@@ -183,59 +307,117 @@ async def test_m7_preview_replacement_break_notice_horizon_and_missing_duration(
             {"start_minute": 675, "end_minute": 780},
         ],
     }
-    changed = await owner_post(auth, work.preview_url(), token, replace)
+    changed = await owner_post(auth, work.preview_url(), token, at_version(replace, configured))
     assert [row["visit_start"][11:16] for row in changed["windows"]] == ["11:30", "11:45"]
-    assert (await owner_get(auth, work.preview_url(day=day + timedelta(days=15))))["windows"] == []
-    late = await owner_post(auth, endpoint, token, POLICY | {"minimum_notice_minutes": 4320})
+    horizon = await owner_get(auth, work.preview_url(day=day + timedelta(days=15)))
+    assert horizon["reason"] == "NO_WINDOWS" and not horizon["windows"]
+    late = await owner_post(
+        auth, endpoint, token, at_version(POLICY | {"minimum_notice_minutes": 4320}, changed)
+    )
     assert late["reason"] == "NO_WINDOWS" and not late["windows"]
 
-    await owner_post(
+    no_buffer = await owner_post(
         auth,
         endpoint,
         token,
-        POLICY | {"step_minutes": 5, "buffer_before_minutes": 0, "buffer_after_minutes": 0},
+        at_version(
+            POLICY | {"step_minutes": 5, "buffer_before_minutes": 0, "buffer_after_minutes": 0},
+            late,
+        ),
     )
     adjacent = await owner_post(
         auth,
         work.preview_url(),
         token,
-        replace
-        | {
-            "windows": [
-                {"start_minute": 600, "end_minute": 665},
-                {"start_minute": 665, "end_minute": 730},
-            ]
-        },
+        at_version(
+            replace
+            | {
+                "windows": [
+                    {"start_minute": 600, "end_minute": 665},
+                    {"start_minute": 665, "end_minute": 730},
+                ]
+            },
+            no_buffer,
+        ),
     )
     assert len(adjacent["windows"]) == 2
     assert adjacent["windows"][0]["busy_end"] == adjacent["windows"][1]["busy_start"]
-    restored = await owner_post(auth, work.preview_url(), token, replace | {"windows": None})
+    restored = await owner_post(
+        auth, work.preview_url(), token, at_version(replace | {"windows": None}, adjacent)
+    )
     assert restored["exception"] is None and restored["windows"]
+
+    single_day = {"action": "schedule", "timezone": ZONE, "week": [WEEK[day.weekday()]]}
+    week = await owner_post(auth, endpoint, token, at_version(single_day, restored))
+    assert week["windows"]
+    next_day = day + timedelta(days=1)
+    next_endpoint = work.preview_url(day=next_day)
+    missing_hours = await owner_get(auth, next_endpoint)
+    assert missing_hours["policy"] == week["policy"] and missing_hours["exception"] is None
+    assert missing_hours["reason"] == "NO_WORKING_HOURS" and not missing_hours["windows"]
+    on_next_day = replace | {"date": str(next_day)}
+    next_closed = await owner_post(
+        auth, next_endpoint, token, at_version(on_next_day | {"windows": []}, missing_hours)
+    )
+    assert next_closed["reason"] == "DATE_CLOSED" and not next_closed["windows"]
+    next_short = await owner_post(
+        auth,
+        next_endpoint,
+        token,
+        at_version(
+            on_next_day | {"windows": [{"start_minute": 600, "end_minute": 645}]}, next_closed
+        ),
+    )
+    assert next_short["reason"] == "NO_WINDOWS" and not next_short["windows"]
+    next_working = await owner_post(auth, next_endpoint, token, at_version(on_next_day, next_short))
+    assert next_working["reason"] is None and next_working["windows"]
+    assert (await owner_get(auth, endpoint))["exception"] is None
+    assert (await owner_get(auth, work.preview_url(day=next_day + timedelta(days=1))))[
+        "reason"
+    ] == "NO_WORKING_HOURS"
 
     # A damaged historical terms snapshot cannot silently fall back to the
     # current service settings. Use the migrator only to emulate missing data.
     quote_id = work.agreement["quote"]["quote_id"]
     async with h.migrator.begin() as connection:
-        await connection.execute(text("ALTER TABLE app.quotes DISABLE TRIGGER quote_immutable"))
-        await connection.execute(
-            text("""
-            UPDATE app.quotes SET material=material-'occupied_minutes'-'duration_reference_id'
-            WHERE (workspace_id,id)=(:ws,CAST(:id AS uuid))
-        """),
-            {"ws": A, "id": quote_id},
-        )
-        await connection.execute(text("ALTER TABLE app.quotes ENABLE TRIGGER quote_immutable"))
+        await remove_historical_duration(connection, A, quote_id)
     unavailable = await owner_get(auth, endpoint)
     assert unavailable["reason"] == "DURATION_UNAVAILABLE"
     assert unavailable["occupied_minutes"] is unavailable["duration_reference_id"] is None
     assert not unavailable["windows"]
+    quote = await auth.client.get(work.url + "/quote")
+    assert quote.status_code == 409 and quote.json() == {"error": {"code": "DURATION_UNAVAILABLE"}}
+    assert quote.headers["cache-control"] == "no-store"
+
+    # An unrelated malformed field keeps the general error, even on this quote.
+    async with h.migrator.begin() as connection:
+        await connection.execute(text("ALTER TABLE app.quotes DISABLE TRIGGER quote_immutable"))
+        result = await connection.execute(
+            text("""
+            UPDATE app.quotes SET material=material||'{"service_name":""}'::jsonb
+            WHERE (workspace_id,id)=(:ws,CAST(:id AS uuid))
+            """),
+            {"ws": A, "id": quote_id},
+        )
+        await connection.execute(text("ALTER TABLE app.quotes ENABLE TRIGGER quote_immutable"))
+        assert result.rowcount == 1
+    broken = await auth.client.get(work.url + "/quote")
+    assert broken.status_code == 503 and broken.json() == {"error": {"code": "UNAVAILABLE"}}
+    assert broken.headers["cache-control"] == "no-store"
+    assert await counts(h) == (2, 2, 2)
     proof(
         "boundaries",
         replacement=changed["windows"],
         adjacent=adjacent["windows"],
-        horizon="NO_WINDOWS",
+        horizon=horizon["reason"],
         notice=late["reason"],
-        unknown=unavailable["reason"],
+        unconfigured=missing_hours["reason"],
+        explicit_day_off=next_closed["reason"],
+        short_interval=next_short["reason"],
+        replacement_date=next_working["date"],
+        replacement_date_windows=len(next_working["windows"]),
+        unknown={"preview": unavailable["reason"], "quote_http": quote.status_code},
+        unrelated_quote_error=broken.status_code,
     )
 
 

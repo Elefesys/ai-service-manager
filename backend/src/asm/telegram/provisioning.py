@@ -499,7 +499,7 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
         if (
             len(expected["functions"]) != 416
             or len(expected["columns"]) != 91
-            or sum(map(len, expected["columns"].values())) != 1274
+            or sum(map(len, expected["columns"].values())) != 1275
         ):
             raise ValueError
         return runner, expected

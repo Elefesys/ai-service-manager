@@ -1,5 +1,6 @@
 """Owner scheduling settings and a computed session availability projection."""
 
+from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Literal, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -40,6 +41,7 @@ def zone_name(value: str) -> str:
 LocalDate = Annotated[date, BeforeValidator(calendar_date)]
 TimeZoneName = Annotated[str, Field(min_length=1, max_length=128), AfterValidator(zone_name)]
 Instant = Annotated[AwareDatetime, Field(strict=False)]
+ScheduleVersion = Annotated[int, Field(ge=0, le=9_007_199_254_740_991)]
 AvailabilityReason = Literal[
     "NO_WORKING_HOURS", "NO_ACTIVE_POLICY", "DURATION_UNAVAILABLE", "DATE_CLOSED", "NO_WINDOWS"
 ]
@@ -84,9 +86,17 @@ class ScheduleSnapshot(ConfigurationModel):
     date: LocalDate
     timezone: TimeZoneName | None
     resource_id: CanonicalUUID | None
+    schedule_version: ScheduleVersion
     week: list[WeeklyInterval] = Field(max_length=10080)
     policy: PolicyView | None
     exception: DateException | None
+
+    @property
+    def working_intervals(self) -> Sequence[LocalSpan]:
+        if self.exception is not None:
+            return self.exception.windows
+        weekday = self.date.weekday()
+        return [span for span in self.week if span.weekday == weekday]
 
 
 class TimeWindow(ConfigurationModel):
@@ -108,6 +118,7 @@ class AvailabilityPreview(ConfigurationModel):
     date: LocalDate
     timezone: TimeZoneName | None
     resource_id: CanonicalUUID | None
+    schedule_version: ScheduleVersion
     week: list[WeeklyInterval]
     policy: PolicyView | None
     exception: DateException | None
@@ -117,6 +128,7 @@ class AvailabilityPreview(ConfigurationModel):
 
 class ScheduleCommand(ConfigurationModel):
     action: Literal["schedule"]
+    expected_version: ScheduleVersion
     timezone: TimeZoneName
     week: list[WeeklyInterval] = Field(max_length=10080)
 
@@ -132,10 +144,12 @@ class ScheduleCommand(ConfigurationModel):
 
 class PolicyCommand(PolicyInput):
     action: Literal["policy"]
+    expected_version: ScheduleVersion
 
 
 class ExceptionCommand(ConfigurationModel):
     action: Literal["exception"]
+    expected_version: ScheduleVersion
     date: LocalDate
     windows: list[LocalSpan] | None = Field(max_length=1440)
 

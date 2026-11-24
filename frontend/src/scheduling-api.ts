@@ -29,6 +29,7 @@ export type ScheduleChange =
   | {action: 'schedule'; timezone: string; week: WeekInterval[]}
   | ({action: 'policy'} & PolicySettings)
   | {action: 'exception'; date: string; windows: DayInterval[] | null};
+export type ScheduleCommand = ScheduleChange & {expected_version: number};
 
 const reasons = ['NO_WORKING_HOURS', 'NO_ACTIVE_POLICY', 'DURATION_UNAVAILABLE', 'DATE_CLOSED', 'NO_WINDOWS'] as const;
 const timestamps = ['visit_start', 'visit_end', 'busy_start', 'busy_end'] as const;
@@ -44,6 +45,7 @@ export type Availability = {
   order_id: string;
   session_id: string;
   resource_id: string | null;
+  schedule_version: number;
   service_name: string;
   occupied_minutes: number | null;
   duration_reference_id: string | null;
@@ -82,10 +84,11 @@ function checkIntervals(value: unknown, week: boolean) {
 }
 
 export function parseAvailability(value: unknown, scope: SchedulingScope, date?: string): Availability {
-  const view = object(value, ['request_id', 'quote_id', 'order_id', 'session_id', 'resource_id', 'service_name',
+  const view = object(value, ['request_id', 'quote_id', 'order_id', 'session_id', 'resource_id', 'schedule_version', 'service_name',
     'occupied_minutes', 'duration_reference_id', 'deposit', 'date', 'timezone', 'week', 'policy', 'exception', 'reason', 'windows']);
   if (view.request_id !== scope.request || view.quote_id !== scope.quote || view.order_id !== scope.order || view.session_id !== scope.session ||
       (view.resource_id !== null && !uuid(view.resource_id)) || typeof view.service_name !== 'string' || !view.service_name.trim() ||
+      !integer(view.schedule_version, 0, Number.MAX_SAFE_INTEGER) || (view.resource_id === null) !== (view.schedule_version === 0) ||
       (view.occupied_minutes !== null && !integer(view.occupied_minutes, 1, 10080)) ||
       (view.duration_reference_id !== null && !uuid(view.duration_reference_id)) || !dateValue(view.date) || (date && view.date !== date) ||
       (view.timezone !== null && (typeof view.timezone !== 'string' || !view.timezone)) ||
@@ -121,6 +124,12 @@ async function request(scope: SchedulingScope, date: string | undefined, signal:
   const id = encodeURIComponent;
   const path = `/api/v1/workspaces/${id(workspace)}/businesses/${id(business)}/intake/conversations/${id(conversation)}/service-requests/${id(work)}/sessions/${id(session)}/availability`;
   const response = await fetch(`${path}?${query}`, {...init, credentials: 'include', cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(10000)])});
+  if (response.status === 409) {
+    const value: unknown = await response.json().catch(() => null);
+    if (record(value) && record(value.error) && value.error.code === 'STALE_STATE') {
+      throw new IntakeError(409, 'STALE_STATE');
+    }
+  }
   if (response.status !== 200) throw new IntakeError(response.status, 'SCHEDULING_REQUEST_FAILED');
   let value: unknown;
   try {value = await response.json();} catch {return invalid();}
@@ -131,7 +140,7 @@ export const schedulingApi = {
   async preview(scope: SchedulingScope, date: string | undefined, signal: AbortSignal) {
     return parseAvailability(await request(scope, date, signal), scope, date);
   },
-  async change(scope: SchedulingScope, date: string, body: ScheduleChange, csrf: string, signal: AbortSignal) {
+  async change(scope: SchedulingScope, date: string, body: ScheduleCommand, csrf: string, signal: AbortSignal) {
     const queryDate = body.action === 'exception' ? undefined : date;
     const value = await request(scope, queryDate, signal, {
       method: 'POST',

@@ -88,7 +88,11 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
             query,
         )
 
-    @router.post("/availability", response_model=AvailabilityPreview)
+    @router.post(
+        "/availability",
+        response_model=AvailabilityPreview,
+        responses={409: {"description": "STALE_STATE or a missing scheduling prerequisite"}},
+    )
     async def change_availability(
         request: Request,
         response: Response,

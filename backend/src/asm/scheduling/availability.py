@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from asm.scheduling.models import LocalSpan, ScheduleSnapshot, TimeWindow
+from asm.scheduling.models import ScheduleSnapshot, TimeWindow
 
 MINUTE = timedelta(minutes=1)
 
@@ -42,19 +42,13 @@ def calculate_windows(snapshot: ScheduleSnapshot, occupied_minutes: int) -> list
 
     zone = ZoneInfo(snapshot.timezone)
     midnight = datetime.combine(snapshot.date, time.min)
-    weekday = snapshot.date.weekday()
-    spans: Iterable[LocalSpan] = (
-        snapshot.exception.windows
-        if snapshot.exception is not None
-        else (span for span in snapshot.week if span.weekday == weekday)
-    )
     duration = timedelta(minutes=occupied_minutes)
     before = timedelta(minutes=policy.buffer_before_minutes)
     after = timedelta(minutes=policy.buffer_after_minutes)
     notice = now + timedelta(minutes=policy.minimum_notice_minutes)
     step = policy.step_minutes
     windows: list[TimeWindow] = []
-    for span in spans:
+    for span in snapshot.working_intervals:
         wall_minutes = {
             minute: _utc_instants(midnight + minute * MINUTE, zone)
             for minute in range(span.start_minute, span.end_minute)

@@ -969,6 +969,12 @@
             ],
             "title": "Resource Id"
           },
+          "schedule_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Schedule Version",
+            "type": "integer"
+          },
           "service_name": {
             "maxLength": 100,
             "title": "Service Name",
@@ -1020,6 +1026,7 @@
           "date",
           "timezone",
           "resource_id",
+          "schedule_version",
           "week",
           "policy",
           "exception",
@@ -4245,6 +4252,12 @@
             "title": "Date",
             "type": "string"
           },
+          "expected_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
           "windows": {
             "anyOf": [
               {
@@ -4263,6 +4276,7 @@
         },
         "required": [
           "action",
+          "expected_version",
           "date",
           "windows"
         ],
@@ -8007,6 +8021,12 @@
             "title": "Buffer Before Minutes",
             "type": "integer"
           },
+          "expected_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
           "hold_ttl_minutes": {
             "maximum": 525600.0,
             "minimum": 1.0,
@@ -8046,7 +8066,8 @@
           "horizon_days",
           "offer_ttl_minutes",
           "hold_ttl_minutes",
-          "action"
+          "action",
+          "expected_version"
         ],
         "title": "PolicyCommand",
         "type": "object"
@@ -10795,6 +10816,12 @@
             "title": "Action",
             "type": "string"
           },
+          "expected_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
           "timezone": {
             "maxLength": 128,
             "minLength": 1,
@@ -10812,6 +10839,7 @@
         },
         "required": [
           "action",
+          "expected_version",
           "timezone",
           "week"
         ],
@@ -16358,6 +16386,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "description": "STALE_STATE or a missing scheduling prerequisite"
           },
           "422": {
             "content": {

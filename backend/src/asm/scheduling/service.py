@@ -20,7 +20,6 @@ from asm.scheduling.models import (
     AvailabilityCommand,
     AvailabilityPreview,
     AvailabilityReason,
-    PolicyInput,
     TimeWindow,
 )
 from asm.scheduling.repository import SchedulingRepository
@@ -114,13 +113,8 @@ async def preview_availability(
     business, service = UUID(selection.business_id), terms.service_id
     repository = SchedulingRepository(unit)
     if command is not None:
-        if command.action == "schedule":
-            await repository.put_schedule(business, service, command.timezone, command.week)
-        elif command.action == "policy":
-            options = PolicyInput.model_validate(command.model_dump(exclude={"action"}))
-            await repository.activate_policy(business, service, options)
-        else:
-            await repository.put_exception(business, service, command.date, command.windows)
+        await repository.change(business, service, command)
+        if command.action == "exception":
             day = command.date
 
     schedule = await repository.read(business, service, day)
@@ -136,7 +130,7 @@ async def preview_availability(
         reason = "DURATION_UNAVAILABLE"
     elif schedule.exception is not None and not schedule.exception.windows:
         reason = "DATE_CLOSED"
-    elif schedule.timezone is None or (not schedule.week and schedule.exception is None):
+    elif schedule.timezone is None or not schedule.working_intervals:
         reason = "NO_WORKING_HOURS"
     elif schedule.policy is None:
         reason = "NO_ACTIVE_POLICY"
@@ -157,6 +151,7 @@ async def preview_availability(
         date=schedule.date,
         timezone=schedule.timezone,
         resource_id=schedule.resource_id,
+        schedule_version=schedule.schedule_version,
         week=schedule.week,
         policy=schedule.policy,
         exception=schedule.exception,

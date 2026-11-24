@@ -82,3 +82,17 @@ async def accept_pair(harness, auth, prepared=None):
     left = Work(left_url, (await read(harness, auth, left_url))["agreement"])
     right = Work(right_url, (await read(harness, auth, right_url))["agreement"])
     return token, left, right
+
+
+async def remove_historical_duration(connection, workspace_id, quote_id):
+    """Emulate an accepted Quote from before duration was captured."""
+    await connection.execute(text("ALTER TABLE app.quotes DISABLE TRIGGER quote_immutable"))
+    result = await connection.execute(
+        text("""
+        UPDATE app.quotes SET material=material-'occupied_minutes'-'duration_reference_id'
+        WHERE (workspace_id,id)=(:ws,CAST(:id AS uuid))
+        """),
+        {"ws": workspace_id, "id": quote_id},
+    )
+    await connection.execute(text("ALTER TABLE app.quotes ENABLE TRIGGER quote_immutable"))
+    assert result.rowcount == 1

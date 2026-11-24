@@ -389,6 +389,7 @@ M7_SCHEDULING_IMPLEMENTATION_PATHS = {
     "backend/src/asm/scheduling/models.py",
     "backend/src/asm/scheduling/repository.py",
     "backend/src/asm/scheduling/service.py",
+    "backend/src/asm/service_requests/errors.py",
     "backend/src/asm/service_requests/repository.py",
     "backend/src/asm/telegram/provisioning.py",
     "backend/src/asm/tenancy/database.py",

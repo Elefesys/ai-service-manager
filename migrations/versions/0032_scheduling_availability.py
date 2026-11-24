@@ -12,6 +12,7 @@ TABLES = {
       workspace_id uuid NOT NULL, business_id uuid NOT NULL,
       id uuid NOT NULL DEFAULT uuidv7(),
       timezone text NOT NULL CHECK(char_length(timezone) BETWEEN 1 AND 128),
+      schedule_version bigint NOT NULL DEFAULT 1 CHECK(schedule_version BETWEEN 1 AND 9007199254740991),
       PRIMARY KEY(workspace_id,business_id),
       UNIQUE(workspace_id,business_id,id),
       FOREIGN KEY(workspace_id,business_id) REFERENCES app.businesses(workspace_id,id)
@@ -125,7 +126,7 @@ FUNCTIONS = {
       now_at:=clock_timestamp();
       RETURN (
         WITH selected AS (
-          SELECT r.id,r.timezone,
+          SELECT r.id,r.timezone,coalesce(r.schedule_version,0) AS schedule_version,
             coalesce(p_date,(now_at AT TIME ZONE coalesce(r.timezone,'UTC'))::date+1) AS local_date
           FROM (VALUES (1)) seed(one) LEFT JOIN app.scheduling_resources r
             ON (r.workspace_id,r.business_id)=(ws,p_business)
@@ -133,6 +134,7 @@ FUNCTIONS = {
         SELECT jsonb_build_object(
           'now',to_char(now_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
           'date',to_char(s.local_date,'YYYY-MM-DD'),'timezone',s.timezone,'resource_id',s.id,
+          'schedule_version',s.schedule_version,
           'week',coalesce((SELECT jsonb_agg(jsonb_build_object('weekday',w.weekday,
             'start_minute',w.start_minute,'end_minute',w.end_minute) ORDER BY w.weekday,w.start_minute)
             FROM app.availability_rules w
@@ -152,12 +154,25 @@ FUNCTIONS = {
     ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
     DECLARE ws uuid:=platform.scheduling_owner_scope(p_business,p_service);
       resource uuid; policy uuid; target_date date; target_zone text;
+      expected_version bigint; current_version bigint;
       inputs constant text[]:=ARRAY['step_minutes','buffer_before_minutes','buffer_after_minutes',
         'minimum_notice_minutes','horizon_days','offer_ttl_minutes','hold_ttl_minutes'];
     BEGIN
       IF p_action IS NULL OR p_action NOT IN ('schedule','policy','exception')
         OR octet_length(p_body::text)>1048576 OR jsonb_typeof(p_body) IS DISTINCT FROM 'object'
+        OR jsonb_typeof(p_body->'expected_version') IS DISTINCT FROM 'number'
+        OR p_body->>'expected_version' !~ '^(0|[1-9][0-9]{0,15})$'
         THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
+      expected_version:=(p_body->>'expected_version')::bigint;
+      IF expected_version>9007199254740991
+        THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
+      p_body:=p_body-'expected_version';
+
+      SELECT id,schedule_version INTO resource,current_version FROM app.scheduling_resources
+        WHERE (workspace_id,business_id)=(ws,p_business) FOR UPDATE;
+      IF coalesce(current_version,0)<>expected_version
+        THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
+
       IF p_action='schedule' THEN
         target_zone:=p_body->>'timezone';
         IF NOT platform.material_object(p_body,ARRAY['timezone','week'])
@@ -166,23 +181,21 @@ FUNCTIONS = {
           OR NOT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name=target_zone)
           OR NOT platform.scheduling_windows_valid(p_body->'week',true)
           THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
-        INSERT INTO app.scheduling_resources(workspace_id,business_id,timezone)
-          VALUES(ws,p_business,target_zone)
-          ON CONFLICT(workspace_id,business_id) DO UPDATE SET timezone=excluded.timezone
-          RETURNING id INTO resource;
+        IF resource IS NULL THEN
+          -- A concurrent first save can win after the preceding SELECT sees no row.
+          INSERT INTO app.scheduling_resources(workspace_id,business_id,timezone)
+            VALUES(ws,p_business,target_zone) ON CONFLICT(workspace_id,business_id) DO NOTHING
+            RETURNING id INTO resource;
+          IF NOT FOUND THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
+        END IF;
         DELETE FROM app.availability_rules
           WHERE (workspace_id,business_id,resource_id)=(ws,p_business,resource);
         INSERT INTO app.availability_rules(workspace_id,business_id,resource_id,weekday,start_minute,end_minute)
           SELECT ws,p_business,resource,w.weekday,w.start_minute,w.end_minute
           FROM jsonb_to_recordset(p_body->'week') AS w(weekday smallint,start_minute smallint,end_minute smallint);
-        RETURN NULL;
-      END IF;
-
-      -- Policy activation and override writes serialize on the same resource as week replacement.
-      SELECT id INTO resource FROM app.scheduling_resources
-        WHERE (workspace_id,business_id)=(ws,p_business) FOR UPDATE;
-      IF NOT FOUND THEN RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101'; END IF;
-      IF p_action='policy' THEN
+      ELSIF resource IS NULL THEN
+        RAISE EXCEPTION 'NEEDS_CLARIFICATION' USING ERRCODE='P3101';
+      ELSIF p_action='policy' THEN
         IF NOT platform.material_object(p_body,inputs)
           OR EXISTS(SELECT 1 FROM unnest(inputs) field(name)
             WHERE jsonb_typeof(p_body->name) IS DISTINCT FROM 'number'
@@ -205,24 +218,29 @@ FUNCTIONS = {
         INSERT INTO app.scheduling_policy_activations(workspace_id,business_id,resource_id,service_id,policy_id)
           VALUES(ws,p_business,resource,p_service,policy)
           ON CONFLICT(workspace_id,business_id,resource_id,service_id) DO UPDATE SET policy_id=excluded.policy_id;
-        RETURN to_jsonb(policy);
+      ELSE
+        IF NOT platform.material_object(p_body,ARRAY['date','windows'])
+          OR jsonb_typeof(p_body->'date') IS DISTINCT FROM 'string'
+          OR p_body->>'date' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          OR (p_body->'windows'<>'null'::jsonb AND NOT platform.scheduling_windows_valid(p_body->'windows',false))
+          THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
+        target_date:=(p_body->>'date')::date;
+        IF p_body->'windows'='null'::jsonb THEN
+          DELETE FROM app.availability_overrides
+            WHERE (workspace_id,business_id,resource_id,local_date)=(ws,p_business,resource,target_date);
+        ELSE
+          INSERT INTO app.availability_overrides(workspace_id,business_id,resource_id,local_date,windows)
+            VALUES(ws,p_business,resource,target_date,p_body->'windows')
+            ON CONFLICT(workspace_id,business_id,resource_id,local_date) DO UPDATE SET windows=excluded.windows;
+        END IF;
       END IF;
 
-      IF NOT platform.material_object(p_body,ARRAY['date','windows'])
-        OR jsonb_typeof(p_body->'date') IS DISTINCT FROM 'string'
-        OR p_body->>'date' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-        OR (p_body->'windows'<>'null'::jsonb AND NOT platform.scheduling_windows_valid(p_body->'windows',false))
-        THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
-      target_date:=(p_body->>'date')::date;
-      IF p_body->'windows'='null'::jsonb THEN
-        DELETE FROM app.availability_overrides
-          WHERE (workspace_id,business_id,resource_id,local_date)=(ws,p_business,resource,target_date);
-      ELSE
-        INSERT INTO app.availability_overrides(workspace_id,business_id,resource_id,local_date,windows)
-          VALUES(ws,p_business,resource,target_date,p_body->'windows')
-          ON CONFLICT(workspace_id,business_id,resource_id,local_date) DO UPDATE SET windows=excluded.windows;
+      IF current_version IS NOT NULL THEN
+        UPDATE app.scheduling_resources
+          SET timezone=coalesce(target_zone,timezone),schedule_version=schedule_version+1
+          WHERE (workspace_id,business_id,id)=(ws,p_business,resource);
       END IF;
-      RETURN NULL;
+      RETURN to_jsonb(policy);
     EXCEPTION WHEN check_violation OR invalid_datetime_format OR datetime_field_overflow THEN
       RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101';
     END $$""",
@@ -696,8 +714,8 @@ PROFILE = r"""CREATE FUNCTION platform.scheduling_availability_schema_profile() 
 ('platform.quote_timestamp(timestamptz)','2e5b1223a7976432ffbc795a2d2c4c2e6d7770d02529bfd30617d5ad2a06eae5','sql',false,'s',false),
 ('platform.quote_view(app.quotes,app.conversations)','88295759706eacd2f81becd27a3a4f027cb451c0b16a140c2f3e7a6a06e8dca7','plpgsql',false,'v',false),
 ('platform.resolve_workspace_membership(uuid,uuid)','8ce9bdd67c17bc83442bea3a5e7a15337a51074e0ea6408855b10542e39ceb39','sql',true,'v',true),
-('platform.scheduling_owner_command(uuid,text,text,jsonb)','9cb9c2c15aec7c257c8145d2060a599211b7ed4355898208e0abccfeccf2cf9a','plpgsql',true,'v',true),
-('platform.scheduling_owner_read(uuid,text,date)','dcb1f0f71e22c9c9fc45b901ee5eddf9a5468f7207065b14b2b4dd47e8aa79be','plpgsql',true,'v',true),
+('platform.scheduling_owner_command(uuid,text,text,jsonb)','f3f2c7d51326a5432ca4f1a81b93f7c8ebaf37824045fcb7601aee8a4d1df57f','plpgsql',true,'v',true),
+('platform.scheduling_owner_read(uuid,text,date)','504050459928e272b1be2c5272a12ca231d6a301a558cd221802624547539260','plpgsql',true,'v',true),
 ('platform.scheduling_owner_scope(uuid,text)','82f50c3ef1e538a7035c06a6593232f10f5871aa08ef02f78d73eb6169891196','plpgsql',true,'v',false),
 ('platform.scheduling_policy_immutable()','b36bbd98cd723dd310936957e716151462f5d5e28b161beeebe7a028a1f01c78','plpgsql',false,'v',false),
 ('platform.scheduling_policy_parameters(app.scheduling_policy_revisions)','e2910c30da404846f639e3150c47183835a7c74cef606aa1b5a9bbd7b0cef6ca','sql',false,'i',false),
@@ -797,7 +815,7 @@ columns_expected(table_name,column_names) AS (VALUES ('app.approval_requests',AR
 ('app.quotes',ARRAY['workspace_id','id','business_id','conversation_id','client_id','request_id','request_revision','version','code','material','basis_sha256','terms_sha256','text','release_id','prepared_by','membership_version','account_version','created_at','expires_at']::text[]),
 ('app.scheduling_policy_activations',ARRAY['workspace_id','business_id','resource_id','service_id','policy_id']::text[]),
 ('app.scheduling_policy_revisions',ARRAY['workspace_id','business_id','resource_id','service_id','id','step_minutes','buffer_before_minutes','buffer_after_minutes','minimum_notice_minutes','horizon_days','offer_ttl_minutes','hold_ttl_minutes','created_at']::text[]),
-('app.scheduling_resources',ARRAY['workspace_id','business_id','id','timezone']::text[]),
+('app.scheduling_resources',ARRAY['workspace_id','business_id','id','timezone','schedule_version']::text[]),
 ('app.service_assessments',ARRAY['workspace_id','id','business_id','request_id','request_revision','service_id','release_id','activation_version','authority_sha256','owner_handoff','duration_policy','rules','evidence','unavailable_fields','outcome','reason','field','rule_id','limit_value','size_mm','occupied_minutes','actor_user_account_id','correlation_id','created_at','complex_work']::text[]),
 ('app.service_orders',ARRAY['workspace_id','id','request_id','acceptance_id']::text[]),
 ('app.service_requests',ARRAY['workspace_id','id','business_id','conversation_id','client_id','intent_message_id','intent_source_version','release_id','service_id','service_name','template_revision','state','revision','facts','missing','conflicts','question','created_at','complex_work']::text[]),
@@ -907,7 +925,7 @@ columns_expected(table_name,column_names) AS (VALUES ('app.approval_requests',AR
         'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,e.extversion,n.nspname) ORDER BY e.extname)
           FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname IN ('vector','btree_gist'))) AS value)
       SELECT jsonb_build_object('schema_revision','0032','valid',coalesce(v.valid,false)
-        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='2d35bc0c9828812813c793ed5c0e818c9e2940a7aa9a3ae1ed61155a78a5ce66',
+        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='b31332ca0d1cfb8298e6955cac0bb686746c3a6d7a2708a7de50b9a4f81fc728',
         'profile_sha256',encode(sha256(convert_to(E'asm:m3:native_schema:v1\n'||c.value::text,'UTF8')),'hex')) FROM validity v CROSS JOIN catalog c $$"""
 
 
