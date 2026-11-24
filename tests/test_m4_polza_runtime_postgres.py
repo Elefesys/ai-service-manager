@@ -40,16 +40,16 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def provider_pg(pg):
     await migrate("upgrade", "0015")
-    await migrate("upgrade", "0031")
-    await migrate("upgrade", "0031")
-    pg.schema_revision = "0031"
+    await migrate("upgrade", "0032")
+    await migrate("upgrade", "0032")
+    pg.schema_revision = "0032"
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
         await migrate("downgrade", "0015")
         with pytest.raises(RuntimeError, match="schema"):
             await runtime.check()
-        await migrate("upgrade", "0031")
+        await migrate("upgrade", "0032")
         await runtime.check()
         yield pg
     finally:
@@ -447,7 +447,7 @@ async def test_telegram_unknown_is_durable_and_never_resent(provider_pg, tmp_pat
                 mods["0016"]["downgrade"]()
                 for sql in statements:
                     await c.execute(text(sql))
-        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0031"
+        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0032"
     finally:
         await worker.ai.telegram.aclose()
 

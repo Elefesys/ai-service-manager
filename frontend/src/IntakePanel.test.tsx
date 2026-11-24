@@ -80,7 +80,7 @@ it.each(['current','previous'] as const)('polls the %s quote through lease expir
     :{quote,status:'UNKNOWN',reason:'UNKNOWN_EXTERNAL_RESULT'} as const;
    return version==='previous'?{...clarification,previous:delivery}:delivery;
   });
-  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" approvalChange={null} expired={vi.fn()}/>);});
+  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" csrf="csrf" approvalChange={null} expired={vi.fn()}/>);});
   const card=screen.getByRole('region',{name:'Предложение клиенту'});
   const delivery=within(version==='previous'?within(card).getByRole('region',{name:'Предыдущая версия'}):card);
   const terms=delivery.getByRole('article',{name:'Условия предложения'});
@@ -109,7 +109,7 @@ it('bounds quote polling while the delivery remains queued',async()=>{
  try{
   const a=draft();
   const read=vi.mocked(intakeApi.quote).mockResolvedValue(quoteDelivery(a,'QUEUED'));
-  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" approvalChange={null} expired={vi.fn()}/>);});
+  await act(async()=>{render(<QuotePanel scope={scope} draft={a} refresh="" csrf="csrf" approvalChange={null} expired={vi.fn()}/>);});
   await act(async()=>{await vi.advanceTimersByTimeAsync(40_000);});
   expect(screen.getByRole('status')).toHaveTextContent('Предложение в очереди на отправку');
   expect(read).toHaveBeenCalledTimes(9);
@@ -128,7 +128,7 @@ it.each([
   const late=new Promise<QuoteDelivery>(resolve=>{finish=resolve;});
   const read=vi.mocked(intakeApi.quote).mockResolvedValueOnce(dispatching).mockResolvedValue(replacement);
   if(pending==='GET')read.mockReturnValueOnce(late);
-  const props={scope,refresh:'',approvalChange:null,expired:vi.fn()};
+ const props={scope,refresh:'',csrf:'csrf',approvalChange:null,expired:vi.fn()};
   const view=render(<QuotePanel {...props} draft={a}/>);
   await act(async()=>{});
   expect(screen.getByRole('status')).toHaveTextContent('Отправка началась, ожидаем подтверждения');

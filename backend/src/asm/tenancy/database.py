@@ -5,7 +5,7 @@ import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
@@ -399,6 +399,25 @@ class TenantUnitOfWork:
         return await self._service_request_execute(
             "SELECT platform.quote_owner_read(:business,:conversation,:request)",
             {"business": business, "conversation": conversation, "request": request_id},
+        )
+
+    async def scheduling_owner_read(self, business: UUID, service: str, day: date | None) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_read(:business,:service,CAST(:day AS date))",
+            {"business": business, "service": service, "day": day},
+        )
+
+    async def scheduling_owner_command(
+        self, business: UUID, service: str, action: str, body: dict[str, object]
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_command(:business,:service,:action,CAST(:body AS jsonb))",
+            {
+                "business": business,
+                "service": service,
+                "action": action,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
         )
 
     async def configuration_command(
