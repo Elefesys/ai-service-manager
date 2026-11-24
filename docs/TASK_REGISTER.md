@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.1A REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.1A REVIEW · C0 и C8 PASS · решение о слиянии · 2026-11-24
 
-Мастер видит окна конкретного согласованного сеанса и сохранённый выходной в обеих карточках. C0 принял R2 и закрыл C0-M7.1A-01–03 в [Draft PR #65](https://github.com/Elefesys/ai-service-manager/pull/65). На head `a8a4f31029c7d53ebc06bf99a61532b5e96985d8` адресные проверки R2 прошли 5/5, CI кандидата — 12/12. База `ac30da7897cbf088cd8c9fb9262a52d67a278582`, ветка `c1/m7-1a-session-availability`, схема `0032`. Единственная активная задача — заключение C8 по S1–S2. Решение о слиянии принимает владелец. [Поручение C8 и доказательства](tasks/M7_HANDOFF.md#m71a-c8).
+Мастер видит окна выбранного сеанса с буферами и сохранённый выходной. C8 подтвердил S1–S2 на `a8a4f31029c7d53ebc06bf99a61532b5e96985d8`, C0 принял результат. Ветка `c1/m7-1a-session-availability`, база и текущий `main` — `ac30da7897cbf088cd8c9fb9262a52d67a278582`. CI кандидата 12/12 с первой попытки, Chromium 98/98, схема `0032`. C0-M7.1A-01–03 закрыты. Владелец решает вопрос о слиянии [PR #65](https://github.com/Elefesys/ai-service-manager/pull/65) обычным merge-коммитом. После этого C0 проверяет фактический `main` и его CI для выдачи M7.1B. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/65#pullrequestreview-6037121737) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45356304709).
 
 ## История — M7.0 INTEGRATED / VERIFIED · 2026-11-24
 

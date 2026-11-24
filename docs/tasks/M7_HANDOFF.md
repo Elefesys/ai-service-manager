@@ -1,8 +1,10 @@
 # M7 — календарь мастера и запись на согласованный сеанс
 
-## CURRENT — M7.1A REVIEW · C8 · synthetic LOCAL/TEST
+## CURRENT — M7.1A REVIEW · C0 и C8 PASS · ожидается решение владельца
 
-24.11.2026 · Мастер видит окна своего согласованного сеанса с буферами. Закрытая дата остаётся выходным после сохранения старой формы в соседней карточке. C0 принял R2 и закрыл C0-M7.1A-01–03. Единственное текущее поручение — независимая проверка C8 по S1–S2 в [Draft PR #65](https://github.com/Elefesys/ai-service-manager/pull/65). [Поручение C8](#m71a-c8) · [Реестр](../TASK_REGISTER.md).
+24.11.2026 · Мастер открывает согласованный сеанс конкретной работы, видит подходящие окна с буферами и закрывает дату. Обе карточки сохраняют выходной при повторном открытии. Предпросмотр дал 0 новых отправок клиенту, 0 удержаний и 0 записей. [Заключение C8 по S1–S2](https://github.com/Elefesys/ai-service-manager/pull/65#pullrequestreview-6037121737).
+
+C0 принял результат C8. В [Draft PR #65](https://github.com/Elefesys/ai-service-manager/pull/65) проверен head `a8a4f31029c7d53ebc06bf99a61532b5e96985d8`, база и фактический `main` — `ac30da7897cbf088cd8c9fb9262a52d67a278582`. CI кандидата прошёл 12/12 с первой попытки, Chromium — 98/98, PostgreSQL подтвердил схему `0032`. C0-M7.1A-01–03 закрыты. PR готов к обычному слиянию через **Create a merge commit** после решения владельца. После слияния C0 проверяет родителей и дерево фактического `main`, затем его отдельный `push/main` CI. Зелёный результат открывает выдачу M7.1B. [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45356304709) · [Приёмка R2](https://github.com/Elefesys/ai-service-manager/pull/65#pullrequestreview-6037052547) · [Реестр](../TASK_REGISTER.md).
 
 **M7.0 INTEGRATED / VERIFIED.** После слияния [PR #64](https://github.com/Elefesys/ai-service-manager/pull/64) C0 проверил фактический `main` `ac30da7897cbf088cd8c9fb9262a52d67a278582`. Родители — `6fdd7d8347e8f8970c2a406dfb7a0e24bc588cf7` и `33f4df0e01c4a300e3c0c49bffe26bd545e09182`. Дерево `a6d1536ed6974e994a59b4fd790eb4dd85de481e` совпало с деревом кандидата. Отдельный `push/main` — 12/12, попытка 1. [CI main](https://github.com/Elefesys/ai-service-manager/actions/runs/45304834026) · [PostgreSQL на схеме 0031](https://github.com/Elefesys/ai-service-manager/actions/runs/45304834026/artifacts/14881470620).
 
