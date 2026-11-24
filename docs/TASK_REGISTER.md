@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.1B-R1 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.1B REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-24
 
-Клиент, уступивший окно другому, должен иметь возможность выбрать любое время из ответного списка. Повтор команды выдачи, которая вернула пустой список, должен сохранять её результат. C0 воспроизвёл два расхождения на PostgreSQL. Единственная задача — R1 в Draft PR #66. Ведёт C2, команды у C1. Ветка `c2/m7-1b-offer-hold-allocation`, head `9cc699b0c1dbdf5a96b3a99e85ab454a69bd3458`, база `0574c8c033d6508341fb34cbdc2c572c7de91633`, схема кандидата `0033`. На этом head CI прошёл 12/12, включая семь S3–S4. [Поручение R1 и результаты C0](tasks/M7_HANDOFF.md#m71b-r1) · [PR #66](https://github.com/Elefesys/ai-service-manager/pull/66) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45400986415).
+При конфликте двух клиентов второй выбрал 12:15 по ID из ответа, а первый сохранил своё удержание. Пустая выдача воспроизводится после открытия дня. C0 закрыл C0-M7.1B-01 и C0-M7.1B-02 на `51a7e2488e1edd79ba9830de06dfa4157f8f4c01`. CI прошёл 12/12 с первой попытки, C0 отдельно проверил три сценария на PostgreSQL 18.6. Ветка `c2/m7-1b-offer-hold-allocation`, база `0574c8c033d6508341fb34cbdc2c572c7de91633`, схема `0033`. Единственная активная задача — независимое заключение C8 по S3–S4 в Draft PR #66. Решение о слиянии принимает владелец. [Поручение C8 и результаты C0](tasks/M7_HANDOFF.md#m71b-c8) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45424212824).
 
 ## История — M7.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
 
