@@ -24,18 +24,22 @@ _catalog = runpy.run_path(
 
 
 @cache
-def current_source():
-    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], "0031")
+def schema_source(revision="0032"):
+    return _catalog["source_catalog"](Path(__file__).resolve().parents[1], revision)
 
 
 async def assert_current_schema(c):
+    return await assert_schema(c, "0032", "scheduling_availability_schema_profile")
+
+
+async def assert_schema(c, revision, profile_name):
     assert (await c.execute(text("SELECT current_user"))).scalar_one() == "asm_migrator"
     assert (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-    ).scalar_one() == "0031"
+    ).scalar_one() == revision
     original_path = (await c.execute(text("SHOW search_path"))).scalar_one()
     await c.execute(text("SET LOCAL search_path=pg_catalog,pg_temp"))
-    expected = current_source()
+    expected = schema_source(revision)
     functions = [dict(row) for row in (await c.execute(text(_catalog["FUNCTION_SQL"]))).mappings()]
     resolved = dict(
         (
@@ -48,9 +52,7 @@ async def assert_current_schema(c):
         ).all()
     )
     full, nonfunction = (await c.execute(text(_catalog["CATALOG_SQL"]))).one()
-    profile = (
-        await c.execute(text("SELECT platform.service_intent_schema_profile()"))
-    ).scalar_one()
+    profile = (await c.execute(text(f"SELECT platform.{profile_name}()"))).scalar_one()
     await c.execute(text("SELECT set_config('search_path',:path,true)"), {"path": original_path})
     _catalog["compare_catalog"](expected, functions, resolved, full, nonfunction, lambda: profile)
     return full
@@ -60,11 +62,11 @@ async def current_snapshot(c):
     """Complete row multisets and the independently checked full catalog."""
     catalog = await assert_current_schema(c)
     rows = {}
-    for table in sorted(current_source()["columns"]):
+    for table in sorted(schema_source()["columns"]):
         values = (await c.execute(text(f"SELECT to_jsonb(t) FROM {table} AS t"))).scalars()
         canonical = sorted(json.dumps(v, sort_keys=True, separators=(",", ":")) for v in values)
         rows[table] = (len(canonical), hashlib.sha256("\n".join(canonical).encode()).hexdigest())
-    assert len(rows) == 86
+    assert len(rows) == 91
     return rows, catalog
 
 
@@ -83,7 +85,7 @@ async def historical_schema(h, revision):
             await h.runtime.check()
         yield
     finally:
-        await _migrate("upgrade", "0031")
+        await _migrate("upgrade", "0032")
         await h.runtime.engine.dispose()
         await h.runtime.check()
         with pytest.raises(RuntimeError, match="schema"):

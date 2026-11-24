@@ -497,7 +497,7 @@ function RequestDraftPanel({scope,selectionScope,data,summaryRefresh,csrf,expire
    </select>
   </section>}
   {draft&&<DraftCard draft={draft}>
-   <QuotePanel key={`quote:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} refresh={`${summaryRefresh}:${termsRefresh}`} approvalChange={quoteApproval} expired={expired} openMessage={openMessage}/>
+   <QuotePanel key={`quote:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} refresh={`${summaryRefresh}:${termsRefresh}`} csrf={csrf} approvalChange={quoteApproval} expired={expired} openMessage={openMessage}/>
    <AssessmentPanel key={`${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} locked={locked} expired={expired} termsChanged={termsChanged}/>
    <PricingPanel key={`price:${draft.request_id}:${draft.revision}`} scope={scope} draft={draft} csrf={csrf} activation={data?.activation_version} summaryRefresh={summaryRefresh} locked={locked} expired={expired} termsChanged={termsChanged}/>
    {approvalOpened&&scope.conversation&&scope.client&&<OpenOwnerApproval key={'approval:'+draft.request_id+':'+draft.revision} scope={scope} draft={draft} csrf={csrf} locked={locked} expired={expired} opened={approvalOpened} termsChanged={termsChanged}/>}

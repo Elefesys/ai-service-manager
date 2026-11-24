@@ -479,7 +479,8 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     pricing = catalog.source_catalog(catalog.ROOT, "0027")
     decisions = catalog.source_catalog(catalog.ROOT, "0028")
     acceptance = catalog.source_catalog(catalog.ROOT, "0030")
-    current = catalog.source_catalog(catalog.ROOT, "0031")
+    intent = catalog.source_catalog(catalog.ROOT, "0031")
+    current = catalog.source_catalog(catalog.ROOT, "0032")
     assert (len(request["functions"]), len(request["columns"])) == (331, 75)
     assert (len(intake["functions"]), len(intake["columns"])) == (318, 73)
     assert (len(v7_repair["functions"]), len(v7_repair["columns"])) == (321, 73)
@@ -488,6 +489,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         len(middle["functions"]),
         len(rights["functions"]),
         len(previous["functions"]),
+        len(intent["functions"]),
         len(current["functions"]),
     ) == (
         167,
@@ -495,14 +497,16 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         194,
         233,
         409,
+        416,
     )
     assert (
         len(old["columns"]),
         len(middle["columns"]),
         len(rights["columns"]),
         len(previous["columns"]),
+        len(intent["columns"]),
         len(current["columns"]),
-    ) == (45, 47, 49, 59, 86)
+    ) == (45, 47, 49, 59, 86, 91)
     assert (
         current["functions"]["platform.intake_schema_profile()"]
         == intake["functions"]["platform.intake_schema_profile()"]
@@ -531,11 +535,20 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         current["functions"]["platform.quote_acceptance_schema_profile()"]
         == acceptance["functions"]["platform.quote_acceptance_schema_profile()"]
     )
-    body = current["functions"]["platform.service_intent_schema_profile()"]["body"]
-    assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
-    assert catalog.compare_embedded_profile(current) == {
+    assert (
+        current["functions"]["platform.service_intent_schema_profile()"]
+        == intent["functions"]["platform.service_intent_schema_profile()"]
+    )
+    assert catalog.compare_embedded_profile(intent) == {
         "other_functions": 408,
         "tables": 86,
+        "result": "PASS",
+    }
+    body = current["functions"]["platform.scheduling_availability_schema_profile()"]["body"]
+    assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
+    assert catalog.compare_embedded_profile(current) == {
+        "other_functions": 415,
+        "tables": 91,
         "result": "PASS",
     }
     assert (

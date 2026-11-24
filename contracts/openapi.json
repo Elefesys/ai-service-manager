@@ -863,6 +863,179 @@
         "title": "AuthCode",
         "type": "string"
       },
+      "AvailabilityPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "deposit": {
+            "$ref": "#/components/schemas/DepositPolicy"
+          },
+          "duration_reference_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Reference Id"
+          },
+          "exception": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateException"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occupied_minutes": {
+            "anyOf": [
+              {
+                "maximum": 10080.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occupied Minutes"
+          },
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "NO_WORKING_HOURS",
+                  "NO_ACTIVE_POLICY",
+                  "DURATION_UNAVAILABLE",
+                  "DATE_CLOSED",
+                  "NO_WINDOWS"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "request_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "schedule_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Schedule Version",
+            "type": "integer"
+          },
+          "service_name": {
+            "maxLength": 100,
+            "title": "Service Name",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "week": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyInterval"
+            },
+            "title": "Week",
+            "type": "array"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindow"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "quote_id",
+          "order_id",
+          "session_id",
+          "service_name",
+          "occupied_minutes",
+          "duration_reference_id",
+          "deposit",
+          "date",
+          "timezone",
+          "resource_id",
+          "schedule_version",
+          "week",
+          "policy",
+          "exception",
+          "reason",
+          "windows"
+        ],
+        "title": "AvailabilityPreview",
+        "type": "object"
+      },
       "BillingAccount": {
         "additionalProperties": false,
         "properties": {
@@ -2401,6 +2574,30 @@
           "next_cursor"
         ],
         "title": "ConversationsPage",
+        "type": "object"
+      },
+      "DateException": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/LocalSpan"
+            },
+            "maxItems": 1440,
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date",
+          "windows"
+        ],
+        "title": "DateException",
         "type": "object"
       },
       "DecideApproval": {
@@ -4040,6 +4237,50 @@
           "can_cancel"
         ],
         "title": "EscalationView",
+        "type": "object"
+      },
+      "ExceptionCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "exception",
+            "title": "Action",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "windows": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LocalSpan"
+                },
+                "maxItems": 1440,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Windows"
+          }
+        },
+        "required": [
+          "action",
+          "expected_version",
+          "date",
+          "windows"
+        ],
+        "title": "ExceptionCommand",
         "type": "object"
       },
       "FAQ": {
@@ -6421,6 +6662,29 @@
         "title": "LimitDecision",
         "type": "object"
       },
+      "LocalSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "end_minute": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "End Minute",
+            "type": "integer"
+          },
+          "start_minute": {
+            "maximum": 1439.0,
+            "minimum": 0.0,
+            "title": "Start Minute",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_minute",
+          "end_minute"
+        ],
+        "title": "LocalSpan",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7735,6 +7999,142 @@
           "revision"
         ],
         "title": "Plan",
+        "type": "object"
+      },
+      "PolicyCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "policy",
+            "title": "Action",
+            "type": "string"
+          },
+          "buffer_after_minutes": {
+            "maximum": 1440.0,
+            "minimum": 0.0,
+            "title": "Buffer After Minutes",
+            "type": "integer"
+          },
+          "buffer_before_minutes": {
+            "maximum": 1440.0,
+            "minimum": 0.0,
+            "title": "Buffer Before Minutes",
+            "type": "integer"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "hold_ttl_minutes": {
+            "maximum": 525600.0,
+            "minimum": 1.0,
+            "title": "Hold Ttl Minutes",
+            "type": "integer"
+          },
+          "horizon_days": {
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Horizon Days",
+            "type": "integer"
+          },
+          "minimum_notice_minutes": {
+            "maximum": 525600.0,
+            "minimum": 0.0,
+            "title": "Minimum Notice Minutes",
+            "type": "integer"
+          },
+          "offer_ttl_minutes": {
+            "maximum": 525600.0,
+            "minimum": 1.0,
+            "title": "Offer Ttl Minutes",
+            "type": "integer"
+          },
+          "step_minutes": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Step Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "step_minutes",
+          "buffer_before_minutes",
+          "buffer_after_minutes",
+          "minimum_notice_minutes",
+          "horizon_days",
+          "offer_ttl_minutes",
+          "hold_ttl_minutes",
+          "action",
+          "expected_version"
+        ],
+        "title": "PolicyCommand",
+        "type": "object"
+      },
+      "PolicyView": {
+        "additionalProperties": false,
+        "properties": {
+          "buffer_after_minutes": {
+            "maximum": 1440.0,
+            "minimum": 0.0,
+            "title": "Buffer After Minutes",
+            "type": "integer"
+          },
+          "buffer_before_minutes": {
+            "maximum": 1440.0,
+            "minimum": 0.0,
+            "title": "Buffer Before Minutes",
+            "type": "integer"
+          },
+          "hold_ttl_minutes": {
+            "maximum": 525600.0,
+            "minimum": 1.0,
+            "title": "Hold Ttl Minutes",
+            "type": "integer"
+          },
+          "horizon_days": {
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Horizon Days",
+            "type": "integer"
+          },
+          "minimum_notice_minutes": {
+            "maximum": 525600.0,
+            "minimum": 0.0,
+            "title": "Minimum Notice Minutes",
+            "type": "integer"
+          },
+          "offer_ttl_minutes": {
+            "maximum": 525600.0,
+            "minimum": 1.0,
+            "title": "Offer Ttl Minutes",
+            "type": "integer"
+          },
+          "policy_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "step_minutes": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Step Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "step_minutes",
+          "buffer_before_minutes",
+          "buffer_after_minutes",
+          "minimum_notice_minutes",
+          "horizon_days",
+          "offer_ttl_minutes",
+          "hold_ttl_minutes",
+          "policy_id"
+        ],
+        "title": "PolicyView",
         "type": "object"
       },
       "PortfolioCode": {
@@ -10408,6 +10808,44 @@
         "title": "Rule",
         "type": "object"
       },
+      "ScheduleCommand": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "schedule",
+            "title": "Action",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "timezone": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "week": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyInterval"
+            },
+            "maxItems": 10080,
+            "title": "Week",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "expected_version",
+          "timezone",
+          "week"
+        ],
+        "title": "ScheduleCommand",
+        "type": "object"
+      },
       "SendResponse": {
         "additionalProperties": false,
         "properties": {
@@ -11328,6 +11766,39 @@
         "title": "TextPreview",
         "type": "object"
       },
+      "TimeWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "busy_end": {
+            "format": "date-time",
+            "title": "Busy End",
+            "type": "string"
+          },
+          "busy_start": {
+            "format": "date-time",
+            "title": "Busy Start",
+            "type": "string"
+          },
+          "visit_end": {
+            "format": "date-time",
+            "title": "Visit End",
+            "type": "string"
+          },
+          "visit_start": {
+            "format": "date-time",
+            "title": "Visit Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visit_start",
+          "visit_end",
+          "busy_start",
+          "busy_end"
+        ],
+        "title": "TimeWindow",
+        "type": "object"
+      },
       "UnsupportedPreview": {
         "additionalProperties": false,
         "properties": {
@@ -11654,6 +12125,36 @@
           "code"
         ],
         "title": "WebhookErrorCode",
+        "type": "object"
+      },
+      "WeeklyInterval": {
+        "additionalProperties": false,
+        "properties": {
+          "end_minute": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "End Minute",
+            "type": "integer"
+          },
+          "start_minute": {
+            "maximum": 1439.0,
+            "minimum": 0.0,
+            "title": "Start Minute",
+            "type": "integer"
+          },
+          "weekday": {
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Weekday",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_minute",
+          "end_minute",
+          "weekday"
+        ],
+        "title": "WeeklyInterval",
         "type": "object"
       }
     }
@@ -15597,6 +16098,312 @@
         "summary": "Read Quote",
         "tags": [
           "service-requests"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/service-requests/{request_id}/sessions/{session_id}/availability": {
+      "get": {
+        "operationId": "read_availability_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__sessions__session_id__availability_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Client Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Availability",
+        "tags": [
+          "scheduling"
+        ]
+      },
+      "post": {
+        "operationId": "change_availability_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__sessions__session_id__availability_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Client Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Order Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "exception": "#/components/schemas/ExceptionCommand",
+                    "policy": "#/components/schemas/PolicyCommand",
+                    "schedule": "#/components/schemas/ScheduleCommand"
+                  },
+                  "propertyName": "action"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ScheduleCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PolicyCommand"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ExceptionCommand"
+                  }
+                ],
+                "title": "Command"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "STALE_STATE or a missing scheduling prerequisite"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Availability",
+        "tags": [
+          "scheduling"
         ]
       }
     },

@@ -1,7 +1,7 @@
 """Install the intent capability over populated 0030 without widening v7 results."""
 
 import pytest
-from generic_pg_schema import assert_current_schema
+from generic_pg_schema import assert_schema
 from sqlalchemy import text
 from test_m2_1_postgres import query
 from test_m2_1_schema_postgres import _migrate
@@ -18,9 +18,9 @@ pytestmark = pytest.mark.integration
 async def test_0031_preserves_populated_0030_v7_run(intake_pg):
     h = intake_pg
     await h.runtime.engine.dispose()
-    await _migrate("downgrade", "0030")
-    h.schema_revision = "0030"
     try:
+        await _migrate("downgrade", "0030")
+        h.schema_revision = "0030"
         async with h.migrator.begin() as connection:
             profile = await connection.execute(
                 text("SELECT platform.quote_acceptance_schema_profile()")
@@ -35,24 +35,27 @@ async def test_0031_preserves_populated_0030_v7_run(intake_pg):
         )
         projection = await summary(h, cid)
         assert projection["facts"][0]["value"] == "flower"
-    finally:
         await _migrate("upgrade", "0031")
         h.schema_revision = "0031"
-
-    await _migrate("upgrade", "0031")
-    await h.runtime.check()
-    async with h.migrator.begin() as connection:
-        await assert_current_schema(connection)
-        assert (
-            await connection.execute(
-                text("SELECT count(*) FROM platform.service_request_agent_intents")
-            )
-        ).scalar_one() == 0
-        assert (
-            await connection.execute(
-                text("SELECT service_request_pin FROM platform.ai_runs WHERE conversation_id=:cid"),
-                {"cid": cid},
-            )
-        ).scalar_one() is None
-    assert await query(h, rows, cid=cid) == before
-    assert await summary(h, cid) == projection
+        await _migrate("upgrade", "0031")
+        async with h.migrator.begin() as connection:
+            await assert_schema(connection, "0031", "service_intent_schema_profile")
+            assert (
+                await connection.execute(
+                    text("SELECT count(*) FROM platform.service_request_agent_intents")
+                )
+            ).scalar_one() == 0
+            assert (
+                await connection.execute(
+                    text(
+                        "SELECT service_request_pin FROM platform.ai_runs WHERE conversation_id=:cid"
+                    ),
+                    {"cid": cid},
+                )
+            ).scalar_one() is None
+        assert await query(h, rows, cid=cid) == before
+        assert await summary(h, cid) == projection
+    finally:
+        await _migrate("upgrade", "0032")
+        h.schema_revision = "0032"
+        await h.runtime.check()

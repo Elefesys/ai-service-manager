@@ -401,6 +401,7 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
                 "0029",
                 "0030",
                 "0031",
+                "0032",
             }:
                 assert not (
                     await c.execute(
@@ -409,7 +410,7 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
                         )
                     )
                 ).scalar_one()
-            if revision in {"0023", "0024", "0025", "0028", "0029", "0030", "0031"}:
+            if revision in {"0023", "0024", "0025", "0028", "0029", "0030", "0031", "0032"}:
                 assert not (
                     await c.execute(
                         text(
@@ -467,6 +468,7 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
                 "0029": "quote_schema_profile",
                 "0030": "quote_acceptance_schema_profile",
                 "0031": "service_intent_schema_profile",
+                "0032": "scheduling_availability_schema_profile",
                 "0019": "published_knowledge_schema_profile",
                 "0020": "knowledge_search_schema_profile",
                 "0018": "business_configuration_schema_profile",
@@ -478,7 +480,7 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
             )
 
     before = await rows()
-    current = await profile("0031")
+    current = await profile("0032")
     await h.runtime.engine.dispose()
     historical18 = None
     historical19 = None
@@ -518,17 +520,17 @@ async def test_populated_0017_upgrade_repeat_exact_unused_reverse_and_used_refus
         await _migrate("upgrade", "0020")
         if historical20 is not None:
             assert await profile("0020") == historical20
-        await _migrate("upgrade", "0031")
-    await _migrate("upgrade", "0031")
-    assert await rows() == before and await profile("0031") == current
+        await _migrate("upgrade", "0032")
+    await _migrate("upgrade", "0032")
+    assert await rows() == before and await profile("0032") == current
     await h.runtime.check()
     await edit(h)
     before_used = await counts(h)
     with pytest.raises(AssertionError, match="CONFIGURATION_DURABLE_DATA"):
         await _migrate("downgrade", "0017")
     assert await counts(h) == before_used
-    assert await scalar_revision() == "0031"
-    assert await profile("0031") == current
+    assert await scalar_revision() == "0032"
+    assert await profile("0032") == current
     await h.runtime.check()
 
 

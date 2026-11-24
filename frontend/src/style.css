@@ -47,6 +47,17 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .control-mode { font-weight: 700; }
 .control-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 .control-actions button { white-space: normal; }
+.scheduling-availability { margin-block: .9rem; padding-block: .75rem; border-top: 1px solid #d8dee8; }
+.scheduling-availability .form { min-width: 0; border: 1px solid #d8dee8; border-radius: 8px; padding: .8rem; }
+.scheduling-availability details { margin-block: .75rem; }
+.scheduling-day { display: flex; align-items: end; flex-wrap: wrap; gap: .65rem; }
+.scheduling-day label, .scheduling-availability .form label { display: grid; gap: .25rem; min-width: 0; }
+.scheduling-day input { max-width: 100%; padding: .55rem; }
+.scheduling-interval { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); align-items: end; gap: .6rem; padding-bottom: .6rem; border-bottom: 1px solid #d8dee8; }
+.scheduling-interval select { margin: 0; }
+.scheduling-windows { list-style: none; display: grid; gap: .5rem; padding: 0; }
+.scheduling-windows li { display: grid; padding: .6rem .8rem; background: #f2f5ff; border-radius: 8px; }
+.scheduling-windows span { color: #525d71; }
 /* Owner decisions are separate from delivery and use the existing Console scale. */
 .escalations { min-width: 0; }
 .escalation-list { list-style: none; padding: 0; display: grid; gap: .7rem; }

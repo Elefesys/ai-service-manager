@@ -6,6 +6,7 @@ import {createInterface} from 'node:readline';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
+import type {Availability} from '../src/scheduling-api';
 import {parseReceipt} from '../src/messaging-api';
 import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,RequestQuote,ServiceAssessment,ServiceRequestDraft} from '../src/intake-api';
 
@@ -106,6 +107,40 @@ async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney
  if('error' in result)throw result.error;
  if(observe)expect(checkpoints).toBe(2);
  return JSON.parse(observe?result.stdout.trim().split('\n').at(-1)!:result.stdout) as T;
+}
+
+async function removeHistoricalDuration(quoteId:string){
+ const envFile=process.env.ASM_BROWSER_ENV_FILE;
+ if(!envFile||!owner?.workspace_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
+ const fixture=`
+import asyncio
+import sys
+from uuid import UUID
+from sqlalchemy.ext.asyncio import create_async_engine
+
+sys.path[:0] = ["scripts", "tests"]
+from m1_3_browser_fixture import guard, target
+from m7_scheduling_fixtures import remove_historical_duration
+
+async def run():
+    engine = create_async_engine(target(), hide_parameters=True, connect_args={"connect_timeout": 3})
+    try:
+        async with engine.begin() as connection:
+            await guard(connection)
+            await remove_historical_duration(connection, UUID(sys.argv[1]), UUID(sys.argv[2]))
+    finally:
+        await engine.dispose()
+
+asyncio.run(run())
+`;
+ const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser',
+  'run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-provision',
+  'python','-c',fixture,owner.workspace_id,quoteId];
+ try{
+  await promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384});
+ }catch{
+  throw new Error('E2E_M7_HISTORICAL_DURATION_FIXTURE_FAILED');
+ }
 }
 
 async function collectIntake(page:Page,variant:Viewport,journey:IntakeJourney){
@@ -1476,11 +1511,11 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  console.log('M6.3B R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,request:firstId,held,checkpoints,unknown,restarted,clarification}));
 });
 
-test('@narrow M6.3C agrees B before A and preserves the first reply and planned session',async({page},info)=>{
+test('@narrow M6.3C agrees B before A and preserves the first reply and planned session',async({page,context},info)=>{
  test.setTimeout(120_000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const journey='quote-acceptance';
- const {input,conversation,intake,inbox,cardId,panel,firstId,execute,read,evaluateAndPrice}=await beginQuoteJourney(page,variant,journey);
+ const {input,conversation,intake,inbox,cardId,panel,firstId,endpoint,execute,read,readHistory,evaluateAndPrice}=await beginQuoteJourney(page,variant,journey);
  const reply=(operation:QuoteReply,id:string)=>intakeFixture<QuoteReplyResult>(operation,journey,variant,conversation,id);
  const a=await evaluateAndPrice(firstId);
  expect(await execute('deliver-quote',firstId)).toMatchObject({status:'SENT',calls:1,effects:1});
@@ -1533,6 +1568,222 @@ test('@narrow M6.3C agrees B before A and preserves the first reply and planned 
  await expect(order.getByTestId('service-order-id')).toHaveText(savedA.order_id);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  console.log('M6.3C Chromium '+info.project.name+' '+JSON.stringify({conversation,a:agreedA,b:agreedB,retry,ambiguous:ambiguous.outcome,scheduledAt:null}));
+
+ if(variant==='narrow')await test.step('M7.1A-R1 keeps the saved calendar across two work cards',async()=>{
+  const beforeOutbound=(await readHistory()).filter(item=>item.direction==='OUTBOUND').map(item=>item.message_id);
+  const requests=intake.getByLabel('Сохранённая заявка',{exact:true});
+
+  function calendar(tab:Page,agreement:NonNullable<QuoteDelivery['agreement']>){
+   const card=tab.getByRole('region',{name:'Согласованный заказ',exact:true});
+   const availability=card.getByRole('region',{name:'Варианты времени выбранного сеанса',exact:true});
+   const dateInput=availability.getByLabel('Дата вариантов',{exact:true});
+   const slots=availability.getByRole('list',{name:'Подходящие окна'}).getByRole('listitem');
+   const material=agreement.quote.material;
+   const path=`${endpoint}/${material.request_id}/sessions/${agreement.session_id}/availability`;
+   const matches=(request:Request)=>new URL(request.url()).pathname===path;
+   const working=availability.getByRole('group',{name:'Рабочая неделя',exact:true});
+   const policy=availability.getByRole('group',{name:'Настройки подбора времени',exact:true});
+   const hours=availability.getByRole('group',{name:'Часы на выбранную дату',exact:true});
+
+   async function action(method:'GET'|'POST',click:()=>Promise<unknown>){
+    const [response]=await Promise.all([tab.waitForResponse(response=>matches(response.request())&&response.request().method()===method),click()]);
+    expect(response.status()).toBe(200);
+    const query=new URL(response.url()).searchParams;
+    expect(Object.fromEntries(query)).toMatchObject({client_id:material.client_id,quote_id:agreement.quote.quote_id,order_id:agreement.order_id});
+    const view=await response.json() as Availability;
+    expect(view).toMatchObject({request_id:material.request_id,quote_id:agreement.quote.quote_id,order_id:agreement.order_id,
+     session_id:agreement.session_id,occupied_minutes:65,duration_reference_id:material.duration_reference_id});
+    await expect(dateInput).toHaveValue(view.date);
+    return view;
+   }
+
+   async function open(){
+    await expect(card.getByTestId('service-order-id')).toHaveText(agreement.order_id);
+    await expect(card.getByTestId('service-session-id')).toHaveText(agreement.session_id);
+    return action('GET',()=>card.getByRole('button',{name:'Варианты времени',exact:true}).click());
+   }
+
+   async function selectDate(date:string){
+    return action('GET',async()=>{
+     if(await dateInput.inputValue()===date)await availability.getByRole('button',{name:'Обновить варианты',exact:true}).click();
+     else await dateInput.fill(date);
+    });
+   }
+
+   async function setHours(start:string,end:string){
+    if(!await hours.isVisible())await availability.getByText('Задать часы на эту дату',{exact:true}).click();
+    if(!await hours.getByLabel('Начало',{exact:true}).count())await hours.getByRole('button',{name:'Добавить интервал',exact:true}).click();
+    await hours.getByLabel('Начало',{exact:true}).fill(start);
+    await hours.getByLabel('Окончание',{exact:true}).fill(end);
+   }
+
+   async function rejectStale(old:Availability,click:()=>Promise<unknown>){
+    const sequence:string[]=[];
+    const record=(request:Request)=>{if(matches(request))sequence.push(request.method());};
+    tab.on('request',record);
+    try{
+     const [write,fresh]=await Promise.all([
+      tab.waitForResponse(response=>matches(response.request())&&response.request().method()==='POST'),
+      tab.waitForResponse(response=>matches(response.request())&&response.request().method()==='GET'),
+      click(),
+     ]);
+     expect(write.status()).toBe(409);
+     expect(await write.json()).toEqual({error:{code:'STALE_STATE'}});
+     expect(write.request().postDataJSON().expected_version).toBe(old.schedule_version);
+     expect(fresh.status()).toBe(200);
+     expect(new URL(fresh.url()).searchParams.get('date')).toBe(old.date);
+     const view=await fresh.json() as Availability;
+     expect(view.schedule_version).toBeGreaterThan(old.schedule_version);
+     await expect(availability.getByRole('alert')).toHaveText('Расписание уже изменилось. Проверьте сохранённые значения перед новой правкой.');
+     expect(sequence).toEqual(['POST','GET']);
+     return {view,proof:{status:write.status(),expectedVersion:old.schedule_version,savedVersion:view.schedule_version,sequence}};
+    }finally{tab.off('request',record);}
+   }
+
+   return {availability,slots,working,policy,hours,open,selectDate,setHours,action,rejectStale};
+  }
+
+  const aCalendar=calendar(page,savedA);
+  const initial=await aCalendar.open();
+  expect(initial).toMatchObject({reason:'NO_WORKING_HOURS',windows:[],schedule_version:0});
+  await expect(aCalendar.availability.getByText('Рабочие часы на эту дату не заданы.',{exact:true})).toBeVisible();
+  function nextDate(days:number){
+   const day=new Date(`${initial.date}T00:00:00Z`);
+   day.setUTCDate(day.getUTCDate()+days);
+   return {date:day.toISOString().slice(0,10),weekday:(day.getUTCDay()+6)%7};
+  }
+  const first=nextDate(1),second=nextDate(2),unscheduled=nextDate(3);
+  const {date}=first,otherDate=second.date;
+  await aCalendar.selectDate(date);
+
+  await aCalendar.working.getByLabel('Часовой пояс',{exact:true}).fill('Asia/Novosibirsk');
+  for(const [index,day] of [first,second].entries()){
+   await aCalendar.working.getByRole('button',{name:'Добавить интервал',exact:true}).click();
+   const row=aCalendar.working.getByRole('group',{name:`Интервал ${index+1}`,exact:true});
+   await row.getByRole('combobox',{name:'День недели',exact:true}).selectOption(String(day.weekday));
+   await row.getByLabel('Начало',{exact:true}).fill('10:00');
+   await row.getByLabel('Окончание',{exact:true}).fill('12:00');
+  }
+  const activate=(ui:typeof aCalendar)=>ui.policy.getByRole('button',{name:'Активировать правила',exact:true}).click();
+  const saveWeek=(ui:typeof aCalendar)=>ui.working.getByRole('button',{name:'Сохранить рабочие часы',exact:true}).click();
+  const saveDate=(ui:typeof aCalendar)=>ui.hours.getByRole('button',{name:'Сохранить часы на дату',exact:true}).click();
+  const schedule=await aCalendar.action('POST',()=>saveWeek(aCalendar));
+  expect(schedule).toMatchObject({reason:'NO_ACTIVE_POLICY',windows:[],timezone:'Asia/Novosibirsk',date});
+  await expect(aCalendar.availability.getByText('Активируйте правила подбора времени для этой услуги.',{exact:true})).toBeVisible();
+
+  await aCalendar.availability.getByText('Правила подбора времени',{exact:true}).click();
+  for(const [label,value] of [
+   ['Шаг начала, мин','15'],['Буфер до сеанса, мин','10'],['Буфер после сеанса, мин','5'],
+   ['Минимальное предупреждение, мин','60'],['Горизонт, дни','7'],['Срок варианта, мин','30'],['Срок удержания, мин','20'],
+  ])await aCalendar.policy.getByLabel(label,{exact:true}).fill(value);
+  const opened=await aCalendar.action('POST',()=>activate(aCalendar));
+  expect(opened.windows.map(window=>window.visit_start)).toEqual(['10:15','10:30','10:45'].map(start=>`${date}T${start}:00+07:00`));
+  expect(opened.windows[0]).toEqual({visit_start:`${date}T10:15:00+07:00`,visit_end:`${date}T11:20:00+07:00`,
+   busy_start:`${date}T10:05:00+07:00`,busy_end:`${date}T11:25:00+07:00`});
+  await expect(aCalendar.slots).toHaveCount(3);
+  await expect(aCalendar.slots.first()).toContainText('Визит 10:15–11:20');
+  await expect(aCalendar.slots.first()).toContainText('Занятость 10:05–11:25');
+  await expect(aCalendar.availability.getByText('Asia/Novosibirsk',{exact:true})).toBeVisible();
+
+  const bTab=await context.newPage();
+  await bTab.goto('/');
+  await openWorkspace(bTab);
+  await openConversation(bTab,conversation);
+  await bTab.getByLabel('Сохранённая заявка',{exact:true}).selectOption(secondId);
+  const bCalendar=calendar(bTab,savedB);
+  await bCalendar.open();
+  const secondWork=await bCalendar.selectDate(date);
+  expect(secondWork.schedule_version).toBe(opened.schedule_version);
+  expect(secondWork.windows).toEqual(opened.windows);
+  expect(secondWork.duration_reference_id).not.toBe(opened.duration_reference_id);
+  await expect(bCalendar.availability.getByText('swallow',{exact:true})).toBeVisible();
+
+  await bCalendar.setHours('10:00','12:30');
+  const closed=await aCalendar.action('POST',()=>aCalendar.availability.getByRole('button',{name:'Отметить выходной',exact:true}).click());
+  expect(closed).toMatchObject({date,reason:'DATE_CLOSED',windows:[],exception:{date,windows:[]}});
+  await expect(aCalendar.availability.getByText('На эту дату отмечен выходной.',{exact:true})).toBeVisible();
+  const staleDate=await bCalendar.rejectStale(secondWork,()=>saveDate(bCalendar));
+  expect(staleDate.view).toMatchObject({date,schedule_version:closed.schedule_version,reason:'DATE_CLOSED',windows:[],exception:{date,windows:[]}});
+  await expect(bCalendar.availability.getByText('На эту дату отмечен выходной.',{exact:true})).toBeVisible();
+  await expect(bCalendar.slots).toHaveCount(0);
+
+  await page.reload();
+  await openWorkspace(page);
+  await openConversation(page,conversation);
+  await requests.selectOption(firstId);
+  await aCalendar.open();
+  expect(await aCalendar.selectDate(date)).toMatchObject({date,reason:'DATE_CLOSED',windows:[]});
+  await expect(aCalendar.availability.getByText('На эту дату отмечен выходной.',{exact:true})).toBeVisible();
+  await expect(aCalendar.slots).toHaveCount(0);
+  const other=await aCalendar.selectDate(otherDate);
+  expect(other.windows.map(window=>window.visit_start.slice(11,16))).toEqual(['10:15','10:30','10:45']);
+  await expect(aCalendar.slots).toHaveCount(3);
+
+  const noHours=await aCalendar.selectDate(unscheduled.date);
+  expect(noHours).toMatchObject({reason:'NO_WORKING_HOURS',policy:{policy_id:opened.policy!.policy_id},exception:null,windows:[]});
+  await expect(aCalendar.availability.getByText('Рабочие часы на эту дату не заданы.',{exact:true})).toBeVisible();
+  await aCalendar.setHours('10:00','12:00');
+  const replaced=await aCalendar.action('POST',()=>saveDate(aCalendar));
+  expect(replaced.windows.map(window=>window.visit_start.slice(11,16))).toEqual(['10:15','10:30','10:45']);
+  await aCalendar.setHours('10:00','10:30');
+  const short=await aCalendar.action('POST',()=>saveDate(aCalendar));
+  expect(short).toMatchObject({reason:'NO_WINDOWS',windows:[]});
+  await expect(aCalendar.availability.getByText('Подходящих окон на эту дату нет.',{exact:true})).toBeVisible();
+  await aCalendar.selectDate(date);
+  const oldWeek=await bCalendar.selectDate(date);
+
+  const weekRow=(ui:typeof aCalendar,day:number)=>ui.working.getByRole('group',{
+   name:`Интервал ${oldWeek.week.findIndex(interval=>interval.weekday===day)+1}`,exact:true,
+  });
+  for(const ui of [aCalendar,bCalendar]){
+   if(!await ui.working.isVisible())await ui.availability.getByText('Рабочие часы',{exact:true}).click();
+  }
+  await weekRow(bCalendar,second.weekday).getByLabel('Окончание',{exact:true}).fill('12:30');
+  await bCalendar.working.getByLabel('Часовой пояс',{exact:true}).fill('UTC');
+  await weekRow(aCalendar,first.weekday).getByLabel('Окончание',{exact:true}).fill('11:00');
+  const savedWeek=await aCalendar.action('POST',()=>saveWeek(aCalendar));
+  const staleWeek=await bCalendar.rejectStale(oldWeek,()=>saveWeek(bCalendar));
+  expect(staleWeek.view).toMatchObject({timezone:savedWeek.timezone,week:savedWeek.week,schedule_version:savedWeek.schedule_version,reason:'DATE_CLOSED'});
+  if(!await bCalendar.working.isVisible())await bCalendar.availability.getByText('Рабочие часы',{exact:true}).click();
+  await expect(bCalendar.working.getByLabel('Часовой пояс',{exact:true})).toHaveValue('Asia/Novosibirsk');
+  await expect(weekRow(bCalendar,first.weekday).getByLabel('Окончание',{exact:true})).toHaveValue('11:00');
+  await expect(weekRow(bCalendar,second.weekday).getByLabel('Окончание',{exact:true})).toHaveValue('12:00');
+
+  for(const ui of [aCalendar,bCalendar])await ui.availability.getByText('Правила подбора времени',{exact:true}).click();
+  await bCalendar.policy.getByLabel('Буфер после сеанса, мин',{exact:true}).fill('12');
+  await aCalendar.policy.getByLabel('Буфер до сеанса, мин',{exact:true}).fill('25');
+  const savedPolicy=await aCalendar.action('POST',()=>activate(aCalendar));
+  const stalePolicy=await bCalendar.rejectStale(staleWeek.view,()=>activate(bCalendar));
+  expect(stalePolicy.view).toMatchObject({policy:savedPolicy.policy,schedule_version:savedPolicy.schedule_version,reason:'DATE_CLOSED'});
+  if(!await bCalendar.policy.isVisible())await bCalendar.availability.getByText('Правила подбора времени',{exact:true}).click();
+  await expect(bCalendar.policy.getByLabel('Буфер до сеанса, мин',{exact:true})).toHaveValue('25');
+  await expect(bCalendar.policy.getByLabel('Буфер после сеанса, мин',{exact:true})).toHaveValue('5');
+  await expect(bCalendar.slots).toHaveCount(0);
+  expect((await read(firstId)).agreement).toEqual(savedA);
+  expect((await read(secondId)).agreement).toEqual(savedB);
+
+  await removeHistoricalDuration(b.quote_id);
+  const [historical]=await Promise.all([
+   page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname===`${endpoint}/${secondId}/quote`),
+   requests.selectOption(secondId),
+  ]);
+  expect(historical.status()).toBe(409);
+  expect(await historical.json()).toEqual({error:{code:'DURATION_UNAVAILABLE'}});
+  await expect(panel.getByRole('alert')).toHaveText('Длительность согласованного сеанса не подтверждена.');
+  await expect(panel.getByRole('button',{name:'Варианты времени',exact:true})).toHaveCount(0);
+  await expect(panel.getByRole('list',{name:'Подходящие окна'})).toHaveCount(0);
+  expect((await readHistory()).filter(item=>item.direction==='OUTBOUND').map(item=>item.message_id)).toEqual(beforeOutbound);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  console.log('M7.1A-R1 Chromium narrow '+JSON.stringify({conversation,dates:{date,otherDate,withoutHours:unscheduled.date},
+   a:{request:firstId,quote:a.quote_id,order:savedA.order_id,session:savedA.session_id,duration_source:opened.duration_reference_id},
+   b:{request:secondId,quote:b.quote_id,order:savedB.order_id,session:savedB.session_id,duration_source:secondWork.duration_reference_id},
+   before:opened.windows,closed:closed.windows,other:other.windows,
+   staleDate:staleDate.proof,staleWeek:{...staleWeek.proof,timezone:staleWeek.view.timezone,week:staleWeek.view.week},
+   stalePolicy:{...stalePolicy.proof,policy:stalePolicy.view.policy},
+   withoutHours:noHours.reason,replacement:replaced.windows,shortDay:short.reason,
+   historical:{status:historical.status(),reason:'DURATION_UNAVAILABLE',windows:0},newOutgoing:0,scheduledAt:null}));
+  await bTab.close();
+ });
 });
 
 test('@narrow M6.3C-R1 keeps A declined and asks for the code only on open B',async({page},info)=>{

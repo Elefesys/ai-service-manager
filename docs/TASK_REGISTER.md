@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.0 REVIEW · реализация M7 TODO · 2026-11-24
+## CURRENT — M7.1A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
 
-C0 принял [план M7](tasks/M7_HANDOFF.md) и [IMPL-007](decisions/IMPL-007-m7-pilot-scheduling.md) для synthetic LOCAL/TEST. На M7.0 в [PR #64](https://github.com/Elefesys/ai-service-manager/pull/64) также исправляется допуск к проверке PostgreSQL на `0031` и увеличиваются бюджеты `browser` и `foundation`. Интеграция ожидает разрешения владельца. После разрешённого слияния плана и зелёного CI на фактическом main выдать только M7.1A (C1 с C2/C5). Принятая база приложения — ниже; SHA ветки планирования не является исходным SHA кода.
+Мастер открывает выбранный согласованный сеанс, задаёт рабочие часы, видит варианты с буферами и закрывает дату. Это единственное активное поручение. C1 ведёт, C2 отвечает за схему и чтение расписания, C5 — за минимальный экран. База `main` — `ac30da7897cbf088cd8c9fb9262a52d67a278582`, ветка `c1/m7-1a-session-availability`. C0 выделил `0032_scheduling_availability.py` поверх `0031`. [Поручение C1, разрешённые пути и S1–S2](tasks/M7_HANDOFF.md#m71a--поручение-c1).
+
+## История — M7.0 INTEGRATED / VERIFIED · 2026-11-24
+
+[PR #64](https://github.com/Elefesys/ai-service-manager/pull/64) слит обычным merge-коммитом `ac30da7897cbf088cd8c9fb9262a52d67a278582`. Оба родителя совпали с принятой базой и кандидатом `33f4df0e01c4a300e3c0c49bffe26bd545e09182`, дерево `a6d1536ed6974e994a59b4fd790eb4dd85de481e` совпало с деревом кандидата. Штатный `push/main` прошёл 12/12 с первой попытки. Артефакт PostgreSQL подтверждает событие push, этот SHA, схему `0031` и 160/160 проверок. [CI main](https://github.com/Elefesys/ai-service-manager/actions/runs/45304834026) · [Артефакт PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45304834026/artifacts/14881470620) · [Принятый IMPL-007](decisions/IMPL-007-m7-pilot-scheduling.md).
 
 ## История — M6 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
 

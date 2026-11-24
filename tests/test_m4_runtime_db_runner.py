@@ -798,6 +798,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0029", "quote_schema_profile"),
         ("0030", "quote_acceptance_schema_profile"),
         ("0031", "service_intent_schema_profile"),
+        ("0032", "scheduling_availability_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -846,6 +847,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0029", "quote_schema_profile", 377, 376),
         ("0030", "quote_acceptance_schema_profile", 390, 389),
         ("0031", "service_intent_schema_profile", 409, 408),
+        ("0032", "scheduling_availability_schema_profile", 416, 415),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -855,7 +857,7 @@ def test_current_verifier_rejects_stale_count_predicates(revision, name, functio
     predicate = {
         "functions": f"(SELECT count(*) FROM functions)={functions}",
         "others": f"(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)={others}",
-        "tables": f"(SELECT count(*) FROM tables)={86 if revision == '0031' else 85 if revision == '0030' else 81 if revision == '0029' else 79 if revision == '0028' else 77 if revision == '0027' else 76 if revision == '0026' else 75 if revision == '0025' else 73 if revision in {'0023', '0024'} else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
+        "tables": f"(SELECT count(*) FROM tables)={91 if revision == '0032' else 86 if revision == '0031' else 85 if revision == '0030' else 81 if revision == '0029' else 79 if revision == '0028' else 77 if revision == '0027' else 76 if revision == '0026' else 75 if revision == '0025' else 73 if revision in {'0023', '0024'} else 69 if revision == '0022' else 68 if revision == '0021' else 59 if revision == '0020' else 52}",
     }[field]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
@@ -880,7 +882,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
-    profile_name = "platform.service_intent_schema_profile()"
+    profile_name = "platform.scheduling_availability_schema_profile()"
     if not body_matches:
         expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
@@ -3731,30 +3733,46 @@ def test_planning_source_refuses_before_resources(
     assert not (r["root"] / "evidence/source-admission.json").exists()
 
 
-def prepare_m6_slice_event(r, monkeypatch, route, feature, revision, *, protected=False):
+def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=False, damage=None):
     f = r["f"]
-    prefix = "M6_" + feature.upper()
+    prefix = ("M7_" if feature == "scheduling" else "M6_") + feature.upper()
     branch = getattr(carrier, prefix + "_BRANCH")
     monkeypatch.setattr(carrier, prefix + "_BASE", r["source"])
-    monkeypatch.setattr(carrier, prefix + "_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    base_tree = f.git("rev-parse", "HEAD^{tree}")
+    monkeypatch.setattr(carrier, prefix + "_TREE", "f" * 40 if damage == "base_tree" else base_tree)
     monkeypatch.setattr(carrier, "M5_V7_FIX_BASE", r["base"])
     for document in sorted(getattr(carrier, prefix + "_DOCS")):
         path = f.root / document
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("C0 assignment\n")
     f.git("add", ".")
-    f.git("commit", "-qm", "assign M6 slice")
+    f.git("commit", "-qm", "assign slice")
     monkeypatch.setattr(carrier, prefix + "_ASSIGNMENT", f.git("rev-parse", "HEAD"))
-    monkeypatch.setattr(carrier, prefix + "_ASSIGNMENT_TREE", f.git("rev-parse", "HEAD^{tree}"))
+    assignment_tree = f.git("rev-parse", "HEAD^{tree}")
+    monkeypatch.setattr(
+        carrier,
+        prefix + "_ASSIGNMENT_TREE",
+        "f" * 40 if damage == "assignment_tree" else assignment_tree,
+    )
     migration = f.root / getattr(carrier, prefix + "_MIGRATION")
     migration.parent.mkdir(parents=True, exist_ok=True)
     migration.write_text(f"revision = '{revision}'\n")
     if protected:
-        (f.root / "docs/tasks/M6_HANDOFF.md").write_text("changed assignment\n")
+        handoff = "M7" if feature == "scheduling" else "M6"
+        (f.root / f"docs/tasks/{handoff}_HANDOFF.md").write_text("changed assignment\n")
+    if damage == "extra_file":
+        (f.root / "outside-scope.md").write_text("not part of the assignment\n")
     f.git("add", ".")
-    f.git("commit", "-qm", "implement M6 slice")
+    f.git("commit", "-qm", "implement slice")
     head = f.git("rev-parse", "HEAD")
-    return head, capability_checkout(r, monkeypatch, route, head, branch=branch)
+    return head, capability_checkout(
+        r,
+        monkeypatch,
+        route,
+        head,
+        branch="c1/m7-unrelated" if damage == "branch" else branch,
+        wrong_base=damage == "base",
+    )
 
 
 @pytest.mark.parametrize(
@@ -3767,28 +3785,29 @@ def prepare_m6_slice_event(r, monkeypatch, route, feature, revision, *, protecte
         ("quote", "0029"),
         ("acceptance", "0030"),
         ("intents", "0031"),
+        ("scheduling", "0032"),
     ],
 )
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
-def test_m6_slice_admits_exact_assignment_and_selects_runtime(
+def test_milestone_slice_admits_exact_assignment_and_selects_runtime(
     aggregate_driver, monkeypatch, route, feature, revision
 ):
     r = aggregate_driver["r"]
-    head, merge = prepare_m6_slice_event(r, monkeypatch, route, feature, revision)
+    head, merge = prepare_slice_event(r, monkeypatch, route, feature, revision)
     r["run"]()
     evidence = r["root"] / "evidence"
     admitted = json.loads((evidence / "source-admission.json").read_text())
     source = json.loads((evidence / "source.json").read_text())
     tree = r["f"].git("rev-parse", head + "^{tree}")
-    assignment = "m6_" + feature + "_assignment"
-    candidate = "m6_" + feature + "_candidate"
+    prefix = ("M7_" if feature == "scheduling" else "M6_") + feature.upper()
+    assignment = prefix.lower() + "_assignment"
+    candidate = prefix.lower() + "_candidate"
     assert admitted[assignment] == source[assignment]
     assert (
         admitted[candidate]
         == source[candidate]
         == {"tree": tree, "sha": head, "merge_parents": [r["source"], head]}
     )
-    prefix = "M6_" + feature.upper()
     assert set(source["paths"]) == getattr(carrier, prefix + "_DOCS") | {
         getattr(carrier, prefix + "_MIGRATION")
     }
@@ -3822,12 +3841,34 @@ def test_m6_slice_admits_exact_assignment_and_selects_runtime(
 )
 def test_m6_slice_cannot_change_its_protected_assignment(r11_event, monkeypatch, feature, revision):
     r = r11_event
-    prepare_m6_slice_event(
+    prepare_slice_event(
         r, monkeypatch, "same-repository-pr-merge", feature, revision, protected=True
     )
     with pytest.raises(carrier.Refusal, match=f"M6_{feature.upper()}_WRITE_SET"):
         r["run"]()
     assert not r["boundary"]
+
+
+@pytest.mark.parametrize(
+    "route,damage,reason",
+    [
+        ("same-repository-pr-merge", "branch", "POLZA_RUNTIME_EVENT_BRANCH"),
+        ("same-repository-pr-merge", "base", "M7_SCHEDULING_EVENT"),
+        ("same-repository-pr-merge", "base_tree", "BASE_TREE"),
+        ("same-repository-pr-merge", "protected", "M7_SCHEDULING_WRITE_SET"),
+        ("main-push", "assignment_tree", "M7_SCHEDULING_ASSIGNMENT_IDENTITY"),
+        ("main-push", "extra_file", "M7_SCHEDULING_WRITE_SET"),
+    ],
+)
+def test_m7_scheduling_refuses_ineligible_source(r11_event, monkeypatch, route, damage, reason):
+    r = r11_event
+    prepare_slice_event(
+        r, monkeypatch, route, "scheduling", "0032", protected=damage == "protected", damage=damage
+    )
+    with pytest.raises((carrier.Refusal, catalog.Refusal), match=f"^{reason}$"):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+    assert not (r["root"] / "evidence/source-admission.json").exists()
 
 
 def prepare_m6_4b_event(r, monkeypatch, route, *, damage=None):

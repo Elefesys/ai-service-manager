@@ -1,6 +1,7 @@
 import type {Session} from './api';
 import type {Intake,CaseInput,DraftListItem,DurationCase,QuoteDelivery,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 import {blankCase} from './intake-api';
+import type {Availability,SchedulingScope} from './scheduling-api';
 export const w='018f0000-0000-7000-8000-000000000001',b='018f0000-0000-7000-8000-000000000002',c='018f0000-0000-7000-8000-000000000003',client='018f0000-0000-7000-8000-000000000004',actor='018f0000-0000-7000-8000-000000000005',message='018f0000-0000-7000-8000-000000000006';
 export const scope={workspace:w,business:b,conversation:c,client};
 export function session():Session{return {user_account_id:actor,csrf_token:'synthetic-csrf',expires_at:'2026-11-17T00:00:00Z',memberships:[{workspace_id:w,role:'OWNER',permissions:[]}]};}
@@ -56,4 +57,14 @@ export function quoteDelivery(card=draft(),status:QuoteDelivery['status']='SENT'
    },
   },
  };
+}
+
+export const schedulingScope:SchedulingScope={...scope,request:draft().request_id,quote:quoteDelivery().quote.quote_id,
+ order:'018f0000-0000-7000-8000-000000000020',session:'018f0000-0000-7000-8000-000000000021'};
+
+export function availability(selected=schedulingScope,patch:Partial<Availability>={}):Availability{
+ return {request_id:selected.request,quote_id:selected.quote,order_id:selected.order,session_id:selected.session,resource_id:null,schedule_version:0,
+  service_name:draft().service_name,occupied_minutes:65,duration_reference_id:assessment().assessment_id,
+  deposit:{mode:'FIXED_DEPOSIT',amount_minor:50000,percent:null},date:'2026-11-26',timezone:null,week:[],policy:null,exception:null,
+  reason:'NO_WORKING_HOURS',windows:[],...patch};
 }

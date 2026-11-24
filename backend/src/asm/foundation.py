@@ -55,9 +55,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0031"
-NATIVE_CONTEXT_PROFILE_SHA256 = "8195438f71fbd1974693c455563ffb59c316e8ccc8322d91bf22094b6a58160f"
-NATIVE_PROFILE_BODY_SHA256 = "5137696e913ec4c7e2611c3037d14a41788f9d5901190637b0a5e323a85e478e"
+DATABASE_SCHEMA_REVISION = "0032"
+NATIVE_CONTEXT_PROFILE_SHA256 = "725cf0747670fa80ce466c1a3d7d5c4fff067b20511d25fce2b5a27bf5ffa4be"
+NATIVE_PROFILE_BODY_SHA256 = "23427da17dafa22d38cbbbbde6373ad0e8d5797ea66e8296a3f988c7d5d79dc0"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -94,7 +94,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.service_intent_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.scheduling_availability_schema_profile()')
             """)
             )
         )
@@ -294,6 +294,7 @@ def create_app(
     from asm.messaging.http import install_messaging
     from asm.portfolio.http import install_portfolio
     from asm.portfolio.service import PortfolioService
+    from asm.scheduling.http import install_scheduling
     from asm.service_requests.http import install_service_requests
     from asm.telegram.adapter import TelegramRefresher
     from asm.telegram.client import TelegramClient
@@ -373,6 +374,7 @@ def create_app(
     install_configuration(app, auth, config)
     install_intake(app, auth, config)
     install_service_requests(app, auth, config)
+    install_scheduling(app, auth, config)
     install_knowledge(app, auth, config, embeddings=knowledge_embeddings)
     app.state.portfolio_service = portfolio
     install_portfolio(app, portfolio, config)
