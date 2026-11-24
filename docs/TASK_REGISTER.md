@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.1A-R1 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.1A-R2 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
 
-Мастер сохраняет выходной при конфликте двух карточек и видит причину отсутствия вариантов. C0 запросил изменения в [Draft PR #65](https://github.com/Elefesys/ai-service-manager/pull/65) на `2b8341e0f5115824ae65e9822d45c2707361e7f5`, CI 12/12. Единственная активная задача — C1 с C2 и C5 исправляет потерю правки расписания, причину для даты без часов и сообщение в карточке при отсутствии подтверждённой длительности. База `ac30da7897cbf088cd8c9fb9262a52d67a278582`, ветка `c1/m7-1a-session-availability`, схема `0032` поверх `0031`. [Поручение и воспроизведение C0-M7.1A-01–03](tasks/M7_HANDOFF.md#m71a-r1).
+Мастер различает недоступную работу и временный сбой чтения. В [Draft PR #65](https://github.com/Elefesys/ai-service-manager/pull/65) C0 проверил R1 на `dbe23692009a064b3d09a668e43158c8cbaafd18` с базой `ac30da7897cbf088cd8c9fb9262a52d67a278582`, штатный CI 12/12. C0-M7.1A-01 и -02 закрыты. Для C0-M7.1A-03 подтверждены сообщение про длительность и ноль окон. Открыт только текст карточки для 403/404 и 503. C1 ведёт, C5 меняет экран и адресный тест в той же ветке `c1/m7-1a-session-availability`. [Поручение R2 и проверка C0](tasks/M7_HANDOFF.md#m71a-r2).
 
 ## История — M7.0 INTEGRATED / VERIFIED · 2026-11-24
 
