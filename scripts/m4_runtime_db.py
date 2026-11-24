@@ -455,6 +455,102 @@ M7_SCHEDULING_IMPLEMENTATION_PATHS = {
     "tests/test_tenancy_postgres.py",
 }
 
+# Exact M7.1B assignment from the accepted M7.1A merge.
+M7_HOLDS_BASE = "0574c8c033d6508341fb34cbdc2c572c7de91633"
+M7_HOLDS_TREE = "831defe72edb756f05554d5a415b98c1b92cb3a5"
+M7_HOLDS_ASSIGNMENT = "08141719225cdde1ae5ba95e3b502246480390c3"
+M7_HOLDS_ASSIGNMENT_TREE = "8d766375077192166673ec79fb35900f832dfa9c"
+M7_HOLDS_BRANCH = "c2/m7-1b-offer-hold-allocation"
+M7_HOLDS_DOCS = M7_SCHEDULING_DOCS
+M7_HOLDS_MIGRATION = "migrations/versions/0033_scheduling_holds.py"
+M7_HOLDS_IMPLEMENTATION_PATHS = {
+    M7_HOLDS_MIGRATION,
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/service_requests/errors.py",
+    "backend/src/asm/service_requests/repository.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/m7_scheduling_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_owner_decisions_postgres.py",
+    "tests/test_m6_pricing_postgres.py",
+    "tests/test_m6_quote_acceptance_postgres.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_intents_migrations.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
+M7_HOLDS_MODULE_PATH = re.compile(
+    r"backend/src/asm/scheduling/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.py"
+    r"|tests/test_m7_scheduling[A-Za-z0-9_]*\.py"
+)
+
+
+class SchedulingSource(NamedTuple):
+    prefix: str
+    base: str
+    base_tree: str
+    assignment: str
+    assignment_tree: str
+    branch: str
+    docs: set[str]
+    migration: str
+    paths: set[str]
+    revision: str
+
+    def proof(self):
+        return {
+            "sha": self.assignment,
+            "tree": self.assignment_tree,
+            "parent": self.base,
+            "paths": sorted(self.docs),
+        }
+
+    def permits(self, paths: set[str]) -> bool:
+        return all(
+            path in self.paths or self.revision == "0033" and M7_HOLDS_MODULE_PATH.fullmatch(path)
+            for path in paths
+        )
+
+    def candidate(self, event):
+        return merge_candidate(event, self.base, self.branch, self.assignment, self.prefix.upper())
+
+
 M6_REQUEST_BASE = "67129e43a5947f6eadea88b268b603fec5f22949"
 M6_REQUEST_TREE = "2c235f6551524450a27bb7cd01959228ec06ac3c"
 M6_REQUEST_ASSIGNMENT = "5c5c1b07ba34d37d8ef1486fbbba18efd93fad77"
@@ -1704,7 +1800,7 @@ def source_tree_from_evidence(path=None):
         "uv_lock_sha256",
     }
     require(type(value) is dict, "SOURCE_IDENTITY_SHAPE")
-    scheduling = value.get("branch") == M7_SCHEDULING_BRANCH
+    scheduling = scheduling_source(branch=value.get("branch"))
     m6_4b = value.get("branch") == M6_4B_BRANCH
     m6_intents = value.get("branch") == M6_INTENTS_BRANCH
     m6_acceptance = value.get("branch") == M6_ACCEPTANCE_BRANCH
@@ -1722,7 +1818,7 @@ def source_tree_from_evidence(path=None):
     if plan:
         keys.add(plan.candidate_key)
     if scheduling:
-        keys.update({"m7_scheduling_assignment", "m7_scheduling_candidate"})
+        keys.update({scheduling.prefix + "_assignment", scheduling.prefix + "_candidate"})
     if m6_4b:
         keys.update({"m6_4b_assignment", "m6_4b_candidate"})
     if m6_intents:
@@ -1758,7 +1854,7 @@ def source_tree_from_evidence(path=None):
         or m6_request
     ):
         if scheduling:
-            prefix, assignment = "m7_scheduling", m7_scheduling_assignment_proof()
+            prefix, assignment = scheduling.prefix, scheduling.proof()
         elif m6_4b:
             prefix, assignment = "m6_4b", m6_4b_assignment_proof()
         elif m6_intents:
@@ -1838,7 +1934,7 @@ def source_tree_from_evidence(path=None):
     search = value["branch"] == M5_SEARCH_BRANCH
     capability = value["branch"] == M5_CAPABILITY_BRANCH
     base, base_tree = (
-        (M7_SCHEDULING_BASE, M7_SCHEDULING_TREE)
+        (scheduling.base, scheduling.base_tree)
         if scheduling
         else (M6_4B_BASE, M6_4B_TREE)
         if m6_4b
@@ -1961,9 +2057,8 @@ def source_tree_from_evidence(path=None):
     )
     if scheduling:
         require(
-            M7_SCHEDULING_DOCS | {M7_SCHEDULING_MIGRATION}
-            <= set(paths)
-            <= M7_SCHEDULING_DOCS | M7_SCHEDULING_IMPLEMENTATION_PATHS,
+            scheduling.docs | {scheduling.migration} <= set(paths)
+            and scheduling.permits(set(paths) - scheduling.docs),
             "SOURCE_IDENTITY_WRITE_SET",
         )
     elif m6_4b:
@@ -2594,14 +2689,14 @@ def admit_m6_slice_source(
     acceptance=False,
     intents=False,
     m6_4b=False,
-    scheduling=False,
+    scheduling: SchedulingSource | None = None,
 ):
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     if scheduling:
-        prefix, base_tree = "m7_scheduling", M7_SCHEDULING_TREE
-        migration, allowed = M7_SCHEDULING_MIGRATION, M7_SCHEDULING_IMPLEMENTATION_PATHS
-        assignment = m7_scheduling_assignment_proof()
-        candidate = m7_scheduling_candidate(event)
+        prefix, base_tree = scheduling.prefix, scheduling.base_tree
+        migration = scheduling.migration
+        assignment = scheduling.proof()
+        candidate = scheduling.candidate(event)
     elif m6_4b:
         prefix, base_tree = "m6_4b", M6_4B_TREE
         # The accepted base already carries 0031.
@@ -2659,7 +2754,7 @@ def admit_m6_slice_source(
     require(
         bool(implementation)
         and (migration is None or migration in implementation)
-        and implementation <= allowed,
+        and (scheduling.permits(implementation) if scheduling else implementation <= allowed),
         f"{prefix.upper()}_WRITE_SET",
     )
     paths = capture([*diff, base, "HEAD"]).splitlines()
@@ -2679,27 +2774,41 @@ def admit_m6_slice_source(
     )
 
 
-def m7_scheduling_event(event):
-    return event.get("head_ref") == M7_SCHEDULING_BRANCH or (
-        event.get("event") == "push"
-        and event["ref"] == "refs/heads/main"
-        and commit_parents("HEAD")[:1] == [M7_SCHEDULING_BASE]
+def scheduling_source(*, branch=None, base=None) -> SchedulingSource | None:
+    candidates = (
+        SchedulingSource(
+            "m7_scheduling",
+            M7_SCHEDULING_BASE,
+            M7_SCHEDULING_TREE,
+            M7_SCHEDULING_ASSIGNMENT,
+            M7_SCHEDULING_ASSIGNMENT_TREE,
+            M7_SCHEDULING_BRANCH,
+            M7_SCHEDULING_DOCS,
+            M7_SCHEDULING_MIGRATION,
+            M7_SCHEDULING_IMPLEMENTATION_PATHS,
+            "0032",
+        ),
+        SchedulingSource(
+            "m7_holds",
+            M7_HOLDS_BASE,
+            M7_HOLDS_TREE,
+            M7_HOLDS_ASSIGNMENT,
+            M7_HOLDS_ASSIGNMENT_TREE,
+            M7_HOLDS_BRANCH,
+            M7_HOLDS_DOCS,
+            M7_HOLDS_MIGRATION,
+            M7_HOLDS_IMPLEMENTATION_PATHS,
+            "0033",
+        ),
     )
+    return next((row for row in candidates if row.branch == branch or row.base == base), None)
 
 
-def m7_scheduling_assignment_proof():
-    return {
-        "sha": M7_SCHEDULING_ASSIGNMENT,
-        "tree": M7_SCHEDULING_ASSIGNMENT_TREE,
-        "parent": M7_SCHEDULING_BASE,
-        "paths": sorted(M7_SCHEDULING_DOCS),
-    }
-
-
-def m7_scheduling_candidate(event):
-    return merge_candidate(
-        event, M7_SCHEDULING_BASE, M7_SCHEDULING_BRANCH, M7_SCHEDULING_ASSIGNMENT, "M7_SCHEDULING"
-    )
+def m7_scheduling_event(event) -> SchedulingSource | None:
+    if event.get("event") == "push" and event["ref"] == "refs/heads/main":
+        parents = commit_parents("HEAD")
+        return scheduling_source(base=parents[0]) if parents else None
+    return scheduling_source(branch=event.get("head_ref"))
 
 
 def m6_4b_event(event):
@@ -3167,8 +3276,8 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
-    if m7_scheduling_event(event):
-        admit_m6_slice_source(event, evidence, scheduling=True)
+    if scheduling := m7_scheduling_event(event):
+        admit_m6_slice_source(event, evidence, scheduling=scheduling)
         return event, manifest
     if m6_4b_event(event):
         admit_m6_slice_source(event, evidence, m6_4b=True)
@@ -3629,7 +3738,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.scheduling_availability_schema_profile()"
+        "platform.scheduling_hold_schema_profile()"
+        if revision == "0033"
+        else "platform.scheduling_availability_schema_profile()"
         if revision == "0032"
         else "platform.service_intent_schema_profile()"
         if revision == "0031"
@@ -3669,6 +3780,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0032":
+        profile_pin = "725cf0747670fa80ce466c1a3d7d5c4fff067b20511d25fce2b5a27bf5ffa4be"
+        body_pin = "23427da17dafa22d38cbbbbde6373ad0e8d5797ea66e8296a3f988c7d5d79dc0"
     if revision == "0031":
         profile_pin = "8195438f71fbd1974693c455563ffb59c316e8ccc8322d91bf22094b6a58160f"
         body_pin = "5137696e913ec4c7e2611c3037d14a41788f9d5901190637b0a5e323a85e478e"
@@ -3771,6 +3885,7 @@ def stock_catalog():
                 "0030",
                 "0031",
                 "0032",
+                "0033",
             },
             "CATALOG_REVISION",
         )
@@ -3795,6 +3910,7 @@ def stock_catalog():
             "0030",
             "0031",
             "0032",
+            "0033",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -3842,7 +3958,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.scheduling_availability_schema_profile()"
+            "platform.scheduling_hold_schema_profile()"
+            if revision == "0033"
+            else "platform.scheduling_availability_schema_profile()"
             if revision == "0032"
             else "platform.service_intent_schema_profile()"
             if revision == "0031"
@@ -4374,7 +4492,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "SQL_TEST_BUDGET_ADMISSION",
     )
     base, base_tree = (
-        (M7_SCHEDULING_BASE, M7_SCHEDULING_TREE)
+        (scheduling.base, scheduling.base_tree)
         if scheduling
         else (M6_4B_BASE, M6_4B_TREE)
         if m6_4b
@@ -4431,7 +4549,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         or (
             event["ref"][11:]
             if event["ref"] != "refs/heads/main"
-            else M7_SCHEDULING_BRANCH
+            else scheduling.branch
             if scheduling
             else M6_4B_BRANCH
             if m6_4b
@@ -4475,8 +4593,8 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
     if scheduling:
-        source["m7_scheduling_assignment"] = m7_scheduling_assignment_proof()
-        source["m7_scheduling_candidate"] = m7_scheduling_candidate(event)
+        source[scheduling.prefix + "_assignment"] = scheduling.proof()
+        source[scheduling.prefix + "_candidate"] = scheduling.candidate(event)
     if m6_4b:
         source["m6_4b_assignment"] = m6_4b_assignment_proof()
         source["m6_4b_candidate"] = m6_4b_candidate(event)
@@ -4670,7 +4788,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
             )
             if module == "preflight":
                 current_revision = (
-                    "0032"
+                    scheduling.revision
                     if scheduling
                     else "0031"
                     if m6_4b or m6_intents

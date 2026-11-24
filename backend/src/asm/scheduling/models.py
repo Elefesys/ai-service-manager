@@ -81,6 +81,11 @@ class DateException(ConfigurationModel):
     windows: list[LocalSpan] = Field(max_length=1440)
 
 
+class OccupiedInterval(ConfigurationModel):
+    busy_start: Instant
+    busy_end: Instant
+
+
 class ScheduleSnapshot(ConfigurationModel):
     now: Instant
     date: LocalDate
@@ -90,6 +95,7 @@ class ScheduleSnapshot(ConfigurationModel):
     week: list[WeeklyInterval] = Field(max_length=10080)
     policy: PolicyView | None
     exception: DateException | None
+    occupancy: list[OccupiedInterval] = Field(default_factory=list)
 
     @property
     def working_intervals(self) -> Sequence[LocalSpan]:

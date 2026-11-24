@@ -48,8 +48,9 @@ async def effects(harness):
         'outbox',(SELECT count(*) FROM app.outbox_events),
         'outbound',(SELECT count(*) FROM app.messages WHERE direction='OUTBOUND'),
         'booked_sessions',(SELECT count(*) FROM app.service_sessions WHERE scheduled_at IS NOT NULL),
-        'booking_tables',(SELECT count(*) FROM pg_tables WHERE schemaname IN ('app','platform')
-            AND tablename IN ('reservation_holds','resource_allocations','appointments','availability_offers'))
+        'offers',(SELECT count(*) FROM app.availability_offers),
+        'holds',(SELECT count(*) FROM app.reservation_holds),
+        'allocations',(SELECT count(*) FROM app.resource_allocations)
     )""",
     )
 
@@ -160,7 +161,7 @@ async def test_m7_owner_scope_buffers_and_persisted_day_off(scheduling_pg, auth)
     for work in (left, right):
         assert (await read(h, auth, work.url))["agreement"] == work.agreement
     assert await effects(h) == before and await counts(h) == triples == (2, 2, 2)
-    assert before["booked_sessions"] == before["booking_tables"] == 0
+    assert all(before[k] == 0 for k in ("booked_sessions", "offers", "holds", "allocations"))
     proof(
         "S1-S2",
         A=left.proof(),
@@ -431,12 +432,15 @@ async def test_m7_upgrade_0031_preserves_accepted_work_and_session(scheduling_pg
         before = await counts(h)
     finally:
         await _migrate("upgrade", "0032")
-    current = await scalar(h, "SELECT platform.scheduling_availability_schema_profile()")
-    assert current["schema_revision"] == "0032" and current["valid"] is True
-    assert await counts(h) == before == (2, 2, 2)
-    for work in (left, right):
-        assert (await read(h, auth, work.url))["agreement"] == work.agreement
-        empty = await owner_get(auth, work.preview_url())
-        assert {key: empty[key] for key in work.proof()} == work.proof()
-        assert empty["reason"] == "NO_WORKING_HOURS" and not empty["windows"]
-    proof("0031-to-0032", A=left.proof(), B=right.proof(), accepts=2, orders=2, sessions=2)
+    try:
+        current = await scalar(h, "SELECT platform.scheduling_availability_schema_profile()")
+        assert current["schema_revision"] == "0032" and current["valid"] is True
+        assert await counts(h) == before == (2, 2, 2)
+        for work in (left, right):
+            assert (await read(h, auth, work.url))["agreement"] == work.agreement
+            empty = await owner_get(auth, work.preview_url())
+            assert {key: empty[key] for key in work.proof()} == work.proof()
+            assert empty["reason"] == "NO_WORKING_HOURS" and not empty["windows"]
+        proof("0031-to-0032", A=left.proof(), B=right.proof(), accepts=2, orders=2, sessions=2)
+    finally:
+        await _migrate("upgrade", "0033")

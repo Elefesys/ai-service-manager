@@ -2,9 +2,15 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.1A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.1B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
 
-Мастер открывает выбранный согласованный сеанс, задаёт рабочие часы, видит варианты с буферами и закрывает дату. Это единственное активное поручение. C1 ведёт, C2 отвечает за схему и чтение расписания, C5 — за минимальный экран. База `main` — `ac30da7897cbf088cd8c9fb9262a52d67a278582`, ветка `c1/m7-1a-session-availability`. C0 выделил `0032_scheduling_availability.py` поверх `0031`. [Поручение C1, разрешённые пути и S1–S2](tasks/M7_HANDOFF.md#m71a--поручение-c1).
+Из двух клиентов, выбравших пересекающиеся окна одного мастера, только один получает удержание со сроком. Второй получает доступные варианты. Разовый блок мастера защищает тот же интервал. C2 ведёт единственную задачу, C1 отвечает за команды. База `main` — `0574c8c033d6508341fb34cbdc2c572c7de91633`, ветка `c2/m7-1b-offer-hold-allocation`. C0 выделил `0033_scheduling_holds.py` поверх `0032`. [Поручение C2, разрешённые пути и S3–S4](tasks/M7_HANDOFF.md#m71b--поручение-c2).
+
+## История — M7.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-24
+
+Владелец слил PR #65. Фактический `main` — `0574c8c033d6508341fb34cbdc2c572c7de91633`, родители — прежний `main` `ac30da7897cbf088cd8c9fb9262a52d67a278582` и принятый C8 кандидат `a8a4f31029c7d53ebc06bf99a61532b5e96985d8`. Дерево `831defe72edb756f05554d5a415b98c1b92cb3a5` совпало с кандидатом. Отдельный `push/main` прошёл 12/12 с первой попытки. На схеме `0032` PostgreSQL прошёл 160/160 проверок, каталог и готовность, Chromium — 98/98. [PR #65](https://github.com/Elefesys/ai-service-manager/pull/65) · [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45371049883) · [PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45371049883/artifacts/14910705595) · [Chromium](https://github.com/Elefesys/ai-service-manager/actions/runs/45371049883/artifacts/14909629017).
+
+По S1–S2 две работы одного клиента открыли свои сеансы. После сохранения выходного и повторного открытия карточки число окон сократилось с трёх до нуля, на соседней рабочей дате осталось три. Попытка перезаписать выходной из устаревшей формы вернула 409, после повторного чтения мастер увидел сохранённое исключение. Предпросмотр создал ноль отправок, удержаний и записей. [C8 PASS](https://github.com/Elefesys/ai-service-manager/pull/65#pullrequestreview-6037121737) · [Приёмка C0 после R1 и R2](https://github.com/Elefesys/ai-service-manager/commit/f7908a62fbbac2e6c597d6a4879f85ac66d21a12).
 
 ## История — M7.0 INTEGRATED / VERIFIED · 2026-11-24
 

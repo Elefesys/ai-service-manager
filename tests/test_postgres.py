@@ -115,6 +115,8 @@ async def test_real_postgres_capabilities_and_roles(database):
             "audit_events",
             "auth_credentials",
             "auth_sessions",
+            "availability_offers",
+            "availability_options",
             "availability_overrides",
             "availability_rules",
             "billing_contact_command_receipts",
@@ -174,8 +176,11 @@ async def test_real_postgres_capabilities_and_roles(database):
             "quote_delivery_intents",
             "quote_reply_events",
             "quotes",
+            "reservation_holds",
+            "resource_allocations",
             "saas_plan_revisions",
             "saas_plans",
+            "scheduling_command_receipts",
             "scheduling_policy_activations",
             "scheduling_policy_revisions",
             "scheduling_resources",
@@ -197,7 +202,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "The material tables must match schema 0032"
+        ], "The material tables must match schema 0033"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

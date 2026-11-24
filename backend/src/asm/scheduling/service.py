@@ -103,6 +103,13 @@ async def selected_terms(unit: TenantUnitOfWork, selection: SelectedSession) -> 
     return material
 
 
+def accepted_minutes(terms: AcceptedMaterial) -> int | None:
+    reference = terms.duration_reference_id
+    if reference is None or reference not in {terms.assessment_id, terms.decision_id}:
+        return None
+    return terms.occupied_minutes
+
+
 async def preview_availability(
     unit: TenantUnitOfWork,
     selection: SelectedSession,
@@ -118,15 +125,11 @@ async def preview_availability(
             day = command.date
 
     schedule = await repository.read(business, service, day)
-    minutes, reference_id = terms.occupied_minutes, terms.duration_reference_id
+    minutes, reference_id = accepted_minutes(terms), terms.duration_reference_id
     reason: AvailabilityReason | None = None
     windows: list[TimeWindow] = []
-    if (
-        minutes is None
-        or reference_id is None
-        or reference_id not in {terms.assessment_id, terms.decision_id}
-    ):
-        minutes, reference_id = None, None
+    if minutes is None:
+        reference_id = None
         reason = "DURATION_UNAVAILABLE"
     elif schedule.exception is not None and not schedule.exception.windows:
         reason = "DATE_CLOSED"

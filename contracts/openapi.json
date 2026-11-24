@@ -112,6 +112,31 @@
         "title": "ActiveProjection",
         "type": "object"
       },
+      "AffectedAllocation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "HOLD",
+              "BLOCK"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "AffectedAllocation",
+        "type": "object"
+      },
       "AnalysisResponse": {
         "additionalProperties": false,
         "properties": {
@@ -863,6 +888,71 @@
         "title": "AuthCode",
         "type": "string"
       },
+      "AvailabilityOffer": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "offer_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Id"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OfferedTime"
+            },
+            "maxItems": 8,
+            "title": "Options",
+            "type": "array"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "offer_id",
+          "date",
+          "timezone",
+          "expires_at",
+          "options"
+        ],
+        "title": "AvailabilityOffer",
+        "type": "object"
+      },
       "AvailabilityPreview": {
         "additionalProperties": false,
         "properties": {
@@ -1389,6 +1479,43 @@
           "businesses"
         ],
         "title": "BusinessesResponse",
+        "type": "object"
+      },
+      "CalendarBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "block_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "BLOCKED",
+              "RELEASED"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "block_id",
+          "outcome"
+        ],
+        "title": "CalendarBlock",
         "type": "object"
       },
       "CaseAsset": {
@@ -7645,6 +7772,46 @@
         "title": "ObservationPage",
         "type": "object"
       },
+      "OfferedTime": {
+        "additionalProperties": false,
+        "properties": {
+          "busy_end": {
+            "format": "date-time",
+            "title": "Busy End",
+            "type": "string"
+          },
+          "busy_start": {
+            "format": "date-time",
+            "title": "Busy Start",
+            "type": "string"
+          },
+          "option_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "visit_end": {
+            "format": "date-time",
+            "title": "Visit End",
+            "type": "string"
+          },
+          "visit_start": {
+            "format": "date-time",
+            "title": "Visit Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visit_start",
+          "visit_end",
+          "busy_start",
+          "busy_end",
+          "option_id"
+        ],
+        "title": "OfferedTime",
+        "type": "object"
+      },
       "OwnerDecision": {
         "additionalProperties": false,
         "properties": {
@@ -10846,6 +11013,46 @@
         "title": "ScheduleCommand",
         "type": "object"
       },
+      "SchedulingConflictDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "affected": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AffectedAllocation"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected"
+          },
+          "code": {
+            "$ref": "#/components/schemas/ServiceRequestCode"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "SchedulingConflictDetail",
+        "type": "object"
+      },
+      "SchedulingConflictResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/SchedulingConflictDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "SchedulingConflictResponse",
+        "type": "object"
+      },
       "SendResponse": {
         "additionalProperties": false,
         "properties": {
@@ -11233,6 +11440,23 @@
         ],
         "title": "ServiceRequestCards",
         "type": "object"
+      },
+      "ServiceRequestCode": {
+        "enum": [
+          "ACCESS_DENIED",
+          "NOT_FOUND",
+          "INVALID_INPUT",
+          "STALE_STATE",
+          "DURATION_UNAVAILABLE",
+          "APPROVAL_EXPIRED",
+          "APPROVAL_REVOKED",
+          "NEEDS_CLARIFICATION",
+          "IDEMPOTENCY_KEY_CONFLICT",
+          "CALENDAR_CONFLICT",
+          "UNAVAILABLE"
+        ],
+        "title": "ServiceRequestCode",
+        "type": "string"
       },
       "ServiceRequestDraft": {
         "additionalProperties": false,
@@ -16388,7 +16612,14 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "STALE_STATE or a missing scheduling prerequisite"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulingConflictResponse"
+                }
+              }
+            },
+            "description": "STALE_STATE, a missing scheduling prerequisite, or CALENDAR_CONFLICT with affected allocations"
           },
           "422": {
             "content": {
@@ -16402,6 +16633,155 @@
           }
         },
         "summary": "Change Availability",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/service-requests/{request_id}/sessions/{session_id}/availability-offers": {
+      "post": {
+        "description": "Persist the currently available options for this agreed session.",
+        "operationId": "issue_availability_offer_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__sessions__session_id__availability_offers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "client_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Client Id",
+                    "type": "string"
+                  },
+                  "date": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Date"
+                  },
+                  "order_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Order Id",
+                    "type": "string"
+                  },
+                  "quote_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Quote Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "quote_id",
+                  "order_id"
+                ],
+                "title": "AvailabilityQuery",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityOffer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Availability Offer",
         "tags": [
           "scheduling"
         ]
@@ -21877,6 +22257,200 @@
         "summary": "Rollback",
         "tags": [
           "portfolio"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/blocks": {
+      "post": {
+        "operationId": "create_calendar_block_api_v1_workspaces__workspace_id__businesses__business_id__scheduling_blocks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "format": "date-time",
+                    "title": "End",
+                    "type": "string"
+                  },
+                  "start": {
+                    "format": "date-time",
+                    "title": "Start",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "title": "CalendarBlockInput",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarBlock"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulingConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict with an active allocation or a different retry"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Calendar Block",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/blocks/{block_id}/release": {
+      "post": {
+        "operationId": "release_calendar_block_api_v1_workspaces__workspace_id__businesses__business_id__scheduling_blocks__block_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Block Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "EmptyRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarBlock"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Calendar Block",
+        "tags": [
+          "scheduling"
         ]
       }
     },

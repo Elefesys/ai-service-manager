@@ -47,6 +47,10 @@ def calculate_windows(snapshot: ScheduleSnapshot, occupied_minutes: int) -> list
     after = timedelta(minutes=policy.buffer_after_minutes)
     notice = now + timedelta(minutes=policy.minimum_notice_minutes)
     step = policy.step_minutes
+    occupied = [
+        (interval.busy_start.astimezone(UTC), interval.busy_end.astimezone(UTC))
+        for interval in snapshot.occupancy
+    ]
     windows: list[TimeWindow] = []
     for span in snapshot.working_intervals:
         wall_minutes = {
@@ -69,6 +73,7 @@ def calculate_windows(snapshot: ScheduleSnapshot, occupied_minutes: int) -> list
                     and now <= busy_start
                     and busy_end <= horizon
                     and any(start <= busy_start and busy_end <= end for start, end in work_ranges)
+                    and not any(busy_start < end and start < busy_end for start, end in occupied)
                 ):
                     windows.append(
                         TimeWindow(
