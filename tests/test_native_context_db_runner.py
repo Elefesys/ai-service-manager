@@ -172,8 +172,8 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    # Include the scheduling tables, row policies, grants and trigger in 0032.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1394
+    # Include the 0033 allocation constraints, tables and capabilities.
+    assert len(journal.catalog["nonfunction_ddl"]) == 1443
     journal.start(node)
     append = store.append
 
@@ -1437,7 +1437,7 @@ def test_foundation_durable_completeness_requires_current_six_lane_receipts(
     source = {
         "source_sha": head,
         "parents": [],
-        "expected_revision": "0032",
+        "expected_revision": "0033",
         "images": {k: {} for k in ("api", "worker", "scheduler", "fixture")},
     }
     if fault == "missing-lifecycle":

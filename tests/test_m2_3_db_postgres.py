@@ -209,6 +209,7 @@ async def ingress_projection(h, p, bot):
             "0030",
             "0031",
             "0032",
+            "0033",
         }
         and "codec" not in p
     ):

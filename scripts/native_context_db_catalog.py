@@ -117,6 +117,7 @@ SERVICE_INTENT_NONFUNCTION_SHA256 = (
     "102f76177a579c854fafc90752f6dce2a1a57c98c0a82a657de79fa4570b2a39"
 )
 SCHEDULING_NONFUNCTION_SHA256 = "b31332ca0d1cfb8298e6955cac0bb686746c3a6d7a2708a7de50b9a4f81fc728"
+HOLD_NONFUNCTION_SHA256 = "aaee2b7f8bf6f434abeaa37058d2b048fd1e534c9e4421fa68116da2d568024b"
 QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
 OWNER_DECISION_NONFUNCTION_SHA256 = (
     "fc25cd353f880f250d226f00e0f0accb25b9f340e5bab7daa21b3aef6f64810d"
@@ -253,6 +254,7 @@ def parse_function(sql):
             require(not defaults, "Non-trailing argument default")
     output_names, output_types = [], []
     table = re.fullmatch(r"TABLE\((.*)\)", returns, re.S)
+    setof = re.fullmatch(rf"SETOF ({TYPE})", returns)
     if table:
         for column in split_sql(table[1], ","):
             arg = re.fullmatch(rf"([a-z_][a-z_0-9]*)\s+({TYPE})", column)
@@ -261,7 +263,10 @@ def parse_function(sql):
             output_types.append(arg[2])
         require(len(output_names) > 1, "Unreviewed single-column TABLE result")
     else:
-        require(re.fullmatch(TYPE, returns) is not None, "Unsupported function result")
+        require(
+            setof is not None or re.fullmatch(TYPE, returns) is not None,
+            "Unsupported function result",
+        )
     return {
         "signature": name + "(" + ",".join(types) + ")",
         "input_types": types,
@@ -269,8 +274,8 @@ def parse_function(sql):
         "all_types": types + output_types if table else None,
         "argmodes": ["i"] * len(types) + ["t"] * len(output_types) if table else None,
         "defaults": ", ".join(defaults) or None,
-        "return_type": "record" if table else returns,
-        "returns_set": bool(table),
+        "return_type": "record" if table else setof[1] if setof else returns,
+        "returns_set": bool(table or setof),
         "language": language,
         "security_definer": "DEFINER" in option_tokens,
         "strict": "STRICT" in option_tokens,
@@ -312,6 +317,7 @@ def capture_source(root, revision="0013"):
             "0030",
             "0031",
             "0032",
+            "0033",
         },
         "Unsupported catalog revision",
     )
@@ -367,7 +373,17 @@ def capture_source(root, revision="0013"):
                         "Unsupported top-level expression",
                     )
             nodes.append(node)
-        namespace = {"op": SimpleNamespace(execute=operations.append)}
+
+        def previous_revision(prior):
+            return SimpleNamespace(module=SimpleNamespace(**modules[prior]))
+
+        op = SimpleNamespace(
+            execute=operations.append,
+            get_context=lambda: SimpleNamespace(
+                script=SimpleNamespace(get_revision=previous_revision)
+            ),
+        )
+        namespace = {"op": op}
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)
         revision = f"{number:04d}"
         require(
@@ -536,6 +552,7 @@ def source_catalog(root, revision="0013"):
             "0030": 390,
             "0031": 409,
             "0032": 416,
+            "0033": 429,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -565,6 +582,7 @@ def source_catalog(root, revision="0013"):
             "0030": 85,
             "0031": 86,
             "0032": 91,
+            "0033": 96,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -656,6 +674,17 @@ def source_catalog(root, revision="0013"):
                     "app.scheduling_resources",
                 }
                 if revision >= "0032"
+                else set()
+            )
+            | (
+                {
+                    "app.availability_offers",
+                    "app.availability_options",
+                    "app.resource_allocations",
+                    "app.reservation_holds",
+                    "platform.scheduling_command_receipts",
+                }
+                if revision >= "0033"
                 else set()
             )
         ),
@@ -769,11 +798,14 @@ def compare_embedded_profile(expected):
             "0030",
             "0031",
             "0032",
+            "0033",
         },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.scheduling_availability_schema_profile()"
+        "platform.scheduling_hold_schema_profile()"
+        if revision == "0033"
+        else "platform.scheduling_availability_schema_profile()"
         if revision == "0032"
         else "platform.service_intent_schema_profile()"
         if revision == "0031"
@@ -848,6 +880,7 @@ def compare_embedded_profile(expected):
             "0030": 389,
             "0031": 408,
             "0032": 415,
+            "0033": 428,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -898,6 +931,7 @@ def compare_embedded_profile(expected):
             "0030": 85,
             "0031": 86,
             "0032": 91,
+            "0033": 96,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -1017,6 +1051,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0030",
             "0031",
             "0032",
+            "0033",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -1040,6 +1075,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0030": ACCEPTANCE_NONFUNCTION_SHA256,
                 "0031": SERVICE_INTENT_NONFUNCTION_SHA256,
                 "0032": SCHEDULING_NONFUNCTION_SHA256,
+                "0033": HOLD_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3156,7 +3192,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0032"),
+            source_catalog(ROOT, "0033"),
         )
 
     def persist_partition(self, work):
@@ -3340,7 +3376,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0032"
+            and source["expected_revision"] == "0033"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

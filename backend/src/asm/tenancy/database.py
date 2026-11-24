@@ -420,6 +420,64 @@ class TenantUnitOfWork:
             },
         )
 
+    async def scheduling_offer(
+        self,
+        selection: dict[str, object],
+        action: str,
+        day: date | None,
+        key: str | None = None,
+        options: list[dict[str, object]] | None = None,
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_offer(CAST(:selection AS jsonb),:action,"
+            "CAST(:day AS date),:key,CAST(:options AS jsonb))",
+            {
+                "selection": json.dumps(selection, ensure_ascii=False, allow_nan=False),
+                "action": action,
+                "day": day,
+                "key": key,
+                "options": json.dumps(options, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
+    async def scheduling_client_action(
+        self,
+        selection: dict[str, object],
+        client: UUID,
+        conversation: UUID,
+        action: str,
+        target: UUID,
+        key: str | None = None,
+        eligible: bool | None = None,
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_client_command(CAST(:selection AS jsonb),:client,"
+            ":conversation,:action,:target,:key,:eligible)",
+            {
+                "selection": json.dumps(selection, ensure_ascii=False, allow_nan=False),
+                "client": client,
+                "conversation": conversation,
+                "action": action,
+                "target": target,
+                "key": key,
+                "eligible": eligible,
+            },
+        )
+
+    async def scheduling_block(
+        self,
+        business: UUID,
+        key: str,
+        start: datetime | None,
+        end: datetime | None,
+        block: UUID | None,
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_block(:business,:key,CAST(:starts_at AS timestamptz),"
+            "CAST(:ends_at AS timestamptz),:block)",
+            {"business": business, "key": key, "starts_at": start, "ends_at": end, "block": block},
+        )
+
     async def configuration_command(
         self, business: UUID, operation: str, key: str, body: dict[str, object]
     ) -> Any:
