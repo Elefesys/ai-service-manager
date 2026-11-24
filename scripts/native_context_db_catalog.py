@@ -254,7 +254,11 @@ def parse_function(sql):
             require(not defaults, "Non-trailing argument default")
     output_names, output_types = [], []
     table = re.fullmatch(r"TABLE\((.*)\)", returns, re.S)
-    setof = re.fullmatch(rf"SETOF ({TYPE})", returns)
+    allocation_set = (
+        name == "platform.scheduling_active_allocations"
+        and types == ["uuid", "uuid", "uuid", "timestamptz"]
+        and returns == "SETOF app.resource_allocations"
+    )
     if table:
         for column in split_sql(table[1], ","):
             arg = re.fullmatch(rf"([a-z_][a-z_0-9]*)\s+({TYPE})", column)
@@ -264,7 +268,7 @@ def parse_function(sql):
         require(len(output_names) > 1, "Unreviewed single-column TABLE result")
     else:
         require(
-            setof is not None or re.fullmatch(TYPE, returns) is not None,
+            allocation_set or re.fullmatch(TYPE, returns) is not None,
             "Unsupported function result",
         )
     return {
@@ -274,8 +278,10 @@ def parse_function(sql):
         "all_types": types + output_types if table else None,
         "argmodes": ["i"] * len(types) + ["t"] * len(output_types) if table else None,
         "defaults": ", ".join(defaults) or None,
-        "return_type": "record" if table else setof[1] if setof else returns,
-        "returns_set": bool(table or setof),
+        "return_type": (
+            "record" if table else "app.resource_allocations" if allocation_set else returns
+        ),
+        "returns_set": bool(table or allocation_set),
         "language": language,
         "security_definer": "DEFINER" in option_tokens,
         "strict": "STRICT" in option_tokens,
