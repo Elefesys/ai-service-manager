@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.1A-R2 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-24
+## CURRENT — M7.1A REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-24
 
-Мастер различает недоступную работу и временный сбой чтения. В [Draft PR #65](https://github.com/Elefesys/ai-service-manager/pull/65) C0 проверил R1 на `dbe23692009a064b3d09a668e43158c8cbaafd18` с базой `ac30da7897cbf088cd8c9fb9262a52d67a278582`, штатный CI 12/12. C0-M7.1A-01 и -02 закрыты. Для C0-M7.1A-03 подтверждены сообщение про длительность и ноль окон. Открыт только текст карточки для 403/404 и 503. C1 ведёт, C5 меняет экран и адресный тест в той же ветке `c1/m7-1a-session-availability`. [Поручение R2 и проверка C0](tasks/M7_HANDOFF.md#m71a-r2).
+Мастер видит окна конкретного согласованного сеанса и сохранённый выходной в обеих карточках. C0 принял R2 и закрыл C0-M7.1A-01–03 в [Draft PR #65](https://github.com/Elefesys/ai-service-manager/pull/65). На head `a8a4f31029c7d53ebc06bf99a61532b5e96985d8` адресные проверки R2 прошли 5/5, CI кандидата — 12/12. База `ac30da7897cbf088cd8c9fb9262a52d67a278582`, ветка `c1/m7-1a-session-availability`, схема `0032`. Единственная активная задача — заключение C8 по S1–S2. Решение о слиянии принимает владелец. [Поручение C8 и доказательства](tasks/M7_HANDOFF.md#m71a-c8).
 
 ## История — M7.0 INTEGRATED / VERIFIED · 2026-11-24
 
