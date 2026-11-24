@@ -500,7 +500,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         233,
         409,
         416,
-        429,
+        430,
     )
     assert (
         len(old["columns"]),
@@ -560,7 +560,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     body = current["functions"]["platform.scheduling_hold_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 428,
+        "other_functions": 429,
         "tables": 96,
         "result": "PASS",
     }
