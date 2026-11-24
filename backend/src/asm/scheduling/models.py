@@ -1,7 +1,7 @@
 """Owner scheduling settings and a computed session availability projection."""
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -10,6 +10,8 @@ from pydantic import (
     AwareDatetime,
     BeforeValidator,
     Field,
+    computed_field,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -110,6 +112,71 @@ class TimeWindow(ConfigurationModel):
     visit_end: Instant
     busy_start: Instant
     busy_end: Instant
+
+
+class ZonedVisit(ConfigurationModel):
+    timezone: TimeZoneName
+    visit_start: Instant
+    visit_end: Instant
+
+    @computed_field
+    def date(self) -> date:
+        return self.visit_start.astimezone(ZoneInfo(self.timezone)).date()
+
+    @field_serializer("visit_start", "visit_end", when_used="json")
+    def local_time(self, value: datetime) -> datetime:
+        return value.astimezone(ZoneInfo(self.timezone))
+
+    @model_validator(mode="after")
+    def positive_visit(self) -> Self:
+        if self.visit_start.astimezone(UTC) >= self.visit_end.astimezone(UTC):
+            raise ValueError("Visit must end after it starts")
+        return self
+
+
+class BookingWindow(ZonedVisit):
+    hold_id: CanonicalUUID
+    allocation_id: CanonicalUUID
+    resource_id: CanonicalUUID
+    busy_start: Instant
+    busy_end: Instant
+
+    @field_serializer("busy_start", "busy_end", when_used="json")
+    def local_occupancy_time(self, value: datetime) -> datetime:
+        return self.local_time(value)
+
+    @model_validator(mode="after")
+    def occupancy_covers_visit(self) -> Self:
+        if self.busy_start.astimezone(UTC) > self.visit_start.astimezone(
+            UTC
+        ) or self.busy_end.astimezone(UTC) < self.visit_end.astimezone(UTC):
+            raise ValueError("Occupancy must cover the visit")
+        return self
+
+
+class HeldBooking(BookingWindow):
+    outcome: Literal["HELD", "EXPIRED", "RELEASED"]
+    expires_at: Instant
+
+    @field_serializer("expires_at", when_used="json")
+    def local_deadline(self, value: datetime) -> datetime:
+        return self.local_time(value)
+
+
+class ConfirmedBooking(BookingWindow):
+    outcome: Literal["CONFIRMED"]
+    appointment_id: CanonicalUUID
+
+
+class BookingProjection(ConfigurationModel):
+    session_id: CanonicalUUID
+    booking: Annotated[HeldBooking | ConfirmedBooking, Field(discriminator="outcome")] | None
+
+
+class SessionBooking(BookingProjection):
+    request_id: CanonicalUUID
+    quote_id: CanonicalUUID
+    order_id: CanonicalUUID
 
 
 class AvailabilityPreview(ConfigurationModel):

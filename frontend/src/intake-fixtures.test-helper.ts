@@ -1,7 +1,7 @@
 import type {Session} from './api';
 import type {Intake,CaseInput,DraftListItem,DurationCase,QuoteDelivery,ServiceAssessment,ServiceRequestDraft} from './intake-api';
 import {blankCase} from './intake-api';
-import type {Availability,SchedulingScope} from './scheduling-api';
+import type {Availability,Booking,SchedulingScope,SessionBookingView} from './scheduling-api';
 export const w='018f0000-0000-7000-8000-000000000001',b='018f0000-0000-7000-8000-000000000002',c='018f0000-0000-7000-8000-000000000003',client='018f0000-0000-7000-8000-000000000004',actor='018f0000-0000-7000-8000-000000000005',message='018f0000-0000-7000-8000-000000000006';
 export const scope={workspace:w,business:b,conversation:c,client};
 export function session():Session{return {user_account_id:actor,csrf_token:'synthetic-csrf',expires_at:'2026-11-17T00:00:00Z',memberships:[{workspace_id:w,role:'OWNER',permissions:[]}]};}
@@ -67,4 +67,15 @@ export function availability(selected=schedulingScope,patch:Partial<Availability
   service_name:draft().service_name,occupied_minutes:65,duration_reference_id:assessment().assessment_id,
   deposit:{mode:'FIXED_DEPOSIT',amount_minor:50000,percent:null},date:'2026-11-26',timezone:null,week:[],policy:null,exception:null,
   reason:'NO_WORKING_HOURS',windows:[],...patch};
+}
+
+const bookingInterval={hold_id:'018f0000-0000-7000-8000-000000000040',allocation_id:'018f0000-0000-7000-8000-000000000041',
+ resource_id:'018f0000-0000-7000-8000-000000000042',date:'2026-11-27',timezone:'Asia/Novosibirsk',
+ visit_start:'2026-11-27T10:15:00+07:00',visit_end:'2026-11-27T11:20:00+07:00',
+ busy_start:'2026-11-27T10:05:00+07:00',busy_end:'2026-11-27T11:25:00+07:00'};
+export const heldBooking={...bookingInterval,outcome:'HELD',expires_at:'2026-11-26T17:00:13+07:00'} as const satisfies Booking;
+export const confirmedBooking={...bookingInterval,outcome:'CONFIRMED',appointment_id:'018f0000-0000-7000-8000-000000000043'} as const satisfies Booking;
+
+export function bookingView(selected=schedulingScope,booking:Booking|null=null):SessionBookingView{
+ return {request_id:selected.request,quote_id:selected.quote,order_id:selected.order,session_id:selected.session,booking};
 }

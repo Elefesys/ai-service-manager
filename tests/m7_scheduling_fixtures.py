@@ -1,4 +1,4 @@
-"""Synthetic accepted M6 work and scoped owner requests for M7.1A."""
+"""Synthetic M6 agreements and scoped owner requests for scheduling proof."""
 
 from dataclasses import dataclass
 from urllib.parse import urlencode
@@ -8,11 +8,12 @@ from asm.messaging.worker import Worker
 from asm.scheduling.commands import TrustedSchedulingClient
 from asm.scheduling.service import SelectedSession
 from sqlalchemy import text
+from test_m5_intake_postgres import next_turn, summary
 from test_m6_owner_decisions_postgres import FIXED_DURATION, contract
 from test_m6_pricing_postgres import draft_for_size, formula_price, price, publish, sign_in
-from test_m6_quote_acceptance_postgres import controlled_reply, process, read, ready_two_works
+from test_m6_quote_acceptance_postgres import controlled_reply, process, read
 from test_m6_quote_delivery_postgres import DeliveryWire, run_quote
-from test_m6_service_assessments_api_postgres import request_assessment
+from test_m6_service_assessments_api_postgres import create_draft, request_assessment
 from test_m6_service_requests_api_postgres import route
 
 ZONE = "Asia/Novosibirsk"
@@ -37,7 +38,7 @@ async def scheduling_pg(approval_pg):
         async with approval_pg.migrator.begin() as connection:
             await connection.execute(
                 text(
-                    "TRUNCATE platform.scheduling_command_receipts,app.reservation_holds,"
+                    "TRUNCATE platform.scheduling_command_receipts,app.appointments,app.reservation_holds,"
                     "app.resource_allocations,app.availability_options,app.availability_offers,"
                     "app.scheduling_policy_activations,app.scheduling_policy_revisions,"
                     "app.availability_rules,app.availability_overrides,app.scheduling_resources"
@@ -96,6 +97,9 @@ class Work:
         )
         return f"{endpoint}/sessions/{session}/availability?{urlencode(refs)}"
 
+    def booking_url(self, **overrides):
+        return self.preview_url(**overrides).replace("/availability?", "/booking?")
+
     def proof(self):
         return {
             "request_id": self.material["request_id"],
@@ -106,33 +110,81 @@ class Work:
         }
 
 
-async def accept_pair(harness, auth, prepared=None):
-    token, left_url, left_quote, right_url, right_quote = (
-        prepared if prepared is not None else await ready_two_works(harness, auth)
+def booking_contract(mode):
+    terms = {
+        "NONE": (None, None),
+        "FIXED_DEPOSIT": (50_000, None),
+        "PERCENT_DEPOSIT": (None, 20),
+        "FULL_PREPAYMENT": (None, None),
+    }
+    amount, percent = terms[mode]
+    published = contract(formula_price(), FIXED_DURATION)
+    published["services"][0]["deposit"] = {"mode": mode, "amount_minor": amount, "percent": percent}
+    return published
+
+
+async def prepare_quote(harness, auth, token, url):
+    await price(auth, url + "/pricing", token)
+    await request_assessment(auth, url + "/assessment", token)
+    quote = (await read(harness, auth, url))["quote"]
+    await run_quote(harness, Worker(harness.kernel, DeliveryWire(harness)), quote)
+    return quote
+
+
+async def accept_quote(harness, auth, url, quote):
+    receipt = await controlled_reply(harness, f"Принимаю {quote['code']}")
+    assert (await process(harness, receipt)).quote_reply.outcome == "ACCEPTED"
+    return Work(url, (await read(harness, auth, url))["agreement"])
+
+
+async def prepare_pair(harness, auth):
+    await publish(harness, booking_contract("FIXED_DEPOSIT"))
+    token = await sign_in(auth)
+    conversation, intake, model, _, request = await draft_for_size(harness, auth, token, "20 mm")
+    left_url = f"{route(conversation)}/{request}"
+    left_quote = await prepare_quote(harness, auth, token, left_url)
+    model.values = {
+        "idea": "swallow",
+        "placement": "shoulder",
+        "approximate_size": "21 mm",
+        "style": "linework",
+    }
+    model.switch = True
+    await next_turn(harness, intake, "Separate swallow shoulder 21 mm linework")
+    other = await create_draft(auth, conversation, token, await summary(harness, conversation))
+    right_url = f"{route(conversation)}/{other}"
+    return (
+        token,
+        left_url,
+        left_quote,
+        right_url,
+        await prepare_quote(harness, auth, token, right_url),
     )
-    for quote in (right_quote, left_quote):
-        receipt = await controlled_reply(harness, f"Принимаю {quote['code']}")
-        assert (await process(harness, receipt)).quote_reply.outcome == "ACCEPTED"
-    left = Work(left_url, (await read(harness, auth, left_url))["agreement"])
-    right = Work(right_url, (await read(harness, auth, right_url))["agreement"])
+
+
+async def accept_pair(harness, auth, prepared=None):
+    token, left_url, left_quote, right_url, right_quote = prepared or await prepare_pair(
+        harness, auth
+    )
+    right = await accept_quote(harness, auth, right_url, right_quote)
+    left = await accept_quote(harness, auth, left_url, left_quote)
     return token, left, right
 
 
-async def accept_two_clients(harness, auth):
-    await publish(harness, contract(formula_price(), FIXED_DURATION))
+async def accept_work(harness, auth, token, size):
+    conversation, _, _, _, request = await draft_for_size(harness, auth, token, size)
+    url = f"{route(conversation)}/{request}"
+    quote = await prepare_quote(harness, auth, token, url)
+    return await accept_quote(harness, auth, url, quote)
+
+
+async def accept_two_clients(harness, auth, *, first_mode="FIXED_DEPOSIT", second_mode=None):
+    await publish(harness, booking_contract(first_mode))
     token = await sign_in(auth)
-    works = []
-    for size in ("20 mm", "21 mm"):
-        conversation, _, _, _, request = await draft_for_size(harness, auth, token, size)
-        url = f"{route(conversation)}/{request}"
-        await price(auth, url + "/pricing", token)
-        await request_assessment(auth, url + "/assessment", token)
-        quote = (await read(harness, auth, url))["quote"]
-        await run_quote(harness, Worker(harness.kernel, DeliveryWire(harness)), quote)
-        receipt = await controlled_reply(harness, f"Принимаю {quote['code']}")
-        assert (await process(harness, receipt)).quote_reply.outcome == "ACCEPTED"
-        works.append(Work(url, (await read(harness, auth, url))["agreement"]))
-    a, b = works
+    a = await accept_work(harness, auth, token, "20 mm")
+    if second_mode is not None:
+        await publish(harness, booking_contract(second_mode))
+    b = await accept_work(harness, auth, token, "21 mm")
     assert a.identity.client_id != b.identity.client_id
     assert a.identity.conversation_id != b.identity.conversation_id
     assert a.identity.business_id == b.identity.business_id

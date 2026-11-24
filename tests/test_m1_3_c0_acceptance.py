@@ -158,6 +158,7 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                         (
                             *TABLES,
                             "platform.scheduling_command_receipts",
+                            "app.appointments",
                             "app.reservation_holds",
                             "app.resource_allocations",
                             "app.availability_options",

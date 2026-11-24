@@ -20,9 +20,15 @@ from asm.scheduling.commands import (
     CalendarBlockInput,
     create_block,
     issue_offer,
+    read_booking,
     release_block,
 )
-from asm.scheduling.models import AvailabilityCommand, AvailabilityPreview, LocalDate
+from asm.scheduling.models import (
+    AvailabilityCommand,
+    AvailabilityPreview,
+    LocalDate,
+    SessionBooking,
+)
 from asm.scheduling.service import SelectedSession, preview_availability
 from asm.service_requests.errors import (
     AffectedAllocation,
@@ -32,10 +38,13 @@ from asm.service_requests.errors import (
 )
 
 
-class AvailabilityQuery(ConfigurationModel):
+class SessionReferences(ConfigurationModel):
     client_id: CanonicalUUID
     quote_id: CanonicalUUID
     order_id: CanonicalUUID
+
+
+class AvailabilityQuery(SessionReferences):
     date: LocalDate | None = None
 
 
@@ -60,7 +69,7 @@ def selected_session(
     conversation_id: str,
     request_id: str,
     session_id: str,
-    references: AvailabilityQuery,
+    references: SessionReferences,
 ) -> SelectedSession:
     return SelectedSession(
         workspace_id=workspace_id,
@@ -202,6 +211,26 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         response.headers["Cache-Control"] = "no-store"
         async with auth.workspace(token, UUID(workspace_id)) as unit:
             return await issue_offer(unit, selection, references.date, key)
+
+    @router.get("/booking", response_model=SessionBooking)
+    async def read_session_booking(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        session_id: CanonicalUUID,
+        query: Annotated[SessionReferences, Query()],
+    ) -> SessionBooking:
+        check_query(request)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        selection = selected_session(
+            workspace_id, business_id, conversation_id, request_id, session_id, query
+        )
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            return await read_booking(unit, selection)
 
     @blocks.post(
         "",

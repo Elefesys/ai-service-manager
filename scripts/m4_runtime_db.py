@@ -515,7 +515,34 @@ M7_HOLDS_IMPLEMENTATION_PATHS = {
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
 }
-M7_HOLDS_MODULE_PATH = re.compile(
+M7_APPOINTMENTS_BASE = "daf0e97920ff73cde9c3b5f137c26761cf246fe1"
+M7_APPOINTMENTS_TREE = "8f1c2a7a2e69075a7170d15dcceb973be271fc23"
+M7_APPOINTMENTS_ASSIGNMENT = "5df8c4e391eea636ab495ccb7e4b05dc5bc17e26"
+M7_APPOINTMENTS_ASSIGNMENT_TREE = "e1dee0af8a59e0c8456defae0365bb11bee5553e"
+M7_APPOINTMENTS_BRANCH = "c1/m7-2a-hold-to-appointment"
+M7_APPOINTMENTS_DOCS = M7_SCHEDULING_DOCS
+M7_APPOINTMENTS_MIGRATION = "migrations/versions/0034_scheduling_appointments.py"
+M7_APPOINTMENTS_IMPLEMENTATION_PATHS = (M7_HOLDS_IMPLEMENTATION_PATHS - {M7_HOLDS_MIGRATION}) | {
+    M7_APPOINTMENTS_MIGRATION,
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/e2e/scheduling-booking.spec.ts",
+    "frontend/src/IntakePanel.test.tsx",
+    "frontend/src/IntakePanel.tsx",
+    "frontend/src/QuotePanel.test.tsx",
+    "frontend/src/QuotePanel.tsx",
+    "frontend/src/SchedulingAvailability.test.tsx",
+    "frontend/src/SchedulingAvailability.tsx",
+    "frontend/src/SessionBooking.test.tsx",
+    "frontend/src/SessionBooking.tsx",
+    "frontend/src/intake-api.test.ts",
+    "frontend/src/intake-api.ts",
+    "frontend/src/intake-fixtures.test-helper.ts",
+    "frontend/src/scheduling-api.test.ts",
+    "frontend/src/scheduling-api.ts",
+    "frontend/src/style.css",
+    "scripts/m5_intake_fixture.py",
+}
+M7_SCHEDULING_MODULE_PATH = re.compile(
     r"backend/src/asm/scheduling/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.py"
     r"|tests/test_m7_scheduling[A-Za-z0-9_]*\.py"
 )
@@ -543,7 +570,9 @@ class SchedulingSource(NamedTuple):
 
     def permits(self, paths: set[str]) -> bool:
         return all(
-            path in self.paths or self.revision == "0033" and M7_HOLDS_MODULE_PATH.fullmatch(path)
+            path in self.paths
+            or self.revision in {"0033", "0034"}
+            and M7_SCHEDULING_MODULE_PATH.fullmatch(path)
             for path in paths
         )
 
@@ -2800,6 +2829,18 @@ def scheduling_source(*, branch=None, base=None) -> SchedulingSource | None:
             M7_HOLDS_IMPLEMENTATION_PATHS,
             "0033",
         ),
+        SchedulingSource(
+            "m7_appointments",
+            M7_APPOINTMENTS_BASE,
+            M7_APPOINTMENTS_TREE,
+            M7_APPOINTMENTS_ASSIGNMENT,
+            M7_APPOINTMENTS_ASSIGNMENT_TREE,
+            M7_APPOINTMENTS_BRANCH,
+            M7_APPOINTMENTS_DOCS,
+            M7_APPOINTMENTS_MIGRATION,
+            M7_APPOINTMENTS_IMPLEMENTATION_PATHS,
+            "0034",
+        ),
     )
     return next((row for row in candidates if row.branch == branch or row.base == base), None)
 
@@ -3738,7 +3779,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.scheduling_hold_schema_profile()"
+        "platform.scheduling_appointment_schema_profile()"
+        if revision == "0034"
+        else "platform.scheduling_hold_schema_profile()"
         if revision == "0033"
         else "platform.scheduling_availability_schema_profile()"
         if revision == "0032"
@@ -3780,6 +3823,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0033":
+        profile_pin = "e4b8a3c8948809a551a0ae498c82c18de7234c65c4cec91bed3e119d9ab56549"
+        body_pin = "673880b331e339002341a5c68d309f8773ad0b5e25c0d497bcbb7ef090af9ed8"
     if revision == "0032":
         profile_pin = "725cf0747670fa80ce466c1a3d7d5c4fff067b20511d25fce2b5a27bf5ffa4be"
         body_pin = "23427da17dafa22d38cbbbbde6373ad0e8d5797ea66e8296a3f988c7d5d79dc0"
@@ -3886,6 +3932,7 @@ def stock_catalog():
                 "0031",
                 "0032",
                 "0033",
+                "0034",
             },
             "CATALOG_REVISION",
         )
@@ -3911,6 +3958,7 @@ def stock_catalog():
             "0031",
             "0032",
             "0033",
+            "0034",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -3958,7 +4006,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.scheduling_hold_schema_profile()"
+            "platform.scheduling_appointment_schema_profile()"
+            if revision == "0034"
+            else "platform.scheduling_hold_schema_profile()"
             if revision == "0033"
             else "platform.scheduling_availability_schema_profile()"
             if revision == "0032"

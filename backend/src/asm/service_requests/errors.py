@@ -46,7 +46,7 @@ class ServiceRequestError(Exception):
 class AffectedAllocation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    kind: Literal["HOLD", "BLOCK"]
+    kind: Literal["HOLD", "BLOCK", "APPOINTMENT"]
     id: CanonicalUUID
 
 

@@ -1,7 +1,8 @@
 """Finite TEST browser input through real ingest/claim/owner/runtime capabilities.
 
 Only the existing CONTROLLED knowledge fixture, two named viewports, fixed
-text events and delivery of a selected synthetic Quote are supported.
+text events, delivery of a selected synthetic Quote and the choice of an
+issued option for a synthetic accepted work are supported.
 """
 
 import asyncio
@@ -10,7 +11,7 @@ import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -37,6 +38,9 @@ from asm.messaging.results import (
     parse_claim,
 )
 from asm.messaging.worker import Worker
+from asm.scheduling.commands import TrustedSchedulingClient, issue_offer, select_option
+from asm.scheduling.service import SelectedSession
+from asm.service_requests.errors import ServiceRequestError
 from asm.service_requests.quotes import QuoteDeliveryView
 from asm.service_requests.repository import ServiceRequestRepository
 from asm.tenancy import AuthenticatedAccount, TenantDatabase
@@ -84,6 +88,7 @@ QUOTE_JOURNEYS = {
     "quote-clarification",
     "quote-agent",
     "quote-pilot",
+    "quote-booking",
 }
 AGENT_OPERATIONS = {
     "agent-first": ("prepare_service_request",),
@@ -96,6 +101,7 @@ AGENT_OPERATIONS = {
 QUOTE_OPERATIONS = {"deliver-quote": OutcomeKind.SUCCESS, "lose-quote-ack": OutcomeKind.UNKNOWN}
 QUOTE_REPLIES = {"agree-quote", "repeat-agreement", "ambiguous-agreement", "decline-quote"}
 QUOTE_HISTORY = "page-reply-history"
+BOOKING_OPERATIONS = {"booking-offer", "booking-select"}
 VALUES = {
     "collect": (("idea", "flower"), ("placement", "forearm")),
     "collect-sized": (("idea", "flower"), ("placement", "forearm"), ("approximate_size", "8 cm")),
@@ -170,7 +176,7 @@ class Diagnostic:
     def refusal(self, args, error: Exception) -> str:
         if isinstance(error, IntakeFixtureRefused):
             reason = error.reason
-        elif isinstance(error, MessagingError):
+        elif isinstance(error, (MessagingError, ServiceRequestError)):
             reason = error.code.value
         elif isinstance(error, TimeoutError):
             reason = "TIMEOUT"
@@ -373,7 +379,10 @@ async def run(args, diagnostic):
             return await deliver_pilot_question(
                 args, diagnostic, engine, tenancy, kernel, actor, workspace
             )
-        if args.operation in QUOTE_OPERATIONS or args.operation in QUOTE_REPLIES | {QUOTE_HISTORY}:
+        if (
+            args.operation in QUOTE_OPERATIONS
+            or args.operation in QUOTE_REPLIES | {QUOTE_HISTORY} | BOOKING_OPERATIONS
+        ):
             return await run_quote(
                 args, diagnostic, engine, tenancy, kernel, actor, workspace, business
             )
@@ -678,7 +687,12 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
             )
 
     before = await read()
-    quote = before.previous.quote if before.previous else before.quote
+    if args.operation in BOOKING_OPERATIONS:
+        if args.journey != "quote-booking" or before.agreement is None:
+            raise IntakeFixtureRefused("SELECTED_SYNTHETIC_AGREEMENT_REQUIRED")
+        quote = before.agreement.quote
+    else:
+        quote = before.previous.quote if before.previous else before.quote
     if quote is None or not quote.material.service_name.startswith(
         f"Synthetic intake consultation {args.variant} "
     ):
@@ -697,6 +711,19 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
         for m in messages.items
     ):
         raise IntakeFixtureRefused("QUOTE_SOURCE_MISMATCH")
+
+    if args.operation in BOOKING_OPERATIONS:
+        agreement = before.agreement
+        if agreement is None or not any(
+            m.message_id == agreement.source.message_id
+            and m.direction == "INBOUND"
+            and m.text == f"Принимаю {quote.code}"
+            for m in messages.items
+        ):
+            raise IntakeFixtureRefused("SELECTED_SYNTHETIC_AGREEMENT_REQUIRED")
+        return await run_booking(
+            args, diagnostic, tenancy, actor, workspace, business, conversation, agreement
+        )
 
     quote_id = UUID(quote.quote_id)
     sent_text = None
@@ -737,7 +764,8 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
 
     if args.operation in QUOTE_REPLIES | {QUOTE_HISTORY}:
         if (
-            args.journey not in {"quote-acceptance", "quote-clarification", "quote-pilot"}
+            args.journey
+            not in {"quote-acceptance", "quote-clarification", "quote-pilot", "quote-booking"}
             or before.status != "SENT"
         ):
             raise IntakeFixtureRefused("SENT_SYNTHETIC_QUOTE_REQUIRED")
@@ -850,6 +878,53 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
     )
 
 
+async def run_booking(
+    args, diagnostic, tenancy, actor, workspace, business, conversation, agreement
+):
+    quote = agreement.quote
+    material = quote.material
+    selection = SelectedSession(
+        workspace_id=str(workspace),
+        business_id=str(business),
+        conversation_id=str(conversation),
+        client_id=material.client_id,
+        request_id=material.request_id,
+        quote_id=quote.quote_id,
+        order_id=agreement.order_id,
+        session_id=agreement.session_id,
+    )
+    key = f"browser.{args.operation}.{args.variant}.{selection.request_id}"
+    async with tenancy.transaction(AuthenticatedAccount(actor), workspace, uuid4()) as unit:
+        owner = OwnerAPIRepository(unit)
+        conversations = await owner.conversations(100, None)
+        selected = next(
+            (c for c in conversations.items if c.conversation_id == str(conversation)), None
+        )
+        connections = await owner.connections(100, None)
+        if (
+            selected is None
+            or selected.client_id != material.client_id
+            or selected.business_id != str(business)
+            or not any(
+                c.connection_id == selected.connection_id and c.provider == "CONTROLLED"
+                for c in connections.items
+            )
+        ):
+            raise IntakeFixtureRefused("BOOKING_CLIENT_SCOPE_MISMATCH")
+        diagnostic.stage = "EXECUTE"
+        if args.operation == "booking-offer":
+            result = await issue_offer(unit, selection, args.booking_date, key)
+        else:
+            client = TrustedSchedulingClient(
+                workspace_id=str(workspace),
+                business_id=str(business),
+                conversation_id=selected.conversation_id,
+                client_id=selected.client_id,
+            )
+            result = await select_option(unit, client, selection, args.option, key)
+    return result.model_dump(mode="json")
+
+
 def main():
     diagnostic = Diagnostic()
     args = None
@@ -862,6 +937,7 @@ def main():
                 *QUOTE_OPERATIONS,
                 *sorted(QUOTE_REPLIES),
                 QUOTE_HISTORY,
+                *sorted(BOOKING_OPERATIONS),
                 "deliver-pilot-question",
             ),
             required=True,
@@ -889,10 +965,18 @@ def main():
             parser.add_argument("--" + name, required=True)
         parser.add_argument("--conversation")
         parser.add_argument("--request")
+        parser.add_argument("--option", type=UUID)
+        parser.add_argument("--booking-date", type=date.fromisoformat)
         parser.add_argument("--receipt-key")
         parser.add_argument("--observe-dispatch", action="store_true")
         args = parser.parse_args()
         if (args.operation == "deliver-pilot-question") != bool(args.receipt_key):
+            raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        if (args.operation == "booking-select") != (args.option is not None):
+            raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        if (args.operation == "booking-offer") != (args.booking_date is not None):
+            raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        if args.operation in BOOKING_OPERATIONS and args.journey != "quote-booking":
             raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         if args.journey == "pilot-complex":
             if args.operation not in {"seed", "pilot-cover-up", "deliver-pilot-question"}:
@@ -912,6 +996,16 @@ def main():
                 raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         elif args.journey == "quote-agent":
             if args.operation not in {"seed", "deliver-quote", *AGENT_OPERATIONS}:
+                raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        elif args.journey == "quote-booking":
+            if args.operation not in {
+                "seed",
+                "price-first",
+                "quote-second",
+                "deliver-quote",
+                "agree-quote",
+                *BOOKING_OPERATIONS,
+            }:
                 raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         elif args.operation in AGENT_OPERATIONS:
             raise IntakeFixtureRefused("INVALID_ARGUMENTS")

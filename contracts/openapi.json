@@ -124,7 +124,8 @@
           "kind": {
             "enum": [
               "HOLD",
-              "BLOCK"
+              "BLOCK",
+              "APPOINTMENT"
             ],
             "title": "Kind",
             "type": "string"
@@ -1862,6 +1863,87 @@
           "error"
         ],
         "title": "ConfigurationErrorResponse",
+        "type": "object"
+      },
+      "ConfirmedBooking": {
+        "additionalProperties": false,
+        "properties": {
+          "allocation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Allocation Id",
+            "type": "string"
+          },
+          "appointment_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Appointment Id",
+            "type": "string"
+          },
+          "busy_end": {
+            "format": "date-time",
+            "title": "Busy End",
+            "type": "string"
+          },
+          "busy_start": {
+            "format": "date-time",
+            "title": "Busy Start",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "readOnly": true,
+            "title": "Date",
+            "type": "string"
+          },
+          "hold_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "outcome": {
+            "const": "CONFIRMED",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "resource_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "visit_end": {
+            "format": "date-time",
+            "title": "Visit End",
+            "type": "string"
+          },
+          "visit_start": {
+            "format": "date-time",
+            "title": "Visit Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "visit_start",
+          "visit_end",
+          "hold_id",
+          "allocation_id",
+          "resource_id",
+          "busy_start",
+          "busy_end",
+          "outcome",
+          "appointment_id",
+          "date"
+        ],
+        "title": "ConfirmedBooking",
         "type": "object"
       },
       "ConnectionResponse": {
@@ -4726,6 +4808,90 @@
           "observed_at"
         ],
         "title": "HeldAutomationWork",
+        "type": "object"
+      },
+      "HeldBooking": {
+        "additionalProperties": false,
+        "properties": {
+          "allocation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Allocation Id",
+            "type": "string"
+          },
+          "busy_end": {
+            "format": "date-time",
+            "title": "Busy End",
+            "type": "string"
+          },
+          "busy_start": {
+            "format": "date-time",
+            "title": "Busy Start",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "readOnly": true,
+            "title": "Date",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "hold_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Hold Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "HELD",
+              "EXPIRED",
+              "RELEASED"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "resource_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "visit_end": {
+            "format": "date-time",
+            "title": "Visit End",
+            "type": "string"
+          },
+          "visit_start": {
+            "format": "date-time",
+            "title": "Visit Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "visit_start",
+          "visit_end",
+          "hold_id",
+          "allocation_id",
+          "resource_id",
+          "busy_start",
+          "busy_end",
+          "outcome",
+          "expires_at",
+          "date"
+        ],
+        "title": "HeldBooking",
         "type": "object"
       },
       "HumanContextPolicyAudit": {
@@ -11616,6 +11782,71 @@
         "title": "ServiceRequestReceipt",
         "type": "object"
       },
+      "SessionBooking": {
+        "additionalProperties": false,
+        "properties": {
+          "booking": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "CONFIRMED": "#/components/schemas/ConfirmedBooking",
+                    "EXPIRED": "#/components/schemas/HeldBooking",
+                    "HELD": "#/components/schemas/HeldBooking",
+                    "RELEASED": "#/components/schemas/HeldBooking"
+                  },
+                  "propertyName": "outcome"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/HeldBooking"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConfirmedBooking"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booking"
+          },
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "booking",
+          "request_id",
+          "quote_id",
+          "order_id"
+        ],
+        "title": "SessionBooking",
+        "type": "object"
+      },
       "SessionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -16782,6 +17013,127 @@
           }
         },
         "summary": "Issue Availability Offer",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/service-requests/{request_id}/sessions/{session_id}/booking": {
+      "get": {
+        "operationId": "read_session_booking_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__sessions__session_id__booking_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Client Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Order Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBooking"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Session Booking",
         "tags": [
           "scheduling"
         ]
