@@ -593,8 +593,21 @@ def profile_sql(prior, functions: dict[str, str]) -> str:
     )
 
 
+def previous_scheduling():
+    scripts = op.get_context().script
+    if scripts is None:
+        # Operations can execute a revision directly without an Alembic
+        # EnvironmentContext. Locate the same registered predecessor then.
+        from pathlib import Path
+
+        from alembic.script import ScriptDirectory
+
+        scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1]))
+    return scripts.get_revision(down_revision).module
+
+
 def upgrade() -> None:
-    prior = op.get_context().script.get_revision(down_revision).module
+    prior = previous_scheduling()
     for table, sql in TABLES.items():
         op.execute(sql)
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
@@ -625,7 +638,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    prior = op.get_context().script.get_revision(down_revision).module
+    prior = previous_scheduling()
     op.execute(f"LOCK TABLE {','.join(TABLES)} IN ACCESS EXCLUSIVE MODE")
     durable = " OR ".join(f"EXISTS(SELECT 1 FROM {table})" for table in TABLES)
     op.execute(f"""DO $$ BEGIN
