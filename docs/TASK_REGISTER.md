@@ -2,9 +2,15 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.2B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
 
-Один выбор клиента на согласованный сеанс при `NONE` создаёт подтверждённую запись. При обязательной предоплате мастер и клиент видят действующее удержание и его срок. C1 ведёт единственное поручение, C2 отвечает за PostgreSQL, C5 — за карточку. База `main` — `daf0e97920ff73cde9c3b5f137c26761cf246fe1`, ветка `c1/m7-2a-hold-to-appointment`, миграция `0034_scheduling_appointments.py` поверх `0033`. [Поручение C1, разрешённые пути и приёмка](tasks/M7_HANDOFF.md#m72a--поручение-c1).
+Мастер переносит подтверждённый визит с возможным пересечением прежнего интервала или явно отменяет его. Неудачный перенос сохраняет исходную запись и занятость. Единственная задача — M7.2B. C1 ведёт команды и owner API, C2 отвечает за PostgreSQL. База `main` `eb8d43e038fc5935a19771193c35ce275d517fac`, ветка `c1/m7-2b-reschedule-cancel`, миграция `0035_scheduling_reschedule_cancel.py` поверх `0034`. [Поручение, пути и критерии S6](tasks/M7_HANDOFF.md#m72b-task).
+
+## История — M7.2A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
+
+Владелец слил PR #67 в `main` `eb8d43e038fc5935a19771193c35ce275d517fac`. Родители совпали с прежним `main` `daf0e97920ff73cde9c3b5f137c26761cf246fe1` и кандидатом C8 `78b1d7049096f399e46aadf54b556da2cf484da6`. Дерево `e74210828ac3d9d6f83b79dfb2d49ba30930c4ac` совпало с принятым кандидатом. Отдельный CI этого слияния прошёл 12/12 с первой попытки. На схеме `0034` приняты 160/160 проверок PostgreSQL, каталог и готовность. В `foundation` прошли 10/10 сценариев M7.2A, в Chromium — 99 сценариев. [PR #67](https://github.com/Elefesys/ai-service-manager/pull/67) · [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45546642847) · [PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45546642847/artifacts/14992331751).
+
+Вторая вкладка получила исходную запись на 10:15, другая работа могла занять 11:45. При обязательной предоплате роза и ласточка получили два отдельных удержания. Закрыты `C0-M7.2A-01` и `C0-M7.2A-02`. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/67#pullrequestreview-6051797740) · [Приёмка C0 до слияния](https://github.com/Elefesys/ai-service-manager/blob/be6c9740c5f83c192ebaeb59af97f36f82d8e51a/docs/tasks/M7_HANDOFF.md#L9).
 
 ## История — M7.1B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
