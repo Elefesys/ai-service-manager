@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.3A-R1 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
 
-Мастер видит в одном дне записи, удержания и блоки, открывает выбранную работу, управляет визитом и сверяет его историю. C5 ведёт экран, C1 — owner API. Единственное активное поручение — M7.3A в `c5/m7-3a-owner-calendar` от принятого `main` `bfb831c3132b2af79d2970f2ffe16b7beedc0857`. Выделена `migrations/versions/0036_scheduling_owner_day.py` поверх `0035` для чтения дня. [Пути и критерии S7](tasks/M7_HANDOFF.md#m73a-task).
+Мастер отмечает выходной на пустой дате и различает одноимённые работы разных клиентов в календаре и при конфликте. C0 проверил [кандидат PR #69](https://github.com/Elefesys/ai-service-manager/pull/69) `3c1a2f6dac13dedb86482384cf06564fd1822f2f` на базе `bfb831c3132b2af79d2970f2ffe16b7beedc0857`. [CI 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/45635896642) прошёл. В адресном Chromium C0 воспроизвёл `C0-M7.3A-01` и `C0-M7.3A-02` на двух ширинах. C5 ведёт единственную доработку в `c5/m7-3a-owner-calendar`, C1 отвечает за owner API, схема `0036` поверх `0035`. [Поручение R1 и критерии](tasks/M7_HANDOFF.md#m73a-r1).
 
 ## История — M7.2B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
