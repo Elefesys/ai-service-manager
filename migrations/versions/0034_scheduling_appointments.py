@@ -179,6 +179,12 @@ def replacement_sql(prior) -> dict[str, str]:
     )
     client = replace(
         client,
+        "            IF NOT (prior.result ? 'hold_id') THEN RETURN prior.result; END IF;",
+        """            IF prior.result->>'outcome'='ALREADY_CONFIRMED' OR NOT (prior.result ? 'hold_id')
+              THEN RETURN prior.result; END IF;""",
+    )
+    client = replace(
+        client,
         "(ws,business,hold.allocation_id) AND released_at IS NULL;",
         "(ws,business,hold.allocation_id) AND kind='HOLD' AND released_at IS NULL;",
     )
@@ -192,10 +198,22 @@ def replacement_sql(prior) -> dict[str, str]:
         "              response:=platform.scheduling_hold_view(hold,moment);",
         "              response:=platform.scheduling_complete_choice(hold,q,moment);",
     )
+    acquire_start = client.index("            PERFORM platform.scheduling_expire_holds(")
+    acquire_end = client.index("\n          END IF;", acquire_start)
+    acquire = client[acquire_start:acquire_end]
+    nested_acquire = "\n".join("  " + line for line in acquire.splitlines())
     client = replace(
         client,
-        "AND a.kind='HOLD' AND a.released_at IS NULL)",
-        "AND a.released_at IS NULL)",
+        acquire,
+        f"""            -- The different option is valid for this session. Return its existing
+            -- appointment before touching any allocations for the new interval.
+            SELECT platform.scheduling_appointment_view(a)||jsonb_build_object('outcome','ALREADY_CONFIRMED')
+              INTO response FROM app.appointments a
+              WHERE (a.workspace_id,a.business_id,a.resource_id,a.session_id,a.status)
+                =(ws,business,r.id,session,'CONFIRMED');
+            IF NOT FOUND THEN
+{nested_acquire}
+            END IF;""",
     )
     owner_block = replace(
         prior.FUNCTIONS[OWNER_BLOCK],

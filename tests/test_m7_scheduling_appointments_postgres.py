@@ -120,6 +120,18 @@ async def historical_quote(h, auth, work):
     return accepted
 
 
+async def original_hold_deadline(h, selection_result):
+    hold = await scalar(
+        h,
+        "SELECT to_jsonb(h) FROM app.reservation_holds h WHERE (workspace_id,id)=(:ws,:id)",
+        ws=A,
+        id=UUID(selection_result.hold_id),
+    )
+    expires_at = datetime.fromisoformat(hold["expires_at"])
+    assert expires_at - datetime.fromisoformat(hold["created_at"]) == timedelta(minutes=15)
+    return expires_at
+
+
 @pytest.mark.parametrize("mode", ["NONE", "FIXED_DEPOSIT", "PERCENT_DEPOSIT", "FULL_PREPAYMENT"])
 async def test_s5_one_choice_uses_accepted_terms_after_quote_expiry(
     scheduling_pg, auth, monkeypatch, mode
@@ -140,9 +152,10 @@ async def test_s5_one_choice_uses_accepted_terms_after_quote_expiry(
     if other is not None:
         assert other.material["deposit"]["mode"] == mode
         assert await booking(auth, other) is None
+    replacement = None
     if mode != "NONE":
-        updated = await publish(h, booking_contract("NONE"))
-        assert updated["release_id"] != work.material["deposit_terms_version"]
+        replacement = await publish(h, booking_contract("NONE"))
+        assert replacement["release_id"] != work.material["deposit_terms_version"]
     day, schedule = await configure(h, auth, token, work)
     assert await booking(auth, work) is None
     issued = await offer(h, work, day, "issue-s5")
@@ -152,10 +165,13 @@ async def test_s5_one_choice_uses_accepted_terms_after_quote_expiry(
     def reject_http(*args, **kwargs):
         pytest.fail("Choosing an option must not call an HTTP provider")
 
-    with monkeypatch.context() as isolated:
-        isolated.setattr(httpx.Client, "send", reject_http)
-        isolated.setattr(httpx.AsyncClient, "send", reject_http)
-        result = await pick(h, work, choice(issued, 0), "one-explicit-choice")
+    async def choose(selected_work, option_id, key):
+        with monkeypatch.context() as isolated:
+            isolated.setattr(httpx.Client, "send", reject_http)
+            isolated.setattr(httpx.AsyncClient, "send", reject_http)
+            return await pick(h, selected_work, option_id, key)
+
+    result = await choose(work, choice(issued, 0), "one-explicit-choice")
 
     shown = await booking(auth, work)
     again = await booking(auth, work)
@@ -170,15 +186,8 @@ async def test_s5_one_choice_uses_accepted_terms_after_quote_expiry(
         for key, value in interval.items()
     )
     assert result.visit_start == option.visit_start and result.visit_end == option.visit_end
-    assert await pick(h, work, choice(issued, 0), "one-explicit-choice") == result
-    hold = await scalar(
-        h,
-        "SELECT to_jsonb(h) FROM app.reservation_holds h WHERE (workspace_id,id)=(:ws,:id)",
-        ws=A,
-        id=UUID(result.hold_id),
-    )
-    expires_at = datetime.fromisoformat(hold["expires_at"])
-    assert expires_at - datetime.fromisoformat(hold["created_at"]) == timedelta(minutes=15)
+    assert await choose(work, choice(issued, 0), "one-explicit-choice") == result
+    expires_at = await original_hold_deadline(h, result)
     if mode == "NONE":
         assert isinstance(result, AppointmentResult) and shown["outcome"] == "CONFIRMED"
         assert shown["appointment_id"] == result.appointment_id
@@ -207,6 +216,67 @@ async def test_s5_one_choice_uses_accepted_terms_after_quote_expiry(
         assert await booking(auth, other) is None
         wrong = await auth.client.get(work.booking_url(session_id=other.selection.session_id))
         assert wrong.status_code == 404 and work.selection.session_id not in wrong.text
+        assert replacement is not None
+        assert other.material["deposit_terms_version"] != replacement["release_id"]
+        second_offer = await offer(h, other, day, "issue-s5-second-work")
+        second_option = second_offer.options[0]
+        assert option.busy_end == second_option.busy_start
+        assert second_option.visit_start.astimezone(ZoneInfo(ZONE)).strftime("%H:%M") == "11:45"
+        second = await choose(other, choice(second_offer, 0), "choice-second-work")
+        assert isinstance(second, HoldResult) and second.outcome == "HELD"
+        assert second.hold_id != result.hold_id and second.allocation_id != result.allocation_id
+        deadline = await original_hold_deadline(h, second)
+        second_card = await booking(auth, other)
+        assert second_card["outcome"] == "HELD" and "appointment_id" not in second_card
+        assert second_card["hold_id"] == second.hold_id
+        assert second_card["allocation_id"] == second.allocation_id
+        assert second_card["resource_id"] == shown["resource_id"]
+        assert second_card["date"] == str(day) and second_card["timezone"] == ZONE
+        assert datetime.fromisoformat(second_card["expires_at"]) == deadline == second.expires_at
+        second_interval = local_interval(second_option)
+        assert all(
+            datetime.fromisoformat(second_card[key]) == datetime.fromisoformat(value)
+            for key, value in second_interval.items()
+        )
+        assert (
+            second.visit_start == second_option.visit_start
+            and second.visit_end == second_option.visit_end
+        )
+        assert await choose(other, choice(second_offer, 0), "choice-second-work") == second
+        assert await choose(work, choice(issued, 0), "one-explicit-choice") == result
+        assert await booking(auth, work) == shown and await booking(auth, other) == second_card
+        counts = await occupancy(h)
+        assert counts["holds"] == counts["active_allocations"] == 2
+        proof(
+            "R1-two-fixed-deposit-works",
+            client_id=work.selection.client_id,
+            conversation_id=work.selection.conversation_id,
+            published_none_release=replacement["release_id"],
+            rose={
+                **work.proof(),
+                "deposit": work.material["deposit"],
+                "deposit_terms_version": work.material["deposit_terms_version"],
+                "option_id": option.option_id,
+                "result": result.model_dump(mode="json"),
+                "owner_booking": shown,
+                "hold_expires_at": expires_at,
+                "interval": interval,
+            },
+            swallow={
+                **other.proof(),
+                "deposit": other.material["deposit"],
+                "deposit_terms_version": other.material["deposit_terms_version"],
+                "option_id": second_option.option_id,
+                "result": second.model_dump(mode="json"),
+                "owner_booking": second_card,
+                "hold_expires_at": deadline,
+                "interval": second_interval,
+            },
+            active_holds=counts["active_allocations"],
+            new_appointments=0,
+            external_calls=0,
+            **(await assert_effects(h, before)),
+        )
     for url, status in (
         (work.booking_url(client_id="00000000-0000-0000-0000-000000000999"), 404),
         (work.booking_url(business_id=BA2), 404),
@@ -214,7 +284,7 @@ async def test_s5_one_choice_uses_accepted_terms_after_quote_expiry(
     ):
         refused = await auth.client.get(url)
         assert refused.status_code == status and result.hold_id not in refused.text
-    assert (await occupancy(h))["active_allocations"] == 1
+    assert (await occupancy(h))["active_allocations"] == (2 if other is not None else 1)
     proof(
         "S5-expired-quote",
         mode=mode,
@@ -263,7 +333,47 @@ async def test_s5_after_lost_response_and_original_hold_expiry(scheduling_pg, au
     with pytest.raises(ServiceRequestError) as mismatch:
         await pick(h, work, different, "same-choice")
     assert mismatch.value.code is ServiceRequestCode.IDEMPOTENCY_KEY_CONFLICT
-    assert (await pick(h, work, different, "other-option")).outcome == "SESSION_HELD"
+    second_tab = await pick(h, work, different, "other-option")
+    assert await pick(h, work, different, "other-option") == second_tab
+    assert await pick(h, work, original, "same-choice") == first
+    assert await booking(auth, work) == saved
+    original_time, requested_time = (issued.options[index] for index in (0, 6))
+    assert original_time.busy_end == requested_time.busy_start
+    assert original_time.visit_start.astimezone(ZoneInfo(ZONE)).strftime("%H:%M") == "10:15"
+    assert requested_time.visit_start.astimezone(ZoneInfo(ZONE)).strftime("%H:%M") == "11:45"
+    preview = await owner_get(auth, competitor.preview_url(day=day))
+    free_interval = local_interval(requested_time)
+    assert free_interval in preview["windows"]
+    counts = await occupancy(h)
+    assert counts["holds"] == counts["active_allocations"] == 1
+    proof(
+        "R1-second-tab-different-option",
+        **work.proof(),
+        first_choice=first.model_dump(mode="json"),
+        requested_option_id=requested_time.option_id,
+        second_choice=second_tab.model_dump(mode="json"),
+        owner_booking=saved,
+        free_interval=free_interval,
+        appointments=(await client_effects(h))["appointments"] - before["appointments"],
+        active_allocations=counts["active_allocations"],
+        **(await assert_effects(h, before, confirmed=1)),
+    )
+    assert isinstance(second_tab, AppointmentResult) and second_tab.outcome == "ALREADY_CONFIRMED"
+    assert second_tab == first.model_copy(update={"outcome": "ALREADY_CONFIRMED"})
+    assert second_tab.message == "Вы уже записаны на 10:15."
+    assert second_tab.session_id == work.selection.session_id
+    assert all(
+        second_tab.model_dump(mode="json")[key] == saved[key]
+        for key in (
+            "appointment_id",
+            "allocation_id",
+            "hold_id",
+            "date",
+            "visit_start",
+            "visit_end",
+            "timezone",
+        )
+    )
 
     engine = create_async_engine(h.runtime.engine.url, hide_parameters=True)
     try:
@@ -281,6 +391,7 @@ async def test_s5_after_lost_response_and_original_hold_expiry(scheduling_pg, au
     assert waited < expires_at
     await scalar(h, "SELECT pg_sleep_until(:after)", after=expires_at + timedelta(milliseconds=100))
     assert await pick(h, work, original, "same-choice") == first
+    assert await pick(h, work, different, "other-option") == second_tab
     late = await release(h, work, first, "late-release")
     assert late.outcome == "CONVERTED" and late.expires_at == expires_at
     assert await release(h, work, first, "late-release") == late

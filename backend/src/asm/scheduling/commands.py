@@ -79,7 +79,7 @@ class HoldResult(ZonedVisit):
 
 
 class AppointmentResult(ZonedVisit):
-    outcome: Literal["CONFIRMED"]
+    outcome: Literal["CONFIRMED", "ALREADY_CONFIRMED"]
     appointment_id: CanonicalUUID
     hold_id: CanonicalUUID
     allocation_id: CanonicalUUID
@@ -87,6 +87,9 @@ class AppointmentResult(ZonedVisit):
 
     @computed_field
     def message(self) -> str:
+        if self.outcome == "ALREADY_CONFIRMED":
+            start = self.visit_start.astimezone(ZoneInfo(self.timezone))
+            return f"Вы уже записаны на {start:%H:%M}."
         return "Запись подтверждена."
 
 
@@ -262,7 +265,7 @@ async def select_option(
     )
     result = await store.select(selection, client_id, conversation_id, option_id, key, eligible)
     outcome = result.get("outcome")
-    if outcome == "CONFIRMED":
+    if outcome in ("CONFIRMED", "ALREADY_CONFIRMED"):
         appointment = _stored(AppointmentResult, result)
         if terms.deposit.mode != "NONE" or appointment.session_id != selection.session_id:
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
