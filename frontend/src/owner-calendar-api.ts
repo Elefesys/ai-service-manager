@@ -1,6 +1,6 @@
 import {
   businessPath, checkIntervals, checkWindow, dateValue, instant, integer, invalid, object, parseBooking,
-  record, schedulingRequest, sessionPath, sessionReferences, timestamps, uuid,
+  record, schedulingRequest, sessionPath, sessionReferences, timestamps, timeInterval, uuid,
 } from './scheduling-api';
 import type {AffectedAllocation, Booking, DayInterval, SchedulingScope, Slot} from './scheduling-api';
 
@@ -25,7 +25,7 @@ export type OwnerDay = {
 export type MoveOption = Slot & {option_id: string};
 export type MoveOffer = {offer_id: string | null; date: string; timezone: string | null; expires_at: string | null; options: MoveOption[]};
 
-function parseEntry(value: unknown, resource: unknown, historical: boolean): CalendarEntry {
+function parseEntry(value: unknown, resource: unknown, historical?: boolean): CalendarEntry {
   if (!record(value)) return invalid();
   if (value.kind === 'BLOCK') {
     const row = object(value, ['kind', 'block_id', 'start', 'end']);
@@ -38,15 +38,17 @@ function parseEntry(value: unknown, resource: unknown, historical: boolean): Cal
   const selection = object(row.selection, ['client_id', 'conversation_id', 'request_id', 'quote_id', 'order_id', 'session_id']);
   const booking = parseBooking(row.booking);
   if (!Object.values(selection).every(uuid) || typeof row.work_label !== 'string' || !row.work_label.trim() ||
-      booking.resource_id !== resource) return invalid();
+      (resource !== undefined && booking.resource_id !== resource)) return invalid();
+  const archived = booking.outcome !== 'CONFIRMED' && booking.outcome !== 'HELD';
+  if (historical !== undefined && historical !== archived) return invalid();
   if (appointment) {
-    if (booking.outcome !== (historical ? 'CANCELLED' : 'CONFIRMED')) return invalid();
+    if (booking.outcome !== 'CANCELLED' && booking.outcome !== 'CONFIRMED') return invalid();
     if (row.successor !== null) {
       const successor = object(row.successor, ['appointment_id', 'date']);
-      if (!historical || !uuid(successor.appointment_id) || !dateValue(successor.date) ||
+      if (!archived || !uuid(successor.appointment_id) || !dateValue(successor.date) ||
           successor.appointment_id === booking.appointment_id) return invalid();
     }
-  } else if (row.kind !== 'HOLD' || (historical ? booking.outcome !== 'EXPIRED' && booking.outcome !== 'RELEASED' : booking.outcome !== 'HELD')) {
+  } else if (row.kind !== 'HOLD' || (booking.outcome !== 'EXPIRED' && booking.outcome !== 'RELEASED' && booking.outcome !== 'HELD')) {
     return invalid();
   }
   return row as WorkEntry;
@@ -119,14 +121,16 @@ export function entryId(entry: CalendarEntry): string {
   }
 }
 
+export const clientLabel = (id: string) => `Клиент №${id}`;
+
 export function workScope(scope: BusinessScope, {selection}: WorkEntry): SchedulingScope {
   return {...scope, client: selection.client_id, conversation: selection.conversation_id, request: selection.request_id,
     quote: selection.quote_id, order: selection.order_id, session: selection.session_id};
 }
 
-const command = (body: unknown, key: string, csrf: string): RequestInit => ({
+const command = (body: unknown, csrf: string, key?: string): RequestInit => ({
   method: 'POST',
-  headers: {'Content-Type': 'application/json', 'Idempotency-Key': key, 'X-CSRF-Token': csrf},
+  headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf, ...(key ? {'Idempotency-Key': key} : {})},
   body: JSON.stringify(body),
 });
 
@@ -135,14 +139,34 @@ export const ownerCalendarApi = {
     const query = date ? `?date=${encodeURIComponent(date)}` : '';
     return parseOwnerDay(await schedulingRequest(`${businessPath(workspace, business)}/scheduling/day${query}`, signal), date);
   },
+  async changeDay({workspace, business}: BusinessScope, day: {
+    resource_id: string; date: string; expected_version: number; windows: DayInterval[] | null;
+  }, csrf: string, signal: AbortSignal) {
+    const path = `${businessPath(workspace, business)}/scheduling/day/exception`;
+    const result = parseOwnerDay(await schedulingRequest(path, signal, command(day, csrf)), day.date);
+    if (result.resource_id !== day.resource_id) return invalid();
+    return result;
+  },
+  async conflictEntries({workspace, business}: BusinessScope, affected: AffectedAllocation[], signal: AbortSignal) {
+    const path = `${businessPath(workspace, business)}/scheduling/conflicts`;
+    const query = new URLSearchParams();
+    const fields = {APPOINTMENT: 'appointment_id', HOLD: 'hold_id', BLOCK: 'block_id'} as const;
+    const requested = new Set(affected.map(({kind, id}) => `${kind}/${id}`));
+    for (const {kind, id} of affected) query.append(fields[kind], id);
+    const response = object(await schedulingRequest(`${path}?${query}`, signal), ['entries']);
+    if (!Array.isArray(response.entries)) return invalid();
+    const entries = response.entries.map(row => parseEntry(row, undefined));
+    if (entries.some(row => !requested.delete(`${row.kind}/${entryId(row)}`))) return invalid();
+    return entries;
+  },
   async moveOffer(scope: SchedulingScope, appointment: string, date: string, key: string, csrf: string, signal: AbortSignal) {
     const path = `${sessionPath(scope)}/booking/${encodeURIComponent(appointment)}/reschedule-offers`;
-    return parseMoveOffer(await schedulingRequest(path, signal, command({...sessionReferences(scope), date}, key, csrf)), date);
+    return parseMoveOffer(await schedulingRequest(path, signal, command({...sessionReferences(scope), date}, csrf, key)), date);
   },
   async changeAppointment(scope: SchedulingScope, appointment: string, change: {reason: string; option_id?: string}, key: string, csrf: string, signal: AbortSignal) {
     const action = change.option_id === undefined ? 'cancel' : 'reschedule';
     const path = `${sessionPath(scope)}/booking/${encodeURIComponent(appointment)}/${action}`;
-    const response = object(await schedulingRequest(path, signal, command({...sessionReferences(scope), ...change}, key, csrf)),
+    const response = object(await schedulingRequest(path, signal, command({...sessionReferences(scope), ...change}, csrf, key)),
       ['outcome', 'session_id', 'booking']);
     const booking = parseBooking(response.booking);
     if (response.session_id !== scope.session || (action === 'cancel'
@@ -155,23 +179,33 @@ export const ownerCalendarApi = {
     const base = `${businessPath(workspace, business)}/scheduling/blocks`;
     const release = 'release' in selection ? selection.release : null;
     const path = release ? `${base}/${encodeURIComponent(release)}/release` : base;
-    const block = object(await schedulingRequest(path, signal, command(release ? {} : selection, key, csrf)),
+    const block = object(await schedulingRequest(path, signal, command(release ? {} : selection, csrf, key)),
       ['block_id', 'outcome', 'start', 'end']);
     if (!uuid(block.block_id) || !instant(block.start) || !instant(block.end) ||
         block.outcome !== (release ? 'RELEASED' : 'BLOCKED') || (release && block.block_id !== release)) return invalid();
   },
 };
 
-export async function conflictMessage(scope: BusinessScope, affected: AffectedAllocation[], dates: string[], signal: AbortSignal) {
-  const views = await Promise.all([...new Set(dates)].map(date => ownerCalendarApi.day(scope, date, signal).catch(() => null)));
-  const entries = views.flatMap(view => view?.entries ?? []);
-  const description = affected.map(({kind, id}) => {
-    const row = entries.find(entry => entry.kind === kind && entryId(entry) === id);
+export async function conflictMessage(scope: BusinessScope, affected: AffectedAllocation[], signal: AbortSignal) {
+  const batchSize = 32;
+  const unique = [...new Map(affected.map(item => [`${item.kind}/${item.id}`, item])).values()];
+  const rows: CalendarEntry[] = [];
+  for (let start = 0; start < unique.length && !signal.aborted; start += batchSize) {
+    const entries = await ownerCalendarApi.conflictEntries(scope, unique.slice(start, start + batchSize), signal)
+      .catch(() => []);
+    rows.push(...entries);
+  }
+  const byId = new Map(rows.map(row => [`${row.kind}/${entryId(row)}`, row]));
+  const description = unique.map(({kind, id}) => {
+    const row = byId.get(`${kind}/${id}`);
     const title = kind === 'BLOCK' ? 'Блок' : kind === 'HOLD' ? 'Удержание' : 'Запись';
-    if (!row) return `${title} #${id.slice(0, 8)}`;
-    return row.kind === 'BLOCK'
-      ? `${title} ${row.start.slice(11, 16)}–${row.end.slice(11, 16)}`
-      : `${title} «${row.work_label}»`;
-  }).join(', ');
-  return description ? `Конфликт календаря. Это время занимает ${description}.` : 'Конфликт календаря. Изменение не сохранено.';
+    if (!row) return `${title} #${id}`;
+    if (row.kind === 'BLOCK') {
+      const date = row.start.slice(0, 10);
+      return `${title} ${timeInterval(row.start, row.end, date)} · ${date}`;
+    }
+    const {booking, selection} = row;
+    return `${title} «${row.work_label}», ${clientLabel(selection.client_id)} · ${booking.date} ${timeInterval(booking.visit_start, booking.visit_end, booking.date)}`;
+  }).join('. ');
+  return description ? `Конфликт календаря. ${description}.` : 'Конфликт календаря. Изменение не сохранено.';
 }

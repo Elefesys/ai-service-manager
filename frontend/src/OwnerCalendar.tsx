@@ -1,12 +1,11 @@
 import {useEffect, useId, useRef, useState} from 'react';
 import {IntakeError} from './intake-api';
 import {CalendarCommandFeedback, OwnerBlockForm, useCalendarCommand} from './OwnerCalendarActions';
-import {entryId, ownerCalendarApi, workScope} from './owner-calendar-api';
+import {clientLabel, entryId, ownerCalendarApi, workScope} from './owner-calendar-api';
 import type {BusinessScope, CalendarEntry, OwnerDay, WorkEntry} from './owner-calendar-api';
 import {OwnerCalendarWork} from './OwnerCalendarWork';
-import {timeInterval} from './SchedulingAvailability';
 import {deadlineText} from './SessionBooking';
-import {dateValue} from './scheduling-api';
+import {dateValue, timeInterval} from './scheduling-api';
 import type {SchedulingScope} from './scheduling-api';
 
 const statusLabels = {
@@ -83,7 +82,7 @@ function CalendarRow({row, date, open, follow, release, busy}: {
     data-request-id={selection.request_id} data-session-id={selection.session_id} data-status={booking.outcome}>
     <div>
       <strong>{work_label}</strong>
-      <span className="muted"> · Клиент №{selection.client_id.slice(0, 8)}</span>
+      <div className="muted">{clientLabel(selection.client_id)}</div>
       <p>{successor ? 'Запись перенесена' : statusLabels[booking.outcome]}</p>
       <div>Визит {timeInterval(booking.visit_start, booking.visit_end, date)}</div>
       <div className="muted">Занятость {timeInterval(booking.busy_start, booking.busy_end, date)}</div>
@@ -101,19 +100,33 @@ function DayEntries({scope, day, csrf, changed, expired, open, follow}: {
   scope: BusinessScope; day: OwnerDay; csrf: string; changed: () => void; expired: () => void;
   open: (row: WorkEntry) => void; follow: (row: WorkEntry, date: string, id: string) => void;
 }) {
-  const {date, timezone} = day;
+  const {date, timezone, resource_id} = day;
   const command = useCalendarCommand({scope, changed, expired});
-  const release = (id: string) => command.start((key, signal) => ownerCalendarApi.changeBlock(scope, {release: id}, key, csrf, signal), [date]);
+  const release = (id: string) => command.start((key, signal) => ownerCalendarApi.changeBlock(scope, {release: id}, key, csrf, signal));
   const place = (block: {start: string; end: string}) => command.start(
-    (key, signal) => ownerCalendarApi.changeBlock(scope, block, key, csrf, signal), [block.start.slice(0, 10), block.end.slice(0, 10)]);
+    (key, signal) => ownerCalendarApi.changeBlock(scope, block, key, csrf, signal));
+  const changeDay = (closed: boolean) => {
+    if (!resource_id) return;
+    const selected = {resource_id, date, expected_version: day.schedule_version, windows: closed ? [] : null};
+    command.start(async (_key, signal) => { await ownerCalendarApi.changeDay(scope, selected, csrf, signal); },
+      {staleMessage: 'Расписание изменилось. Проверьте часы выбранной даты перед новой правкой.'});
+  };
   const row = (entry: CalendarEntry) => <CalendarRow key={entryId(entry)} row={entry} date={date} open={open} follow={follow} release={release} busy={command.locked}/>;
 
   if (!timezone) return <p>Расписание мастера ещё не настроено.</p>;
   return <>
     {day.working_intervals.length > 0 ? <p>Рабочие часы {day.working_intervals.map(interval =>
       `${clock(interval.start_minute)}–${clock(interval.end_minute)}`).join(', ')}</p> : <p>Выходной.</p>}
-    <OwnerBlockForm date={date} timezone={timezone} busy={command.locked} place={place}/>
-    <CalendarCommandFeedback command={command}/>
+    <div role="group" aria-label="Действия с датой">
+      <div className="control-actions">
+        {day.working_intervals.length > 0 && <button className="secondary" type="button" disabled={command.locked}
+          onClick={() => changeDay(true)}>Отметить выходной</button>}
+        {day.exception && <button className="secondary" type="button" disabled={command.locked}
+          onClick={() => changeDay(false)}>Вернуть часы недели</button>}
+      </div>
+      <OwnerBlockForm date={date} timezone={timezone} busy={command.locked} place={place}/>
+      <CalendarCommandFeedback command={command}/>
+    </div>
     {day.entries.length > 0 ? <ul className="calendar-entries" aria-label="Занятость дня">{day.entries.map(row)}</ul> :
       <p role="status">На этот день нет действующей занятости.</p>}
     {day.history.length > 0 && <section aria-label="История календаря">

@@ -1,3 +1,4 @@
+import {clientLabel} from './owner-calendar-api';
 import {useEffect, useRef, useState} from 'react';
 import {DraftCard} from './IntakePanel';
 import {IntakeError, intakeApi} from './intake-api';
@@ -30,7 +31,10 @@ export function OwnerCalendarWork({scope, label, date, version, csrf, refresh, c
 
   return <section className="calendar-work" aria-label="Работа из календаря">
     <div className="billing-heading">
-      <h3 ref={heading} tabIndex={-1}>{label}</h3>
+      <div>
+        <h3 ref={heading} tabIndex={-1}>{label}</h3>
+        <p className="muted">{clientLabel(scope.client)}</p>
+      </div>
       <button className="secondary" type="button" onClick={close}>Закрыть работу</button>
     </div>
     {error && <p role="alert" className="error">{error}</p>}

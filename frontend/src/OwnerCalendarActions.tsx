@@ -3,14 +3,13 @@ import type {FormEvent} from 'react';
 import {IntakeError} from './intake-api';
 import {conflictMessage, ownerCalendarApi} from './owner-calendar-api';
 import type {BusinessScope, MoveOffer} from './owner-calendar-api';
-import {SchedulingError} from './scheduling-api';
+import {SchedulingError, timeInterval, utcOffset} from './scheduling-api';
 import type {Booking, SchedulingScope} from './scheduling-api';
-import {timeInterval, utcOffset} from './SchedulingAvailability';
 
 type CommandScope = {scope: BusinessScope; changed: () => void; expired: () => void};
 type Attempt = {
   key: string;
-  dates: string[];
+  staleMessage?: string;
   run: (key: string, signal: AbortSignal) => Promise<void>;
   rejected?: () => void;
 };
@@ -41,10 +40,10 @@ export function useCalendarCommand({scope, changed, expired}: CommandScope) {
         setRetry(null);
         attempt.rejected?.();
         if (cause instanceof SchedulingError && cause.code === 'CALENDAR_CONFLICT') {
-          const message = await conflictMessage(scope, cause.affected, attempt.dates, signal);
+          const message = await conflictMessage(scope, cause.affected, signal);
           if (!signal.aborted) setError(message);
         } else {
-          setError(status === 409 ? 'Запись или вариант уже изменились. Проверьте действующее время и начните действие заново.' :
+          setError(status === 409 ? (attempt.staleMessage ?? 'Запись или вариант уже изменились. Проверьте действующее время и начните действие заново.') :
             status === 422 || status === 400 ? 'Проверьте дату, время и причину.' : 'Действие недоступно. Откройте календарь заново.');
         }
       } else {
@@ -62,8 +61,8 @@ export function useCalendarCommand({scope, changed, expired}: CommandScope) {
 
   return {
     busy, locked: busy || retry !== null, error,
-    start: (run: Attempt['run'], dates: string[], rejected?: () => void) => {
-      if (!retry) void send({key: crypto.randomUUID(), dates, run, rejected});
+    start: (run: Attempt['run'], options: Pick<Attempt, 'rejected' | 'staleMessage'> = {}) => {
+      if (!retry) void send({key: crypto.randomUUID(), run, ...options});
     },
     reset: () => setError(''),
     repeat: retry ? () => void send(retry) : null,
@@ -79,7 +78,7 @@ export function CalendarCommandFeedback({command}: {command: ReturnType<typeof u
 
 type AppointmentForm =
   | {type: 'move'; appointment: string; date: string; offer: MoveOffer | null; option: string}
-  | {type: 'cancel'; appointment: string; date: string};
+  | {type: 'cancel'; appointment: string};
 
 export function OwnerAppointmentActions({scope, booking, date, csrf, changed, expired}: CommandScope & {
   scope: SchedulingScope; booking: Booking | null; date: string; csrf: string;
@@ -98,7 +97,7 @@ export function OwnerAppointmentActions({scope, booking, date, csrf, changed, ex
     command.reset();
     setForm(type === 'move'
       ? {type, appointment: current.appointment_id, date, offer: null, option: ''}
-      : {type, appointment: current.appointment_id, date: current.date});
+      : {type, appointment: current.appointment_id});
   }
 
   function findOptions() {
@@ -107,7 +106,7 @@ export function OwnerAppointmentActions({scope, booking, date, csrf, changed, ex
     command.start(async (key, signal) => {
       const offer = await ownerCalendarApi.moveOffer(scope, form.appointment, form.date, key, csrf, signal);
       if (!signal.aborted) setForm({...form, offer, option: ''});
-    }, [form.date], () => setForm(null));
+    }, {rejected: () => setForm(null)});
   }
 
   function submit(event: FormEvent) {
@@ -121,7 +120,7 @@ export function OwnerAppointmentActions({scope, booking, date, csrf, changed, ex
         setForm(null);
         setReason('');
       }
-    }, [form.date], () => setForm(null));
+    }, {rejected: () => setForm(null)});
   }
 
   return <div className="calendar-controls">

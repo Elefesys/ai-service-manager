@@ -1,15 +1,16 @@
 """M7.3A owner day over real PostgreSQL and the ordinary booking commands."""
 
 import json
-from datetime import datetime, timedelta
-from uuid import UUID
+from datetime import date, datetime, timedelta
+from urllib.parse import urlencode
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
 from asm.scheduling.commands import HoldResult
 from asm.service_requests.errors import ServiceRequestCode, ServiceRequestError
 from m5_knowledge_search_fixtures import owner_unit
-from m7_scheduling_fixtures import accept_pair_with_modes, accept_work, booking_contract
+from m7_scheduling_fixtures import ZONE, accept_pair_with_modes, accept_work, booking_contract
 from sqlalchemy import text
 from test_m2_1_schema_postgres import _migrate
 from test_m3_1_native_context_postgres import scalar
@@ -53,7 +54,7 @@ from test_m7_scheduling_reschedule_postgres import (
     submit,
     wall,
 )
-from test_tenancy_postgres import BA, BA2, BB, PROVIDER, A, B
+from test_tenancy_postgres import BA, BA2, BB, PROVIDER, UA, A, B
 
 pytestmark = pytest.mark.integration
 
@@ -61,6 +62,11 @@ pytestmark = pytest.mark.integration
 def day_route(day=None, *, workspace=A, business=BA):
     path = f"/api/v1/workspaces/{workspace}/businesses/{business}/scheduling/day"
     return f"{path}?date={day}" if day is not None else path
+
+
+def conflicts_route(*, workspace=A, business=BA, **ids):
+    path = day_route(workspace=workspace, business=business).removesuffix("/day") + "/conflicts"
+    return f"{path}?{urlencode(ids, doseq=True)}" if ids else path
 
 
 def receipt(case, **values):
@@ -76,8 +82,8 @@ def bookable_times(preview):
     return {wall(window["visit_start"]) for window in preview["windows"]}
 
 
-async def create_hold(h, work, day):
-    option = option_at(await offer(h, work, day, "owner-day-hold"), "12:00")
+async def create_hold(h, work, day, *, start="12:00"):
+    option = option_at(await offer(h, work, day, "owner-day-hold"), start)
     hold = await pick(h, work, UUID(option.option_id), "owner-day-hold-choice")
     assert isinstance(hold, HoldResult) and hold.outcome == "HELD"
     return hold
@@ -103,6 +109,232 @@ async def shorten_hold_fixture(h, hold):
             text("ALTER TABLE app.reservation_holds ENABLE TRIGGER scheduling_fact_immutable")
         )
     return shortened
+
+
+async def test_r1_owner_can_close_an_empty_date_and_cannot_remove_a_commitment(scheduling_pg, auth):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    async with owner_unit(h) as unit:
+        for business in (BA, BA2):
+            await unit.scheduling_owner_command(
+                business,
+                "schedule",
+                "schedule",
+                {"timezone": ZONE, "week": WEEK, "expected_version": 0},
+            )
+    today = await owner_get(auth, day_route())
+    day = date.fromisoformat(today["date"]) + timedelta(days=1)
+    empty = await owner_get(auth, day_route(day))
+    assert empty["exception"] is None and empty["working_intervals"]
+    assert empty["entries"] == empty["history"] == []
+    assert await scalar(h, "SELECT count(*) FROM app.service_requests") == 0
+    route = day_route() + "/exception"
+    request = {
+        "resource_id": empty["resource_id"],
+        "expected_version": empty["schedule_version"],
+        "date": str(day),
+        "windows": [],
+    }
+    assert (await auth.client.post(route, json=request)).status_code == 403
+    foreign = await owner_get(auth, day_route(day, business=BA2))
+    for path, body, status, code in (
+        (route, request | {"resource_id": foreign["resource_id"]}, 409, "STALE_STATE"),
+        (day_route(business=BA2) + "/exception", request, 409, "STALE_STATE"),
+        (day_route(business=BB) + "/exception", request, 404, "NOT_FOUND"),
+        (day_route(workspace=B, business=BB) + "/exception", request, 403, "ACCESS_DENIED"),
+    ):
+        refusal = await auth.client.post(path, headers=token, json=body)
+        assert (refusal.status_code, refusal.json()) == (status, {"error": {"code": code}})
+        assert refusal.headers["cache-control"] == "no-store"
+    async with h.migrator.begin() as connection:
+        await connection.execute(
+            text(
+                "UPDATE platform.workspace_memberships SET role='ADMIN' WHERE (workspace_id,user_account_id)=(:ws,:actor)"
+            ),
+            {"ws": A, "actor": UA},
+        )
+    try:
+        refusal = await auth.client.post(route, headers=token, json=request)
+        assert (refusal.status_code, refusal.json()) == (403, {"error": {"code": "ACCESS_DENIED"}})
+    finally:
+        async with h.migrator.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE platform.workspace_memberships SET role='OWNER' WHERE (workspace_id,user_account_id)=(:ws,:actor)"
+                ),
+                {"ws": A, "actor": UA},
+            )
+
+    closed = await owner_post(auth, route, token, request)
+    assert closed["resource_id"] == empty["resource_id"]
+    assert closed["schedule_version"] == empty["schedule_version"] + 1
+    assert closed["exception"] == {"date": str(day), "windows": []}
+    assert closed["entries"] == closed["history"] == closed["working_intervals"] == []
+    assert (await owner_get(auth, day_route(day))) | {"now": closed["now"]} == closed
+    stale = await auth.client.post(route, headers=token, json=request | {"windows": None})
+    assert (stale.status_code, stale.json()) == (409, {"error": {"code": "STALE_STATE"}})
+    assert (await owner_get(auth, day_route(day)))["exception"] == closed["exception"]
+    assert (await owner_get(auth, day_route(day, business=BA2))) | {
+        "now": foreign["now"]
+    } == foreign
+
+    await publish(h, booking_contract("NONE"))
+    work = await accept_work(h, auth, token, "20 mm")
+    await publish(h, booking_contract("FIXED_DEPOSIT"))
+    second = await accept_work(h, auth, token, "21 mm")
+    plan = await owner_post(
+        auth,
+        work.preview_url(day=day),
+        token,
+        NO_BUFFERS | {"expected_version": closed["schedule_version"]},
+    )
+    preview = await owner_get(auth, work.preview_url(day=day))
+    assert preview == plan and preview["reason"] == "DATE_CLOSED" and preview["windows"] == []
+    reopened = await owner_post(
+        auth,
+        route,
+        token,
+        request | {"expected_version": plan["schedule_version"], "windows": None},
+    )
+    assert (
+        reopened["exception"] is None
+        and reopened["working_intervals"] == empty["working_intervals"]
+    )
+    assert (await owner_get(auth, day_route(day))) | {"now": reopened["now"]} == reopened
+    assert "10:00" in bookable_times(await owner_get(auth, work.preview_url(day=day)))
+
+    hold_day = day + timedelta(days=1)
+    appointment, _ = await initial_appointment(h, work, await offer(h, work, day, "r1-appointment"))
+    hold = await create_hold(h, second, hold_day, start="10:00")
+    protected = [
+        (work, day, "APPOINTMENT", appointment.appointment_id),
+        (second, hold_day, "HOLD", hold.hold_id),
+    ]
+    facts = await legacy_facts(h)
+    refusals = {}
+    for booking_work, booking_date, kind, identifier in protected:
+        before = await owner_get(auth, day_route(booking_date))
+        card = await owner_booking(auth, booking_work)
+        assert len(before["entries"]) == 1 and before["entries"][0]["kind"] == kind
+        assert_work(before["entries"][0], booking_work, card["booking"])
+        refusal = await auth.client.post(
+            route,
+            headers=token,
+            json=request
+            | {"date": str(booking_date), "expected_version": before["schedule_version"]},
+        )
+        assert refusal.status_code == 409 and refusal.headers["cache-control"] == "no-store"
+        error = refusal.json()["error"]
+        assert error == {
+            "code": "CALENDAR_CONFLICT",
+            "affected": [{"kind": kind, "id": identifier}],
+        }
+        lookup = await owner_get(auth, conflicts_route(**{f"{kind.lower()}_id": identifier}))
+        assert lookup["entries"] == before["entries"]
+        assert (await owner_get(auth, day_route(booking_date))) | {"now": before["now"]} == before
+        assert await owner_booking(auth, booking_work) == card
+        refusals[kind] = error
+    assert await legacy_facts(h) == facts
+    receipt(
+        "S7-R1-close-and-restore",
+        closed=closed["exception"],
+        preview=preview["reason"],
+        restored=reopened["working_intervals"],
+        protected=refusals,
+        stale=stale.json()["error"],
+        foreign_business=404,
+        foreign_workspace=403,
+    )
+
+
+async def test_r1_resolves_all_affected_bookings_on_an_intermediate_date(scheduling_pg, auth):
+    h = scheduling_pg
+    assert (await auth.client.get(conflicts_route(appointment_id=uuid4()))).status_code == 401
+    token = await sign_in(auth)
+    await publish(h, booking_contract("NONE"))
+    work = await accept_work(h, auth, token, "20 mm")
+    other_work = await accept_work(h, auth, token, "20 mm")
+    assert work.identity.client_id != other_work.identity.client_id
+    first_date, _ = await configure(h, auth, token, work, policy=NO_BUFFERS)
+    booking_date = first_date + timedelta(days=1)
+    last_date = first_date + timedelta(days=2)
+    first, _ = await initial_appointment(
+        h, work, await offer(h, work, booking_date, "r1-block-first"), key="r1-block-first-choice"
+    )
+    second, _ = await initial_appointment(
+        h,
+        other_work,
+        await offer(h, other_work, booking_date, "r1-block-second"),
+        start="13:00",
+        key="r1-block-second-choice",
+    )
+    assert not (await owner_get(auth, day_route(first_date)))["entries"]
+    assert not (await owner_get(auth, day_route(last_date)))["entries"]
+    entries = (await owner_get(auth, day_route(booking_date)))["entries"]
+    assert len(entries) == 2 and entries[0]["work_label"] == entries[1]["work_label"]
+    for row, selected in zip(entries, (work, other_work), strict=True):
+        assert_work(row, selected, (await owner_booking(auth, selected))["booking"])
+
+    expected = [first.appointment_id, second.appointment_id]
+    spans = [
+        (block_time(booking_date, "10:15"), block_time(booking_date, "10:25"), expected[:1]),
+        (block_time(booking_date, "13:15"), block_time(booking_date, "13:25"), expected[1:]),
+        (block_time(first_date, "15:00"), block_time(last_date, "10:00"), expected),
+    ]
+    for index, (start, end, matching) in enumerate(spans):
+        refusal = await command_http(
+            auth, token, CREATE_BLOCK, f"r1-conflict-{index}", {"start": start, "end": end}
+        )
+        assert refusal.status_code == 409
+        error = refusal.json()["error"]
+        assert error["code"] == "CALENDAR_CONFLICT"
+        assert {item["id"] for item in error["affected"]} == set(matching)
+        assert {item["kind"] for item in error["affected"]} == {"APPOINTMENT"}
+        lookup = await owner_get(
+            auth, conflicts_route(appointment_id=[item["id"] for item in error["affected"]])
+        )
+        assert lookup["entries"] == [
+            row for row in entries if row["booking"]["appointment_id"] in matching
+        ]
+
+    assert (await owner_get(auth, conflicts_route(business=BA2, appointment_id=expected)))[
+        "entries"
+    ] == []
+    assert (await owner_get(auth, conflicts_route(hold_id=expected, block_id=expected)))[
+        "entries"
+    ] == []
+    assert (
+        await owner_get(auth, conflicts_route(appointment_id=expected + [expected[0], uuid4()]))
+    )["entries"] == entries
+    for query, status in (
+        (conflicts_route(workspace=B, business=BB, appointment_id=expected), 403),
+        (conflicts_route(business=BB, appointment_id=expected), 404),
+        (conflicts_route(), 422),
+        (conflicts_route(date=str(booking_date), appointment_id=expected), 422),
+        (conflicts_route(appointment_id=[expected[0]] * 32, hold_id=expected[1]), 422),
+    ):
+        refusal = await auth.client.get(query)
+        assert refusal.status_code == status and refusal.headers["cache-control"] == "no-store"
+        assert all(value not in refusal.text for value in expected)
+    with pytest.raises(ServiceRequestError) as denied:
+        async with owner_unit(h, actor=PROVIDER) as unit:
+            await unit.scheduling_owner_day(BA, None, [{"kind": "APPOINTMENT", "id": expected[0]}])
+    assert denied.value.code is ServiceRequestCode.ACCESS_DENIED
+
+    assert (await submit(h, cancel(other_work, second))).outcome == "CANCELLED"
+    now = await owner_get(auth, day_route(booking_date))
+    assert now["entries"] == entries[:1] and len(now["history"]) == 1
+    assert (await owner_get(auth, conflicts_route(appointment_id=expected)))["entries"] == (
+        now["entries"] + now["history"]
+    )
+    receipt(
+        "S7-R1-scoped-conflicts",
+        dates=[first_date, booking_date, last_date],
+        matching_appointments=expected,
+        selections=[row["selection"] for row in entries],
+        work_label=entries[0]["work_label"],
+        cancelled=now["history"][0]["booking"]["appointment_id"],
+    )
 
 
 async def test_s7_owner_day_matches_each_work_before_and_after_changes_and_expiry(
@@ -187,11 +419,14 @@ async def test_s7_owner_day_matches_each_work_before_and_after_changes_and_expir
         held,
     ]
     assert conflicting["history"] == []
+    block_lookup = await owner_get(auth, conflicts_route(block_id=block_id))
+    assert block_lookup["entries"] == conflicting["entries"][1:2]
     released = await command_http(
         auth, token, f"{CREATE_BLOCK}/{block_id}/release", "owner-day-unblock", {}
     )
     assert released.status_code == 200 and released.json()["outcome"] == "RELEASED"
     assert (await owner_get(auth, day_route(day)))["entries"] == [start, held]
+    assert await owner_get(auth, conflicts_route(block_id=block_id)) == block_lookup
     moved = await command_http(
         auth, token, appointment_route + "/reschedule", "owner-day-move", request
     )

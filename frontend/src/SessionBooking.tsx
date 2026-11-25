@@ -1,9 +1,8 @@
 import {useEffect, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
 import {IntakeError} from './intake-api';
-import {schedulingApi} from './scheduling-api';
+import {schedulingApi, timeInterval, utcOffset} from './scheduling-api';
 import type {Booking, SessionBookingView, SchedulingScope} from './scheduling-api';
-import {timeInterval, utcOffset} from './SchedulingAvailability';
 
 type Props = {scope: SchedulingScope; expired: () => void; refresh?: number; actions?: (booking: Booking | null) => ReactNode};
 type Reading = {key: string} & ({view: SessionBookingView} | {error: string});

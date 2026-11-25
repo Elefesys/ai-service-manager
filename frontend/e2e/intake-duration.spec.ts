@@ -20,11 +20,11 @@ type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second'|'agent-first'|'agent-start-second'|'agent-second'|'agent-exclude-first'|'agent-correct-first'|'agent-same-title';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
 type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
-type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history'|'pilot-cover-up'|'deliver-pilot-question'|'booking-offer'|'booking-select';
+type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history'|'pilot-cover-up'|'deliver-pilot-question'|'booking-offer'|'booking-select'|'seed-owner-day-clients';
 type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
 type BookingArgument={date:string}|{optionId:string};
-type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot'|'quote-booking'|'quote-reschedule'|'quote-day';
+type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot'|'quote-booking'|'quote-reschedule'|'quote-day'|'quote-day-r1-a'|'quote-day-r1-b';
 type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'pilot-complex'|QuoteIntakeJourney;
 
 function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:IntakeJourney,variant:Viewport):Error {
@@ -83,7 +83,7 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
 async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,targetId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>,booking?:BookingArgument):Promise<T>{
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
- const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
+ const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,operation==='seed-owner-day-clients'?'browser-provision':'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
   ...(conversation?['--conversation',conversation]:[]),...(targetId?[operation==='deliver-pilot-question'?'--receipt-key':'--request',targetId]:[]),
   ...(observe?['--observe-dispatch']:[]),...(booking?('date' in booking?['--booking-date',booking.date]:['--option',booking.optionId]):[])];
  const child=promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384});
@@ -1099,6 +1099,10 @@ async function configureQuoteService(page:Page,variant:Viewport,journey:QuoteInt
 
 async function beginQuoteJourney(page:Page,variant:Viewport,journey:QuoteIntakeJourney){
  const {settings,serviceName}=await configureQuoteService(page,variant,journey);
+ return {...await firstQuoteWork(page,variant,journey),settings,serviceName};
+}
+
+async function firstQuoteWork(page:Page,variant:Viewport,journey:QuoteIntakeJourney){
  const {input,conversation,collected,intake,inbox}=await collectIntake(page,variant,journey);
  const work=intake.getByRole('region',{name:'Черновик заявки',exact:true});
  const cardId=work.getByTestId('service-request-id');
@@ -1131,7 +1135,7 @@ async function beginQuoteJourney(page:Page,variant:Viewport,journey:QuoteIntakeJ
  await (await chooseWork(page,collected.message_id,'flower','forearm','20 mm','linework')).click();
  await expect(cardId).toHaveText(/^[0-9a-f-]{36}$/);
  const firstId=(await cardId.textContent())!;
- return {input,conversation,collected,intake,inbox,settings,serviceName,work,cardId,panel,firstId,endpoint,execute,read,readHistory,evaluateAndPrice,price};
+ return {input,conversation,collected,intake,inbox,work,cardId,panel,firstId,endpoint,execute,read,readHistory,evaluateAndPrice,price};
 }
 
 test('@narrow M6.4A-R2 binds a follow-up to the second work and preserves the excluded request',async({page},info)=>{
@@ -2633,6 +2637,16 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   const failedClosure = await postThrough(ownerTab, `${a.path}/availability`, exception, 409);
   expect(failedClosure.body).toEqual({error: {code: 'CALENDAR_CONFLICT', affected: [{kind: 'HOLD', id: held.hold_id}]}});
   await expect(preview.getByRole('alert')).toContainText('Удержание «swallow');
+  const dateActions = open(ownerTab).getByRole('group', {name: 'Действия с датой', exact: true});
+  const closeDay = dateActions.getByRole('button', {name: 'Отметить выходной', exact: true});
+  const protectedHold = await postThrough(ownerTab, `${dayPath}/exception`, () => closeDay.click(), 409);
+  expect(protectedHold.body).toEqual(failedClosure.body);
+  await expect(dateActions.getByRole('alert')).toContainText(`Клиент №${b.refs.client_id} · ${day} 13:00–14:05`);
+  const dayAfterRefusal = await getDay(ownerTab);
+  expect(dayAfterRefusal).toMatchObject({
+    schedule_version: afterCancellation.schedule_version, working_intervals: afterCancellation.working_intervals,
+    exception: afterCancellation.exception, entries: afterCancellation.entries,
+  });
   await selectDay(ownerTab, offDay);
   await postThrough(ownerTab, `${a.path}/availability`, exception);
   await expect(preview.getByText('На эту дату отмечен выходной.', {exact: true})).toBeVisible();
@@ -2667,3 +2681,202 @@ function rowTime(booking: Booking | null) {
   if (booking === null || !('expires_at' in booking)) throw new Error('S7 expected a hold deadline');
   return booking.expires_at;
 }
+
+test('@narrow M7.3A-R1 closes an empty day and identifies the clients in single and multi-day conflicts', async ({page, context}, info) => {
+  test.setTimeout(150_000);
+  const variant = info.project.name === 'chromium-narrow' ? 'narrow' : 'desktop';
+  const journeyA = 'quote-day-r1-a', journeyB = 'quote-day-r1-b';
+  await configureQuoteService(page, variant, journeyA);
+  const identity = await intakeFixture<{client_ids: [string, string]}>('seed-owner-day-clients', journeyA, variant);
+  const [clientA, clientB] = identity.client_ids;
+  expect(clientA.slice(0, 8)).toBe(clientB.slice(0, 8));
+  expect(clientA).not.toBe(clientB);
+
+  async function prepare(journey: QuoteIntakeJourney, client: string) {
+    const work = await firstQuoteWork(page, variant, journey);
+    const quote = await work.evaluateAndPrice(work.firstId);
+    expect(quote.material.client_id).toBe(client);
+    expect(await work.execute('deliver-quote', work.firstId)).toMatchObject({status: 'SENT', calls: 1, effects: 1});
+    const accepted = await intakeFixture<QuoteReplyResult>('agree-quote', journey, variant, work.conversation, work.firstId);
+    expect(accepted).toMatchObject({outcome: 'ACCEPTED', quote_id: quote.quote_id});
+    const agreement = (await work.read(work.firstId)).agreement!;
+    const path = `${work.endpoint}/${work.firstId}/sessions/${agreement.session_id}`;
+    const query = new URLSearchParams({client_id: client, quote_id: quote.quote_id, order_id: agreement.order_id});
+    return {journey, client, request: work.firstId, session: agreement.session_id,
+      conversation: work.conversation, previewPath: `${path}/availability?${query}`, bookingPath: `${path}/booking?${query}`};
+  }
+
+  const a = await prepare(journeyA, clientA);
+  const b = await prepare(journeyB, clientB);
+  const timezone = 'Asia/Novosibirsk';
+  const {csrf_token: csrf} = await (await page.request.get('/api/v1/auth/session')).json() as {csrf_token: string};
+  const headers = {'X-CSRF-Token': csrf, Origin: new URL(page.url()).origin};
+  async function schedule(body: ScheduleCommand) {
+    const response = await page.request.post(a.previewPath, {data: body, headers});
+    expect(response.status(), await response.text()).toBe(200);
+    return await response.json() as Availability;
+  }
+  const initial = await (await page.request.get(a.previewPath)).json() as Availability;
+  const hours = await schedule({action: 'schedule', expected_version: initial.schedule_version, timezone,
+    week: Array.from({length: 7}, (_, weekday) => ({weekday, start_minute: 570, end_minute: 1080}))});
+  await schedule({action: 'policy', expected_version: hours.schedule_version, step_minutes: 15,
+    buffer_before_minutes: 10, buffer_after_minutes: 5, minimum_notice_minutes: 60,
+    horizon_days: 20, offer_ttl_minutes: 10, hold_ttl_minutes: 2});
+
+  function offset(days: number) {
+    const stamp = new Date(`${hours.date}T00:00:00Z`);
+    stamp.setUTCDate(stamp.getUTCDate() + days);
+    return stamp.toISOString().slice(0, 10);
+  }
+  const distance = variant === 'narrow' ? 17 : 14;
+  const free = offset(distance - 1), visitDate = offset(distance), following = offset(distance + 1);
+  const api = `/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/scheduling`;
+  async function readDay(tab: Page, date: string) {
+    const response = await tab.request.get(`${api}/day?date=${date}`);
+    expect(response.status()).toBe(200);
+    return await response.json() as OwnerDay;
+  }
+  async function preview(tab: Page, date: string) {
+    const response = await tab.request.get(`${a.previewPath}&date=${date}`);
+    expect(response.status()).toBe(200);
+    return await response.json() as Availability;
+  }
+
+  const consoleTab = await context.newPage();
+  consoleTab.setDefaultTimeout(12_000);
+  const inboxPath = `/api/v1/workspaces/${owner.workspace_id}/conversations`;
+  await consoleTab.route(url => url.pathname === inboxPath, route => route.abort());
+  const calendar = consoleTab.getByRole('region', {name: 'Календарь мастера', exact: true});
+  const dateActions = calendar.getByRole('group', {name: 'Действия с датой', exact: true});
+  const closing = dateActions.getByRole('button', {name: 'Отметить выходной', exact: true});
+  const calendarWork = calendar.getByRole('region', {name: 'Работа из календаря', exact: true});
+  const alert = dateActions.getByRole('alert');
+  async function select(date: string) {
+    const reply = consoleTab.waitForResponse(r => {
+      const parsed = new URL(r.url());
+      return r.request().method() === 'GET' && parsed.pathname === `${api}/day` && parsed.searchParams.get('date') === date;
+    });
+    await calendar.getByLabel('Дата календаря', {exact: true}).fill(date);
+    expect((await reply).status()).toBe(200);
+  }
+  async function openCalendar() {
+    await openWorkspace(consoleTab);
+    await consoleTab.getByRole('button', {name: /Synthetic business/}).click();
+    await calendar.getByRole('button', {name: 'Открыть календарь', exact: true}).click();
+    await expect(consoleTab.getByText('Выберите диалог.', {exact: true})).toBeVisible();
+  }
+  async function post(path: string, action: () => Promise<unknown>, status: number) {
+    const response = consoleTab.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === path);
+    await action();
+    const reply = await response;
+    expect(reply.status(), await reply.text()).toBe(status);
+    return reply.json();
+  }
+
+  await consoleTab.goto('/');
+  await openCalendar();
+  await select(free);
+  await expect(calendar.getByText('Рабочие часы 09:30–18:00', {exact: true})).toBeVisible();
+  await expect(calendar.getByText('На этот день нет действующей занятости.', {exact: true})).toBeVisible();
+  await expect(calendarWork).toHaveCount(0);
+  const before = await readDay(consoleTab, free);
+  const slots = (await preview(consoleTab, free)).windows.length;
+  expect(slots).toBeGreaterThan(0);
+  const closed = await post(`${api}/day/exception`, () => closing.click(), 200) as OwnerDay;
+  expect(closed).toMatchObject({date: free, resource_id: before.resource_id, schedule_version: before.schedule_version + 1,
+    working_intervals: [], exception: {date: free, windows: []}, entries: []});
+  await expect(calendar.getByText('Выходной.', {exact: true})).toBeVisible();
+  await consoleTab.reload();
+  await openCalendar();
+  await select(free);
+  await expect(calendar.getByText('Выходной.', {exact: true})).toBeVisible();
+  expect((await readDay(consoleTab, free)).exception).toEqual(closed.exception);
+  expect(await preview(consoleTab, free)).toMatchObject({reason: 'DATE_CLOSED', windows: []});
+  await openConversation(page, a.conversation);
+  const accepted = page.getByRole('region', {name: 'Предварительный запрос', exact: true});
+  await expect(accepted.getByTestId('service-request-id')).toHaveText(a.request);
+  await accepted.getByRole('button', {name: 'Варианты времени', exact: true}).click();
+  const closedPreview = accepted.getByRole('region', {name: 'Варианты времени выбранного сеанса', exact: true});
+  await closedPreview.getByLabel('Дата вариантов', {exact: true}).fill(free);
+  await expect(closedPreview.getByText('На эту дату отмечен выходной.', {exact: true})).toBeVisible();
+  await expect(closedPreview.getByRole('list', {name: 'Подходящие окна'})).toHaveCount(0);
+
+  async function book(work: typeof a, time: string) {
+    const offer = await intakeFixture<{options: {option_id: string; visit_start: string}[]}>(
+      'booking-offer', work.journey, variant, work.conversation, work.request, undefined, {date: visitDate});
+    const option = offer.options.find(value => Date.parse(value.visit_start) === Date.parse(`${visitDate}T${time}:00+07:00`));
+    expect(option).toBeDefined();
+    const booked = await intakeFixture<{appointment_id: string; session_id: string; outcome: string}>(
+      'booking-select', work.journey, variant, work.conversation, work.request, undefined, {optionId: option!.option_id});
+    expect(booked).toMatchObject({outcome: 'CONFIRMED', session_id: work.session});
+    return {...work, appointment: booked.appointment_id, time};
+  }
+
+  const first = await book(a, '10:00');
+  const second = await book(b, '13:00');
+  await select(visitDate);
+  const busyDay = await readDay(consoleTab, visitDate);
+  expect(busyDay.entries).toHaveLength(2);
+  const affected = [first, second].map(work => ({kind: 'APPOINTMENT', id: work.appointment}));
+  async function observeConflict(path: string, action: () => Promise<unknown>, expected: typeof affected) {
+    const lookup = consoleTab.waitForResponse(r => r.request().method() === 'GET' && new URL(r.url()).pathname === `${api}/conflicts`);
+    const {error} = await post(path, action, 409);
+    expect(error.code).toBe('CALENDAR_CONFLICT');
+    expect(error.affected).toHaveLength(expected.length);
+    expect(error.affected).toEqual(expect.arrayContaining(expected));
+    const reply = await lookup;
+    expect(reply.status()).toBe(200);
+    expect(new URL(reply.url()).searchParams.getAll('appointment_id').sort()).toEqual(expected.map(item => item.id).sort());
+    const entries = (await reply.json() as {entries: OwnerDay['entries']}).entries;
+    expect(entries).toHaveLength(expected.length);
+    for (const work of [first, second].filter(work => expected.some(item => item.id === work.appointment))) {
+      expect(entries).toEqual(expect.arrayContaining([expect.objectContaining({
+        kind: 'APPOINTMENT', work_label: 'flower · forearm',
+        selection: expect.objectContaining({client_id: work.client, request_id: work.request, session_id: work.session}),
+        booking: expect.objectContaining({appointment_id: work.appointment, visit_start: `${visitDate}T${work.time}:00+07:00`}),
+      })]));
+      await expect(alert).toContainText(`Клиент №${work.client} · ${visitDate} ${work.time}`);
+    }
+    return error.affected;
+  }
+
+  await expect(calendarWork).toHaveCount(0);
+  const protectedDay = await observeConflict(`${api}/day/exception`, () => closing.click(), affected);
+  expect(await readDay(consoleTab, visitDate)).toMatchObject({working_intervals: busyDay.working_intervals,
+    schedule_version: busyDay.schedule_version, entries: busyDay.entries, exception: busyDay.exception});
+
+  for (const work of [first, second]) {
+    const row = calendar.getByTestId(`calendar-entry-${work.appointment}`);
+    await expect(row).toContainText('flower · forearm');
+    await expect(row).toContainText(`Клиент №${work.client}`);
+    await row.getByRole('button', {name: 'Открыть работу', exact: true}).click();
+    await expect(calendarWork.getByTestId('service-request-id')).toHaveText(work.request);
+    await expect(calendarWork.getByTestId('service-session-id')).toHaveText(work.session);
+    await expect(calendarWork.getByRole('region', {name: 'Запись сейчас'})).toHaveAttribute('data-booking-id', work.appointment);
+    const booking = await consoleTab.request.get(work.bookingPath);
+    expect(booking.status()).toBe(200);
+    expect(await booking.json()).toMatchObject({request_id: work.request, session_id: work.session,
+      booking: {appointment_id: work.appointment, outcome: 'CONFIRMED'}});
+  }
+
+  async function block(start: string, end: string, expected: typeof affected) {
+    const from = calendar.getByLabel('Начало блока', {exact: true});
+    if (!await from.isVisible()) await calendar.getByText('Поставить блок', {exact: true}).click();
+    await from.fill(start);
+    await calendar.getByLabel('Конец блока', {exact: true}).fill(end);
+    return observeConflict(`${api}/blocks`, () => calendar.getByRole('button', {name: 'Сохранить блок', exact: true}).click(), expected);
+  }
+
+  const early = await block(`${visitDate}T10:00`, `${visitDate}T10:15`, affected.slice(0, 1));
+  const late = await block(`${visitDate}T13:00`, `${visitDate}T13:15`, affected.slice(1));
+  await select(free);
+  const middle = await block(`${free}T18:00`, `${following}T09:00`, affected);
+  expect((await readDay(consoleTab, visitDate)).entries).toEqual(busyDay.entries);
+  expect((await readDay(consoleTab, free)).entries).toEqual([]);
+  expect((await readDay(consoleTab, following)).entries).toEqual([]);
+  expect(await consoleTab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  console.log('M7.3A-R1 Chromium ' + info.project.name + ' ' + JSON.stringify({
+    free, slotsBefore: slots, slotsAfter: 0, savedAfterReload: closed.exception,
+    visitDate, first, second, protectedDay, conflicts: {early, late, middle},
+  }));
+});

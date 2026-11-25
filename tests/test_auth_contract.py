@@ -129,6 +129,8 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/blocks",
         "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/blocks/{block_id}/release",
         "GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/day",
+        "POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/day/exception",
+        "GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/conflicts",
         "GET /api/v1/workspaces/{workspace_id}/service-approvals",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/approvals",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/approvals/{{approval_id}}",

@@ -1,4 +1,4 @@
-"""Project one scoped calendar day from its existing scheduling facts."""
+"""Project an owner's day, resolve its conflicts, and scope date exceptions."""
 
 import hashlib
 import re
@@ -10,16 +10,19 @@ down_revision = "0035"
 branch_labels = None
 depends_on = None
 
-OWNER_DAY = "platform.scheduling_owner_day(uuid,date)"
+OWNER_DAY = "platform.scheduling_owner_day(uuid,date,jsonb)"
+OWNER_COMMAND = "platform.scheduling_owner_command(uuid,text,text,jsonb)"
 THIS_PROFILE = "platform.scheduling_owner_day_schema_profile()"
 
 OWNER_DAY_SQL = r"""CREATE FUNCTION platform.scheduling_owner_day(
-      p_business uuid,p_date date
+      p_business uuid,p_date date,p_affected jsonb
     ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
     DECLARE ws uuid:=platform.scheduling_owner_scope(p_business,'schedule');
       moment timestamptz:=clock_timestamp();
     BEGIN
-      IF p_date IS NOT NULL AND (p_date<DATE '0001-01-01' OR p_date>DATE '9999-12-31')
+      IF (p_date IS NOT NULL AND (p_date<DATE '0001-01-01' OR p_date>DATE '9999-12-31'))
+        OR (p_affected IS NOT NULL AND (p_date IS NOT NULL OR CASE jsonb_typeof(p_affected)
+          WHEN 'array' THEN jsonb_array_length(p_affected) NOT BETWEEN 1 AND 32 ELSE true END))
         THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
       RETURN (
         WITH resource AS (
@@ -43,11 +46,28 @@ OWNER_DAY_SQL = r"""CREATE FUNCTION platform.scheduling_owner_day(
                   AS instant
               ) earlier
             ) edges
-          ) bounds ON r.id IS NOT NULL
+          ) bounds ON r.id IS NOT NULL AND p_affected IS NULL
+        ), requested AS (
+          SELECT DISTINCT x.kind,x.id
+          FROM jsonb_to_recordset(coalesce(p_affected,'[]'::jsonb)) AS x(kind text,id uuid)
+        ), addressed AS (
+          SELECT x.kind,p.allocation_id FROM requested x JOIN app.appointments p
+            ON (p.workspace_id,p.business_id,p.id)=(ws,p_business,x.id)
+          WHERE x.kind='APPOINTMENT'
+          UNION ALL
+          SELECT x.kind,h.allocation_id FROM requested x JOIN app.reservation_holds h
+            ON (h.workspace_id,h.business_id,h.id)=(ws,p_business,x.id)
+          WHERE x.kind='HOLD'
+          UNION ALL
+          SELECT x.kind,x.id FROM requested x WHERE x.kind='BLOCK'
         ), allocations AS (
           SELECT a.* FROM day d JOIN app.resource_allocations a
             ON (a.workspace_id,a.business_id,a.resource_id)=(ws,p_business,d.id)
-          WHERE a.occupied && d.span
+          WHERE p_affected IS NULL AND a.occupied && d.span
+          UNION ALL
+          SELECT a.* FROM addressed x JOIN app.resource_allocations a
+            ON (a.workspace_id,a.business_id,a.id,a.kind)=(ws,p_business,x.allocation_id,x.kind)
+          JOIN day d ON d.id=a.resource_id
         ), bookings AS (
           SELECT p.id,p.session_id,lower(a.occupied) AS starts_at,p.status='CONFIRMED' AS active,
             jsonb_build_object('kind','APPOINTMENT','booking',platform.scheduling_booking_appointment(p),
@@ -92,9 +112,11 @@ OWNER_DAY_SQL = r"""CREATE FUNCTION platform.scheduling_owner_day(
           SELECT a.id,lower(a.occupied),true,jsonb_build_object('kind','BLOCK','block_id',a.id,
             'start',lower(a.occupied),'end',upper(a.occupied),'timezone',d.timezone)
           FROM allocations a JOIN day d ON d.id=a.resource_id
-          WHERE a.kind='BLOCK' AND a.released_at IS NULL
+          WHERE a.kind='BLOCK' AND (p_affected IS NOT NULL OR a.released_at IS NULL)
         )
-        SELECT jsonb_build_object('date',d.local_date,'now',moment,'timezone',d.timezone,'resource_id',d.id,
+        SELECT CASE WHEN p_affected IS NOT NULL THEN
+          jsonb_build_object('entries',coalesce(r.entries,'[]'::jsonb))
+        ELSE jsonb_build_object('date',d.local_date,'now',moment,'timezone',d.timezone,'resource_id',d.id,
           'schedule_version',d.schedule_version,
           'exception',CASE WHEN d.override_windows IS NOT NULL THEN
             jsonb_build_object('date',d.local_date,'windows',d.override_windows) END,
@@ -102,12 +124,14 @@ OWNER_DAY_SQL = r"""CREATE FUNCTION platform.scheduling_owner_day(
             'start_minute',w.start_minute,'end_minute',w.end_minute) ORDER BY w.start_minute)
             FROM app.availability_rules w WHERE (w.workspace_id,w.business_id,w.resource_id,w.weekday)
               =(ws,p_business,d.id,extract(isodow FROM d.local_date)::integer-1)),'[]'::jsonb),
-          'entries',coalesce(r.entries,'[]'::jsonb),'history',coalesce(r.history,'[]'::jsonb))
+          'entries',coalesce(r.entries,'[]'::jsonb),'history',coalesce(r.history,'[]'::jsonb)) END
         FROM day d CROSS JOIN (
-          SELECT jsonb_agg(item ORDER BY starts_at,id) FILTER (WHERE active) AS entries,
+          SELECT jsonb_agg(item ORDER BY starts_at,id) FILTER (WHERE active OR p_affected IS NOT NULL) AS entries,
             jsonb_agg(item ORDER BY starts_at,id) FILTER (WHERE NOT active) AS history
           FROM rows
         ) r);
+    EXCEPTION WHEN invalid_text_representation OR invalid_parameter_value THEN
+      RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101';
     END $$"""
 
 
@@ -120,6 +144,30 @@ def previous_scheduling():
 
         scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1]))
     return scripts.get_revision(down_revision).module
+
+
+def owner_command_sql(availability, *, require_resource: bool = True) -> str:
+    sql = availability.FUNCTIONS[OWNER_COMMAND].replace(
+        "CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1
+    )
+    if not require_resource:
+        return sql
+    check = """      IF coalesce(current_version,0)<>expected_version
+        THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;"""
+    assert sql.count(check) == 1
+    return sql.replace(
+        check,
+        check
+        + """
+      IF p_body ? 'resource_id' THEN
+        IF p_action<>'exception' OR jsonb_typeof(p_body->'resource_id') IS DISTINCT FROM 'string'
+          OR p_body->>'resource_id' !~ '^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$'
+          THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P3101'; END IF;
+        IF resource::text IS DISTINCT FROM p_body->>'resource_id'
+          THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
+        p_body:=p_body-'resource_id';
+      END IF;""",
+    )
 
 
 def profile_sql(prior, holds, availability, callers: tuple[str, ...]) -> str:
@@ -137,6 +185,7 @@ def profile_sql(prior, holds, availability, callers: tuple[str, ...]) -> str:
     changes = dict(zip(holds.PROFILE_CALLERS, callers, strict=True)) | {
         prior.THIS_PROFILE: previous,
         OWNER_DAY: OWNER_DAY_SQL,
+        OWNER_COMMAND: owner_command_sql(availability),
     }
     profile = previous.replace(prior.THIS_PROFILE, THIS_PROFILE)
     additions = []
@@ -146,7 +195,7 @@ def profile_sql(prior, holds, availability, callers: tuple[str, ...]) -> str:
         digest = hashlib.sha256(body.encode()).hexdigest()
         language = "plpgsql" if "LANGUAGE plpgsql" in header else "sql"
         volatility = "s" if " STABLE " in header else "v"
-        can_execute = str(signature == OWNER_DAY).lower()
+        can_execute = str(signature in {OWNER_DAY, OWNER_COMMAND}).lower()
         additions.append(
             f"('{signature}','{digest}','{language}',true,'{volatility}',{can_execute})"
         )
@@ -166,6 +215,7 @@ def upgrade() -> None:
     op.execute(OWNER_DAY_SQL)
     op.execute(f"REVOKE ALL ON FUNCTION {OWNER_DAY} FROM PUBLIC,asm_runtime")
     op.execute(f"GRANT EXECUTE ON FUNCTION {OWNER_DAY} TO asm_runtime")
+    op.execute(owner_command_sql(availability))
     for sql in callers:
         op.execute(sql)
     op.execute(profile_sql(prior, holds, availability, callers))
@@ -178,5 +228,6 @@ def downgrade() -> None:
     availability = holds.previous_scheduling()
     for sql in holds.callers_sql(availability, prior.THIS_PROFILE, "'0035'"):
         op.execute(sql)
+    op.execute(owner_command_sql(availability, require_resource=False))
     op.execute(f"DROP FUNCTION {THIS_PROFILE}")
     op.execute(f"DROP FUNCTION {OWNER_DAY}")

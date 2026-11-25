@@ -2,7 +2,7 @@ import {useEffect, useId, useRef, useState} from 'react';
 import type {FormEvent} from 'react';
 import {conflictMessage} from './owner-calendar-api';
 import {IntakeError} from './intake-api';
-import {policyFields, policyLimits, SchedulingError, schedulingApi} from './scheduling-api';
+import {policyFields, policyLimits, SchedulingError, schedulingApi, timeInterval} from './scheduling-api';
 import type {Availability, DayInterval, PolicyField, PolicySettings, ScheduleChange, ScheduleCommand, SchedulingScope} from './scheduling-api';
 
 const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
@@ -137,15 +137,6 @@ function DateException({view, busy, save}: SettingsProps) {
   </div>;
 }
 
-export const utcOffset = (value: string) => `UTC${value.endsWith('Z') ? '+00:00' : value.slice(-6)}`;
-
-export function timeInterval(start: string, end: string, date: string) {
-  const time = (value: string) => `${value.startsWith(date) ? '' : `${value.slice(0, 10)} `}${value.slice(11, 16)}`;
-  const from = utcOffset(start);
-  const to = utcOffset(end);
-  return from === to ? `${time(start)}–${time(end)} · ${from}` : `${time(start)} ${from}–${time(end)} ${to}`;
-}
-
 function AvailabilityPanel({scope, workName, csrf, expired, id, calendar}: Props & {id: string}) {
   const active = useRef<AbortController | null>(null);
   const [view, setView] = useState<Availability | null>(null);
@@ -184,7 +175,7 @@ function AvailabilityPanel({scope, workName, csrf, expired, id, calendar}: Props
       if (signal.aborted) return;
       const status = cause instanceof IntakeError ? cause.status : null;
       if (calendar && command && cause instanceof SchedulingError && cause.code === 'CALENDAR_CONFLICT' && day) {
-        const message = await conflictMessage(scope, cause.affected, [day], signal);
+        const message = await conflictMessage(scope, cause.affected, signal);
         if (!signal.aborted) setError(message);
         return;
       }

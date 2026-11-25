@@ -44,6 +44,7 @@ LocalDate = Annotated[date, BeforeValidator(calendar_date)]
 TimeZoneName = Annotated[str, Field(min_length=1, max_length=128), AfterValidator(zone_name)]
 Instant = Annotated[AwareDatetime, Field(strict=False)]
 ScheduleVersion = Annotated[int, Field(ge=0, le=9_007_199_254_740_991)]
+OWNER_CONFLICT_LOOKUP_LIMIT = 32
 AppointmentReason = Annotated[Nonblank, Field(max_length=300)]
 AvailabilityReason = Literal[
     "NO_WORKING_HOURS", "NO_ACTIVE_POLICY", "DURATION_UNAVAILABLE", "DATE_CLOSED", "NO_WINDOWS"
@@ -272,6 +273,10 @@ class OwnerDay(ConfigurationModel):
     history: list[OwnerDayRow]
 
 
+class OwnerDayConflicts(ConfigurationModel):
+    entries: list[OwnerDayRow] = Field(max_length=OWNER_CONFLICT_LOOKUP_LIMIT)
+
+
 class AvailabilityPreview(ConfigurationModel):
     request_id: CanonicalUUID
     quote_id: CanonicalUUID
@@ -313,8 +318,7 @@ class PolicyCommand(PolicyInput):
     expected_version: ScheduleVersion
 
 
-class ExceptionCommand(ConfigurationModel):
-    action: Literal["exception"]
+class DayExceptionInput(ConfigurationModel):
     expected_version: ScheduleVersion
     date: LocalDate
     windows: list[LocalSpan] | None = Field(max_length=1440)
@@ -330,6 +334,14 @@ class ExceptionCommand(ConfigurationModel):
         ):
             raise ValueError("Date intervals must not overlap")
         return ordered
+
+
+class ExceptionCommand(DayExceptionInput):
+    action: Literal["exception"]
+
+
+class OwnerDayException(DayExceptionInput):
+    resource_id: CanonicalUUID
 
 
 AvailabilityCommand = Annotated[

@@ -246,3 +246,12 @@ export const schedulingApi = {
     return parseAvailability(value, scope, body.action === 'exception' ? body.date : date);
   },
 };
+
+export const utcOffset = (value: string) => `UTC${value.endsWith('Z') ? '+00:00' : value.slice(-6)}`;
+
+export function timeInterval(start: string, end: string, date: string) {
+  const time = (value: string) => `${value.startsWith(date) ? '' : `${value.slice(0, 10)} `}${value.slice(11, 16)}`;
+  const from = utcOffset(start);
+  const to = utcOffset(end);
+  return from === to ? `${time(start)}–${time(end)} · ${from}` : `${time(start)} ${from}–${time(end)} ${to}`;
+}
