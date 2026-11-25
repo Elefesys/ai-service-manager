@@ -42,6 +42,7 @@ class AcceptedMaterial(StoredProjection):
     service_id: Identifier
     service_name: Nonblank = Field(max_length=100)
     deposit: DepositPolicy
+    deposit_terms_version: CanonicalUUID
     assessment_id: CanonicalUUID
     decision_id: CanonicalUUID | None
     occupied_minutes: OccupiedMinutes | None = None

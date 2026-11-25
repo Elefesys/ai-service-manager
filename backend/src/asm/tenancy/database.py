@@ -440,6 +440,12 @@ class TenantUnitOfWork:
             },
         )
 
+    async def scheduling_owner_booking(self, selection: dict[str, object]) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_booking(CAST(:selection AS jsonb))",
+            {"selection": json.dumps(selection, ensure_ascii=False, allow_nan=False)},
+        )
+
     async def scheduling_client_action(
         self,
         selection: dict[str, object],

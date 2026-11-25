@@ -1,6 +1,6 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {availability,schedulingScope as scope} from './intake-fixtures.test-helper';
-import {parseAvailability,schedulingApi} from './scheduling-api';
+import {availability,bookingView,confirmedBooking,heldBooking,schedulingScope as scope} from './intake-fixtures.test-helper';
+import {parseAvailability,parseSessionBooking,schedulingApi} from './scheduling-api';
 
 afterEach(()=>vi.unstubAllGlobals());
 
@@ -48,4 +48,32 @@ it('rejects projections for the wrong work, the wrong date or invalid absolute i
   visit_start:`${view.date}T10:15:00+07:00`,visit_end:`${view.date}T11:20:00+07:00`,
   busy_start:`${view.date}T10:05:00+07:00`,busy_end:`${view.date}T10:50:00+07:00`,
  }]},scope)).toThrow('INVALID_RESPONSE');
+});
+
+it('reads booking only for the scoped session and decodes the canonical status',async()=>{
+ const view=bookingView(scope,confirmedBooking);
+ const fetch=vi.fn().mockResolvedValue(Response.json(view));
+ vi.stubGlobal('fetch',fetch);
+ expect(await schedulingApi.booking(scope,new AbortController().signal)).toEqual(view);
+ expect(fetch).toHaveBeenCalledExactlyOnceWith(
+  `/api/v1/workspaces/${scope.workspace}/businesses/${scope.business}/intake/conversations/${scope.conversation}/service-requests/${scope.request}/sessions/${scope.session}/booking?client_id=${scope.client}&quote_id=${scope.quote}&order_id=${scope.order}`,
+  expect.objectContaining({credentials:'include',cache:'no-store',signal:expect.any(AbortSignal)}),
+ );
+ for(const status of [null,heldBooking,{...heldBooking,outcome:'EXPIRED'}] as const){
+  expect(parseSessionBooking(bookingView(scope,status),scope).booking).toEqual(status);
+ }
+});
+
+it('rejects booking projections for another work and inconsistent outcomes or intervals',()=>{
+ const view=bookingView(scope,confirmedBooking);
+ for(const field of ['request_id','quote_id','order_id','session_id'] as const){
+  expect(()=>parseSessionBooking({...view,[field]:scope.workspace},scope)).toThrow('INVALID_RESPONSE');
+ }
+ for(const booking of [
+  {...confirmedBooking,expires_at:heldBooking.expires_at},
+  {...heldBooking,appointment_id:confirmedBooking.appointment_id},
+  {...heldBooking,expires_at:'not-a-time'},
+  {...confirmedBooking,date:'2026-11-28'},
+  {...confirmedBooking,busy_end:confirmedBooking.visit_start},
+ ])expect(()=>parseSessionBooking({...view,booking},scope)).toThrow('INVALID_RESPONSE');
 });

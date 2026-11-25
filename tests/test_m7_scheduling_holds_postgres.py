@@ -61,14 +61,14 @@ async def client_effects(h):
         'messages',(SELECT count(*) FROM app.messages WHERE direction='OUTBOUND'),
         'send_jobs',(SELECT count(*) FROM platform.messaging_jobs WHERE outbox_id IS NOT NULL),
         'dated_sessions',(SELECT count(*) FROM app.service_sessions WHERE scheduled_at IS NOT NULL),
-        'appointments_table',to_regclass('app.appointments') IS NOT NULL)""",
+        'appointments',(SELECT count(*) FROM app.appointments))""",
     )
 
 
 async def assert_no_client_effects(h, before):
     after = await client_effects(h)
     assert after == before
-    assert after["dated_sessions"] == 0 and not after["appointments_table"]
+    assert after["dated_sessions"] == 0
     return {"appointments": 0, "outbox": 0, "outbound_messages": 0, "send_jobs": 0}
 
 
@@ -850,9 +850,11 @@ async def test_s4_changed_schedule_and_upgrade_preserve_agreement(clients, auth)
             },
         )
     finally:
-        await _migrate("upgrade", "0033")
-
-    assert (await scalar(h, "SELECT platform.scheduling_hold_schema_profile()"))["valid"]
+        try:
+            await _migrate("upgrade", "0033")
+            assert (await scalar(h, "SELECT platform.scheduling_hold_schema_profile()"))["valid"]
+        finally:
+            await _migrate("upgrade", "0034")
     assert await owner_get(auth, endpoint) == closed
     assert (await owner_get(auth, a.url + "/quote"))["agreement"] == a.agreement
     before = await client_effects(h)

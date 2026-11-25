@@ -111,6 +111,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "ai_provider_sessions",
             "ai_runs",
             "alembic_version",
+            "appointments",
             "approval_requests",
             "audit_events",
             "auth_credentials",
@@ -202,7 +203,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "The material tables must match schema 0033"
+        ], "The material tables must match schema 0034"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

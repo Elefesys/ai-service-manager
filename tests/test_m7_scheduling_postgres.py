@@ -49,6 +49,7 @@ async def effects(harness):
         'outbound',(SELECT count(*) FROM app.messages WHERE direction='OUTBOUND'),
         'booked_sessions',(SELECT count(*) FROM app.service_sessions WHERE scheduled_at IS NOT NULL),
         'offers',(SELECT count(*) FROM app.availability_offers),
+        'appointments',(SELECT count(*) FROM app.appointments),
         'holds',(SELECT count(*) FROM app.reservation_holds),
         'allocations',(SELECT count(*) FROM app.resource_allocations)
     )""",
@@ -161,7 +162,10 @@ async def test_m7_owner_scope_buffers_and_persisted_day_off(scheduling_pg, auth)
     for work in (left, right):
         assert (await read(h, auth, work.url))["agreement"] == work.agreement
     assert await effects(h) == before and await counts(h) == triples == (2, 2, 2)
-    assert all(before[k] == 0 for k in ("booked_sessions", "offers", "holds", "allocations"))
+    assert all(
+        before[k] == 0
+        for k in ("booked_sessions", "offers", "appointments", "holds", "allocations")
+    )
     proof(
         "S1-S2",
         A=left.proof(),
@@ -443,4 +447,4 @@ async def test_m7_upgrade_0031_preserves_accepted_work_and_session(scheduling_pg
             assert empty["reason"] == "NO_WORKING_HOURS" and not empty["windows"]
         proof("0031-to-0032", A=left.proof(), B=right.proof(), accepts=2, orders=2, sessions=2)
     finally:
-        await _migrate("upgrade", "0033")
+        await _migrate("upgrade", "0034")

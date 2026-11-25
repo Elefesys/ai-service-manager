@@ -47,7 +47,8 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .control-mode { font-weight: 700; }
 .control-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 .control-actions button { white-space: normal; }
-.scheduling-availability { margin-block: .9rem; padding-block: .75rem; border-top: 1px solid #d8dee8; }
+.scheduling-availability, .session-booking { margin-block: .9rem; padding-block: .75rem; border-top: 1px solid #d8dee8; }
+.session-booking h6 { font-size: 1rem; margin-block: 0 .55rem; }
 .scheduling-availability .form { min-width: 0; border: 1px solid #d8dee8; border-radius: 8px; padding: .8rem; }
 .scheduling-availability details { margin-block: .75rem; }
 .scheduling-day { display: flex; align-items: end; flex-wrap: wrap; gap: .65rem; }

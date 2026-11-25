@@ -6,7 +6,7 @@ import {createInterface} from 'node:readline';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
-import type {Availability} from '../src/scheduling-api';
+import type {Availability, Booking, ScheduleCommand, SessionBookingView} from '../src/scheduling-api';
 import {parseReceipt} from '../src/messaging-api';
 import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,RequestQuote,ServiceAssessment,ServiceRequestDraft} from '../src/intake-api';
 
@@ -19,10 +19,11 @@ type Viewport='desktop'|'narrow';
 type IntakeOperation='seed'|'collect'|'collect-sized'|'complex'|'ambiguous'|'second'|'late-size'|'late-cover-up'|'complex-message'|'assess-first'|'assess-second'|'price-first'|'price-second'|'price-size'|'price-oversize'|'quote-second'|'agent-first'|'agent-start-second'|'agent-second'|'agent-exclude-first'|'agent-correct-first'|'agent-same-title';
 type QuoteOperation='deliver-quote'|'lose-quote-ack';
 type QuoteReply='agree-quote'|'repeat-agreement'|'ambiguous-agreement'|'decline-quote';
-type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history'|'pilot-cover-up'|'deliver-pilot-question';
+type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-history'|'pilot-cover-up'|'deliver-pilot-question'|'booking-offer'|'booking-select';
 type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
-type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot';
+type BookingArgument={date:string}|{optionId:string};
+type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot'|'quote-booking';
 type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'pilot-complex'|QuoteIntakeJourney;
 
 function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:IntakeJourney,variant:Viewport):Error {
@@ -78,11 +79,12 @@ async function beginIntake(page:Page,variant:Viewport,journey:IntakeJourney){
  return {...await collectIntake(page,variant,journey),serviceName};
 }
 
-async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,targetId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>):Promise<T>{
+async function intakeFixture<T>(operation:FixtureOperation,journey:IntakeJourney,variant:Viewport,conversation?:string,targetId?:string,observe?: (checkpoint:DispatchCheckpoint)=>Promise<void>,booking?:BookingArgument):Promise<T>{
  const envFile=process.env.ASM_BROWSER_ENV_FILE;
  if(!envFile||!owner?.user_account_id)throw new Error('E2E_INTAKE_TEST_RUNTIME_REQUIRED');
  const args=['compose','--env-file',envFile,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-runtime','python','scripts/m5_intake_fixture.py','--variant',variant,'--journey',journey,'--operation',operation,'--actor',owner.user_account_id,'--workspace',owner.workspace_id,'--business',owner.business_id,
-  ...(conversation?['--conversation',conversation]:[]),...(targetId?[operation==='deliver-pilot-question'?'--receipt-key':'--request',targetId]:[]),...(observe?['--observe-dispatch']:[])];
+  ...(conversation?['--conversation',conversation]:[]),...(targetId?[operation==='deliver-pilot-question'?'--receipt-key':'--request',targetId]:[]),
+  ...(observe?['--observe-dispatch']:[]),...(booking?('date' in booking?['--booking-date',booking.date]:['--option',booking.optionId]):[])];
  const child=promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:16384});
  const completed=child.then(result=>({stdout:result.stdout}),error=>({error:intakeChildFailure(error,operation,journey,variant)}));
  let checkpoints=0;
@@ -1081,12 +1083,12 @@ async function configureQuoteService(page:Page,variant:Viewport,journey:QuoteInt
  for(let i=await rules.count()-1;i>=0;i--)await rules.nth(i).click();
  await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('CONFIGURED_FORMULA');
  await settings.getByLabel('Режим длительности 1',{exact:true}).selectOption('FIXED');
- const fixedDeposit=journey==='quote-pilot';
+ const fixedDeposit=journey==='quote-pilot'||journey==='quote-booking';
  await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption(fixedDeposit?'FIXED_DEPOSIT':'NONE');
  const range=journey==='quote-acceptance'||journey==='quote-clarification';
  for(const [label,value] of [
   ['База, копейки 1','250000'],['За начатый шаг, копейки 1','50000'],
-  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',range?'1000':'100'],
+  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',range||journey==='quote-booking'?'1000':'100'],
   ['Прибавка к верхней границе, копейки 1',range?'50000':''],['Длительность, минуты 1','65'],
   ['Предоплата, копейки 1',fixedDeposit?'50000':''],['Предоплата, процент 1',''],
  ])await settings.getByLabel(label,{exact:true}).fill(value);
@@ -2077,4 +2079,192 @@ test('M6.4B follows automatic and owner quotes to two planned sessions and clari
   await expect(complexInbox.getByTestId('message-' + receipt.message_id)).toContainText(clientQuestion);
   console.log('M6.4B GJ-C ' + JSON.stringify({variant, conversation: c.conversation_id, source: handoff.message_id,
     escalation: open[0].escalation_id, ownerQuestion, clientQuestion, manual: delivery}));
+});
+
+test('@narrow M7.2A shows a confirmed visit and an expiring hold for two works', async ({page}, info) => {
+  // This case writes resource occupancy after the existing narrow availability scenarios.
+  test.skip(info.project.name !== 'chromium-narrow', 'Runs after the shared narrow availability scenarios');
+  test.setTimeout(180_000);
+  const variant = 'narrow';
+  const journey = 'quote-booking';
+  const {input, conversation, intake, inbox, settings, serviceName, cardId, panel, firstId, endpoint,
+    execute, read, readHistory, evaluateAndPrice} = await beginQuoteJourney(page, variant, journey);
+  type Agreement = NonNullable<QuoteDelivery['agreement']>;
+  type OfferedOption = {option_id: string; visit_start: string; visit_end: string; busy_start: string; busy_end: string};
+  type Offer = {offer_id: string; date: string; timezone: string; expires_at: string; options: OfferedOption[]};
+  type Choice = Pick<Booking, 'hold_id' | 'allocation_id' | 'date' | 'timezone' | 'visit_start' | 'visit_end'> & {message: string} & (
+    {outcome: 'CONFIRMED'; appointment_id: string; session_id: string} | {outcome: 'HELD'; expires_at: string}
+  );
+
+  async function accept(id: string, mode: 'FIXED_DEPOSIT' | 'NONE'): Promise<Agreement> {
+    const quote = await evaluateAndPrice(id);
+    expect(quote.material).toMatchObject({deposit: {mode}});
+    expect(await execute('deliver-quote', id)).toMatchObject({status: 'SENT', calls: 1, effects: 1});
+    const reply = await intakeFixture<QuoteReplyResult>('agree-quote', journey, variant, conversation, id);
+    expect(reply).toMatchObject({outcome: 'ACCEPTED', quote_id: quote.quote_id, source_message_id: reply.message_id});
+    const agreement = (await read(id)).agreement!;
+    expect(agreement).toMatchObject({acceptance_id: reply.acceptance_id, order_id: reply.order_id, session_id: reply.session_id,
+      status: 'PLANNED', scheduled_at: null, quote, source: {message_id: reply.message_id}});
+    return agreement;
+  }
+
+  const second = await input('quote-second', conversation);
+  await refreshIntake(inbox, intake);
+  await (await chooseWork(page, second.message_id, 'swallow', 'shoulder', '101 mm', 'linework')).click();
+  await expect(cardId).not.toHaveText(firstId);
+  const secondId = (await cardId.textContent())!;
+  const workSelector = intake.getByLabel('Сохранённая заявка', {exact: true});
+  await workSelector.selectOption(firstId);
+  await expect(cardId).toHaveText(firstId);
+  const paid = await accept(firstId, 'FIXED_DEPOSIT');
+
+  if (!await settings.isVisible()) await page.getByRole('button', {name: /Synthetic business/}).click();
+  await settings.getByRole('combobox', {name: 'Режим предоплаты 1', exact: true}).selectOption('NONE');
+  await settings.getByLabel('Предоплата, копейки 1', {exact: true}).fill('');
+  await publishIntakeService(settings, serviceName);
+  await refreshIntake(inbox, intake);
+  await workSelector.selectOption(secondId);
+  await expect(cardId).toHaveText(secondId);
+  const none = await accept(secondId, 'NONE');
+  expect(none.quote.material.client_id).toBe(paid.quote.material.client_id);
+  expect(none.session_id).not.toBe(paid.session_id);
+
+  const requestId = (agreement: Agreement) => agreement.quote.material.request_id;
+  const section = panel.getByRole('region', {name: 'Запись сейчас', exact: true});
+  const unscheduled = section.getByText('Время визита ещё не назначено.', {exact: true});
+  function sessionPath(agreement: Agreement, path: 'availability' | 'booking') {
+    const query = new URLSearchParams({client_id: agreement.quote.material.client_id,
+      quote_id: agreement.quote.quote_id, order_id: agreement.order_id});
+    return `${endpoint}/${requestId(agreement)}/sessions/${agreement.session_id}/${path}?${query}`;
+  }
+  function readCard(agreement: Agreement, open: () => Promise<unknown>) {
+    const path = sessionPath(agreement, 'booking');
+    return Promise.all([
+      page.waitForResponse(r => {
+        const url = new URL(r.url());
+        return r.request().method() === 'GET' && `${url.pathname}${url.search}` === path;
+      }),
+      open(),
+    ]).then(async ([response]) => {
+      expect(response.status()).toBe(200);
+      const view = await response.json() as SessionBookingView;
+      expect(view).toMatchObject({request_id: requestId(agreement), quote_id: agreement.quote.quote_id,
+        order_id: agreement.order_id, session_id: agreement.session_id});
+      return view.booking;
+    });
+  }
+  const refreshCard = () => intake.getByRole('button', {name: 'Обновить сводку', exact: true}).click();
+  const selectWork = (agreement: Agreement) => workSelector.selectOption(requestId(agreement));
+  async function reopen(agreement: Agreement) {
+    await page.reload();
+    await openWorkspace(page);
+    await openConversation(page, conversation);
+    return await readCard(agreement, async () => {
+      if (await workSelector.inputValue() !== requestId(agreement)) await selectWork(agreement);
+      else await refreshCard();
+    });
+  }
+  const outward = async () => (await readHistory()).filter(m => m.direction === 'OUTBOUND').map(m => m.message_id);
+  const outgoingBeforeChoice = await outward();
+  expect(await readCard(none, refreshCard)).toBeNull();
+  await expect(unscheduled).toBeVisible();
+  expect(await readCard(paid, () => selectWork(paid))).toBeNull();
+  await expect(unscheduled).toBeVisible();
+
+  const auth = await page.request.get('/api/v1/auth/session');
+  expect(auth.status()).toBe(200);
+  const csrf = (await auth.json() as {csrf_token: string}).csrf_token;
+  const availabilityPath = sessionPath(none, 'availability');
+  const initial = await page.request.get(availabilityPath);
+  expect(initial.status()).toBe(200);
+  const initialState = await initial.json() as Availability;
+  async function configure(command: ScheduleCommand) {
+    const response = await page.request.post(availabilityPath, {data: command,
+      headers: {'X-CSRF-Token': csrf, Origin: new URL(page.url()).origin}});
+    expect(response.status()).toBe(200);
+    return await response.json() as Availability;
+  }
+  const timezone = 'Asia/Novosibirsk';
+  const hours = await configure({action: 'schedule', expected_version: initialState.schedule_version, timezone,
+    week: Array.from({length: 7}, (_, weekday) => ({weekday, start_minute: 600, end_minute: 960}))});
+  await configure({action: 'policy', expected_version: hours.schedule_version, step_minutes: 15,
+    buffer_before_minutes: 10, buffer_after_minutes: 5, minimum_notice_minutes: 60, horizon_days: 10,
+    offer_ttl_minutes: 10, hold_ttl_minutes: 1});
+  // Leave the earlier date overrides in this workspace available for inspection.
+  const reservedDay = new Date(`${hours.date}T00:00:00Z`);
+  reservedDay.setUTCDate(reservedDay.getUTCDate() + 5);
+  const date = reservedDay.toISOString().slice(0, 10);
+
+  async function choose(agreement: Agreement) {
+    const offer = await intakeFixture<Offer>('booking-offer', journey, variant, conversation,
+      requestId(agreement), undefined, {date});
+    expect(offer.offer_id).toBeTruthy();
+    expect(offer.timezone).toBe(timezone);
+    expect(offer.date).toBe(date);
+    expect(offer.options.length).toBeGreaterThan(0);
+    const option = offer.options[0];
+    const chosen = await intakeFixture<Choice>('booking-select', journey, variant, conversation,
+      requestId(agreement), undefined, {optionId: option.option_id});
+    expect(chosen).toMatchObject({date: offer.date, timezone});
+    expect(Date.parse(chosen.visit_start)).toBe(Date.parse(option.visit_start));
+    expect(Date.parse(chosen.visit_end)).toBe(Date.parse(option.visit_end));
+    return {offer: offer.offer_id, option, chosen};
+  }
+  async function checkInterval(actual: Booking | null, {chosen, option}: Awaited<ReturnType<typeof choose>>) {
+    expect(actual).toMatchObject({hold_id: chosen.hold_id, allocation_id: chosen.allocation_id,
+      date: chosen.date, timezone, visit_start: chosen.visit_start, visit_end: chosen.visit_end});
+    expect(Date.parse(actual!.busy_start)).toBe(Date.parse(option.busy_start));
+    expect(Date.parse(actual!.busy_end)).toBe(Date.parse(option.busy_end));
+    await expect(section.getByText(chosen.date, {exact: true})).toBeVisible();
+    await expect(section.getByText(timezone, {exact: true})).toBeVisible();
+    await expect(section.getByText(`${chosen.visit_start.slice(11, 16)}–${chosen.visit_end.slice(11, 16)} · UTC+07:00`, {exact: true})).toBeVisible();
+    await expect(section.getByText(`${actual!.busy_start.slice(11, 16)}–${actual!.busy_end.slice(11, 16)} · UTC+07:00`, {exact: true})).toBeVisible();
+  }
+
+  const confirmed = await choose(none);
+  expect(confirmed.chosen).toMatchObject({outcome: 'CONFIRMED', session_id: none.session_id, message: 'Запись подтверждена.'});
+  const recorded = await readCard(none, () => selectWork(none));
+  expect(recorded).toMatchObject({outcome: 'CONFIRMED', appointment_id: confirmed.chosen.outcome === 'CONFIRMED' && confirmed.chosen.appointment_id});
+  await expect(section.getByText('Запись подтверждена.', {exact: true})).toBeVisible();
+  await checkInterval(recorded, confirmed);
+  expect(await reopen(none)).toEqual(recorded);
+  await expect(section.getByText('Запись подтверждена.', {exact: true})).toBeVisible();
+  await checkInterval(recorded, confirmed);
+  expect(await readCard(paid, () => selectWork(paid))).toBeNull();
+  await expect(unscheduled).toBeVisible();
+
+  const held = await choose(paid);
+  expect(held.chosen.outcome).toBe('HELD');
+  expect(held.chosen).not.toHaveProperty('appointment_id');
+  expect(held.chosen.message).toMatch(/^Время удержано до .+, запись не подтверждена\.$/);
+  const pending = await readCard(paid, refreshCard);
+  expect(pending?.outcome).toBe('HELD');
+  expect(pending).not.toHaveProperty('appointment_id');
+  expect(Date.parse(pending?.outcome === 'HELD' ? pending.expires_at : '')).toBe(
+    Date.parse(held.chosen.outcome === 'HELD' ? held.chosen.expires_at : ''));
+  await expect(section.getByText(/^Время удержано до .+, запись не подтверждена\.$/)).toBeVisible();
+  await checkInterval(pending, held);
+  expect(await reopen(paid)).toEqual(pending);
+  await expect(section.getByText(/^Время удержано до .+, запись не подтверждена\.$/)).toBeVisible();
+  expect(await readCard(none, () => selectWork(none))).toEqual(recorded);
+  await expect(section.getByText('Запись подтверждена.', {exact: true})).toBeVisible();
+  expect((await read(firstId)).agreement).toEqual(paid);
+  expect((await read(secondId)).agreement).toEqual(none);
+
+  await expect.poll(async () => {
+    const response = await page.request.get(sessionPath(paid, 'booking'));
+    expect(response.status()).toBe(200);
+    return (await response.json() as SessionBookingView).booking?.outcome;
+  }, {timeout: 75_000, intervals: [1000, 3000, 5000]}).toBe('EXPIRED');
+  const expired = await readCard(paid, () => selectWork(paid));
+  expect(expired).toEqual({...pending, outcome: 'EXPIRED'});
+  await expect(section.getByText('Срок удержания истёк.', {exact: true})).toBeVisible();
+  await expect(section.getByText('Запись подтверждена.', {exact: true})).toHaveCount(0);
+  expect(await readCard(none, () => selectWork(none))).toEqual(recorded);
+  expect(await outward()).toEqual(outgoingBeforeChoice);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  console.log('M7.2A Chromium ' + JSON.stringify({conversation,
+    none: {request: secondId, quote: none.quote.quote_id, session: none.session_id, ...confirmed, booking: recorded},
+    fixed: {request: firstId, quote: paid.quote.quote_id, session: paid.session_id, ...held, booking: pending, expired},
+    before: [null, null], historyPreserved: true, newOutgoing: 0}));
 });

@@ -7,13 +7,22 @@ from typing import Annotated, Literal, Self
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BeforeValidator, Field, model_validator
+from pydantic import BeforeValidator, Field, computed_field, model_validator
 
 from asm.billing.validation import KEY_PATTERN, CanonicalUUID
 from asm.configuration.models import ConfigurationModel
 from asm.configuration.permissions import require_owner
 from asm.scheduling.availability import calculate_windows
-from asm.scheduling.models import Instant, LocalDate, ScheduleSnapshot, TimeWindow, TimeZoneName
+from asm.scheduling.models import (
+    BookingProjection,
+    Instant,
+    LocalDate,
+    ScheduleSnapshot,
+    SessionBooking,
+    TimeWindow,
+    TimeZoneName,
+    ZonedVisit,
+)
 from asm.scheduling.offer_store import OfferStore
 from asm.scheduling.service import (
     AcceptedMaterial,
@@ -48,14 +57,40 @@ class AvailabilityOffer(ConfigurationModel):
     options: list[OfferedTime] = Field(max_length=OFFER_OPTION_LIMIT)
 
 
-class HoldResult(ConfigurationModel):
-    outcome: Literal["HELD", "EXPIRED", "RELEASED"]
+class HoldResult(ZonedVisit):
+    outcome: Literal["HELD", "EXPIRED", "RELEASED", "CONVERTED"]
     hold_id: CanonicalUUID
     allocation_id: CanonicalUUID
-    timezone: TimeZoneName
     expires_at: Instant
-    visit_start: Instant
-    visit_end: Instant
+
+    @computed_field
+    def message(self) -> str:
+        if self.outcome == "HELD":
+            deadline = self.expires_at.astimezone(ZoneInfo(self.timezone))
+            return (
+                f"Время удержано до {deadline:%d.%m.%Y %H:%M:%S} ({self.timezone}), "
+                "запись не подтверждена."
+            )
+        return {
+            "EXPIRED": "Срок удержания истёк.",
+            "RELEASED": "Удержание снято.",
+            "CONVERTED": "Запись подтверждена.",
+        }[self.outcome]
+
+
+class AppointmentResult(ZonedVisit):
+    outcome: Literal["CONFIRMED", "ALREADY_CONFIRMED"]
+    appointment_id: CanonicalUUID
+    hold_id: CanonicalUUID
+    allocation_id: CanonicalUUID
+    session_id: CanonicalUUID
+
+    @computed_field
+    def message(self) -> str:
+        if self.outcome == "ALREADY_CONFIRMED":
+            start = self.visit_start.astimezone(ZoneInfo(self.timezone))
+            return f"Вы уже записаны на {start:%H:%M}."
+        return "Запись подтверждена."
 
 
 class ClientTime(ConfigurationModel):
@@ -85,7 +120,7 @@ class SessionHeld(SelectionUnavailable):
     windows: list[ClientTime] = Field(max_length=OFFER_OPTION_LIMIT)
 
 
-type SelectionResult = HoldResult | AlternativeOptions | SessionHeld
+type SelectionResult = AppointmentResult | HoldResult | AlternativeOptions | SessionHeld
 
 
 def _explicit_instant(value: object) -> object:
@@ -210,6 +245,7 @@ async def select_option(
     option_id: UUID,
     key: str,
 ) -> SelectionResult:
+    """Use the caller's transaction. Expose the selection result after its commit."""
     _check_key(key)
     _client_scope(unit, client, selection)
     store = OfferStore(unit)
@@ -229,6 +265,11 @@ async def select_option(
     )
     result = await store.select(selection, client_id, conversation_id, option_id, key, eligible)
     outcome = result.get("outcome")
+    if outcome in ("CONFIRMED", "ALREADY_CONFIRMED"):
+        appointment = _stored(AppointmentResult, result)
+        if terms.deposit.mode != "NONE" or appointment.session_id != selection.session_id:
+            raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+        return appointment
     if outcome not in ("OPTION_UNAVAILABLE", "SESSION_HELD"):
         return _stored(HoldResult, result)
     if outcome == "OPTION_UNAVAILABLE" and "alternatives" in result:
@@ -252,6 +293,21 @@ async def select_option(
             ClientTime(visit_start=window.visit_start, visit_end=window.visit_end)
             for window in windows
         ],
+    )
+
+
+async def read_booking(unit: TenantUnitOfWork, selection: SelectedSession) -> SessionBooking:
+    await require_owner(unit)
+    raw = await unit.scheduling_owner_booking(selection.model_dump(mode="json"))
+    projection = _stored(BookingProjection, raw)
+    if projection.session_id != selection.session_id:
+        raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+    return SessionBooking(
+        request_id=selection.request_id,
+        quote_id=selection.quote_id,
+        order_id=selection.order_id,
+        session_id=projection.session_id,
+        booking=projection.booking,
     )
 
 

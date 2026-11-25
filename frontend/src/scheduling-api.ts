@@ -59,6 +59,27 @@ export type Availability = {
   windows: Slot[];
 };
 
+type BookingInterval = Slot & {
+  hold_id: string;
+  allocation_id: string;
+  resource_id: string;
+  date: string;
+  timezone: string;
+};
+
+export type Booking = BookingInterval & (
+  | {outcome: 'CONFIRMED'; appointment_id: string}
+  | {outcome: 'HELD' | 'EXPIRED' | 'RELEASED'; expires_at: string}
+);
+
+export type SessionBookingView = {
+  request_id: string;
+  quote_id: string;
+  order_id: string;
+  session_id: string;
+  booking: Booking | null;
+};
+
 const invalid = (): never => {throw new IntakeError(502, 'INVALID_RESPONSE');};
 const record = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const object = (v: unknown, keys: readonly string[]) => {
@@ -81,6 +102,12 @@ function checkIntervals(value: unknown, week: boolean) {
     if ((week && !integer(interval.weekday, 0, 6)) || !integer(interval.start_minute, 0, 1439) ||
         !integer(interval.end_minute, 1, 1440) || interval.end_minute <= interval.start_minute) invalid();
   }
+}
+
+function checkWindow({visit_start, visit_end, busy_start, busy_end}: Record<string, unknown>, date: string) {
+  if (!instant(visit_start) || !instant(visit_end) || !instant(busy_start) || !instant(busy_end) ||
+      visit_start.slice(0, 10) !== date || Date.parse(busy_start) > Date.parse(visit_start) ||
+      Date.parse(visit_start) >= Date.parse(visit_end) || Date.parse(visit_end) > Date.parse(busy_end)) invalid();
 }
 
 export function parseAvailability(value: unknown, scope: SchedulingScope, date?: string): Availability {
@@ -108,21 +135,34 @@ export function parseAvailability(value: unknown, scope: SchedulingScope, date?:
     checkIntervals(exception.windows, false);
   }
   if ((view.reason === null) !== (view.windows.length > 0)) invalid();
-  for (const entry of view.windows) {
-    const {visit_start, visit_end, busy_start, busy_end} = object(entry, timestamps);
-    if (!instant(visit_start) || !instant(visit_end) || !instant(busy_start) || !instant(busy_end) ||
-        visit_start.slice(0, 10) !== view.date || Date.parse(busy_start) > Date.parse(visit_start) ||
-        Date.parse(visit_start) >= Date.parse(visit_end) || Date.parse(visit_end) > Date.parse(busy_end)) invalid();
-  }
+  for (const entry of view.windows) checkWindow(object(entry, timestamps), view.date);
   return view as Availability;
 }
 
-async function request(scope: SchedulingScope, date: string | undefined, signal: AbortSignal, init?: RequestInit) {
+export function parseSessionBooking(value: unknown, scope: SchedulingScope): SessionBookingView {
+  const view = object(value, ['request_id', 'quote_id', 'order_id', 'session_id', 'booking']);
+  if (view.request_id !== scope.request || view.quote_id !== scope.quote || view.order_id !== scope.order ||
+      view.session_id !== scope.session) return invalid();
+  if (view.booking !== null) {
+    if (!record(view.booking)) return invalid();
+    const confirmed = view.booking.outcome === 'CONFIRMED';
+    const booking = object(view.booking, ['outcome', 'hold_id', 'allocation_id', 'resource_id', 'date', 'timezone',
+      ...timestamps, confirmed ? 'appointment_id' : 'expires_at']);
+    if (!uuid(booking.hold_id) || !uuid(booking.allocation_id) || !uuid(booking.resource_id) || !dateValue(booking.date) ||
+        typeof booking.timezone !== 'string' || !booking.timezone ||
+        (confirmed ? !uuid(booking.appointment_id) :
+          !['HELD', 'EXPIRED', 'RELEASED'].some(outcome => outcome === booking.outcome) || !instant(booking.expires_at))) return invalid();
+    checkWindow(booking, booking.date);
+  }
+  return view as SessionBookingView;
+}
+
+async function request(scope: SchedulingScope, endpoint: 'availability' | 'booking', date: string | undefined, signal: AbortSignal, init?: RequestInit) {
   const query = new URLSearchParams({client_id: scope.client, quote_id: scope.quote, order_id: scope.order});
   if (date) query.set('date', date);
   const {workspace, business, conversation, request: work, session} = scope;
   const id = encodeURIComponent;
-  const path = `/api/v1/workspaces/${id(workspace)}/businesses/${id(business)}/intake/conversations/${id(conversation)}/service-requests/${id(work)}/sessions/${id(session)}/availability`;
+  const path = `/api/v1/workspaces/${id(workspace)}/businesses/${id(business)}/intake/conversations/${id(conversation)}/service-requests/${id(work)}/sessions/${id(session)}/${endpoint}`;
   const response = await fetch(`${path}?${query}`, {...init, credentials: 'include', cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(10000)])});
   if (response.status === 409) {
     const value: unknown = await response.json().catch(() => null);
@@ -137,12 +177,15 @@ async function request(scope: SchedulingScope, date: string | undefined, signal:
 }
 
 export const schedulingApi = {
+  async booking(scope: SchedulingScope, signal: AbortSignal) {
+    return parseSessionBooking(await request(scope, 'booking', undefined, signal), scope);
+  },
   async preview(scope: SchedulingScope, date: string | undefined, signal: AbortSignal) {
-    return parseAvailability(await request(scope, date, signal), scope, date);
+    return parseAvailability(await request(scope, 'availability', date, signal), scope, date);
   },
   async change(scope: SchedulingScope, date: string, body: ScheduleCommand, csrf: string, signal: AbortSignal) {
     const queryDate = body.action === 'exception' ? undefined : date;
-    const value = await request(scope, queryDate, signal, {
+    const value = await request(scope, 'availability', queryDate, signal, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf},
       body: JSON.stringify(body),

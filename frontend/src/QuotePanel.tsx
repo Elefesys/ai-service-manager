@@ -3,6 +3,7 @@ import type {ApprovalSelection} from './escalation-api';
 import type {OpenMessage} from './MessagingPanel';
 import {IntakeError,intakeApi} from './intake-api';
 import {SchedulingAvailability} from './SchedulingAvailability';
+import {SessionBooking} from './SessionBooking';
 import type {IntakeScope,QuoteAgreement,QuoteDelivery,QuoteReplyNotice,QuoteStatus,RequestQuote,ServiceRequestDraft} from './intake-api';
 
 const statusText:Record<QuoteStatus,string>={
@@ -93,7 +94,7 @@ function Agreement({agreement,draft,csrf,expired}:{agreement:QuoteAgreement;draf
   <dl className="billing-facts">
    <dt>Заказ</dt><dd><code data-testid="service-order-id">{agreement.order_id}</code></dd>
    <dt>Согласие клиента</dt><dd><code data-testid="quote-acceptance-id">{agreement.acceptance_id}</code></dd>
-   <dt>Следующий сеанс</dt><dd>Запланирован без даты · {quote.material.occupied_minutes} мин <code data-testid="service-session-id">{agreement.session_id}</code></dd>
+   <dt>Сеанс на момент согласия</dt><dd>Запланирован без даты · {quote.material.occupied_minutes} мин <code data-testid="service-session-id">{agreement.session_id}</code></dd>
   </dl>
   <p><a href={`#consent-${source.message_id}`} onClick={event=>{
    event.preventDefault();
@@ -108,6 +109,7 @@ function Agreement({agreement,draft,csrf,expired}:{agreement:QuoteAgreement;draf
    <summary>Принятые условия · {quote.code}</summary>
    <QuoteTerms quote={quote} revision={draft.revision}/>
   </details>
+  <SessionBooking scope={schedulingScope} expired={expired}/>
   <SchedulingAvailability scope={schedulingScope} csrf={csrf} expired={expired} workName={draft.facts.find(fact=>fact.field==='idea')?.value}/>
  </section>;
 }
@@ -167,13 +169,17 @@ export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,open
 
  const previous=delivery?.previous;
  const reply=delivery?.reply_notice;
+ const agreement=delivery?.agreement;
+ const material=agreement?.quote.material;
+ const selected=material?.request_id===draft.request_id&&material.workspace_id===scope.workspace&&
+  material.business_id===scope.business&&material.conversation_id===scope.conversation&&material.client_id===scope.client;
  return <section aria-label="Предложение клиенту" style={{overflowWrap:'anywhere'}}>
   <h4>Предложение клиенту</h4>
   {error&&<p role="alert">{error}</p>}
   {!error&&!delivery&&<p role="status">Проверяем статус предложения…</p>}
   {delivery&&<DeliveryStatus status={delivery.status} reason={delivery.reason}/>}
   {delivery?.quote&&<QuoteTerms quote={delivery.quote} revision={draft.revision}/>}
-  {delivery?.agreement&&<Agreement key={delivery.agreement.acceptance_id} agreement={delivery.agreement} draft={draft} csrf={csrf} expired={expired}/>}
+  {agreement&&selected&&<Agreement key={agreement.acceptance_id} agreement={agreement} draft={draft} csrf={csrf} expired={expired}/>}
   {reply&&<p role="status">{replyText[reply.outcome]}{' '}
    <a href={`#message-${reply.message_id}`} onClick={event=>openReply(event,reply.message_id)}>Ответ клиента</a></p>}
   {previous&&<section aria-label="Предыдущая версия">

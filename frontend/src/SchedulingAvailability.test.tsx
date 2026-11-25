@@ -5,7 +5,7 @@ import {QuotePanel} from './QuotePanel';
 import {SchedulingAvailability} from './SchedulingAvailability';
 import {IntakeError,intakeApi} from './intake-api';
 import type {QuoteDelivery,ServiceRequestDraft} from './intake-api';
-import {availability,draft,quoteDelivery,scope,schedulingScope} from './intake-fixtures.test-helper';
+import {availability,bookingView,draft,quoteDelivery,scope,schedulingScope} from './intake-fixtures.test-helper';
 import {schedulingApi} from './scheduling-api';
 import type {Availability,SchedulingScope} from './scheduling-api';
 
@@ -27,6 +27,7 @@ it('opens only a chosen agreement and ignores a delayed read after switching wor
   order:'018f0000-0000-7000-8000-000000000032',session:'018f0000-0000-7000-8000-000000000033'};
  vi.spyOn(intakeApi,'quote').mockImplementation(async(_,request)=>request===first.request_id
   ?confirmed(first,schedulingScope):confirmed(second,secondScope));
+ vi.spyOn(schedulingApi,'booking').mockImplementation(async selected=>bookingView(selected));
  let finishFirst!:(view:Availability)=>void;
  const waitFirst=new Promise<Availability>(resolve=>{finishFirst=resolve;});
  const preview=vi.spyOn(schedulingApi,'preview').mockReturnValueOnce(waitFirst)
