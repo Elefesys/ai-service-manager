@@ -1,7 +1,8 @@
 import {act, render, screen, waitFor} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {afterEach, expect, it, vi} from 'vitest';
 import {IntakeError} from './intake-api';
-import {bookingView, confirmedBooking, heldBooking, schedulingScope as scope} from './intake-fixtures.test-helper';
+import {bookingView, cancelledBooking, confirmedBooking, heldBooking, schedulingScope as scope} from './intake-fixtures.test-helper';
 import {schedulingApi} from './scheduling-api';
 import type {SessionBookingView} from './scheduling-api';
 import {SessionBooking} from './SessionBooking';
@@ -59,4 +60,14 @@ it('discards an aborted booking response after switching work', async () => {
   expect(await screen.findByText('Время визита ещё не назначено.')).toBeVisible();
   expect(screen.queryByText('Запись подтверждена.')).not.toBeInTheDocument();
   expect(read.mock.calls[0][1].aborted).toBe(true);
+});
+
+it('shows a cancelled visit and keeps its former time and reason in history', async () => {
+  vi.spyOn(schedulingApi, 'booking').mockResolvedValue(bookingView(scope, cancelledBooking, [cancelledBooking]));
+  render(<SessionBooking scope={scope} expired={vi.fn()}/>);
+  expect(await screen.findByText('Запись отменена.')).toBeVisible();
+  expect(screen.queryByText('Запись подтверждена.')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByText('История записи'));
+  expect(screen.getByText(/10:15–11:20/)).toBeVisible();
+  expect(screen.getByText(cancelledBooking.cancel_reason)).toBeVisible();
 });

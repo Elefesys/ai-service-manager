@@ -74,8 +74,11 @@ const bookingInterval={hold_id:'018f0000-0000-7000-8000-000000000040',allocation
  visit_start:'2026-11-27T10:15:00+07:00',visit_end:'2026-11-27T11:20:00+07:00',
  busy_start:'2026-11-27T10:05:00+07:00',busy_end:'2026-11-27T11:25:00+07:00'};
 export const heldBooking={...bookingInterval,outcome:'HELD',expires_at:'2026-11-26T17:00:13+07:00'} as const satisfies Booking;
-export const confirmedBooking={...bookingInterval,outcome:'CONFIRMED',appointment_id:'018f0000-0000-7000-8000-000000000043'} as const satisfies Booking;
+export const confirmedBooking={...bookingInterval,outcome:'CONFIRMED',appointment_id:'018f0000-0000-7000-8000-000000000043',
+ previous_appointment_id:null,reschedule_option_id:null,cancelled_at:null,cancelled_by:null,cancel_reason:null} as const satisfies Booking;
+export const cancelledBooking={...confirmedBooking,outcome:'CANCELLED',cancelled_at:'2026-11-26T17:10:00+07:00',
+ cancelled_by:'018f0000-0000-7000-8000-000000000044',cancel_reason:'Отменено по просьбе клиента.'} as const satisfies Booking;
 
-export function bookingView(selected=schedulingScope,booking:Booking|null=null):SessionBookingView{
- return {request_id:selected.request,quote_id:selected.quote,order_id:selected.order,session_id:selected.session,booking};
+export function bookingView(selected=schedulingScope,booking:Booking|null=null,history:SessionBookingView['history']=[]):SessionBookingView{
+ return {request_id:selected.request,quote_id:selected.quote,order_id:selected.order,session_id:selected.session,booking,history};
 }

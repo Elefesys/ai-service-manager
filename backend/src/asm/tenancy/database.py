@@ -446,6 +446,20 @@ class TenantUnitOfWork:
             {"selection": json.dumps(selection, ensure_ascii=False, allow_nan=False)},
         )
 
+    async def scheduling_owner_appointment(
+        self, selection: dict[str, object], action: str, appointment: UUID, body: dict[str, object]
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_appointment(CAST(:selection AS jsonb),:action,"
+            ":appointment,CAST(:body AS jsonb))",
+            {
+                "selection": json.dumps(selection, ensure_ascii=False, allow_nan=False),
+                "action": action,
+                "appointment": appointment,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
     async def scheduling_client_action(
         self,
         selection: dict[str, object],

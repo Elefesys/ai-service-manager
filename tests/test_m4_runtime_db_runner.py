@@ -801,6 +801,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0032", "scheduling_availability_schema_profile"),
         ("0033", "scheduling_hold_schema_profile"),
         ("0034", "scheduling_appointment_schema_profile"),
+        ("0035", "scheduling_reschedule_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -852,6 +853,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0032", "scheduling_availability_schema_profile", 416, 415),
         ("0033", "scheduling_hold_schema_profile", 430, 429),
         ("0034", "scheduling_appointment_schema_profile", 434, 433),
+        ("0035", "scheduling_reschedule_schema_profile", 440, 439),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -886,7 +888,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
-    profile_name = "platform.scheduling_appointment_schema_profile()"
+    profile_name = "platform.scheduling_reschedule_schema_profile()"
     if not body_matches:
         expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
@@ -3737,7 +3739,7 @@ def test_planning_source_refuses_before_resources(
     assert not (r["root"] / "evidence/source-admission.json").exists()
 
 
-SCHEDULING_FEATURES = {"scheduling", "holds", "appointments"}
+SCHEDULING_FEATURES = {"scheduling", "holds", "appointments", "reschedule"}
 HOLD_PROOF_PATHS = {
     "backend/src/asm/scheduling/offer_store.py",
     "tests/test_m7_scheduling_holds.py",
@@ -3746,6 +3748,15 @@ APPOINTMENT_PROOF_PATHS = HOLD_PROOF_PATHS | {
     "frontend/src/SessionBooking.tsx",
     "frontend/e2e/scheduling-booking.spec.ts",
     "tests/test_m7_scheduling_appointments_postgres.py",
+}
+SCHEDULING_PROOF_PATHS = {
+    "holds": HOLD_PROOF_PATHS,
+    "appointments": APPOINTMENT_PROOF_PATHS,
+    "reschedule": {
+        "backend/src/asm/scheduling/commands.py",
+        "frontend/src/SessionBooking.tsx",
+        "tests/test_m7_scheduling_reschedule_postgres.py",
+    },
 }
 
 
@@ -3788,8 +3799,7 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("not part of the assignment\n")
     if damage is None:
-        extra = {"holds": HOLD_PROOF_PATHS, "appointments": APPOINTMENT_PROOF_PATHS}
-        for relative in sorted(extra.get(feature, ())):
+        for relative in sorted(SCHEDULING_PROOF_PATHS.get(feature, ())):
             path = f.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("# permitted scheduling implementation\n")
@@ -3830,6 +3840,7 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         ("scheduling", "0032"),
         ("holds", "0033"),
         ("appointments", "0034"),
+        ("reschedule", "0035"),
     ],
 )
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
@@ -3852,10 +3863,9 @@ def test_milestone_slice_admits_exact_assignment_and_selects_runtime(
         == source[candidate]
         == {"tree": tree, "sha": head, "merge_parents": [r["source"], head]}
     )
-    extra = {"holds": HOLD_PROOF_PATHS, "appointments": APPOINTMENT_PROOF_PATHS}
     assert set(source["paths"]) == getattr(carrier, prefix + "_DOCS") | {
         getattr(carrier, prefix + "_MIGRATION")
-    } | extra.get(feature, set())
+    } | SCHEDULING_PROOF_PATHS.get(feature, set())
     for key, val in {
         "SOURCE_SHA": merge,
         "SOURCE_TREE": tree,
@@ -3866,7 +3876,7 @@ def test_milestone_slice_admits_exact_assignment_and_selects_runtime(
     assert carrier.source_tree_from_evidence(evidence / "source.json") == tree
     phases = {label for _, label, _ in aggregate_driver["calls"]}
     assert {"schema-" + revision, "catalog-" + revision, "readiness"} <= phases
-    if feature in {"holds", "appointments"}:
+    if feature in SCHEDULING_PROOF_PATHS:
         assert source["branch"] == getattr(carrier, prefix + "_BRANCH")
         source["paths"].append("tests/test_unassigned.py")
         carrier.write(evidence / "source.json", source)
@@ -3940,7 +3950,9 @@ def test_m7_scheduling_refuses_ineligible_source(r11_event, monkeypatch, route, 
         ("main-push", "unassigned_tests", "{prefix}_WRITE_SET"),
     ],
 )
-@pytest.mark.parametrize(("feature", "revision"), [("holds", "0033"), ("appointments", "0034")])
+@pytest.mark.parametrize(
+    ("feature", "revision"), [("holds", "0033"), ("appointments", "0034"), ("reschedule", "0035")]
+)
 def test_m7_booking_refuses_ineligible_source(
     r11_event, monkeypatch, route, damage, reason, feature, revision
 ):

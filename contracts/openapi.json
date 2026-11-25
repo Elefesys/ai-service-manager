@@ -201,6 +201,51 @@
         "title": "AnalysisResponse",
         "type": "object"
       },
+      "AppointmentChange": {
+        "additionalProperties": false,
+        "properties": {
+          "booking": {
+            "discriminator": {
+              "mapping": {
+                "CANCELLED": "#/components/schemas/CancelledBooking",
+                "CONFIRMED": "#/components/schemas/ConfirmedBooking"
+              },
+              "propertyName": "outcome"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmedBooking"
+              },
+              {
+                "$ref": "#/components/schemas/CancelledBooking"
+              }
+            ],
+            "title": "Booking"
+          },
+          "outcome": {
+            "enum": [
+              "RESCHEDULED",
+              "UNCHANGED",
+              "CANCELLED"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "session_id",
+          "booking"
+        ],
+        "title": "AppointmentChange",
+        "type": "object"
+      },
       "ApprovalBasis": {
         "additionalProperties": false,
         "properties": {
@@ -1519,6 +1564,141 @@
         "title": "CalendarBlock",
         "type": "object"
       },
+      "CancelledBooking": {
+        "additionalProperties": false,
+        "properties": {
+          "allocation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Allocation Id",
+            "type": "string"
+          },
+          "appointment_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Appointment Id",
+            "type": "string"
+          },
+          "busy_end": {
+            "format": "date-time",
+            "title": "Busy End",
+            "type": "string"
+          },
+          "busy_start": {
+            "format": "date-time",
+            "title": "Busy Start",
+            "type": "string"
+          },
+          "cancel_reason": {
+            "maxLength": 300,
+            "title": "Cancel Reason",
+            "type": "string"
+          },
+          "cancelled_at": {
+            "format": "date-time",
+            "title": "Cancelled At",
+            "type": "string"
+          },
+          "cancelled_by": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Cancelled By",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "readOnly": true,
+            "title": "Date",
+            "type": "string"
+          },
+          "hold_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Id"
+          },
+          "outcome": {
+            "const": "CANCELLED",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "previous_appointment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Appointment Id"
+          },
+          "reschedule_option_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reschedule Option Id"
+          },
+          "resource_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "timezone": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "visit_end": {
+            "format": "date-time",
+            "title": "Visit End",
+            "type": "string"
+          },
+          "visit_start": {
+            "format": "date-time",
+            "title": "Visit Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "visit_start",
+          "visit_end",
+          "allocation_id",
+          "resource_id",
+          "busy_start",
+          "busy_end",
+          "appointment_id",
+          "hold_id",
+          "previous_appointment_id",
+          "reschedule_option_id",
+          "outcome",
+          "cancelled_at",
+          "cancelled_by",
+          "cancel_reason",
+          "date"
+        ],
+        "title": "CancelledBooking",
+        "type": "object"
+      },
       "CaseAsset": {
         "additionalProperties": false,
         "properties": {
@@ -1890,6 +2070,18 @@
             "title": "Busy Start",
             "type": "string"
           },
+          "cancel_reason": {
+            "title": "Cancel Reason",
+            "type": "null"
+          },
+          "cancelled_at": {
+            "title": "Cancelled At",
+            "type": "null"
+          },
+          "cancelled_by": {
+            "title": "Cancelled By",
+            "type": "null"
+          },
           "date": {
             "format": "date",
             "readOnly": true,
@@ -1897,15 +2089,48 @@
             "type": "string"
           },
           "hold_id": {
-            "format": "uuid",
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            "title": "Hold Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Id"
           },
           "outcome": {
             "const": "CONFIRMED",
             "title": "Outcome",
             "type": "string"
+          },
+          "previous_appointment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Appointment Id"
+          },
+          "reschedule_option_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reschedule Option Id"
           },
           "resource_id": {
             "format": "uuid",
@@ -1934,13 +2159,18 @@
           "timezone",
           "visit_start",
           "visit_end",
-          "hold_id",
           "allocation_id",
           "resource_id",
           "busy_start",
           "busy_end",
-          "outcome",
           "appointment_id",
+          "hold_id",
+          "previous_appointment_id",
+          "reschedule_option_id",
+          "outcome",
+          "cancelled_at",
+          "cancelled_by",
+          "cancel_reason",
           "date"
         ],
         "title": "ConfirmedBooking",
@@ -4882,12 +5112,12 @@
           "timezone",
           "visit_start",
           "visit_end",
-          "hold_id",
           "allocation_id",
           "resource_id",
           "busy_start",
           "busy_end",
           "outcome",
+          "hold_id",
           "expires_at",
           "date"
         ],
@@ -11790,6 +12020,7 @@
               {
                 "discriminator": {
                   "mapping": {
+                    "CANCELLED": "#/components/schemas/CancelledBooking",
                     "CONFIRMED": "#/components/schemas/ConfirmedBooking",
                     "EXPIRED": "#/components/schemas/HeldBooking",
                     "HELD": "#/components/schemas/HeldBooking",
@@ -11803,6 +12034,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/ConfirmedBooking"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CancelledBooking"
                   }
                 ]
               },
@@ -11811,6 +12045,13 @@
               }
             ],
             "title": "Booking"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/CancelledBooking"
+            },
+            "title": "History",
+            "type": "array"
           },
           "order_id": {
             "format": "uuid",
@@ -11840,6 +12081,7 @@
         "required": [
           "session_id",
           "booking",
+          "history",
           "request_id",
           "quote_id",
           "order_id"
@@ -17134,6 +17376,489 @@
           }
         },
         "summary": "Read Session Booking",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/service-requests/{request_id}/sessions/{session_id}/booking/{appointment_id}/cancel": {
+      "post": {
+        "operationId": "cancel_session_appointment_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__sessions__session_id__booking__appointment_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "appointment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Appointment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "client_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Client Id",
+                    "type": "string"
+                  },
+                  "order_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Order Id",
+                    "type": "string"
+                  },
+                  "quote_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Quote Id",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 300,
+                    "title": "Reason",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "quote_id",
+                  "order_id",
+                  "reason"
+                ],
+                "title": "AppointmentCancellation",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentChange"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Session Appointment",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/service-requests/{request_id}/sessions/{session_id}/booking/{appointment_id}/reschedule": {
+      "post": {
+        "operationId": "move_session_appointment_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__sessions__session_id__booking__appointment_id__reschedule_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "appointment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Appointment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "client_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Client Id",
+                    "type": "string"
+                  },
+                  "option_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Option Id",
+                    "type": "string"
+                  },
+                  "order_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Order Id",
+                    "type": "string"
+                  },
+                  "quote_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Quote Id",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 300,
+                    "title": "Reason",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "quote_id",
+                  "order_id",
+                  "reason",
+                  "option_id"
+                ],
+                "title": "AppointmentReschedule",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentChange"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulingConflictResponse"
+                }
+              }
+            },
+            "description": "Calendar conflict, stale appointment or offer, or mismatched retry"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move Session Appointment",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/intake/conversations/{conversation_id}/service-requests/{request_id}/sessions/{session_id}/booking/{appointment_id}/reschedule-offers": {
+      "post": {
+        "description": "Issue replacement options for the current appointment of this session.",
+        "operationId": "offer_appointment_reschedule_api_v1_workspaces__workspace_id__businesses__business_id__intake_conversations__conversation_id__service_requests__request_id__sessions__session_id__booking__appointment_id__reschedule_offers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "appointment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Appointment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "client_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Client Id",
+                    "type": "string"
+                  },
+                  "date": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Date"
+                  },
+                  "order_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Order Id",
+                    "type": "string"
+                  },
+                  "quote_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Quote Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "quote_id",
+                  "order_id"
+                ],
+                "title": "AvailabilityQuery",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityOffer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Offer Appointment Reschedule",
         "tags": [
           "scheduling"
         ]

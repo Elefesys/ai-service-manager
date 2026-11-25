@@ -119,6 +119,7 @@ SERVICE_INTENT_NONFUNCTION_SHA256 = (
 SCHEDULING_NONFUNCTION_SHA256 = "b31332ca0d1cfb8298e6955cac0bb686746c3a6d7a2708a7de50b9a4f81fc728"
 HOLD_NONFUNCTION_SHA256 = "7cddc57567ccbe5ce8d185b83b7b0205948b77ade4d7cbefa6f0bb313518fc88"
 APPOINTMENT_NONFUNCTION_SHA256 = "a4f5ebec5251129b25a4ecd7cb9de3cfd8ba00135d5f37628f44b4209d3fc2db"
+RESCHEDULE_NONFUNCTION_SHA256 = "fbb12c3304ea5d08d1b27b3cf5360839f040eac534ebb58cc0115d9a57521c72"
 QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
 OWNER_DECISION_NONFUNCTION_SHA256 = (
     "fc25cd353f880f250d226f00e0f0accb25b9f340e5bab7daa21b3aef6f64810d"
@@ -326,6 +327,7 @@ def capture_source(root, revision="0013"):
             "0032",
             "0033",
             "0034",
+            "0035",
         },
         "Unsupported catalog revision",
     )
@@ -472,6 +474,10 @@ def source_catalog(root, revision="0013"):
                         revision == "0031"
                         and m[1] in {"app.service_assessments", "app.price_calculations"}
                         and operation == "ALTER COLUMN actor_user_account_id DROP NOT NULL"
+                    ) or (
+                        revision == "0035"
+                        and m[1] == "app.appointments"
+                        and operation == "ALTER COLUMN hold_id DROP NOT NULL"
                     ):
                         continue
                     else:
@@ -565,6 +571,7 @@ def source_catalog(root, revision="0013"):
             "0032": 416,
             "0033": 430,
             "0034": 434,
+            "0035": 440,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -596,6 +603,7 @@ def source_catalog(root, revision="0013"):
             "0032": 91,
             "0033": 96,
             "0034": 97,
+            "0035": 97,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -814,11 +822,14 @@ def compare_embedded_profile(expected):
             "0032",
             "0033",
             "0034",
+            "0035",
         },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.scheduling_appointment_schema_profile()"
+        "platform.scheduling_reschedule_schema_profile()"
+        if revision == "0035"
+        else "platform.scheduling_appointment_schema_profile()"
         if revision == "0034"
         else "platform.scheduling_hold_schema_profile()"
         if revision == "0033"
@@ -899,6 +910,7 @@ def compare_embedded_profile(expected):
             "0032": 415,
             "0033": 429,
             "0034": 433,
+            "0035": 439,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -951,6 +963,7 @@ def compare_embedded_profile(expected):
             "0032": 91,
             "0033": 96,
             "0034": 97,
+            "0035": 97,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -1072,6 +1085,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0032",
             "0033",
             "0034",
+            "0035",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -1097,6 +1111,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0032": SCHEDULING_NONFUNCTION_SHA256,
                 "0033": HOLD_NONFUNCTION_SHA256,
                 "0034": APPOINTMENT_NONFUNCTION_SHA256,
+                "0035": RESCHEDULE_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3213,7 +3228,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0034"),
+            source_catalog(ROOT, "0035"),
         )
 
     def persist_partition(self, work):
@@ -3397,7 +3412,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0034"
+            and source["expected_revision"] == "0035"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

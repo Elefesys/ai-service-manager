@@ -15,6 +15,8 @@ from asm.configuration.permissions import require_owner
 from asm.scheduling.availability import calculate_windows
 from asm.scheduling.models import (
     BookingProjection,
+    CancelledBooking,
+    ConfirmedBooking,
     Instant,
     LocalDate,
     ScheduleSnapshot,
@@ -57,8 +59,31 @@ class AvailabilityOffer(ConfigurationModel):
     options: list[OfferedTime] = Field(max_length=OFFER_OPTION_LIMIT)
 
 
+class RescheduleOfferState(ConfigurationModel):
+    schedule: ScheduleSnapshot | None
+    offer: AvailabilityOffer | None
+
+    @model_validator(mode="after")
+    def exactly_one(self) -> Self:
+        if (self.schedule is None) == (self.offer is None):
+            raise ValueError("Expected a schedule or an existing offer")
+        return self
+
+
+class AppointmentChange(ConfigurationModel):
+    outcome: Literal["RESCHEDULED", "UNCHANGED", "CANCELLED"]
+    session_id: CanonicalUUID
+    booking: Annotated[ConfirmedBooking | CancelledBooking, Field(discriminator="outcome")]
+
+    @model_validator(mode="after")
+    def matching_status(self) -> Self:
+        if (self.outcome == "CANCELLED") != (self.booking.outcome == "CANCELLED"):
+            raise ValueError("Command result must match its appointment status")
+        return self
+
+
 class HoldResult(ZonedVisit):
-    outcome: Literal["HELD", "EXPIRED", "RELEASED", "CONVERTED"]
+    outcome: Literal["HELD", "EXPIRED", "RELEASED", "CONVERTED", "CANCELLED"]
     hold_id: CanonicalUUID
     allocation_id: CanonicalUUID
     expires_at: Instant
@@ -75,13 +100,14 @@ class HoldResult(ZonedVisit):
             "EXPIRED": "Срок удержания истёк.",
             "RELEASED": "Удержание снято.",
             "CONVERTED": "Запись подтверждена.",
+            "CANCELLED": "Исходная запись отменена.",
         }[self.outcome]
 
 
 class AppointmentResult(ZonedVisit):
-    outcome: Literal["CONFIRMED", "ALREADY_CONFIRMED"]
+    outcome: Literal["CONFIRMED", "ALREADY_CONFIRMED", "CANCELLED"]
     appointment_id: CanonicalUUID
-    hold_id: CanonicalUUID
+    hold_id: CanonicalUUID | None
     allocation_id: CanonicalUUID
     session_id: CanonicalUUID
 
@@ -90,6 +116,8 @@ class AppointmentResult(ZonedVisit):
         if self.outcome == "ALREADY_CONFIRMED":
             start = self.visit_start.astimezone(ZoneInfo(self.timezone))
             return f"Вы уже записаны на {start:%H:%M}."
+        if self.outcome == "CANCELLED":
+            return "Исходная запись отменена."
         return "Запись подтверждена."
 
 
@@ -265,7 +293,7 @@ async def select_option(
     )
     result = await store.select(selection, client_id, conversation_id, option_id, key, eligible)
     outcome = result.get("outcome")
-    if outcome in ("CONFIRMED", "ALREADY_CONFIRMED"):
+    if outcome in ("CONFIRMED", "ALREADY_CONFIRMED", "CANCELLED") and "appointment_id" in result:
         appointment = _stored(AppointmentResult, result)
         if terms.deposit.mode != "NONE" or appointment.session_id != selection.session_id:
             raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
@@ -308,6 +336,87 @@ async def read_booking(unit: TenantUnitOfWork, selection: SelectedSession) -> Se
         order_id=selection.order_id,
         session_id=projection.session_id,
         booking=projection.booking,
+        history=projection.history,
+    )
+
+
+async def issue_reschedule_offer(
+    unit: TenantUnitOfWork,
+    selection: SelectedSession,
+    appointment_id: UUID,
+    day: date | None,
+    key: str,
+) -> AvailabilityOffer:
+    _check_key(key)
+    terms = await selected_terms(unit, selection)
+    scope = selection.model_dump(mode="json")
+    request: dict[str, object] = {"key": key, "date": None if day is None else day.isoformat()}
+    state = _stored(
+        RescheduleOfferState,
+        await unit.scheduling_owner_appointment(scope, "state", appointment_id, request),
+    )
+    if state.offer is not None:
+        return state.offer
+    if state.schedule is None:
+        raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+    windows = calculate_windows(state.schedule, _minutes(terms))[:OFFER_OPTION_LIMIT]
+    saved = await unit.scheduling_owner_appointment(
+        scope,
+        "issue",
+        appointment_id,
+        {**request, "options": [window.model_dump(mode="json") for window in windows]},
+    )
+    return _stored(AvailabilityOffer, saved)
+
+
+async def _change_appointment(
+    unit: TenantUnitOfWork,
+    selection: SelectedSession,
+    appointment_id: UUID,
+    action: Literal["reschedule", "cancel"],
+    body: dict[str, object],
+    key: str,
+) -> AppointmentChange:
+    _check_key(key)
+    await require_owner(unit)
+    result = _stored(
+        AppointmentChange,
+        await unit.scheduling_owner_appointment(
+            selection.model_dump(mode="json"), action, appointment_id, {**body, "key": key}
+        ),
+    )
+    if result.session_id != selection.session_id:
+        raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+    return result
+
+
+async def reschedule_appointment(
+    unit: TenantUnitOfWork,
+    selection: SelectedSession,
+    appointment_id: UUID,
+    option_id: UUID,
+    reason: str,
+    key: str,
+) -> AppointmentChange:
+    return await _change_appointment(
+        unit,
+        selection,
+        appointment_id,
+        "reschedule",
+        {"option_id": str(option_id), "reason": reason},
+        key,
+    )
+
+
+async def cancel_appointment(
+    unit: TenantUnitOfWork,
+    selection: SelectedSession,
+    appointment_id: UUID,
+    reason: str,
+    key: str,
+) -> AppointmentChange:
+    return await _change_appointment(
+        unit, selection, appointment_id, "cancel", {"reason": reason}, key
     )
 
 

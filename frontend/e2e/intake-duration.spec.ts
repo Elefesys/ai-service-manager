@@ -23,7 +23,7 @@ type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-hist
 type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
 type BookingArgument={date:string}|{optionId:string};
-type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot'|'quote-booking';
+type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot'|'quote-booking'|'quote-reschedule';
 type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'pilot-complex'|QuoteIntakeJourney;
 
 function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:IntakeJourney,variant:Viewport):Error {
@@ -2267,4 +2267,132 @@ test('@narrow M7.2A shows a confirmed visit and an expiring hold for two works',
     none: {request: secondId, quote: none.quote.quote_id, session: none.session_id, ...confirmed, booking: recorded},
     fixed: {request: firstId, quote: paid.quote.quote_id, session: paid.session_id, ...held, booking: pending, expired},
     before: [null, null], historyPreserved: true, newOutgoing: 0}));
+});
+
+test('@narrow M7.2B reopens a visit after conflict, reschedule and cancellation', async ({page}, info) => {
+  test.skip(info.project.name !== 'chromium-narrow', 'Runs after the shared narrow scheduling journeys');
+  test.setTimeout(150_000);
+  const journey = 'quote-reschedule';
+  const {conversation, intake, panel, firstId, endpoint,
+    execute, read, readHistory, evaluateAndPrice} = await beginQuoteJourney(page, 'narrow', journey);
+  const quote = await evaluateAndPrice(firstId);
+  expect(quote.material).toMatchObject({deposit: {mode: 'NONE'}});
+  expect(await execute('deliver-quote', firstId)).toMatchObject({status: 'SENT', effects: 1});
+  const agreed = await intakeFixture<QuoteReplyResult>('agree-quote', journey, 'narrow', conversation, firstId);
+  const agreement = (await read(firstId)).agreement!;
+  expect(agreed).toMatchObject({outcome: 'ACCEPTED', session_id: agreement.session_id, quote_id: quote.quote_id});
+
+  const refs = {client_id: quote.material.client_id, quote_id: quote.quote_id, order_id: agreement.order_id};
+  const session = `${endpoint}/${firstId}/sessions/${agreement.session_id}`;
+  const query = new URLSearchParams(refs);
+  const bookingPath = `${session}/booking?${query}`;
+  const availability = `${session}/availability?${query}`;
+  const csrf = (await (await page.request.get('/api/v1/auth/session')).json() as {csrf_token: string}).csrf_token;
+  const origin = new URL(page.url()).origin;
+  const section = panel.getByRole('region', {name: 'Запись сейчас', exact: true});
+  const outward = async () => (await readHistory()).filter(m => m.direction === 'OUTBOUND').map(m => m.message_id);
+  const sentBefore = await outward();
+  type Offer = {options: {option_id: string; visit_start: string}[]};
+  type Change = {outcome: string; session_id: string; booking: Booking};
+  async function schedule(command: ScheduleCommand) {
+    const response = await page.request.post(availability, {data: command, headers: {'X-CSRF-Token': csrf, Origin: origin}});
+    expect(response.status()).toBe(200);
+    return await response.json() as Availability;
+  }
+  async function command(path: string, key: string, data: Record<string, unknown>, status = 200) {
+    const response = await page.request.post(path, {data, headers: {
+      'X-CSRF-Token': csrf, 'Idempotency-Key': key, Origin: origin,
+    }});
+    expect(response.status(), await response.text()).toBe(status);
+    return await response.json();
+  }
+  async function current() {
+    const response = await page.request.get(bookingPath);
+    expect(response.status()).toBe(200);
+    const view = await response.json() as SessionBookingView;
+    expect(view).toMatchObject({request_id: firstId, quote_id: refs.quote_id,
+      order_id: refs.order_id, session_id: agreement.session_id});
+    return view;
+  }
+  async function reopen() {
+    await page.reload();
+    await openWorkspace(page);
+    const readBooking = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return response.request().method() === 'GET' && `${url.pathname}${url.search}` === bookingPath;
+    });
+    await openConversation(page, conversation);
+    await expect(intake.getByTestId('service-request-id')).toHaveText(firstId);
+    const response = await readBooking;
+    expect(response.status()).toBe(200);
+    return await response.json() as SessionBookingView;
+  }
+  function optionAt(offer: Offer, time: string) {
+    const option = offer.options.find(value => Date.parse(value.visit_start) === Date.parse(`${day}T${time}:00+07:00`));
+    expect(option, time).toBeDefined();
+    return option!.option_id;
+  }
+  const first = await page.request.get(availability);
+  expect(first.status()).toBe(200);
+  const before = await first.json() as Availability;
+  const timezone = 'Asia/Novosibirsk';
+  const hours = await schedule({action: 'schedule', expected_version: before.schedule_version, timezone,
+    week: Array.from({length: 7}, (_, weekday) => ({weekday, start_minute: 600, end_minute: 960}))});
+  await schedule({action: 'policy', expected_version: hours.schedule_version, step_minutes: 15,
+    buffer_before_minutes: 0, buffer_after_minutes: 0, minimum_notice_minutes: 60,
+    horizon_days: 10, offer_ttl_minutes: 10, hold_ttl_minutes: 10});
+  const nextDay = new Date(`${hours.date}T00:00:00Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 6);
+  const day = nextDay.toISOString().slice(0, 10);
+  expect((await current()).booking).toBeNull();
+  const issued = await intakeFixture<Offer>('booking-offer', journey, 'narrow', conversation, firstId, undefined, {date: day});
+  const initial = await intakeFixture<{appointment_id: string}>('booking-select', journey, 'narrow',
+    conversation, firstId, undefined, {optionId: issued.options[0].option_id});
+  const source = (await current()).booking!;
+  expect(source).toMatchObject({appointment_id: initial.appointment_id, outcome: 'CONFIRMED', date: day, timezone,
+    visit_start: `${day}T10:00:00+07:00`, visit_end: `${day}T11:05:00+07:00`});
+  const appointment = `${session}/booking/${initial.appointment_id}`;
+  const options = await command(`${appointment}/reschedule-offers`, 's6-browser-offer', {...refs, date: day}) as Offer;
+  const optionId = optionAt(options, '10:30');
+  const blocks = `/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/scheduling/blocks`;
+  const block = await command(blocks, 's6-browser-block', {
+    start: `${day}T11:10:00+07:00`, end: `${day}T11:20:00+07:00`,
+  }) as {block_id: string};
+  const move = {...refs, option_id: optionId, reason: 'Изменили время по просьбе клиента.'};
+  const conflict = await command(`${appointment}/reschedule`, 's6-browser-conflict', move, 409);
+  expect(conflict).toEqual({error: {code: 'CALENDAR_CONFLICT', affected: [{kind: 'BLOCK', id: block.block_id}]}});
+  expect(await reopen()).toMatchObject({booking: source, history: []});
+  await expect(section.getByText('10:00–11:05 · UTC+07:00', {exact: true}).first()).toBeVisible();
+
+  await command(`${blocks}/${block.block_id}/release`, 's6-browser-unblock', {});
+  const fresh = await command(`${appointment}/reschedule-offers`, 's6-browser-fresh-offer', {...refs, date: day}) as Offer;
+  const changed = await command(`${appointment}/reschedule`, 's6-browser-change', {
+    ...move, option_id: optionAt(fresh, '10:30'),
+  }) as Change;
+  expect(changed).toMatchObject({outcome: 'RESCHEDULED', session_id: agreement.session_id, booking: {
+    outcome: 'CONFIRMED', previous_appointment_id: initial.appointment_id,
+    visit_start: `${day}T10:30:00+07:00`, visit_end: `${day}T11:35:00+07:00`, timezone,
+  }});
+  const moved = await reopen();
+  expect(moved.booking).toEqual(changed.booking);
+  expect(moved.history).toMatchObject([{appointment_id: initial.appointment_id, outcome: 'CANCELLED', cancel_reason: move.reason}]);
+  await expect(section.getByText('10:30–11:35 · UTC+07:00', {exact: true}).first()).toBeVisible();
+  await section.getByText('История записи', {exact: true}).click();
+  await expect(section.getByText(/10:00–11:05/)).toBeVisible();
+
+  if (changed.booking.outcome !== 'CONFIRMED') throw new Error('Expected the rescheduled visit');
+  const cancelled = await command(`${session}/booking/${changed.booking.appointment_id}/cancel`, 's6-browser-cancel',
+    {...refs, reason: 'Клиент отменил визит.'}) as Change;
+  const closed = await reopen();
+  expect(cancelled).toMatchObject({outcome: 'CANCELLED', session_id: agreement.session_id});
+  expect(closed.booking).toEqual(cancelled.booking);
+  expect(closed.history).toHaveLength(2);
+  await expect(section.getByText('Запись отменена.', {exact: true})).toBeVisible();
+  await section.getByText('История записи', {exact: true}).click();
+  await expect(section.getByText('Клиент отменил визит.', {exact: true})).toBeVisible();
+  expect((await read(firstId)).agreement).toEqual(agreement);
+  expect(await outward()).toEqual(sentBefore);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  console.log('M7.2B Chromium ' + JSON.stringify({conversation, session: agreement.session_id, source,
+    conflict, moved: moved.booking, cancelled: closed.booking, history: closed.history, newOutgoing: 0}));
 });

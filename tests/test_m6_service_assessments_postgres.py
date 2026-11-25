@@ -366,7 +366,7 @@ async def test_assessment_owner_access_and_immutable_archive(assessment_pg):
     assert await assessment_count(h, request_id) == 1
     with pytest.raises(AssertionError, match="SERVICE_ASSESSMENT_DURABLE_DATA"):
         await _migrate("downgrade", "0025")
-    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0034"
+    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0035"
 
 
 async def test_0026_round_trip_preserves_draft_and_guards_new_config(assessment_pg):
@@ -384,7 +384,7 @@ async def test_0026_round_trip_preserves_draft_and_guards_new_config(assessment_
             "valid"
         ] is True
     finally:
-        await _migrate("upgrade", "0034")
+        await _migrate("upgrade", "0035")
     assert await read(h, cid, request_id) == prior
     bundle = policy_bundle(fixed(90))
     bundle["rules"] = [
@@ -393,4 +393,4 @@ async def test_0026_round_trip_preserves_draft_and_guards_new_config(assessment_
     await configure(h, bundle, publish=False)
     with pytest.raises(AssertionError, match="SERVICE_ASSESSMENT_DURABLE_DATA"):
         await _migrate("downgrade", "0025")
-    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0034"
+    assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0035"
