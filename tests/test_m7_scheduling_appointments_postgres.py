@@ -503,7 +503,7 @@ async def test_s4_legacy_hold_expires_while_waiting_for_resource(scheduling_pg, 
         legacy = await pick(h, first, choice(first_offer, 0), "legacy-choice")
         assert isinstance(legacy, HoldResult) and legacy.outcome == "HELD"
     finally:
-        await _migrate("upgrade", "0034")
+        await _migrate("upgrade", "0035")
     before = await client_effects(h)
     assert (await booking(auth, first))["outcome"] == "HELD"
     expiry = legacy.expires_at
@@ -569,7 +569,7 @@ async def durable_calendar(h):
     return await scalar(
         h,
         """SELECT jsonb_build_object(
-          'offers',(SELECT jsonb_agg(to_jsonb(f) ORDER BY f.id) FROM app.availability_offers f),
+          'offers',(SELECT jsonb_agg(jsonb_strip_nulls(to_jsonb(f)) ORDER BY f.id) FROM app.availability_offers f),
           'options',(SELECT jsonb_agg(to_jsonb(o) ORDER BY o.id) FROM app.availability_options o),
           'holds',(SELECT jsonb_agg(to_jsonb(h) ORDER BY h.id) FROM app.reservation_holds h),
           'allocations',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM app.resource_allocations a),
@@ -604,9 +604,13 @@ async def test_s5_0033_upgrade_preserves_operational_facts(scheduling_pg, auth):
         assert isinstance(block, CalendarBlock)
         original = await durable_calendar(h)
     finally:
-        await _migrate("upgrade", "0034")
-    assert (await scalar(h, "SELECT platform.scheduling_appointment_schema_profile()"))["valid"]
+        await _migrate("upgrade", "0035")
+    assert (await scalar(h, "SELECT platform.scheduling_reschedule_schema_profile()"))["valid"]
     assert await durable_calendar(h) == original
+    assert not await scalar(
+        h,
+        "SELECT EXISTS(SELECT 1 FROM app.availability_offers WHERE replacement_appointment_id IS NOT NULL)",
+    )
     before = await client_effects(h)
     assert before["appointments"] == 0
     assert (await booking(auth, first))["outcome"] == "HELD"

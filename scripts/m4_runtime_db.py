@@ -542,6 +542,76 @@ M7_APPOINTMENTS_IMPLEMENTATION_PATHS = (M7_HOLDS_IMPLEMENTATION_PATHS - {M7_HOLD
     "frontend/src/style.css",
     "scripts/m5_intake_fixture.py",
 }
+M7_RESCHEDULE_BASE = "eb8d43e038fc5935a19771193c35ce275d517fac"
+M7_RESCHEDULE_TREE = "e74210828ac3d9d6f83b79dfb2d49ba30930c4ac"
+M7_RESCHEDULE_ASSIGNMENT = "15a222983e6f97b995be16b33a156d4c504f47c8"
+M7_RESCHEDULE_ASSIGNMENT_TREE = "fd6f4a73e98e0f6b359fe68693e0905b03a363f7"
+M7_RESCHEDULE_BRANCH = "c1/m7-2b-reschedule-cancel"
+M7_RESCHEDULE_DOCS = M7_SCHEDULING_DOCS
+M7_RESCHEDULE_MIGRATION = "migrations/versions/0035_scheduling_reschedule_cancel.py"
+M7_RESCHEDULE_IMPLEMENTATION_PATHS = {
+    M7_RESCHEDULE_MIGRATION,
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/service_requests/errors.py",
+    "backend/src/asm/service_requests/repository.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/e2e/scheduling-booking.spec.ts",
+    "frontend/src/SessionBooking.test.tsx",
+    "frontend/src/SessionBooking.tsx",
+    "frontend/src/intake-fixtures.test-helper.ts",
+    "frontend/src/scheduling-api.test.ts",
+    "frontend/src/scheduling-api.ts",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/test_auth_contract.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m6_owner_decisions_postgres.py",
+    "tests/m7_scheduling_fixtures.py",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/test_foundation.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_pricing_postgres.py",
+    "tests/test_m6_quote_acceptance_postgres.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_intents_migrations.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_m7_scheduling_appointments_postgres.py",
+    "tests/test_m7_scheduling_holds_postgres.py",
+    "tests/test_m7_scheduling_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
 M7_SCHEDULING_MODULE_PATH = re.compile(
     r"backend/src/asm/scheduling/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.py"
     r"|tests/test_m7_scheduling[A-Za-z0-9_]*\.py"
@@ -571,7 +641,7 @@ class SchedulingSource(NamedTuple):
     def permits(self, paths: set[str]) -> bool:
         return all(
             path in self.paths
-            or self.revision in {"0033", "0034"}
+            or self.revision in {"0033", "0034", "0035"}
             and M7_SCHEDULING_MODULE_PATH.fullmatch(path)
             for path in paths
         )
@@ -2841,6 +2911,18 @@ def scheduling_source(*, branch=None, base=None) -> SchedulingSource | None:
             M7_APPOINTMENTS_IMPLEMENTATION_PATHS,
             "0034",
         ),
+        SchedulingSource(
+            "m7_reschedule",
+            M7_RESCHEDULE_BASE,
+            M7_RESCHEDULE_TREE,
+            M7_RESCHEDULE_ASSIGNMENT,
+            M7_RESCHEDULE_ASSIGNMENT_TREE,
+            M7_RESCHEDULE_BRANCH,
+            M7_RESCHEDULE_DOCS,
+            M7_RESCHEDULE_MIGRATION,
+            M7_RESCHEDULE_IMPLEMENTATION_PATHS,
+            "0035",
+        ),
     )
     return next((row for row in candidates if row.branch == branch or row.base == base), None)
 
@@ -3779,7 +3861,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.scheduling_appointment_schema_profile()"
+        "platform.scheduling_reschedule_schema_profile()"
+        if revision == "0035"
+        else "platform.scheduling_appointment_schema_profile()"
         if revision == "0034"
         else "platform.scheduling_hold_schema_profile()"
         if revision == "0033"
@@ -3823,6 +3907,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0034":
+        profile_pin = "653aba94259bf7fca5a7850759e8e6ff1e502aee4ffcfcdbdb09f0d99f7920e9"
+        body_pin = "a1b45e3cba90f7c74a605bdd96a7e826d896ae3e476bdf33bb67f84123c95a6e"
     if revision == "0033":
         profile_pin = "e4b8a3c8948809a551a0ae498c82c18de7234c65c4cec91bed3e119d9ab56549"
         body_pin = "673880b331e339002341a5c68d309f8773ad0b5e25c0d497bcbb7ef090af9ed8"
@@ -3933,6 +4020,7 @@ def stock_catalog():
                 "0032",
                 "0033",
                 "0034",
+                "0035",
             },
             "CATALOG_REVISION",
         )
@@ -3959,6 +4047,7 @@ def stock_catalog():
             "0032",
             "0033",
             "0034",
+            "0035",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -4006,7 +4095,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.scheduling_appointment_schema_profile()"
+            "platform.scheduling_reschedule_schema_profile()"
+            if revision == "0035"
+            else "platform.scheduling_appointment_schema_profile()"
             if revision == "0034"
             else "platform.scheduling_hold_schema_profile()"
             if revision == "0033"

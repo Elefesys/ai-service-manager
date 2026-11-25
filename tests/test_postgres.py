@@ -203,7 +203,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "The material tables must match schema 0034"
+        ], "The material tables must match schema 0035"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

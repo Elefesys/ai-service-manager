@@ -60,17 +60,24 @@ export type Availability = {
 };
 
 type BookingInterval = Slot & {
-  hold_id: string;
   allocation_id: string;
   resource_id: string;
   date: string;
   timezone: string;
 };
 
-export type Booking = BookingInterval & (
-  | {outcome: 'CONFIRMED'; appointment_id: string}
-  | {outcome: 'HELD' | 'EXPIRED' | 'RELEASED'; expires_at: string}
-);
+type Appointment = BookingInterval & {
+  appointment_id: string;
+  hold_id: string | null;
+  previous_appointment_id: string | null;
+  reschedule_option_id: string | null;
+};
+export type CancelledAppointment = Appointment & {
+  outcome: 'CANCELLED'; cancelled_at: string; cancelled_by: string; cancel_reason: string;
+};
+export type Booking = CancelledAppointment |
+  (Appointment & {outcome: 'CONFIRMED'; cancelled_at: null; cancelled_by: null; cancel_reason: null}) |
+  (BookingInterval & {outcome: 'HELD' | 'EXPIRED' | 'RELEASED'; hold_id: string; expires_at: string});
 
 export type SessionBookingView = {
   request_id: string;
@@ -78,6 +85,7 @@ export type SessionBookingView = {
   order_id: string;
   session_id: string;
   booking: Booking | null;
+  history: CancelledAppointment[];
 };
 
 const invalid = (): never => {throw new IntakeError(502, 'INVALID_RESPONSE');};
@@ -139,20 +147,39 @@ export function parseAvailability(value: unknown, scope: SchedulingScope, date?:
   return view as Availability;
 }
 
+function checkBooking(value: unknown) {
+  if (!record(value)) return invalid();
+  const appointment = value.outcome === 'CONFIRMED' || value.outcome === 'CANCELLED';
+  const appointmentFields = ['appointment_id', 'previous_appointment_id', 'reschedule_option_id',
+    'cancelled_at', 'cancelled_by', 'cancel_reason'];
+  const booking = object(value, ['outcome', 'hold_id', 'allocation_id', 'resource_id', 'date', 'timezone',
+    ...timestamps, ...(appointment ? appointmentFields : ['expires_at'])]);
+  if (!uuid(booking.allocation_id) || !uuid(booking.resource_id) || !dateValue(booking.date) ||
+      typeof booking.timezone !== 'string' || !booking.timezone) return invalid();
+  checkWindow(booking, booking.date);
+  if (appointment) {
+    const sourceValid = booking.hold_id === null
+      ? uuid(booking.previous_appointment_id) && uuid(booking.reschedule_option_id)
+      : uuid(booking.hold_id) && booking.previous_appointment_id === null && booking.reschedule_option_id === null;
+    const cancellationValid = booking.outcome === 'CANCELLED'
+      ? instant(booking.cancelled_at) && uuid(booking.cancelled_by) &&
+        typeof booking.cancel_reason === 'string' && booking.cancel_reason.trim().length > 0
+      : booking.cancelled_at === null && booking.cancelled_by === null && booking.cancel_reason === null;
+    if (!uuid(booking.appointment_id) || !sourceValid || !cancellationValid) return invalid();
+  } else if (!['HELD', 'EXPIRED', 'RELEASED'].some(outcome => outcome === booking.outcome) ||
+      !uuid(booking.hold_id) || !instant(booking.expires_at)) {
+    return invalid();
+  }
+  return booking;
+}
+
 export function parseSessionBooking(value: unknown, scope: SchedulingScope): SessionBookingView {
-  const view = object(value, ['request_id', 'quote_id', 'order_id', 'session_id', 'booking']);
+  const view = object(value, ['request_id', 'quote_id', 'order_id', 'session_id', 'booking', 'history']);
   if (view.request_id !== scope.request || view.quote_id !== scope.quote || view.order_id !== scope.order ||
-      view.session_id !== scope.session) return invalid();
-  if (view.booking !== null) {
-    if (!record(view.booking)) return invalid();
-    const confirmed = view.booking.outcome === 'CONFIRMED';
-    const booking = object(view.booking, ['outcome', 'hold_id', 'allocation_id', 'resource_id', 'date', 'timezone',
-      ...timestamps, confirmed ? 'appointment_id' : 'expires_at']);
-    if (!uuid(booking.hold_id) || !uuid(booking.allocation_id) || !uuid(booking.resource_id) || !dateValue(booking.date) ||
-        typeof booking.timezone !== 'string' || !booking.timezone ||
-        (confirmed ? !uuid(booking.appointment_id) :
-          !['HELD', 'EXPIRED', 'RELEASED'].some(outcome => outcome === booking.outcome) || !instant(booking.expires_at))) return invalid();
-    checkWindow(booking, booking.date);
+      view.session_id !== scope.session || !Array.isArray(view.history)) return invalid();
+  if (view.booking !== null) checkBooking(view.booking);
+  for (const item of view.history) {
+    if (checkBooking(item).outcome !== 'CANCELLED') return invalid();
   }
   return view as SessionBookingView;
 }

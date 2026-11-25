@@ -81,6 +81,7 @@ INPUTS = {
 PILOT_QUESTION = (
     "Пришлите фото старой татуировки при дневном свете, чтобы мастер оценил перекрытие."
 )
+BOOKING_JOURNEYS = {"quote-booking", "quote-reschedule"}
 QUOTE_JOURNEYS = {
     "quote-delivery",
     "quote-guard",
@@ -88,7 +89,7 @@ QUOTE_JOURNEYS = {
     "quote-clarification",
     "quote-agent",
     "quote-pilot",
-    "quote-booking",
+    *BOOKING_JOURNEYS,
 }
 AGENT_OPERATIONS = {
     "agent-first": ("prepare_service_request",),
@@ -688,7 +689,7 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
 
     before = await read()
     if args.operation in BOOKING_OPERATIONS:
-        if args.journey != "quote-booking" or before.agreement is None:
+        if args.journey not in BOOKING_JOURNEYS or before.agreement is None:
             raise IntakeFixtureRefused("SELECTED_SYNTHETIC_AGREEMENT_REQUIRED")
         quote = before.agreement.quote
     else:
@@ -765,7 +766,7 @@ async def run_quote(args, diagnostic, engine, tenancy, kernel, actor, workspace,
     if args.operation in QUOTE_REPLIES | {QUOTE_HISTORY}:
         if (
             args.journey
-            not in {"quote-acceptance", "quote-clarification", "quote-pilot", "quote-booking"}
+            not in {"quote-acceptance", "quote-clarification", "quote-pilot", *BOOKING_JOURNEYS}
             or before.status != "SENT"
         ):
             raise IntakeFixtureRefused("SENT_SYNTHETIC_QUOTE_REQUIRED")
@@ -976,7 +977,7 @@ def main():
             raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         if (args.operation == "booking-offer") != (args.booking_date is not None):
             raise IntakeFixtureRefused("INVALID_ARGUMENTS")
-        if args.operation in BOOKING_OPERATIONS and args.journey != "quote-booking":
+        if args.operation in BOOKING_OPERATIONS and args.journey not in BOOKING_JOURNEYS:
             raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         if args.journey == "pilot-complex":
             if args.operation not in {"seed", "pilot-cover-up", "deliver-pilot-question"}:
@@ -997,7 +998,7 @@ def main():
         elif args.journey == "quote-agent":
             if args.operation not in {"seed", "deliver-quote", *AGENT_OPERATIONS}:
                 raise IntakeFixtureRefused("INVALID_ARGUMENTS")
-        elif args.journey == "quote-booking":
+        elif args.journey in BOOKING_JOURNEYS:
             if args.operation not in {
                 "seed",
                 "price-first",

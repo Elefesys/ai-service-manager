@@ -137,8 +137,8 @@ async def accept_quote(harness, auth, url, quote):
     return Work(url, (await read(harness, auth, url))["agreement"])
 
 
-async def prepare_pair(harness, auth):
-    await publish(harness, booking_contract("FIXED_DEPOSIT"))
+async def draft_work_pair(harness, auth, first_mode):
+    await publish(harness, booking_contract(first_mode))
     token = await sign_in(auth)
     conversation, intake, model, _, request = await draft_for_size(harness, auth, token, "20 mm")
     left_url = f"{route(conversation)}/{request}"
@@ -152,7 +152,11 @@ async def prepare_pair(harness, auth):
     model.switch = True
     await next_turn(harness, intake, "Separate swallow shoulder 21 mm linework")
     other = await create_draft(auth, conversation, token, await summary(harness, conversation))
-    right_url = f"{route(conversation)}/{other}"
+    return token, left_url, left_quote, f"{route(conversation)}/{other}"
+
+
+async def prepare_pair(harness, auth):
+    token, left_url, left_quote, right_url = await draft_work_pair(harness, auth, "FIXED_DEPOSIT")
     return (
         token,
         left_url,
@@ -168,6 +172,16 @@ async def accept_pair(harness, auth, prepared=None):
     )
     right = await accept_quote(harness, auth, right_url, right_quote)
     left = await accept_quote(harness, auth, left_url, left_quote)
+    return token, left, right
+
+
+async def accept_pair_with_modes(harness, auth, first_mode, second_mode):
+    token, left_url, left_quote, right_url = await draft_work_pair(harness, auth, first_mode)
+    left = await accept_quote(harness, auth, left_url, left_quote)
+    if second_mode != first_mode:
+        await publish(harness, booking_contract(second_mode))
+    right_quote = await prepare_quote(harness, auth, token, right_url)
+    right = await accept_quote(harness, auth, right_url, right_quote)
     return token, left, right
 
 

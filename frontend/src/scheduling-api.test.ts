@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {availability,bookingView,confirmedBooking,heldBooking,schedulingScope as scope} from './intake-fixtures.test-helper';
+import {availability,bookingView,cancelledBooking,confirmedBooking,heldBooking,schedulingScope as scope} from './intake-fixtures.test-helper';
 import {parseAvailability,parseSessionBooking,schedulingApi} from './scheduling-api';
 
 afterEach(()=>vi.unstubAllGlobals());
@@ -76,4 +76,13 @@ it('rejects booking projections for another work and inconsistent outcomes or in
   {...confirmedBooking,date:'2026-11-28'},
   {...confirmedBooking,busy_end:confirmedBooking.visit_start},
  ])expect(()=>parseSessionBooking({...view,booking},scope)).toThrow('INVALID_RESPONSE');
+});
+
+it('reads the successor and accepts only cancelled visits in the booking history',()=>{
+ const moved={...confirmedBooking,hold_id:null,previous_appointment_id:cancelledBooking.appointment_id,
+  appointment_id:'018f0000-0000-7000-8000-000000000045',reschedule_option_id:'018f0000-0000-7000-8000-000000000046'};
+ const view=bookingView(scope,moved,[cancelledBooking]);
+ expect(parseSessionBooking(view,scope)).toEqual(view);
+ expect(()=>parseSessionBooking({...view,history:[confirmedBooking]},scope)).toThrow('INVALID_RESPONSE');
+ expect(()=>parseSessionBooking({...view,booking:{...moved,previous_appointment_id:null}},scope)).toThrow('INVALID_RESPONSE');
 });

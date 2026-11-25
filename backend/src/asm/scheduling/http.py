@@ -14,16 +14,21 @@ from asm.billing.validation import CanonicalUUID
 from asm.configuration.http import body_as, command_key, command_schema
 from asm.configuration.models import ConfigurationModel
 from asm.scheduling.commands import (
+    AppointmentChange,
     AvailabilityOffer,
-    BlockConflict,
     CalendarBlock,
     CalendarBlockInput,
+    CalendarConflictResult,
+    cancel_appointment,
     create_block,
     issue_offer,
+    issue_reschedule_offer,
     read_booking,
     release_block,
+    reschedule_appointment,
 )
 from asm.scheduling.models import (
+    AppointmentReason,
     AvailabilityCommand,
     AvailabilityPreview,
     LocalDate,
@@ -46,6 +51,14 @@ class SessionReferences(ConfigurationModel):
 
 class AvailabilityQuery(SessionReferences):
     date: LocalDate | None = None
+
+
+class AppointmentCancellation(SessionReferences):
+    reason: AppointmentReason
+
+
+class AppointmentReschedule(AppointmentCancellation):
+    option_id: CanonicalUUID
 
 
 class SchedulingConflictDetail(ConfigurationModel):
@@ -232,6 +245,95 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         async with auth.workspace(token, UUID(workspace_id)) as unit:
             return await read_booking(unit, selection)
 
+    @router.post(
+        "/booking/{appointment_id}/reschedule-offers",
+        response_model=AvailabilityOffer,
+        openapi_extra=command_schema(AvailabilityQuery),
+        description="Issue replacement options for the current appointment of this session.",
+    )
+    async def offer_appointment_reschedule(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        session_id: CanonicalUUID,
+        appointment_id: CanonicalUUID,
+    ) -> AvailabilityOffer:
+        token = mutation_token(request, settings)
+        key = command_key(request)
+        references = await body_as(request, AvailabilityQuery)
+        selection = selected_session(
+            workspace_id, business_id, conversation_id, request_id, session_id, references
+        )
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            return await issue_reschedule_offer(
+                unit, selection, UUID(appointment_id), references.date, key
+            )
+
+    @router.post(
+        "/booking/{appointment_id}/reschedule",
+        response_model=AppointmentChange,
+        openapi_extra=command_schema(AppointmentReschedule),
+        responses={
+            409: {
+                "model": SchedulingConflictResponse,
+                "description": "Calendar conflict, stale appointment or offer, or mismatched retry",
+            },
+        },
+    )
+    async def move_session_appointment(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        session_id: CanonicalUUID,
+        appointment_id: CanonicalUUID,
+    ) -> AppointmentChange:
+        token = mutation_token(request, settings)
+        key = command_key(request)
+        body = await body_as(request, AppointmentReschedule)
+        selection = selected_session(
+            workspace_id, business_id, conversation_id, request_id, session_id, body
+        )
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            result = await reschedule_appointment(
+                unit, selection, UUID(appointment_id), UUID(body.option_id), body.reason, key
+            )
+        if isinstance(result, CalendarConflictResult):
+            raise CalendarConflict(result.affected)
+        return result
+
+    @router.post(
+        "/booking/{appointment_id}/cancel",
+        response_model=AppointmentChange,
+        openapi_extra=command_schema(AppointmentCancellation),
+    )
+    async def cancel_session_appointment(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        session_id: CanonicalUUID,
+        appointment_id: CanonicalUUID,
+    ) -> AppointmentChange:
+        token = mutation_token(request, settings)
+        key = command_key(request)
+        body = await body_as(request, AppointmentCancellation)
+        selection = selected_session(
+            workspace_id, business_id, conversation_id, request_id, session_id, body
+        )
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            return await cancel_appointment(unit, selection, UUID(appointment_id), body.reason, key)
+
     @blocks.post(
         "",
         response_model=CalendarBlock,
@@ -255,7 +357,7 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         response.headers["Cache-Control"] = "no-store"
         async with auth.workspace(token, UUID(workspace_id)) as unit:
             result = await create_block(unit, UUID(business_id), block, key)
-        if isinstance(result, BlockConflict):
+        if isinstance(result, CalendarConflictResult):
             raise CalendarConflict(result.affected)
         return result
 

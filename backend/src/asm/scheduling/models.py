@@ -44,6 +44,7 @@ LocalDate = Annotated[date, BeforeValidator(calendar_date)]
 TimeZoneName = Annotated[str, Field(min_length=1, max_length=128), AfterValidator(zone_name)]
 Instant = Annotated[AwareDatetime, Field(strict=False)]
 ScheduleVersion = Annotated[int, Field(ge=0, le=9_007_199_254_740_991)]
+AppointmentReason = Annotated[Nonblank, Field(max_length=300)]
 AvailabilityReason = Literal[
     "NO_WORKING_HOURS", "NO_ACTIVE_POLICY", "DURATION_UNAVAILABLE", "DATE_CLOSED", "NO_WINDOWS"
 ]
@@ -135,7 +136,6 @@ class ZonedVisit(ConfigurationModel):
 
 
 class BookingWindow(ZonedVisit):
-    hold_id: CanonicalUUID
     allocation_id: CanonicalUUID
     resource_id: CanonicalUUID
     busy_start: Instant
@@ -156,6 +156,7 @@ class BookingWindow(ZonedVisit):
 
 class HeldBooking(BookingWindow):
     outcome: Literal["HELD", "EXPIRED", "RELEASED"]
+    hold_id: CanonicalUUID
     expires_at: Instant
 
     @field_serializer("expires_at", when_used="json")
@@ -163,14 +164,47 @@ class HeldBooking(BookingWindow):
         return self.local_time(value)
 
 
-class ConfirmedBooking(BookingWindow):
-    outcome: Literal["CONFIRMED"]
+class AppointmentBooking(BookingWindow):
     appointment_id: CanonicalUUID
+    hold_id: CanonicalUUID | None
+    previous_appointment_id: CanonicalUUID | None
+    reschedule_option_id: CanonicalUUID | None
+
+    @model_validator(mode="after")
+    def appointment_source(self) -> Self:
+        if self.hold_id is None:
+            if self.previous_appointment_id is None or self.reschedule_option_id is None:
+                raise ValueError("Replacement must reference its predecessor and issued option")
+        elif self.previous_appointment_id is not None or self.reschedule_option_id is not None:
+            raise ValueError("First confirmation must reference its source hold")
+        return self
+
+
+class ConfirmedBooking(AppointmentBooking):
+    outcome: Literal["CONFIRMED"]
+    cancelled_at: None
+    cancelled_by: None
+    cancel_reason: None
+
+
+class CancelledBooking(AppointmentBooking):
+    outcome: Literal["CANCELLED"]
+    cancelled_at: Instant
+    cancelled_by: CanonicalUUID
+    cancel_reason: AppointmentReason
+
+    @field_serializer("cancelled_at", when_used="json")
+    def local_cancellation_time(self, value: datetime) -> datetime:
+        return self.local_time(value)
 
 
 class BookingProjection(ConfigurationModel):
     session_id: CanonicalUUID
-    booking: Annotated[HeldBooking | ConfirmedBooking, Field(discriminator="outcome")] | None
+    booking: (
+        Annotated[HeldBooking | ConfirmedBooking | CancelledBooking, Field(discriminator="outcome")]
+        | None
+    )
+    history: list[CancelledBooking]
 
 
 class SessionBooking(BookingProjection):

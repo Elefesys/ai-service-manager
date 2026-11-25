@@ -760,4 +760,4 @@ async def test_0025_upgrade_preserves_0024_intake_and_rejects_downgrade_with_req
         updated = await read(h, cid, draft["request_id"])
         assert "idea" not in updated["missing"] and updated["question"] != old_question
     finally:
-        await _migrate("upgrade", "0034")
+        await _migrate("upgrade", "0035")
