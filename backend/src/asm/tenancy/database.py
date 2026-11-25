@@ -407,6 +407,12 @@ class TenantUnitOfWork:
             {"business": business, "service": service, "day": day},
         )
 
+    async def scheduling_owner_day(self, business: UUID, day: date | None) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_day(:business,CAST(:day AS date))",
+            {"business": business, "day": day},
+        )
+
     async def scheduling_owner_command(
         self, business: UUID, service: str, action: str, body: dict[str, object]
     ) -> Any:

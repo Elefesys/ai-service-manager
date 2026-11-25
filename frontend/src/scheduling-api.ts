@@ -32,8 +32,8 @@ export type ScheduleChange =
 export type ScheduleCommand = ScheduleChange & {expected_version: number};
 
 const reasons = ['NO_WORKING_HOURS', 'NO_ACTIVE_POLICY', 'DURATION_UNAVAILABLE', 'DATE_CLOSED', 'NO_WINDOWS'] as const;
-const timestamps = ['visit_start', 'visit_end', 'busy_start', 'busy_end'] as const;
-type Slot = Record<(typeof timestamps)[number], string>;
+export const timestamps = ['visit_start', 'visit_end', 'busy_start', 'busy_end'] as const;
+export type Slot = Record<(typeof timestamps)[number], string>;
 type Deposit = {
   mode: 'NONE' | 'FIXED_DEPOSIT' | 'PERCENT_DEPOSIT' | 'FULL_PREPAYMENT';
   amount_minor: number | null;
@@ -88,22 +88,22 @@ export type SessionBookingView = {
   history: CancelledAppointment[];
 };
 
-const invalid = (): never => {throw new IntakeError(502, 'INVALID_RESPONSE');};
-const record = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const object = (v: unknown, keys: readonly string[]) => {
+export const invalid = (): never => {throw new IntakeError(502, 'INVALID_RESPONSE');};
+export const record = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+export const object = (v: unknown, keys: readonly string[]) => {
   if (!record(v) || Object.keys(v).length !== keys.length || !keys.every(k => Object.hasOwn(v, k))) return invalid();
   return v;
 };
-const uuid = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v);
-const integer = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && min <= v && v <= max;
-function dateValue(v: unknown): v is string {
+export const uuid = (v: unknown) => typeof v === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(v);
+export const integer = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && min <= v && v <= max;
+export function dateValue(v: unknown): v is string {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
   const parsed = new Date(`${v}T00:00:00Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === v;
 }
-const instant = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(v) && Number.isFinite(Date.parse(v));
+export const instant = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(v) && Number.isFinite(Date.parse(v));
 
-function checkIntervals(value: unknown, week: boolean) {
+export function checkIntervals(value: unknown, week: boolean) {
   if (!Array.isArray(value)) return invalid();
   for (const entry of value) {
     const interval = object(entry, week ? ['weekday', 'start_minute', 'end_minute'] : ['start_minute', 'end_minute']);
@@ -112,7 +112,7 @@ function checkIntervals(value: unknown, week: boolean) {
   }
 }
 
-function checkWindow({visit_start, visit_end, busy_start, busy_end}: Record<string, unknown>, date: string) {
+export function checkWindow({visit_start, visit_end, busy_start, busy_end}: Record<string, unknown>, date: string) {
   if (!instant(visit_start) || !instant(visit_end) || !instant(busy_start) || !instant(busy_end) ||
       visit_start.slice(0, 10) !== date || Date.parse(busy_start) > Date.parse(visit_start) ||
       Date.parse(visit_start) >= Date.parse(visit_end) || Date.parse(visit_end) > Date.parse(busy_end)) invalid();
@@ -147,7 +147,7 @@ export function parseAvailability(value: unknown, scope: SchedulingScope, date?:
   return view as Availability;
 }
 
-function checkBooking(value: unknown) {
+export function parseBooking(value: unknown): Booking {
   if (!record(value)) return invalid();
   const appointment = value.outcome === 'CONFIRMED' || value.outcome === 'CANCELLED';
   const appointmentFields = ['appointment_id', 'previous_appointment_id', 'reschedule_option_id',
@@ -170,37 +170,63 @@ function checkBooking(value: unknown) {
       !uuid(booking.hold_id) || !instant(booking.expires_at)) {
     return invalid();
   }
-  return booking;
+  return booking as Booking;
 }
 
 export function parseSessionBooking(value: unknown, scope: SchedulingScope): SessionBookingView {
   const view = object(value, ['request_id', 'quote_id', 'order_id', 'session_id', 'booking', 'history']);
   if (view.request_id !== scope.request || view.quote_id !== scope.quote || view.order_id !== scope.order ||
       view.session_id !== scope.session || !Array.isArray(view.history)) return invalid();
-  if (view.booking !== null) checkBooking(view.booking);
+  if (view.booking !== null) parseBooking(view.booking);
   for (const item of view.history) {
-    if (checkBooking(item).outcome !== 'CANCELLED') return invalid();
+    if (parseBooking(item).outcome !== 'CANCELLED') return invalid();
   }
   return view as SessionBookingView;
 }
 
-async function request(scope: SchedulingScope, endpoint: 'availability' | 'booking', date: string | undefined, signal: AbortSignal, init?: RequestInit) {
-  const query = new URLSearchParams({client_id: scope.client, quote_id: scope.quote, order_id: scope.order});
-  if (date) query.set('date', date);
+export type AffectedAllocation = {kind: 'APPOINTMENT' | 'HOLD' | 'BLOCK'; id: string};
+
+export class SchedulingError extends IntakeError {
+  constructor(status: number, code: string, readonly affected: AffectedAllocation[] = []) {
+    super(status, code);
+  }
+}
+
+export const businessPath = (workspace: string, business: string) =>
+  `/api/v1/workspaces/${encodeURIComponent(workspace)}/businesses/${encodeURIComponent(business)}`;
+
+export function sessionPath(scope: SchedulingScope) {
   const {workspace, business, conversation, request: work, session} = scope;
   const id = encodeURIComponent;
-  const path = `/api/v1/workspaces/${id(workspace)}/businesses/${id(business)}/intake/conversations/${id(conversation)}/service-requests/${id(work)}/sessions/${id(session)}/${endpoint}`;
-  const response = await fetch(`${path}?${query}`, {...init, credentials: 'include', cache: 'no-store', signal: AbortSignal.any([signal, AbortSignal.timeout(10000)])});
-  if (response.status === 409) {
-    const value: unknown = await response.json().catch(() => null);
-    if (record(value) && record(value.error) && value.error.code === 'STALE_STATE') {
-      throw new IntakeError(409, 'STALE_STATE');
-    }
+  return `${businessPath(workspace, business)}/intake/conversations/${id(conversation)}/service-requests/${id(work)}/sessions/${id(session)}`;
+}
+
+export const sessionReferences = ({client, quote, order}: SchedulingScope) =>
+  ({client_id: client, quote_id: quote, order_id: order});
+
+export async function schedulingRequest(path: string, signal: AbortSignal, init?: RequestInit): Promise<unknown> {
+  const response = await fetch(path, {
+    ...init, credentials: 'include', cache: 'no-store',
+    signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+  });
+  const value: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = record(value) && record(value.error) ? value.error : null;
+    const affected = error?.affected;
+    const safe = Array.isArray(affected) ? affected.filter((item): item is AffectedAllocation =>
+      record(item) && uuid(item.id) && (item.kind === 'BLOCK' || item.kind === 'APPOINTMENT' || item.kind === 'HOLD')) : [];
+    const code = response.status === 409 && (error?.code === 'STALE_STATE' || error?.code === 'CALENDAR_CONFLICT')
+      ? error.code : 'SCHEDULING_REQUEST_FAILED';
+    throw new SchedulingError(response.status, code, safe);
   }
-  if (response.status !== 200) throw new IntakeError(response.status, 'SCHEDULING_REQUEST_FAILED');
-  let value: unknown;
-  try {value = await response.json();} catch {return invalid();}
+  if (response.status !== 200 || value === null) return invalid();
   return value;
+}
+
+async function request(scope: SchedulingScope, endpoint: 'availability' | 'booking', date: string | undefined, signal: AbortSignal, init?: RequestInit) {
+  const query = new URLSearchParams(sessionReferences(scope));
+  if (date) query.set('date', date);
+  return schedulingRequest(`${sessionPath(scope)}/${endpoint}?${query}`, signal, init);
 }
 
 export const schedulingApi = {

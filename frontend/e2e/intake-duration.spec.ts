@@ -7,6 +7,7 @@ import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import type {ApprovalBody,ApprovalCard} from '../src/escalation-api';
 import type {Availability, Booking, ScheduleCommand, SessionBookingView} from '../src/scheduling-api';
+import type {OwnerDay} from '../src/owner-calendar-api';
 import {parseReceipt} from '../src/messaging-api';
 import type {DraftCommand,DraftListItem,DraftRevisionCommand,Intake,PriceCalculation,PriceHistory,QuoteDelivery,RequestQuote,ServiceAssessment,ServiceRequestDraft} from '../src/intake-api';
 
@@ -23,7 +24,7 @@ type FixtureOperation=IntakeOperation|QuoteOperation|QuoteReply|'page-reply-hist
 type QuoteReplyResult={outcome:string|null;message_id:string;source_message_id:string|null;quote_id:string|null;acceptance_id:string|null;order_id:string|null;session_id:string|null};
 type DispatchCheckpoint={phase:'before_call'|'before_finalize';calls:number;effects:number};
 type BookingArgument={date:string}|{optionId:string};
-type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot'|'quote-booking'|'quote-reschedule';
+type QuoteIntakeJourney='quote-delivery'|'quote-guard'|'quote-acceptance'|'quote-clarification'|'quote-agent'|'quote-pilot'|'quote-booking'|'quote-reschedule'|'quote-day';
 type IntakeJourney='intake'|'request'|'request-deferred'|'assessment'|'assessment-complex'|'assessment-complex-source'|'pricing'|'owner-decision'|'owner-decision-partial'|'owner-source-other'|'pilot-complex'|QuoteIntakeJourney;
 
 function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:IntakeJourney,variant:Viewport):Error {
@@ -1088,7 +1089,7 @@ async function configureQuoteService(page:Page,variant:Viewport,journey:QuoteInt
  const range=journey==='quote-acceptance'||journey==='quote-clarification';
  for(const [label,value] of [
   ['База, копейки 1','250000'],['За начатый шаг, копейки 1','50000'],
-  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',range||journey==='quote-booking'?'1000':'100'],
+  ['Шаг размера, мм 1','10'],['Предел размера для цены, мм 1',range||journey==='quote-booking'||journey==='quote-day'?'1000':'100'],
   ['Прибавка к верхней границе, копейки 1',range?'50000':''],['Длительность, минуты 1','65'],
   ['Предоплата, копейки 1',fixedDeposit?'50000':''],['Предоплата, процент 1',''],
  ])await settings.getByLabel(label,{exact:true}).fill(value);
@@ -2396,3 +2397,273 @@ test('@narrow M7.2B reopens a visit after conflict, reschedule and cancellation'
   console.log('M7.2B Chromium ' + JSON.stringify({conversation, session: agreement.session_id, source,
     conflict, moved: moved.booking, cancelled: closed.booking, history: closed.history, newOutgoing: 0}));
 });
+
+test('@narrow M7.3A opens the owner day and follows two works through conflict, history and expiry', async ({page, context}, info) => {
+  test.setTimeout(300_000);
+  const variant = info.project.name === 'chromium-narrow' ? 'narrow' : 'desktop';
+  const journey = 'quote-day';
+  const {firstId, cardId, settings, serviceName, intake, inbox, input, conversation, endpoint,
+    evaluateAndPrice, execute, read, readHistory} = await beginQuoteJourney(page, variant, journey);
+
+  async function accept(request: string, mode: 'NONE' | 'FIXED_DEPOSIT') {
+    const quote = await evaluateAndPrice(request);
+    expect(quote.material).toMatchObject({deposit: {mode}});
+    expect(await execute('deliver-quote', request)).toMatchObject({status: 'SENT', calls: 1, effects: 1});
+    const agreed = await intakeFixture<QuoteReplyResult>('agree-quote', journey, variant, conversation, request);
+    const agreement = (await read(request)).agreement!;
+    expect(agreed).toMatchObject({outcome: 'ACCEPTED', quote_id: quote.quote_id, session_id: agreement.session_id});
+    const refs = {client_id: quote.material.client_id, quote_id: quote.quote_id, order_id: agreement.order_id};
+    const path = `${endpoint}/${request}/sessions/${agreement.session_id}`;
+    return {request, session: agreement.session_id, refs, path};
+  }
+
+  const second = await input('quote-second', conversation);
+  await refreshIntake(inbox, intake);
+  await (await chooseWork(page, second.message_id, 'swallow', 'shoulder', '101 mm', 'linework')).click();
+  await expect(cardId).not.toHaveText(firstId);
+  const secondId = (await cardId.textContent())!;
+  const workSelector = intake.getByLabel('Сохранённая заявка', {exact: true});
+  await workSelector.selectOption(firstId);
+  await expect(cardId).toHaveText(firstId);
+  const a = await accept(firstId, 'NONE');
+  await expect(settings).toBeVisible();
+  await settings.getByRole('combobox', {name: 'Режим предоплаты 1', exact: true}).selectOption('FIXED_DEPOSIT');
+  await settings.getByLabel('Предоплата, копейки 1', {exact: true}).fill('50000');
+  await publishIntakeService(settings, serviceName);
+  await refreshIntake(inbox, intake);
+  await workSelector.selectOption(secondId);
+  await expect(cardId).toHaveText(secondId);
+  const b = await accept(secondId, 'FIXED_DEPOSIT');
+  expect(a.refs.client_id).toBe(b.refs.client_id);
+  expect(a.session).not.toBe(b.session);
+
+  const outgoing = async () => (await readHistory()).filter(m => m.direction === 'OUTBOUND').map(m => m.message_id);
+  const sentBefore = await outgoing();
+  const {csrf_token: csrf} = await (await page.request.get('/api/v1/auth/session')).json() as {csrf_token: string};
+  const headers = {'X-CSRF-Token': csrf, Origin: new URL(page.url()).origin};
+  const availability = `${a.path}/availability?${new URLSearchParams(a.refs)}`;
+  async function configure(body: ScheduleCommand) {
+    const response = await page.request.post(availability, {data: body, headers});
+    expect(response.status(), await response.text()).toBe(200);
+    return await response.json() as Availability;
+  }
+  const timezone = 'Asia/Novosibirsk';
+  const initial = await (await page.request.get(availability)).json() as Availability;
+  const schedule = await configure({action: 'schedule', expected_version: initial.schedule_version, timezone,
+    week: Array.from({length: 7}, (_, weekday) => ({weekday, start_minute: 570, end_minute: 1080}))});
+  await configure({action: 'policy', expected_version: schedule.schedule_version, step_minutes: 15,
+    buffer_before_minutes: 10, buffer_after_minutes: 5, minimum_notice_minutes: 60,
+    horizon_days: 20, offer_ttl_minutes: 10, hold_ttl_minutes: 2});
+  function daysAfter(days: number) {
+    const value = new Date(`${schedule.date}T00:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + days);
+    return value.toISOString().slice(0, 10);
+  }
+  const day = daysAfter(variant === 'narrow' ? 9 : 8);
+  const offDay = daysAfter(variant === 'narrow' ? 12 : 11);
+  async function choose<T>(work: typeof a, hhmm: string) {
+    const offer = await intakeFixture<{options: {option_id: string; visit_start: string}[]}>(
+      'booking-offer', journey, variant, conversation, work.request, undefined, {date: day});
+    const option = offer.options.find(item => Date.parse(item.visit_start) === Date.parse(`${day}T${hhmm}:00+07:00`));
+    expect(option, JSON.stringify(offer)).toBeDefined();
+    return intakeFixture<T>('booking-select', journey, variant, conversation, work.request, undefined, {optionId: option!.option_id});
+  }
+  const first = await choose<{appointment_id: string; allocation_id: string}>(a, '10:00');
+  const open = (tab: Page) => tab.getByRole('region', {name: 'Календарь мастера', exact: true});
+  const dayPath = `/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/scheduling/day`;
+  const businessPath = dayPath.slice(0, -'/scheduling/day'.length);
+  const row = (tab: Page, id: string) => open(tab).getByTestId(`calendar-entry-${id}`);
+  const workCard = (tab: Page) => open(tab).getByRole('region', {name: 'Работа из календаря', exact: true});
+  const current = (tab: Page) => workCard(tab).getByRole('region', {name: 'Запись сейчас', exact: true});
+  const history = (tab: Page) => open(tab).getByRole('region', {name: 'История календаря', exact: true});
+  const active = (tab: Page) => open(tab).getByRole('list', {name: 'Занятость дня', exact: true});
+  async function getDay(tab: Page, date = day) {
+    const response = await tab.request.get(`${dayPath}?date=${date}`);
+    expect(response.status(), await response.text()).toBe(200);
+    return await response.json() as OwnerDay;
+  }
+  async function getBooking(tab: Page, work: typeof a) {
+    const response = await tab.request.get(`${work.path}/booking?${new URLSearchParams(work.refs)}`);
+    expect(response.status(), await response.text()).toBe(200);
+    return await response.json() as SessionBookingView;
+  }
+  async function openCalendar(tab: Page) {
+    await openWorkspace(tab);
+    await tab.getByRole('button', {name: /Synthetic business/}).click();
+    await open(tab).getByRole('button', {name: 'Открыть календарь', exact: true}).click();
+  }
+  async function selectDay(tab: Page, date: string) {
+    const field = open(tab).getByLabel('Дата календаря', {exact: true});
+    const matches = (response: import('@playwright/test').Response) => {
+      const url = new URL(response.url());
+      return response.request().method() === 'GET' && url.pathname === dayPath && url.searchParams.get('date') === date;
+    };
+    const pending = tab.waitForResponse(matches);
+    await field.fill(date);
+    expect((await pending).status()).toBe(200);
+    await expect(field).toHaveValue(date);
+  }
+  const ownerTab = await context.newPage();
+  const otherTab = await context.newPage();
+  for (const tab of [ownerTab, otherTab]) tab.setDefaultTimeout(12_000);
+  // Opening the day and the two works must not need the Inbox list.
+  await ownerTab.route(url => url.pathname === `/api/v1/workspaces/${owner.workspace_id}/conversations`, route => route.abort());
+  await Promise.all([ownerTab.goto('/'), otherTab.goto('/')]);
+  await Promise.all([openCalendar(ownerTab), openCalendar(otherTab)]);
+  const held = await choose<{hold_id: string; allocation_id: string; expires_at: string}>(b, '13:00');
+  await Promise.all([selectDay(ownerTab, day), selectDay(otherTab, day)]);
+  const dayBefore = await getDay(ownerTab);
+  expect(dayBefore.timezone).toBe(timezone);
+  await expect(row(ownerTab, first.appointment_id)).toContainText('Визит 10:00–11:05');
+  await expect(row(ownerTab, first.appointment_id)).toContainText('Занятость 09:50–11:10');
+  await expect(row(ownerTab, first.appointment_id)).toContainText('flower');
+  await expect(row(ownerTab, held.hold_id)).toContainText('swallow');
+  await expect(row(ownerTab, held.hold_id)).toHaveAttribute('data-status', 'HELD');
+
+  async function checkWork(tab: Page, work: typeof a, id: string, status: string) {
+    await row(tab, id).getByRole('button', {name: 'Открыть работу', exact: true}).click();
+    await expect(workCard(tab).getByTestId('service-request-id')).toHaveText(work.request);
+    await expect(workCard(tab).getByTestId('service-session-id')).toHaveText(work.session);
+    await expect(current(tab)).toHaveAttribute('data-booking-id', id);
+    await expect(current(tab)).toHaveAttribute('data-booking-status', status);
+    const booking = await getBooking(tab, work);
+    expect(booking).toMatchObject({request_id: work.request, session_id: work.session, booking: {outcome: status}});
+    const view = await getDay(tab);
+    const item = [...view.entries, ...view.history].find(entry => entry.kind !== 'BLOCK' && (
+      entry.kind === 'HOLD' ? entry.booking.hold_id === id : entry.booking.appointment_id === id));
+    expect(item).toMatchObject({selection: {request_id: work.request, session_id: work.session}, booking: booking.booking});
+    return booking;
+  }
+  await expect(ownerTab.getByText('Выберите диалог.', {exact: true})).toBeVisible();
+  const original = await checkWork(ownerTab, a, first.appointment_id, 'CONFIRMED');
+  const heldBefore = await checkWork(ownerTab, b, held.hold_id, 'HELD');
+  expect(Date.parse(rowTime(heldBefore.booking))).toBe(Date.parse(held.expires_at));
+  await expect(current(ownerTab)).toContainText('13:00–14:05');
+  await selectDay(ownerTab, offDay);
+  await expect(open(ownerTab).getByText('На этот день нет действующей занятости.', {exact: true})).toBeVisible();
+  await ownerTab.reload();
+  await openCalendar(ownerTab);
+  await selectDay(ownerTab, day);
+  await checkWork(ownerTab, a, first.appointment_id, 'CONFIRMED');
+
+  async function postThrough(tab: Page, path: string, trigger: () => Promise<unknown>, status = 200) {
+    const pending = tab.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === path);
+    await trigger();
+    const response = await pending;
+    expect(response.status(), await response.text()).toBe(status);
+    return {
+      body: await response.json(),
+      key: response.request().headers()['idempotency-key'],
+    };
+  }
+  const oldPath = `${a.path}/booking/${first.appointment_id}`;
+  async function propose() {
+    await current(ownerTab).getByRole('button', {name: 'Перенести визит', exact: true}).click();
+    const {body} = await postThrough(ownerTab, `${oldPath}/reschedule-offers`, () =>
+      current(ownerTab).getByRole('button', {name: 'Подобрать время переноса', exact: true}).click());
+    const option = (body.options as {option_id: string; visit_start: string}[]).find(item => Date.parse(item.visit_start) === Date.parse(`${day}T10:30:00+07:00`));
+    expect(option).toBeDefined();
+    const choices = current(ownerTab).getByLabel('Новое время', {exact: true});
+    await expect(choices.getByRole('option', {name: '10:30–11:35 · UTC+07:00', exact: true})).toBeAttached();
+    await choices.selectOption(option!.option_id);
+    await current(ownerTab).getByLabel('Причина переноса', {exact: true}).fill('Клиент попросил позже');
+  }
+
+  await propose();
+  await open(otherTab).getByText('Поставить блок', {exact: true}).click();
+  await open(otherTab).getByLabel('Начало блока', {exact: true}).fill(`${day}T11:10`);
+  await open(otherTab).getByLabel('Конец блока', {exact: true}).fill(`${day}T11:20`);
+  const blocksPath = `${businessPath}/scheduling/blocks`;
+  const {body: block} = await postThrough(otherTab, blocksPath, () =>
+    open(otherTab).getByRole('button', {name: 'Сохранить блок', exact: true}).click());
+  await expect(row(otherTab, block.block_id)).toContainText('11:10–11:20');
+  const conflict = await postThrough(ownerTab, `${oldPath}/reschedule`, () =>
+    current(ownerTab).getByRole('button', {name: 'Подтвердить перенос', exact: true}).click(), 409);
+  expect(conflict.body).toEqual({error: {code: 'CALENDAR_CONFLICT', affected: [{kind: 'BLOCK', id: block.block_id}]}});
+  await expect(current(ownerTab).getByRole('alert')).toContainText('Блок 11:10–11:20');
+  await expect(current(ownerTab)).toContainText('10:00–11:05');
+  expect(await getBooking(ownerTab, a)).toEqual(original);
+
+  await postThrough(otherTab, `${blocksPath}/${block.block_id}/release`, () =>
+    row(otherTab, block.block_id).getByRole('button', {name: 'Снять блок', exact: true}).click());
+  await expect(row(otherTab, block.block_id)).toHaveCount(0);
+  await checkWork(otherTab, a, first.appointment_id, 'CONFIRMED');
+  await current(otherTab).getByRole('button', {name: 'Отменить визит', exact: true}).click();
+  await current(otherTab).getByLabel('Причина отмены', {exact: true}).fill('Устаревшая вкладка');
+
+  await propose();
+  const moved = await postThrough(ownerTab, `${oldPath}/reschedule`, () =>
+    current(ownerTab).getByRole('button', {name: 'Подтвердить перенос', exact: true}).click());
+  expect(moved.key).not.toBe(conflict.key);
+  const next = moved.body.booking.appointment_id as string;
+  expect(moved.body).toMatchObject({outcome: 'RESCHEDULED', session_id: a.session,
+    booking: {outcome: 'CONFIRMED', previous_appointment_id: first.appointment_id, visit_start: `${day}T10:30:00+07:00`,
+      visit_end: `${day}T11:35:00+07:00`}});
+  await expect(current(otherTab)).toHaveAttribute('data-booking-id', next, {timeout: 12000});
+  const stale = await postThrough(otherTab, `${oldPath}/cancel`, () =>
+    current(otherTab).getByRole('button', {name: 'Подтвердить отмену', exact: true}).click(), 409);
+  expect(stale.body).toEqual({error: {code: 'STALE_STATE'}});
+  await expect(current(otherTab).getByRole('alert')).toContainText('Запись или вариант уже изменились');
+  await expect(current(otherTab)).toContainText('10:30–11:35');
+  await expect(current(ownerTab)).toHaveAttribute('data-booking-id', next);
+  await expect(active(ownerTab).getByTestId(`calendar-entry-${first.appointment_id}`)).toHaveCount(0);
+  await expect(history(ownerTab).getByTestId(`calendar-entry-${first.appointment_id}`)).toContainText('Запись перенесена');
+  await expect(row(ownerTab, next)).toContainText('10:30–11:35');
+
+  await current(ownerTab).getByRole('button', {name: 'Отменить визит', exact: true}).click();
+  await current(ownerTab).getByLabel('Причина отмены', {exact: true}).fill('Клиент отменил визит');
+  const cancelled = await postThrough(ownerTab, `${a.path}/booking/${next}/cancel`, () =>
+    current(ownerTab).getByRole('button', {name: 'Подтвердить отмену', exact: true}).click());
+  expect(cancelled.body).toMatchObject({outcome: 'CANCELLED', session_id: a.session, booking: {appointment_id: next}});
+  await expect(current(otherTab)).toHaveAttribute('data-booking-status', 'CANCELLED', {timeout: 12000});
+  await expect(history(ownerTab).getByTestId(`calendar-entry-${next}`)).toContainText('Запись отменена');
+  await history(ownerTab).getByRole('button', {name: 'Показать новый визит', exact: true}).click();
+  await expect(row(ownerTab, next)).toBeFocused();
+  const afterCancellation = await getDay(ownerTab);
+  expect(afterCancellation.entries).toEqual(dayBefore.entries.filter(entry => entry.kind === 'HOLD'));
+  expect(afterCancellation.history).toEqual(expect.arrayContaining([
+    expect.objectContaining({successor: {appointment_id: next, date: day}, booking: expect.objectContaining({appointment_id: first.appointment_id, outcome: 'CANCELLED'})}),
+    expect.objectContaining({successor: null, booking: expect.objectContaining({appointment_id: next, outcome: 'CANCELLED'})}),
+  ]));
+
+  const preview = workCard(ownerTab).getByRole('region', {name: 'Варианты времени выбранного сеанса', exact: true});
+  await workCard(ownerTab).getByRole('button', {name: 'Варианты времени', exact: true}).click();
+  await expect(preview.getByRole('list', {name: 'Подходящие окна'})).toContainText('Визит 10:00–11:05');
+  const exception = () => preview.getByRole('button', {name: 'Отметить выходной', exact: true}).click();
+  const failedClosure = await postThrough(ownerTab, `${a.path}/availability`, exception, 409);
+  expect(failedClosure.body).toEqual({error: {code: 'CALENDAR_CONFLICT', affected: [{kind: 'HOLD', id: held.hold_id}]}});
+  await expect(preview.getByRole('alert')).toContainText('Удержание «swallow');
+  await selectDay(ownerTab, offDay);
+  await postThrough(ownerTab, `${a.path}/availability`, exception);
+  await expect(preview.getByText('На эту дату отмечен выходной.', {exact: true})).toBeVisible();
+  await expect(preview.getByRole('list', {name: 'Подходящие окна'})).toHaveCount(0);
+  await expect(open(ownerTab).getByText('Выходной.', {exact: true})).toBeVisible();
+  await selectDay(ownerTab, day);
+  await checkWork(ownerTab, b, held.hold_id, 'HELD');
+
+  await expect(current(ownerTab)).toHaveAttribute('data-booking-status', 'EXPIRED', {timeout: 130_000});
+  await expect(current(ownerTab)).toContainText('Срок удержания истёк.');
+  await expect(history(ownerTab).getByTestId(`calendar-entry-${held.hold_id}`)).toHaveAttribute('data-status', 'EXPIRED');
+  await expect(active(ownerTab)).toHaveCount(0);
+  const expired = await getDay(ownerTab);
+  expect(Date.parse(expired.now)).toBeGreaterThanOrEqual(Date.parse(held.expires_at));
+  expect(expired.entries).toEqual([]);
+  expect((await getBooking(ownerTab, b)).booking).toMatchObject({outcome: 'EXPIRED', hold_id: held.hold_id, allocation_id: held.allocation_id});
+  await workCard(ownerTab).getByRole('button', {name: 'Варианты времени', exact: true}).click();
+  await expect(preview.getByRole('list', {name: 'Подходящие окна'})).toContainText('Визит 13:00–14:05');
+  expect(await outgoing()).toEqual(sentBefore);
+  for (const tab of [ownerTab, otherTab]) expect(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+
+  console.log('M7.3A S7 Chromium ' + info.project.name + ' ' + JSON.stringify({
+    day, offDay, conversation, a, b, conflict: conflict.body, stale: stale.body,
+    original: original.booking, moved: moved.body.booking, cancelled: cancelled.body.booking,
+    hold: {before: heldBefore.booking, expiryRead: expired.now},
+    activeAfterCancellation: afterCancellation.entries.map(entry => entry.kind),
+    historyAfterExpiry: expired.history.map(entry => entry.booking.outcome), newOutbound: 0,
+  }));
+});
+
+function rowTime(booking: Booking | null) {
+  if (booking === null || !('expires_at' in booking)) throw new Error('S7 expected a hold deadline');
+  return booking.expires_at;
+}

@@ -483,7 +483,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     availability = catalog.source_catalog(catalog.ROOT, "0032")
     holds = catalog.source_catalog(catalog.ROOT, "0033")
     appointments = catalog.source_catalog(catalog.ROOT, "0034")
-    current = catalog.source_catalog(catalog.ROOT, "0035")
+    current = catalog.source_catalog(catalog.ROOT, "0036")
     assert (len(request["functions"]), len(request["columns"])) == (331, 75)
     assert (len(intake["functions"]), len(intake["columns"])) == (318, 73)
     assert (len(v7_repair["functions"]), len(v7_repair["columns"])) == (321, 73)
@@ -506,7 +506,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         416,
         430,
         434,
-        440,
+        442,
     )
     assert (
         len(old["columns"]),
@@ -573,10 +573,10 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         current["functions"]["platform.scheduling_appointment_schema_profile()"]
         == appointments["functions"]["platform.scheduling_appointment_schema_profile()"]
     )
-    body = current["functions"]["platform.scheduling_reschedule_schema_profile()"]["body"]
+    body = current["functions"]["platform.scheduling_owner_day_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 439,
+        "other_functions": 441,
         "tables": 97,
         "result": "PASS",
     }

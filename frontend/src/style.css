@@ -124,3 +124,29 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .intake-card article, .duration-cases article { padding:.75rem 0; border-bottom:1px solid #d9dce1; overflow-wrap:anywhere; }
 .case-measurements { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:.75rem; }
 .intake-card input, .duration-cases input, .duration-cases select { max-width:100%; min-width:0; }
+
+.owner-calendar { overflow-wrap: anywhere; min-width: 0; }
+.calendar-day-controls, .calendar-row-actions {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .65rem 1rem;
+}
+.calendar-day-controls { margin-bottom: 1rem; }
+.calendar-day-controls label { display: grid; gap: .35rem; }
+.owner-calendar input, .owner-calendar select { max-width: 100%; min-width: 0; }
+.owner-calendar fieldset {
+  min-width: 0; margin: .75rem 0; border: 1px solid #d8dee8; border-radius: .6rem;
+}
+.owner-calendar summary { cursor: pointer; padding: .5rem 0; }
+.calendar-entries { list-style: none; padding: 0; display: grid; gap: .55rem; }
+.calendar-row {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  gap: .6rem 1rem; border: 1px solid #d8dee8; border-radius: .65rem; padding: .75rem;
+}
+.calendar-row p { margin: .3rem 0; }
+.calendar-row:focus-visible, .calendar-work h3:focus-visible { outline: 2px solid #244bbf; outline-offset: 3px; }
+.calendar-work { border-top: 1px solid #d8dee8; padding-top: 1rem; margin-top: 1rem; }
+.calendar-controls { margin-top: .75rem; }
+@media (max-width: 520px) {
+  .owner-calendar .billing-heading { align-items: flex-start; flex-direction: column; gap: .5rem; }
+  .calendar-day-controls { align-items: flex-start; flex-direction: column; }
+  .calendar-row-actions button { white-space: normal; }
+}

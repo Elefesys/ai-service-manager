@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, Business, Session } from './api';
 import { BillingPanel } from './BillingPanel';
 import { ConfigurationPanel } from './ConfigurationPanel';
@@ -6,6 +6,7 @@ import { IntakePanel } from './IntakePanel';
 import { DurationCasesPanel } from './DurationCasesPanel';
 import { ReferencePortfolio } from './PortfolioPanel';
 import { MessagingPanel } from './MessagingPanel';
+import { OwnerCalendar } from './OwnerCalendar';
 import { EscalationsPanel } from './EscalationsPanel';
 import type { ApprovalSelection, EscalationContext } from './escalation-api';
 
@@ -27,6 +28,9 @@ function Console() {
   const denyOwner = () => { if (session) setDeniedOwner({ session, workspace }); };
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
   const [selected, setSelected] = useState<Business | null>(null);
+  const selectedId = selected?.id;
+  const calendarScope = useMemo(() => selectedId ? {workspace, business: selectedId} : null, [workspace, selectedId]);
+  const [recheckingBusiness, setRecheckingBusiness] = useState(false);
   const [ownerDecision, setOwnerDecision] = useState<EscalationContext | null>(null);
   const [commercialApproval,setCommercialApproval] = useState<ApprovalSelection|null>(null);
   const [commercialDecision,setCommercialDecision] = useState<ApprovalSelection|null>(null);
@@ -40,6 +44,7 @@ function Console() {
   const logoutIntent = useRef(false);
   const lastContext = useRef({ actor: '', workspace: '' });
   const beginAuth = useCallback(() => {
+    setRecheckingBusiness(false);
     const owner = ++authSequence.current;
     authControllers.current.forEach((controller) => controller.abort());
     authControllers.current.clear();
@@ -54,6 +59,7 @@ function Console() {
     businessControllers.current.clear();
     setSession(null); setWorkspace(''); setBusinesses(null); setSelected(null);
     setDeniedOwner(null);
+    setRecheckingBusiness(false);
     setOwnerDecision(null);
     setCommercialApproval(null);
     setCommercialDecision(null);
@@ -68,6 +74,7 @@ function Console() {
     setPhase('anonymous');
     setError(notice);
   }, [clearProtected]);
+  const expireCalendarSession = useCallback(() => invalidateAuth('Сессия завершена. Войдите снова.'), [invalidateAuth]);
   const accept = useCallback((next: Session, owner: number, controller: AbortController) => {
     if (!ownsAuth(owner, controller)) return false;
     const preferred = lastContext.current.actor === next.user_account_id && next.memberships.some(m => m.workspace_id === lastContext.current.workspace) ? lastContext.current.workspace : next.memberships[0]?.workspace_id ?? '';
@@ -76,31 +83,44 @@ function Console() {
     return true;
   }, [clearProtected, ownsAuth]);
 
-  const checkSession = useCallback(async (recovery = false) => {
+  const checkSession = useCallback(async (recovery = false, expected?: Session) => {
     const { owner, controller } = beginAuth();
-    setPhase(recovery ? 'recovering' : 'checking'); setError('');
+    if (expected) setRecheckingBusiness(true);
+    else setPhase(recovery ? 'recovering' : 'checking');
+    setError('');
     try {
       const actual = await api.session(controller.signal);
       if (!ownsAuth(owner, controller)) return;
       if (logoutIntent.current) {
         clearProtected(); setPhase('recovering');
         await finishLogout(actual, false);
-      } else accept(actual, owner, controller);
+      } else if (!expected || JSON.stringify(actual) !== JSON.stringify(expected)) {
+        accept(actual, owner, controller);
+      }
     }
     catch (e) {
       if (!ownsAuth(owner, controller)) return;
       clearProtected();
       if (e instanceof ApiError && e.status === 401 && e.code === 'SESSION_REQUIRED') { logoutIntent.current = false; setPhase('anonymous'); }
       else { setPhase('uncertain'); setError(message(e)); }
-    } finally { authControllers.current.delete(controller); }
+    } finally {
+      if (expected && ownsAuth(owner, controller)) setRecheckingBusiness(false);
+      authControllers.current.delete(controller);
+    }
   }, [accept, beginAuth, clearProtected, ownsAuth]);
 
   useEffect(() => { mounted.current = true; void checkSession(); return () => { mounted.current = false; authSequence.current++; authControllers.current.forEach((controller) => controller.abort()); businessControllers.current.forEach((controller) => controller.abort()); }; }, [checkSession]);
   useEffect(() => {
-    const verify = () => { if (document.visibilityState === 'visible' && session && !busy) void checkSession(true); };
+    const verify = () => {
+      if (document.visibilityState === 'visible' && session && !busy) {
+        // Hold the business view during focus validation so a same-session
+        // response does not reset a form the owner has open in another tab.
+        void checkSession(true, selected && ownerSession ? session : undefined);
+      }
+    };
     window.addEventListener('focus', verify); document.addEventListener('visibilitychange', verify);
     return () => { window.removeEventListener('focus', verify); document.removeEventListener('visibilitychange', verify); };
-  }, [session, busy, checkSession]);
+  }, [session, busy, selected, ownerSession, checkSession]);
   useEffect(() => {
     if (!session || !workspace) { setBusinesses(session ? [] : null); return; }
     const owner = ++businessGeneration.current; const principal = session.user_account_id; const c = new AbortController(); businessControllers.current.add(c); setBusinesses(null); setSelected(null);
@@ -162,7 +182,11 @@ function Console() {
     catch (e) { if (ownsAuth(owner, controller)) await recoverMutation(e); } finally { if (ownsAuth(owner, controller)) setBusy(false); authControllers.current.delete(controller); }
   }
   async function selectBusiness(id: string) {
-    if (!session || !workspace) return; const owner = businessGeneration.current; const c = new AbortController(); businessControllers.current.add(c); setSelected(null);
+    if (!session || !workspace) return;
+    const owner = ++businessGeneration.current;
+    const c = new AbortController();
+    businessControllers.current.add(c);
+    setSelected(null);
     try { const item = await api.business(workspace, id, c.signal); if (owner === businessGeneration.current) setSelected(item); }
     catch (e) { if (!c.signal.aborted && owner === businessGeneration.current) setError(e instanceof ApiError && e.status === 404 ? 'Business не найден или недоступен.' : message(e)); }
     finally { businessControllers.current.delete(c); }
@@ -173,13 +197,18 @@ function Console() {
     {(phase === 'checking' || phase === 'recovering') && <section className="panel center" aria-busy="true"><div className="spinner" /><h2>{phase === 'checking' ? 'Проверяем сессию' : 'Уточняем результат'}</h2><p>Защищённые данные пока скрыты.</p></section>}
     {phase === 'uncertain' && <section className="panel alert" role="alert"><h2>Состояние сессии неизвестно</h2><p>{error}</p><button onClick={() => void checkSession(true)}>Проверить снова</button></section>}
     {phase === 'anonymous' && <section className="auth-grid"><div><span className="kicker">SERVER SESSION</span><h2>Вход в консоль</h2><p>Используйте синтетическую учётную запись LOCAL/TEST. Регистрация и восстановление пароля здесь не реализованы.</p></div><form className="panel form" onSubmit={(e) => void login(e)}><label htmlFor="login">Логин</label><input id="login" name="login" autoComplete="username" minLength={3} maxLength={72} required /><label htmlFor="password">Пароль</label><input id="password" name="password" type="password" autoComplete="current-password" minLength={15} maxLength={128} required /><button disabled={busy} type="submit">{busy ? 'Входим…' : 'Войти'}</button>{error && <p className="error" role="alert">{error}</p>}</form></section>}
+    {recheckingBusiness && <p role="status">Проверяем сессию…</p>}
+    <div hidden={recheckingBusiness}>
     {phase === 'authenticated' && session && <><section className="identity"><div><span className="kicker">ACTIVE SESSION</span><h2>Рабочее пространство</h2><p className="mono">Пользователь {session.user_account_id}</p></div><div className="actions"><button className="secondary" disabled={busy} onClick={() => void rotate()}>Обновить защиту сессии</button><button className="danger" disabled={busy} onClick={() => void finishLogout()}>Выйти</button></div></section><section className="panel"><label htmlFor="workspace">Workspace</label><select id="workspace" value={workspace} onChange={(e) => { businessGeneration.current++; setBusinesses(null); setSelected(null); lastContext.current = { actor: session.user_account_id, workspace: e.target.value }; setError(''); setWorkspace(e.target.value); }}>{session.memberships.map((m) => <option value={m.workspace_id} key={m.workspace_id}>{m.workspace_id} · {m.role}</option>)}</select>{session.memberships.length === 0 && <p className="empty">Нет доступных memberships.</p>}<p className="muted">Сессия действует до: {session.expires_at} (решение об истечении принимает сервер).</p></section>{error && <p className="banner" role="alert">{error}</p>}<section className="panel"><h2>Business</h2>{businesses === null && workspace && <p role="status">Загружаем список…</p>}{businesses?.length === 0 && <p className="empty">В этом Workspace нет доступных Business.</p>}<div className="cards">{businesses?.map((b) => <button className="business" key={b.id} onClick={() => void selectBusiness(b.id)}><strong>{b.name}</strong><span>{b.status} · v{b.version}</span><span className="mono">{b.id}</span></button>)}</div>{selected && <article className="detail"><span className="kicker">DETAIL</span><h3>{selected.name}</h3><dl><dt>Status</dt><dd>{selected.status}</dd><dt>Version</dt><dd>{selected.version}</dd><dt>Business ID</dt><dd className="mono">{selected.id}</dd></dl></article>}</section></>}
     {phase === 'authenticated' && ownerBlocked && <section className="panel alert" role="alert"><h2>Нет доступа к данным владельца</h2><p>Подписка, Audit, переписка, изображения и запросы владельцу скрыты до проверки сессии.</p><button onClick={() => void checkSession(true)}>Проверить доступ заново</button></section>}
+    {calendarScope && ownerSession?.memberships.some(m => m.workspace_id === workspace && m.role === 'OWNER') &&
+      <OwnerCalendar key={`${workspace}/${selectedId}`} scope={calendarScope} csrf={ownerSession.csrf_token} expired={expireCalendarSession}/>}
     <ConfigurationPanel session={ownerSession} workspace={workspace} business={selected} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
     <BillingPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
     <EscalationsPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} accepted={setOwnerDecision} approval={commercialApproval?.workspace===workspace?commercialApproval:null} approvalChanged={setCommercialDecision} />
     <DurationCasesPanel session={ownerSession} scope={selected?{workspace,business:selected.id}:null} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} />
     <MessagingPanel portfolio={(context,canAnalyse,refresh,openMessage)=><><IntakePanel approvalOpened={setCommercialApproval} approvalChanged={commercialDecision} refresh={refresh} openMessage={openMessage} session={ownerSession} scope={context?{workspace,business:context.business_id,conversation:context.conversation_id,client:context.client_id}:null} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} /><ReferencePortfolio session={ownerSession} workspace={workspace} context={context} canAnalyse={canAnalyse} refresh={refresh} recover={()=>void checkSession(true)} expired={()=>invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner}/></>} session={ownerSession} workspace={workspace} ownerDecision={ownerDecision} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
+    </div>
   </Shell>;
 }
 

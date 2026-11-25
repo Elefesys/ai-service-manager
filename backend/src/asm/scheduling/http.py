@@ -24,6 +24,7 @@ from asm.scheduling.commands import (
     issue_offer,
     issue_reschedule_offer,
     read_booking,
+    read_owner_day,
     release_block,
     reschedule_appointment,
 )
@@ -32,6 +33,7 @@ from asm.scheduling.models import (
     AvailabilityCommand,
     AvailabilityPreview,
     LocalDate,
+    OwnerDay,
     SessionBooking,
 )
 from asm.scheduling.service import SelectedSession, preview_availability
@@ -50,6 +52,10 @@ class SessionReferences(ConfigurationModel):
 
 
 class AvailabilityQuery(SessionReferences):
+    date: LocalDate | None = None
+
+
+class OwnerDayQuery(ConfigurationModel):
     date: LocalDate | None = None
 
 
@@ -103,7 +109,7 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         "/service-requests/{request_id}/sessions/{session_id}",
         tags=["scheduling"],
     )
-    blocks = APIRouter(prefix=business_path + "/scheduling/blocks", tags=["scheduling"])
+    calendar = APIRouter(prefix=business_path + "/scheduling", tags=["scheduling"])
 
     @app.exception_handler(CalendarConflict)
     async def calendar_conflict_response(
@@ -334,8 +340,26 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         async with auth.workspace(token, UUID(workspace_id)) as unit:
             return await cancel_appointment(unit, selection, UUID(appointment_id), body.reason, key)
 
-    @blocks.post(
-        "",
+    @calendar.get(
+        "/day",
+        response_model=OwnerDay,
+        description="Read this business's calendar day, defaulting to today in the resource time zone.",
+    )
+    async def read_calendar_day(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        query: Annotated[OwnerDayQuery, Query()],
+    ) -> OwnerDay:
+        check_query(request)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            return await read_owner_day(unit, UUID(business_id), query.date)
+
+    @calendar.post(
+        "/blocks",
         response_model=CalendarBlock,
         openapi_extra=command_schema(CalendarBlockInput),
         responses={
@@ -361,8 +385,8 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
             raise CalendarConflict(result.affected)
         return result
 
-    @blocks.post(
-        "/{block_id}/release",
+    @calendar.post(
+        "/blocks/{block_id}/release",
         response_model=CalendarBlock,
         openapi_extra=command_schema(EmptyRequest),
     )
@@ -381,4 +405,4 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
             return await release_block(unit, UUID(business_id), UUID(block_id), key)
 
     app.include_router(router)
-    app.include_router(blocks)
+    app.include_router(calendar)

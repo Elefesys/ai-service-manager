@@ -213,6 +213,65 @@ class SessionBooking(BookingProjection):
     order_id: CanonicalUUID
 
 
+class OwnerDaySelection(ConfigurationModel):
+    client_id: CanonicalUUID
+    conversation_id: CanonicalUUID
+    request_id: CanonicalUUID
+    quote_id: CanonicalUUID
+    order_id: CanonicalUUID
+    session_id: CanonicalUUID
+
+
+class OwnerDayWork(ConfigurationModel):
+    selection: OwnerDaySelection
+    work_label: Nonblank = Field(max_length=603)
+
+
+class OwnerDaySuccessor(ConfigurationModel):
+    appointment_id: CanonicalUUID
+    date: LocalDate
+
+
+class OwnerDayAppointment(OwnerDayWork):
+    kind: Literal["APPOINTMENT"]
+    booking: Annotated[ConfirmedBooking | CancelledBooking, Field(discriminator="outcome")]
+    successor: OwnerDaySuccessor | None
+
+
+class OwnerDayHold(OwnerDayWork):
+    kind: Literal["HOLD"]
+    booking: HeldBooking
+
+
+class OwnerDayBlock(ConfigurationModel):
+    kind: Literal["BLOCK"]
+    block_id: CanonicalUUID
+    start: Instant
+    end: Instant
+    timezone: TimeZoneName = Field(exclude=True)
+
+    @field_serializer("start", "end", when_used="json")
+    def local_time(self, value: datetime) -> datetime:
+        return value.astimezone(ZoneInfo(self.timezone))
+
+
+OwnerDayRow = Annotated[
+    OwnerDayAppointment | OwnerDayHold | OwnerDayBlock, Field(discriminator="kind")
+]
+
+
+class OwnerDay(ConfigurationModel):
+    date: LocalDate
+    now: Instant
+    timezone: TimeZoneName | None
+    resource_id: CanonicalUUID | None
+    schedule_version: ScheduleVersion
+    working_intervals: list[LocalSpan]
+    exception: DateException | None
+    entries: list[OwnerDayRow]
+    history: list[OwnerDayRow]
+
+
 class AvailabilityPreview(ConfigurationModel):
     request_id: CanonicalUUID
     quote_id: CanonicalUUID

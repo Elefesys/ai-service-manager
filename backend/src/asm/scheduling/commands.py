@@ -19,6 +19,7 @@ from asm.scheduling.models import (
     ConfirmedBooking,
     Instant,
     LocalDate,
+    OwnerDay,
     ScheduleSnapshot,
     SessionBooking,
     TimeWindow,
@@ -338,6 +339,11 @@ async def read_booking(unit: TenantUnitOfWork, selection: SelectedSession) -> Se
         booking=projection.booking,
         history=projection.history,
     )
+
+
+async def read_owner_day(unit: TenantUnitOfWork, business_id: UUID, day: date | None) -> OwnerDay:
+    await require_owner(unit)
+    return _stored(OwnerDay, await unit.scheduling_owner_day(business_id, day))
 
 
 async def issue_reschedule_offer(

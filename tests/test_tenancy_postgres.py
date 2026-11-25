@@ -507,6 +507,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0033",
             "0034",
             "0035",
+            "0036",
         }:
             expected_tables.add("service_requests")
         if revision in {
@@ -520,17 +521,29 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0033",
             "0034",
             "0035",
+            "0036",
         }:
             expected_tables.add("service_assessments")
-        if revision in {"0027", "0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035"}:
+        if revision in {
+            "0027",
+            "0028",
+            "0029",
+            "0030",
+            "0031",
+            "0032",
+            "0033",
+            "0034",
+            "0035",
+            "0036",
+        }:
             expected_tables.add("price_calculations")
-        if revision in {"0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035"}:
+        if revision in {"0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036"}:
             expected_tables.update(("approval_requests", "owner_decisions"))
-        if revision in {"0029", "0030", "0031", "0032", "0033", "0034", "0035"}:
+        if revision in {"0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036"}:
             expected_tables.add("quotes")
-        if revision in {"0030", "0031", "0032", "0033", "0034", "0035"}:
+        if revision in {"0030", "0031", "0032", "0033", "0034", "0035", "0036"}:
             expected_tables.update(("quote_acceptances", "service_orders", "service_sessions"))
-        if revision in {"0032", "0033", "0034", "0035"}:
+        if revision in {"0032", "0033", "0034", "0035", "0036"}:
             expected_tables.update(
                 (
                     "scheduling_resources",
@@ -540,7 +553,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                     "scheduling_policy_activations",
                 )
             )
-        if revision in {"0033", "0034", "0035"}:
+        if revision in {"0033", "0034", "0035", "0036"}:
             expected_tables.update(
                 (
                     "availability_offers",
@@ -549,7 +562,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                     "resource_allocations",
                 )
             )
-        if revision in {"0034", "0035"}:
+        if revision in {"0034", "0035", "0036"}:
             expected_tables.add("appointments")
         assert {row["tablename"] for row in tables} == expected_tables
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
@@ -813,6 +826,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0033",
             "0034",
             "0035",
+            "0036",
         }:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
@@ -891,6 +905,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0033",
             "0034",
             "0035",
+            "0036",
         }:
             from scripts import native_context_db_catalog as catalog
 
@@ -920,6 +935,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 "0033",
                 "0034",
                 "0035",
+                "0036",
             }:
                 for signature, function in source["functions"].items():
                     if (
@@ -945,6 +961,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                                 "0033",
                                 "0034",
                                 "0035",
+                                "0036",
                             }
                             and signature.startswith("platform.knowledge_")
                         )
@@ -966,6 +983,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                                 "0033",
                                 "0034",
                                 "0035",
+                                "0036",
                             }
                             and (
                                 signature.startswith("platform.portfolio_")
@@ -988,6 +1006,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                                 "0033",
                                 "0034",
                                 "0035",
+                                "0036",
                             }
                             and signature.startswith(("platform.intake_", "platform.duration_"))
                         )
@@ -1004,6 +1023,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                             "0033",
                             "0034",
                             "0035",
+                            "0036",
                         }
                         and signature.startswith("platform.service_request_")
                         or revision
@@ -1018,21 +1038,34 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                             "0033",
                             "0034",
                             "0035",
+                            "0036",
                         }
                         and signature.startswith("platform.service_assessment_")
                         or revision
-                        in {"0027", "0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035"}
+                        in {
+                            "0027",
+                            "0028",
+                            "0029",
+                            "0030",
+                            "0031",
+                            "0032",
+                            "0033",
+                            "0034",
+                            "0035",
+                            "0036",
+                        }
                         and signature.startswith("platform.price_")
                         or revision
-                        in {"0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035"}
+                        in {"0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036"}
                         and signature.startswith(("platform.approval_", "platform.owner_decision_"))
-                        or revision in {"0029", "0030", "0031", "0032", "0033", "0034", "0035"}
+                        or revision
+                        in {"0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036"}
                         and signature.startswith("platform.quote_")
-                        or revision in {"0030", "0031", "0032", "0033", "0034", "0035"}
+                        or revision in {"0030", "0031", "0032", "0033", "0034", "0035", "0036"}
                         and signature == "platform.telegram_ingest_own_text(text,jsonb,uuid)"
-                        or revision in {"0031", "0032", "0033", "0034", "0035"}
+                        or revision in {"0031", "0032", "0033", "0034", "0035", "0036"}
                         and signature.startswith("platform.service_intent_")
-                        or revision in {"0032", "0033", "0034", "0035"}
+                        or revision in {"0032", "0033", "0034", "0035", "0036"}
                         and signature.startswith("platform.scheduling_")
                     ):
                         native_profiles[signature] = (

@@ -81,7 +81,7 @@ INPUTS = {
 PILOT_QUESTION = (
     "Пришлите фото старой татуировки при дневном свете, чтобы мастер оценил перекрытие."
 )
-BOOKING_JOURNEYS = {"quote-booking", "quote-reschedule"}
+BOOKING_JOURNEYS = {"quote-booking", "quote-reschedule", "quote-day"}
 QUOTE_JOURNEYS = {
     "quote-delivery",
     "quote-guard",

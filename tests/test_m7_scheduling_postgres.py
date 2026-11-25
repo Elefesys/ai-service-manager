@@ -447,4 +447,4 @@ async def test_m7_upgrade_0031_preserves_accepted_work_and_session(scheduling_pg
             assert empty["reason"] == "NO_WORKING_HOURS" and not empty["windows"]
         proof("0031-to-0032", A=left.proof(), B=right.proof(), accepts=2, orders=2, sessions=2)
     finally:
-        await _migrate("upgrade", "0035")
+        await _migrate("upgrade", "0036")
