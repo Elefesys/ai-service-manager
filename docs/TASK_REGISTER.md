@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.2B REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-25
 
-Мастер переносит подтверждённый визит с возможным пересечением прежнего интервала или явно отменяет его. Неудачный перенос сохраняет исходную запись и занятость. Единственная задача — M7.2B. C1 ведёт команды и owner API, C2 отвечает за PostgreSQL. База `main` `eb8d43e038fc5935a19771193c35ce275d517fac`, ветка `c1/m7-2b-reschedule-cancel`, миграция `0035_scheduling_reschedule_cancel.py` поверх `0034`. [Поручение, пути и критерии S6](tasks/M7_HANDOFF.md#m72b-task).
+После отказа повтор команды сохраняет визит на 10:00. Новым ключом мастер переносит тот же сеанс на 10:30. C0 закрыл `C0-M7.2B-01` на head `1044251c7173eb228d35a8f3677c769dc2ae05dc`, база `main` `eb8d43e038fc5935a19771193c35ce275d517fac`, ветка `c1/m7-2b-reschedule-cancel`, схема `0035` поверх `0034`. Обе адресные проверки C0 прошли на PostgreSQL 18.6. CI PR #68 — 12/12 после повтора одного задания Docker. Активна независимая проверка C8 по S6. [Поручение и доказательства](tasks/M7_HANDOFF.md#m72b-c8).
 
 ## История — M7.2A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
