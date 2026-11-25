@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2A REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.2A REVIEW · C0 и C8 PASS · ожидается решение владельца · 2026-11-25
 
-C0 принял M7.2A-R1 в Draft PR #67 на head `78b1d7049096f399e46aadf54b556da2cf484da6` при базе `main` `daf0e97920ff73cde9c3b5f137c26761cf246fe1`. Обе вкладки показывают один подтверждённый визит на 10:15. Для двух работ с фиксированным депозитом сохранены разные удержания и исходные сроки. Оба замечания C0 закрыты, CI кандидата прошёл 12/12 с первой попытки на схеме `0034`. Единственная активная задача — независимая проверка C8 по S5 и части S4 с Appointment. [Поручение C8](tasks/M7_HANDOFF.md#m72a-c8) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45533862598).
+C0 принял заключение C8 по S5 и части S4 с Appointment для PR #67 на head `78b1d7049096f399e46aadf54b556da2cf484da6`, база `main` `daf0e97920ff73cde9c3b5f137c26761cf246fe1`. Оба замечания R1 закрыты. CI кандидата прошёл 12/12 с первой попытки на схеме `0034`. PR готов к обычному слиянию по решению владельца. После слияния и зелёного CI фактического `main` C0 выдаёт M7.2B. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/67#pullrequestreview-6051797740) · [Итог C0](tasks/M7_HANDOFF.md#m72a-merge) · [CI](https://github.com/Elefesys/ai-service-manager/actions/runs/45533862598).
 
 ## История — M7.1B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
