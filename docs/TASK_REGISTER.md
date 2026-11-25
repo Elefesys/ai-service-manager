@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2A-R1 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.2A REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-25
 
-C0 проверил Draft PR #67 от `main` `daf0e97920ff73cde9c3b5f137c26761cf246fe1`, head `0c9cfa76d17abdf7bc5266050a770596195e6a8c`, CI 12/12 на схеме `0034`. При выборе другого окна для уже подтверждённого сеанса команда возвращает `SESSION_HELD` и скрывает исходное время. C1 ведёт M7.2A-R1 в том же PR, C2 отвечает за согласованное чтение записи. В проверке двух фиксированных депозитов осталось выбрать время для второй работы того же клиента. [Поручение и критерии C0](tasks/M7_HANDOFF.md#m72a-r1) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45485050592).
+C0 принял M7.2A-R1 в Draft PR #67 на head `78b1d7049096f399e46aadf54b556da2cf484da6` при базе `main` `daf0e97920ff73cde9c3b5f137c26761cf246fe1`. Обе вкладки показывают один подтверждённый визит на 10:15. Для двух работ с фиксированным депозитом сохранены разные удержания и исходные сроки. Оба замечания C0 закрыты, CI кандидата прошёл 12/12 с первой попытки на схеме `0034`. Единственная активная задача — независимая проверка C8 по S5 и части S4 с Appointment. [Поручение C8](tasks/M7_HANDOFF.md#m72a-c8) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45533862598).
 
 ## История — M7.1B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
