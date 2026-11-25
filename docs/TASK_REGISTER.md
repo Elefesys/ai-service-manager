@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2B REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.2B REVIEW · C0 и C8 PASS · ожидается слияние владельцем · 2026-11-25
 
-После отказа повтор команды сохраняет визит на 10:00. Новым ключом мастер переносит тот же сеанс на 10:30. C0 закрыл `C0-M7.2B-01` на head `1044251c7173eb228d35a8f3677c769dc2ae05dc`, база `main` `eb8d43e038fc5935a19771193c35ce275d517fac`, ветка `c1/m7-2b-reschedule-cancel`, схема `0035` поверх `0034`. Обе адресные проверки C0 прошли на PostgreSQL 18.6. CI PR #68 — 12/12 после повтора одного задания Docker. Активна независимая проверка C8 по S6. [Поручение и доказательства](tasks/M7_HANDOFF.md#m72b-c8).
+При конфликте визит остался на 10:00–11:05, отдельный перенос дал 10:30–11:35, явная отмена освободила окно и сохранила историю. C0 принял [заключение C8 по S6](https://github.com/Elefesys/ai-service-manager/pull/68#pullrequestreview-6056918888) на head `1044251c7173eb228d35a8f3677c769dc2ae05dc` PR #68. База `main` — `eb8d43e038fc5935a19771193c35ce275d517fac`, схема `0035`, CI 12/12. `C0-M7.2B-01` закрыт. PR готов к обычному слиянию по решению владельца. Отдельный зелёный `push/main` откроет M7.3A. [Решение C0 и доказательства](tasks/M7_HANDOFF.md#m72b-merge).
 
 ## История — M7.2A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
