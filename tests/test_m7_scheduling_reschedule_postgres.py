@@ -15,7 +15,7 @@ from asm.scheduling.commands import (
     issue_reschedule_offer,
     reschedule_appointment,
 )
-from asm.service_requests.errors import CalendarConflict, ServiceRequestCode, ServiceRequestError
+from asm.service_requests.errors import ServiceRequestCode, ServiceRequestError
 from asm.tenancy import AuthenticatedAccount
 from asm.tenancy.database import TenantDatabase
 from m5_knowledge_search_fixtures import owner_unit
@@ -133,6 +133,16 @@ def cancel(work, appointment, key="cancel", reason=CANCEL_REASON):
 async def submit(h, command):
     async with owner_unit(h) as unit:
         return await command(unit)
+
+
+async def submit_reschedule_result(h, work, appointment, option, key):
+    async with owner_unit(h) as unit:
+        return await unit.scheduling_owner_appointment(
+            work.selection.model_dump(mode="json"),
+            "reschedule",
+            UUID(appointment.appointment_id),
+            {"key": key, "option_id": option.option_id, "reason": RESCHEDULE_REASON},
+        )
 
 
 async def facts(h, work):
@@ -322,15 +332,27 @@ async def test_s6_new_block_conflict_and_successor_fault_leave_original_unchange
     block = await command_http(auth, token, CREATE_BLOCK, "block-new-time", interval)
     assert block.status_code == 200, block.text
     block_id = block.json()["block_id"]
-    with pytest.raises(CalendarConflict) as conflict:
-        await submit(h, move(work, original, candidate, key="block-conflict"))
-    assert [r.model_dump() for r in conflict.value.affected] == [{"kind": "BLOCK", "id": block_id}]
-    assert await facts(h, work) == saved
+    conflict = await submit_reschedule_result(h, work, original, candidate, "block-conflict")
+    assert conflict == {
+        "outcome": "CALENDAR_CONFLICT",
+        "affected": [{"kind": "BLOCK", "id": block_id}],
+    }
+    refused_facts = saved | {"owner_receipts": sorted([*saved["owner_receipts"], "block-conflict"])}
+    assert await facts(h, work) == refused_facts
     assert await owner_booking(auth, work) == shown
     unblocked = await command_http(
         auth, token, f"{CREATE_BLOCK}/{block_id}/release", "release-block", {}
     )
     assert unblocked.status_code == 200, unblocked.text
+    assert (
+        await submit_reschedule_result(h, work, original, candidate, "block-conflict") == conflict
+    )
+    assert await facts(h, work) == refused_facts
+    fault_url = work.booking_url().split("?", 1)[0] + f"/{original.appointment_id}/reschedule"
+    request = work.selection.model_dump(include={"client_id", "quote_id", "order_id"}) | {
+        "option_id": candidate.option_id,
+        "reason": RESCHEDULE_REASON,
+    }
 
     async with h.migrator.begin() as connection:
         await connection.execute(
@@ -344,29 +366,35 @@ async def test_s6_new_block_conflict_and_successor_fault_leave_original_unchange
               FOR EACH ROW EXECUTE FUNCTION platform.s6_fail_successor()""")
         )
     try:
-        with pytest.raises(ServiceRequestError) as injected:
-            await submit(h, move(work, original, candidate, key="forced-fault"))
-        assert injected.value.code is ServiceRequestCode.UNAVAILABLE
+        injected = await command_http(auth, token, fault_url, "forced-fault", request)
+        assert injected.status_code == 503 and injected.json() == {"error": {"code": "UNAVAILABLE"}}
         assert await owner_booking(auth, work) == shown
-        assert await facts(h, work) == saved
+        assert await facts(h, work) == refused_facts
     finally:
         async with h.migrator.begin() as connection:
             await connection.execute(text("DROP TRIGGER s6_fail_successor ON app.appointments"))
             await connection.execute(text("DROP FUNCTION platform.s6_fail_successor()"))
 
-    recovered = await submit(h, move(work, original, candidate, key="forced-fault"))
-    assert recovered.outcome == "RESCHEDULED"
-    assert_visit(recovered.booking.model_dump(mode="json"), "10:30", "11:35")
+    recovered = await command_http(auth, token, fault_url, "forced-fault", request)
+    assert recovered.status_code == 200 and recovered.json()["outcome"] == "RESCHEDULED"
+    assert_visit(recovered.json()["booking"], "10:30", "11:35")
+    moved_facts = await facts(h, work)
+    assert (
+        await submit_reschedule_result(h, work, original, candidate, "block-conflict") == conflict
+    )
+    assert await facts(h, work) == moved_facts
     proof(
         "S6-block-and-fault-rollback",
         **work.proof(),
         before=shown["booking"],
-        conflict=conflict.value.code.value,
+        conflict=conflict["outcome"],
         block_interval=interval,
-        affected=[r.model_dump() for r in conflict.value.affected],
-        fault=injected.value.code.value,
+        affected=conflict["affected"],
+        fault=injected.json()["error"]["code"],
+        fault_http_status=injected.status_code,
         identical_after_block_and_fault=saved,
-        recovered=recovered.model_dump(mode="json"),
+        recovered=recovered.json(),
+        recovered_http_status=recovered.status_code,
         **(await no_effects(h, before, jobs, confirmed=1)),
     )
 
@@ -401,16 +429,16 @@ async def test_s6_same_client_second_work_is_protected_by_buffers(scheduling_pg,
     with pytest.raises(ServiceRequestError) as wrong_work:
         await submit(h, cancel(other, original, key="wrong-work"))
     assert wrong_work.value.code is ServiceRequestCode.NOT_FOUND
-    with pytest.raises(CalendarConflict) as conflict:
-        await submit(h, move(work, original, option, key="same-client-conflict"))
+    conflict = await submit_reschedule_result(h, work, original, option, "same-client-conflict")
     if mode == "NONE":
         assert isinstance(competitor, AppointmentResult)
         affected = {"kind": "APPOINTMENT", "id": competitor.appointment_id}
     else:
         assert isinstance(competitor, HoldResult) and competitor.outcome == "HELD"
         affected = {"kind": "HOLD", "id": competitor.hold_id}
-    assert [r.model_dump() for r in conflict.value.affected] == [affected]
-    assert await facts(h, work) == saved and await facts(h, other) == other_facts
+    assert conflict == {"outcome": "CALENDAR_CONFLICT", "affected": [affected]}
+    refused = saved | {"owner_receipts": sorted([*saved["owner_receipts"], "same-client-conflict"])}
+    assert await facts(h, work) == refused and await facts(h, other) == other_facts
     assert await owner_booking(auth, work) == shown
     assert await submit(h, cancel(work, original))
     assert await owner_booking(auth, other) == other_before

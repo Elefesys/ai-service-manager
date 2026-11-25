@@ -219,9 +219,12 @@ FUNCTIONS = {
               LEFT JOIN app.reservation_holds h ON (h.workspace_id,h.business_id,h.allocation_id)
                 =(a.workspace_id,a.business_id,a.id)
               WHERE a.id<>current_booking.allocation_id AND a.occupied && occupied_range;
-            IF affected IS NOT NULL
-              THEN RAISE EXCEPTION 'CALENDAR_CONFLICT' USING ERRCODE='P3101',DETAIL=affected::text; END IF;
-            PERFORM platform.scheduling_expire_holds(ws,business,resource.id,occupied_range,session,moment);
+            IF affected IS NOT NULL THEN
+              -- Save this refusal as the result of the owner's command.
+              response:=jsonb_build_object('outcome','CALENDAR_CONFLICT','affected',affected);
+            ELSE
+              PERFORM platform.scheduling_expire_holds(ws,business,resource.id,occupied_range,session,moment);
+            END IF;
           END IF;
         END IF;
 

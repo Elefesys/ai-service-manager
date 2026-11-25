@@ -16,9 +16,9 @@ from asm.configuration.models import ConfigurationModel
 from asm.scheduling.commands import (
     AppointmentChange,
     AvailabilityOffer,
-    BlockConflict,
     CalendarBlock,
     CalendarBlockInput,
+    CalendarConflictResult,
     cancel_appointment,
     create_block,
     issue_offer,
@@ -302,9 +302,12 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         )
         response.headers["Cache-Control"] = "no-store"
         async with auth.workspace(token, UUID(workspace_id)) as unit:
-            return await reschedule_appointment(
+            result = await reschedule_appointment(
                 unit, selection, UUID(appointment_id), UUID(body.option_id), body.reason, key
             )
+        if isinstance(result, CalendarConflictResult):
+            raise CalendarConflict(result.affected)
+        return result
 
     @router.post(
         "/booking/{appointment_id}/cancel",
@@ -354,7 +357,7 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         response.headers["Cache-Control"] = "no-store"
         async with auth.workspace(token, UUID(workspace_id)) as unit:
             result = await create_block(unit, UUID(business_id), block, key)
-        if isinstance(result, BlockConflict):
+        if isinstance(result, CalendarConflictResult):
             raise CalendarConflict(result.affected)
         return result
 

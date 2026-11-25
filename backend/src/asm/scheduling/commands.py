@@ -188,7 +188,7 @@ class CalendarBlock(CalendarBlockInput):
     outcome: Literal["BLOCKED", "RELEASED"]
 
 
-class BlockConflict(ConfigurationModel):
+class CalendarConflictResult(ConfigurationModel):
     outcome: Literal["CALENDAR_CONFLICT"]
     affected: list[AffectedAllocation]
 
@@ -376,15 +376,15 @@ async def _change_appointment(
     action: Literal["reschedule", "cancel"],
     body: dict[str, object],
     key: str,
-) -> AppointmentChange:
+) -> AppointmentChange | CalendarConflictResult:
     _check_key(key)
     await require_owner(unit)
-    result = _stored(
-        AppointmentChange,
-        await unit.scheduling_owner_appointment(
-            selection.model_dump(mode="json"), action, appointment_id, {**body, "key": key}
-        ),
+    raw = await unit.scheduling_owner_appointment(
+        selection.model_dump(mode="json"), action, appointment_id, {**body, "key": key}
     )
+    if isinstance(raw, dict) and raw.get("outcome") == "CALENDAR_CONFLICT":
+        return _stored(CalendarConflictResult, raw)
+    result = _stored(AppointmentChange, raw)
     if result.session_id != selection.session_id:
         raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
     return result
@@ -397,7 +397,7 @@ async def reschedule_appointment(
     option_id: UUID,
     reason: str,
     key: str,
-) -> AppointmentChange:
+) -> AppointmentChange | CalendarConflictResult:
     return await _change_appointment(
         unit,
         selection,
@@ -415,9 +415,12 @@ async def cancel_appointment(
     reason: str,
     key: str,
 ) -> AppointmentChange:
-    return await _change_appointment(
+    result = await _change_appointment(
         unit, selection, appointment_id, "cancel", {"reason": reason}, key
     )
+    if not isinstance(result, AppointmentChange):
+        raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE)
+    return result
 
 
 async def release_hold(
@@ -437,12 +440,12 @@ async def release_hold(
 
 async def create_block(
     unit: TenantUnitOfWork, business: UUID, block: CalendarBlockInput, key: str
-) -> CalendarBlock | BlockConflict:
+) -> CalendarBlock | CalendarConflictResult:
     _check_key(key)
     await require_owner(unit)
     result = await OfferStore(unit).block(business, key, start=block.start, end=block.end)
     if result.get("outcome") == "CALENDAR_CONFLICT":
-        return _stored(BlockConflict, result)
+        return _stored(CalendarConflictResult, result)
     return _stored(CalendarBlock, result)
 
 
