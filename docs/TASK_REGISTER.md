@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.2B-R1 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
 
-Мастер переносит подтверждённый визит с возможным пересечением прежнего интервала или явно отменяет его. Неудачный перенос сохраняет исходную запись и занятость. Единственная задача — M7.2B. C1 ведёт команды и owner API, C2 отвечает за PostgreSQL. База `main` `eb8d43e038fc5935a19771193c35ce275d517fac`, ветка `c1/m7-2b-reschedule-cancel`, миграция `0035_scheduling_reschedule_cancel.py` поверх `0034`. [Поручение, пути и критерии S6](tasks/M7_HANDOFF.md#m72b-task).
+После конфликта повтор прежней команды должен оставлять запись на 10:00. C0 воспроизвёл HTTP 409 → HTTP 200 и перенос на 10:30 после снятия блока при том же запросе и ключе. `C0-M7.2B-01` открыт на head `8b4baabd0cc72ce809017658465cd5271ce09b89` PR #68, база `main` `eb8d43e038fc5935a19771193c35ce275d517fac`. CI кандидата 12/12. Единственная активная задача — M7.2B-R1 в `c1/m7-2b-reschedule-cancel`. C1 ведёт owner API, C2 отвечает за PostgreSQL, схема `0035` поверх `0034`. [Поручение, доказательства и критерии](tasks/M7_HANDOFF.md#m72b-r1).
 
 ## История — M7.2A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
