@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.2A-R1 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
 
-Один выбор клиента на согласованный сеанс при `NONE` создаёт подтверждённую запись. При обязательной предоплате мастер и клиент видят действующее удержание и его срок. C1 ведёт единственное поручение, C2 отвечает за PostgreSQL, C5 — за карточку. База `main` — `daf0e97920ff73cde9c3b5f137c26761cf246fe1`, ветка `c1/m7-2a-hold-to-appointment`, миграция `0034_scheduling_appointments.py` поверх `0033`. [Поручение C1, разрешённые пути и приёмка](tasks/M7_HANDOFF.md#m72a--поручение-c1).
+C0 проверил Draft PR #67 от `main` `daf0e97920ff73cde9c3b5f137c26761cf246fe1`, head `0c9cfa76d17abdf7bc5266050a770596195e6a8c`, CI 12/12 на схеме `0034`. При выборе другого окна для уже подтверждённого сеанса команда возвращает `SESSION_HELD` и скрывает исходное время. C1 ведёт M7.2A-R1 в том же PR, C2 отвечает за согласованное чтение записи. В проверке двух фиксированных депозитов осталось выбрать время для второй работы того же клиента. [Поручение и критерии C0](tasks/M7_HANDOFF.md#m72a-r1) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45485050592).
 
 ## История — M7.1B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
