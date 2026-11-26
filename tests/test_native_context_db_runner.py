@@ -173,7 +173,7 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
     # Include the current catalog with the scheduling intent privileges.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1511
+    assert len(journal.catalog["nonfunction_ddl"]) == 1515
     journal.start(node)
     append = store.append
 
