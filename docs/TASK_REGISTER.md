@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3A REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-26
+## CURRENT — M7.3A REVIEW · C0 и C8 PASS · ожидается решение владельца · 2026-11-26
 
-Мастер закрывает пустой день из календаря, отличает одноимённые работы двух клиентов и видит участников конфликта на промежуточной дате блока. C0 принял R1 и закрыл `C0-M7.3A-01` и `C0-M7.3A-02`. [Кандидат PR #69](https://github.com/Elefesys/ai-service-manager/pull/69) — `a27bceeaebd6d65d031aebafc7d7f384054cb83a`, база `main` — `bfb831c3132b2af79d2970f2ffe16b7beedc0857`, схема `0036` поверх `0035`. [CI 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/45657982678), Chromium 104/104, runtime 160/160. Единственная активная задача — независимое заключение C8 по S7 и R1. [Поручение и доказательства](tasks/M7_HANDOFF.md#m73a-c8).
+Мастер закрывает пустой день и видит, чей визит занимает время при конфликте. C0 принял [заключение C8 по S7 и R1](https://github.com/Elefesys/ai-service-manager/pull/69#pullrequestreview-6067356891) для head `a27bceeaebd6d65d031aebafc7d7f384054cb83a`, база `main` — `bfb831c3132b2af79d2970f2ffe16b7beedc0857`. [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45657982678) прошёл 12/12 с первой попытки. Владелец решает вопрос о слиянии [PR #69](https://github.com/Elefesys/ai-service-manager/pull/69) через **Create a merge commit**. После слияния C0 сверяет фактический `main` и его отдельный CI перед выдачей M7.3B. [Решение C0](tasks/M7_HANDOFF.md#m73a-merge).
 
 ## История — M7.2B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
