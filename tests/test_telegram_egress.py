@@ -1947,7 +1947,7 @@ def test_native_profile_is_separate_from_exact_historical_material_inventory():
     native = egress.native_source_profile()
     assert len(old["functions"]) == 132 and len(old["columns"]) == 42
     assert len(native["functions"]) == 453 and len(native["columns"]) == 99
-    assert sum(map(len, native["columns"].values())) == 1377
+    assert sum(map(len, native["columns"].values())) == 1379
     assert set(old["columns"]) == egress.SCHEMA_TABLES["0012"]
     assert set(native["columns"]) == egress.SCHEMA_TABLES["0037"]
     with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
