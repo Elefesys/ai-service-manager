@@ -41,6 +41,9 @@ TABLES = {
       local_date date,
       timezone text,
       period text CHECK(period IN ('ANY','MORNING','AFTERNOON','EVENING')),
+      not_before_minute integer CHECK(not_before_minute BETWEEN 0 AND 1439),
+      prior_sources jsonb NOT NULL DEFAULT '[]'::jsonb
+        CHECK(jsonb_typeof(prior_sources)='array' AND jsonb_array_length(prior_sources)<=4),
       option_id uuid,
       result jsonb,
       outbox_id uuid,
@@ -66,9 +69,10 @@ TABLES = {
 FUNCTIONS = {
     "platform.scheduling_agreed_works(platform.ai_runs)": r"""CREATE FUNCTION platform.scheduling_agreed_works(
       r platform.ai_runs
-    ) RETURNS TABLE(request_id uuid, title text, service_name text, selection jsonb)
+    ) RETURNS TABLE(request_id uuid, title text, service_name text, deposit_mode text, selection jsonb)
     LANGUAGE sql STABLE SET search_path=pg_catalog,pg_temp AS $$
       SELECT q.request_id,coalesce(f.idea,q.material->>'service_name'),q.material->>'service_name',
+        q.material->'deposit'->>'mode',
         jsonb_build_object('workspace_id',d.workspace_id,'business_id',d.business_id,
           'conversation_id',d.conversation_id,'client_id',d.client_id,'request_id',d.id,
           'quote_id',q.id,'order_id',o.id,'session_id',s.id)
@@ -86,6 +90,93 @@ FUNCTIONS = {
         =(r.workspace_id,r.business_id,r.conversation_id,r.client_id)
         AND s.status='PLANNED' AND s.scheduled_at IS NULL
     $$""",
+    "platform.scheduling_chat_sources_current(platform.scheduling_turn_actions)": r"""CREATE FUNCTION platform.scheduling_chat_sources_current(
+      a platform.scheduling_turn_actions
+    ) RETURNS boolean LANGUAGE sql STABLE SET search_path=pg_catalog,pg_temp AS $$
+      SELECT NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements(a.prior_sources||jsonb_build_array(
+          jsonb_build_object('message_id',a.source_message_id,'source_version',a.source_version)
+        )) refs(source)
+        WHERE platform.intake_source_current(a.workspace_id,a.business_id,a.conversation_id,a.client_id,refs.source) IS NOT TRUE
+      )
+    $$""",
+    "platform.scheduling_pending_clarification(platform.ai_runs,app.messages)": r"""CREATE FUNCTION platform.scheduling_pending_clarification(
+      r platform.ai_runs,m app.messages
+    ) RETURNS jsonb LANGUAGE sql STABLE SET search_path=pg_catalog,pg_temp AS $$
+      SELECT jsonb_build_object('preference',a.result->'preference','occurred_at',origin.occurred_at,
+        'sources',a.prior_sources||jsonb_build_array(
+          jsonb_build_object('message_id',a.source_message_id,'source_version',a.source_version)))
+      FROM (
+        SELECT box.id AS outbox_id
+        FROM app.messages msg LEFT JOIN app.outbox_events box
+          ON (box.workspace_id,box.message_id)=(msg.workspace_id,msg.id)
+        WHERE (msg.workspace_id,msg.conversation_id,msg.connection_id)=(m.workspace_id,m.conversation_id,m.connection_id)
+          AND (msg.created_at,msg.id)<(m.created_at,m.id)
+          AND (msg.direction='INBOUND' OR (box.status='SENT' AND box.completed_at<=m.created_at))
+        ORDER BY msg.created_at DESC,msg.id DESC LIMIT 1
+      ) previous
+      JOIN platform.ai_deliveries d ON (d.workspace_id,d.outbox_id)=(m.workspace_id,previous.outbox_id)
+      JOIN platform.ai_runs prior_run ON (prior_run.workspace_id,prior_run.id)=(d.workspace_id,d.run_id)
+      JOIN platform.scheduling_turn_actions a ON (a.workspace_id,a.run_id)=(prior_run.workspace_id,prior_run.id)
+      JOIN app.messages origin ON (origin.workspace_id,origin.id)=(a.workspace_id,
+        coalesce((a.prior_sources->0->>'message_id')::uuid,a.source_message_id))
+      WHERE (a.workspace_id,a.business_id,a.conversation_id,a.client_id,a.outbox_id)
+        =(r.workspace_id,r.business_id,r.conversation_id,r.client_id,d.outbox_id)
+        AND (prior_run.connection_id,prior_run.control_generation)=(r.connection_id,r.control_generation)
+        AND prior_run.binding->>'activation_fence_seq' IS NOT DISTINCT FROM r.binding->>'activation_fence_seq'
+        AND a.phase='DONE' AND a.intent='list_availability' AND a.result->>'outcome'='CLARIFICATION'
+        AND a.result ? 'preference' AND jsonb_array_length(a.prior_sources)<4
+        AND m.occurred_at>=origin.occurred_at AND platform.scheduling_chat_sources_current(a)
+    $$""",
+    "platform.scheduling_session_commitment(uuid,uuid,uuid)": r"""CREATE FUNCTION platform.scheduling_session_commitment(
+      ws uuid,business uuid,session uuid
+    ) RETURNS jsonb LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE resource uuid; moment timestamptz; commitment jsonb;
+    BEGIN
+      -- The same resource lock serializes owner cancellation, replacement and release.
+      -- Use a new clock reading after lock waits, including on final send admission.
+      SELECT r.id INTO resource FROM app.scheduling_resources r
+        WHERE (r.workspace_id,r.business_id)=(ws,business) FOR UPDATE;
+      IF resource IS NULL THEN RETURN NULL; END IF;
+      moment:=clock_timestamp();
+      SELECT platform.scheduling_appointment_view(p) INTO commitment
+      FROM app.appointments p JOIN app.resource_allocations a
+        ON (a.workspace_id,a.business_id,a.resource_id,a.session_id,a.id)
+          =(p.workspace_id,p.business_id,p.resource_id,p.session_id,p.allocation_id)
+      WHERE (p.workspace_id,p.business_id,p.resource_id,p.session_id,p.status)
+        =(ws,business,resource,session,'CONFIRMED') AND a.kind='APPOINTMENT' AND a.released_at IS NULL;
+      IF FOUND THEN RETURN commitment; END IF;
+      SELECT platform.scheduling_hold_view(h,moment) INTO commitment
+      FROM app.reservation_holds h JOIN app.resource_allocations a
+        ON (a.workspace_id,a.business_id,a.resource_id,a.session_id,a.id)
+          =(h.workspace_id,h.business_id,h.resource_id,h.session_id,h.allocation_id)
+      WHERE (h.workspace_id,h.business_id,h.resource_id,h.session_id)=(ws,business,resource,session)
+        AND a.kind='HOLD' AND a.released_at IS NULL AND h.expires_at>moment;
+      RETURN commitment;
+    END $$""",
+    "platform.scheduling_chat_delivery_current(platform.ai_runs,platform.ai_deliveries)": r"""CREATE FUNCTION platform.scheduling_chat_delivery_current(
+      r platform.ai_runs,d platform.ai_deliveries
+    ) RETURNS boolean LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE a platform.scheduling_turn_actions%ROWTYPE; current_booking jsonb; outcome text;
+    BEGIN
+      SELECT * INTO a FROM platform.scheduling_turn_actions
+        WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
+      IF NOT FOUND THEN RETURN true; END IF;
+      IF (a.business_id,a.conversation_id,a.client_id,a.outbox_id,a.phase)
+          IS DISTINCT FROM (r.business_id,r.conversation_id,r.client_id,d.outbox_id,'DONE')
+        OR platform.scheduling_chat_sources_current(a) IS NOT TRUE THEN RETURN false; END IF;
+      outcome:=a.result->>'outcome';
+      IF outcome NOT IN ('HELD','CONFIRMED','ALREADY_CONFIRMED') THEN RETURN true; END IF;
+      current_booking:=platform.scheduling_session_commitment(r.workspace_id,r.business_id,(a.selection->>'session_id')::uuid);
+      RETURN current_booking->>'outcome'=CASE WHEN outcome='HELD' THEN 'HELD' ELSE 'CONFIRMED' END
+        AND (current_booking->>'appointment_id',current_booking->>'hold_id',current_booking->>'allocation_id',
+          (current_booking->>'visit_start')::timestamptz,(current_booking->>'visit_end')::timestamptz,
+          current_booking->>'timezone',(current_booking->>'expires_at')::timestamptz)
+        IS NOT DISTINCT FROM
+          (a.result->>'appointment_id',a.result->>'hold_id',a.result->>'allocation_id',
+          (a.result->>'visit_start')::timestamptz,(a.result->>'visit_end')::timestamptz,
+          a.result->>'timezone',(a.result->>'expires_at')::timestamptz);
+    END $$""",
     "platform.scheduling_register_chat_list(platform.scheduling_turn_actions,jsonb)": r"""CREATE FUNCTION platform.scheduling_register_chat_list(
       a platform.scheduling_turn_actions, p_offer jsonb
     ) RETURNS jsonb LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
@@ -149,7 +240,7 @@ FUNCTIONS = {
     DECLARE r platform.ai_runs%ROWTYPE; a platform.scheduling_turn_actions%ROWTYPE;
       m app.messages%ROWTYPE; source jsonb; effective jsonb; work record; chosen_code text;
       chosen_id uuid; origin app.availability_offers%ROWTYPE; reply jsonb; response jsonb;
-      state jsonb; outcome text; key text; seen jsonb;
+      state jsonb; outcome text; key text; seen jsonb; prior jsonb;
     BEGIN
       r:=platform.ai_reply_rights_current(p_job,p_claim,p_run);
       IF current_database()<>'asm_test' OR r.config->>'prompt_revision' IS DISTINCT FROM 'conversation_v9'
@@ -203,7 +294,7 @@ FUNCTIONS = {
           UPDATE platform.scheduling_turn_actions SET timezone=a.timezone
             WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
           RETURN jsonb_build_object('kind','LIST','text',effective->>'text','occurred_at',m.occurred_at,
-            'timezone',a.timezone,'works',(
+            'timezone',a.timezone,'clarification',platform.scheduling_pending_clarification(r,m),'works',(
               SELECT coalesce(jsonb_agg(to_jsonb(w)-'selection' ORDER BY w.request_id),'[]'::jsonb)
               FROM platform.scheduling_agreed_works(r) w
             ));
@@ -215,7 +306,7 @@ FUNCTIONS = {
         IF chosen_code IS NULL OR jsonb_array_length(r.snapshot->'members')<>1 THEN
           RETURN '{"kind":"NEEDS_CODE"}'::jsonb;
         END IF;
-        SELECT x.option_id,list.period INTO chosen_id,a.period
+        SELECT x.option_id,list.period,list.not_before_minute INTO chosen_id,a.period,a.not_before_minute
         FROM platform.scheduling_chat_codes x
         JOIN platform.scheduling_turn_actions list ON (list.workspace_id,list.run_id)=(x.workspace_id,x.run_id)
         JOIN app.outbox_events box ON (box.workspace_id,box.id)=(list.workspace_id,list.outbox_id)
@@ -224,8 +315,7 @@ FUNCTIONS = {
           =(r.workspace_id,r.business_id,r.conversation_id,r.client_id,chosen_code)
           AND list.phase='DONE' AND box.status='SENT' AND box.kind='SEND_AI_TEXT'
           AND origin_run.connection_id=r.connection_id
-          AND platform.intake_source_current(list.workspace_id,list.business_id,list.conversation_id,list.client_id,
-            jsonb_build_object('message_id',list.source_message_id,'source_version',list.source_version));
+          AND platform.scheduling_chat_sources_current(list);
         IF NOT FOUND THEN RETURN '{"kind":"UNKNOWN_CODE"}'::jsonb; END IF;
         SELECT o.* INTO STRICT origin FROM app.availability_offers o
         JOIN app.availability_options opt ON (opt.workspace_id,opt.business_id,opt.offer_id)=(o.workspace_id,o.business_id,o.id)
@@ -235,11 +325,13 @@ FUNCTIONS = {
         SELECT * INTO STRICT work FROM platform.scheduling_agreed_works(r) w
           WHERE (w.request_id,(w.selection->>'session_id')::uuid)=(origin.request_id,origin.session_id);
         UPDATE platform.scheduling_turn_actions SET phase='SELECT_STATE',selection=work.selection,
-          local_date=origin.local_date,timezone=origin.timezone,period=a.period,option_id=chosen_id
+          local_date=origin.local_date,timezone=origin.timezone,period=a.period,
+          not_before_minute=a.not_before_minute,option_id=chosen_id
           WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
         state:=platform.scheduling_scoped_client(r.workspace_id,work.selection,r.client_id,r.conversation_id,
           'state',chosen_id,NULL,NULL,NULL);
-        RETURN jsonb_build_object('kind','SELECT','work',to_jsonb(work)-'selection','state',state,'period',a.period);
+        RETURN jsonb_build_object('kind','SELECT','work',to_jsonb(work)-'selection','state',state,
+          'period',a.period,'not_before_minute',a.not_before_minute);
       END IF;
 
       SELECT * INTO a FROM platform.scheduling_turn_actions
@@ -248,15 +340,47 @@ FUNCTIONS = {
         THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
       key:='m7-chat:'||a.option_id::text;
 
-      IF p_stage='LIST_STATE' AND a.phase='OPEN' AND a.intent='list_availability'
-        AND platform.material_object(p,ARRAY['request_id','day','period'])
-        AND p->>'period' IN ('ANY','MORNING','AFTERNOON','EVENING') THEN
+      IF p_stage='CONTINUE' AND a.phase='OPEN' AND a.intent='list_availability' AND p='{}'::jsonb THEN
+        SELECT * INTO STRICT m FROM app.messages WHERE (workspace_id,id)=(a.workspace_id,a.source_message_id);
+        prior:=platform.scheduling_pending_clarification(r,m);
+        IF prior IS NULL OR a.prior_sources<>'[]'::jsonb THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
+        UPDATE platform.scheduling_turn_actions SET prior_sources=prior->'sources'
+          WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
+        RETURN 'null'::jsonb;
+
+      ELSIF p_stage='CURRENT' AND a.phase='OPEN' AND a.intent='list_availability'
+        AND platform.material_object(p,ARRAY['request_id']) THEN
         SELECT * INTO STRICT work FROM platform.scheduling_agreed_works(r) w WHERE w.request_id=(p->>'request_id')::uuid;
-        state:=platform.scheduling_scoped_offer(r.workspace_id,work.selection,'state',(p->>'day')::date,NULL,NULL);
+        -- Preserve the session-before-resource lock order of the offer command.
+        PERFORM 1 FROM app.service_sessions s WHERE (s.workspace_id,s.id)=(r.workspace_id,
+          (work.selection->>'session_id')::uuid) FOR NO KEY UPDATE;
+        response:=platform.scheduling_session_commitment(r.workspace_id,r.business_id,(work.selection->>'session_id')::uuid);
+        UPDATE platform.scheduling_turn_actions SET selection=work.selection,result=response,
+          phase=CASE WHEN response IS NULL THEN 'OPEN' ELSE 'READY' END
+          WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
+        RETURN coalesce(response,'null'::jsonb);
+
+      ELSIF p_stage='CLARIFY' AND a.phase='OPEN' AND a.intent='list_availability'
+        AND platform.material_object(p,ARRAY['question','request_id','day','period','not_before_minute'])
+        AND p->>'question' IN ('WORK','DATE','PERIOD','TIME')
+        AND p->>'request_id' IS NOT DISTINCT FROM a.selection->>'request_id'
+        AND (p->>'period' IS NULL OR p->>'period' IN ('ANY','MORNING','AFTERNOON','EVENING'))
+        AND (p->>'day' IS NULL OR p->>'day' ~ '^\d{4}-\d{2}-\d{2}$')
+        AND (p->>'not_before_minute' IS NULL OR (p->>'not_before_minute')::int BETWEEN 0 AND 1439) THEN
+        UPDATE platform.scheduling_turn_actions SET phase='READY',
+          result=jsonb_build_object('outcome','CLARIFICATION','preference',p)
+          WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
+        RETURN 'null'::jsonb;
+
+      ELSIF p_stage='LIST_STATE' AND a.phase='OPEN' AND a.intent='list_availability'
+        AND a.selection IS NOT NULL AND platform.material_object(p,ARRAY['day','period','not_before_minute'])
+        AND p->>'period' IN ('ANY','MORNING','AFTERNOON','EVENING') THEN
+        state:=platform.scheduling_scoped_offer(r.workspace_id,a.selection,'state',(p->>'day')::date,NULL,NULL);
         IF state->>'timezone' IS DISTINCT FROM a.timezone THEN RAISE EXCEPTION 'AI_STALE' USING ERRCODE='P2001'; END IF;
-        UPDATE platform.scheduling_turn_actions SET phase='LIST_STATE',selection=work.selection,
-          local_date=(p->>'day')::date,period=p->>'period' WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
-        RETURN jsonb_build_object('schedule',state,'terms',to_jsonb(platform.scheduling_agreement(r.workspace_id,work.selection))->'material');
+        UPDATE platform.scheduling_turn_actions SET phase='LIST_STATE',
+          local_date=(p->>'day')::date,period=p->>'period',not_before_minute=(p->>'not_before_minute')::int
+          WHERE (workspace_id,run_id)=(r.workspace_id,r.id);
+        RETURN jsonb_build_object('schedule',state,'terms',to_jsonb(platform.scheduling_agreement(r.workspace_id,a.selection))->'material');
 
       ELSIF p_stage='ISSUE' AND a.phase='LIST_STATE' AND platform.material_object(p,ARRAY['windows']) THEN
         response:=platform.scheduling_scoped_offer(r.workspace_id,a.selection,'issue',a.local_date,
@@ -271,6 +395,11 @@ FUNCTIONS = {
         response:=platform.scheduling_scoped_client(r.workspace_id,a.selection,r.client_id,r.conversation_id,
           'select',a.option_id,key,(p->>'eligible')::boolean,NULL);
         outcome:=response->>'outcome';
+        IF outcome='SESSION_HELD' THEN
+          state:=platform.scheduling_session_commitment(r.workspace_id,r.business_id,(a.selection->>'session_id')::uuid);
+          response:=coalesce(state,jsonb_build_object('outcome','EXPIRED'));
+          outcome:=response->>'outcome';
+        END IF;
         IF EXISTS(SELECT 1 FROM platform.scheduling_turn_actions past
           WHERE (past.workspace_id,past.business_id,past.conversation_id,past.client_id,past.option_id,past.phase)
             =(a.workspace_id,a.business_id,a.conversation_id,a.client_id,a.option_id,'DONE')
@@ -384,7 +513,11 @@ def conversation_functions(intents, portfolio):
           RAISE;
         END;
 """
-        + current[stop:]
+        + current[stop:].replace(
+            "RETURN allowed IS TRUE;",
+            """RETURN allowed IS TRUE AND (r.config->>'prompt_revision'<>'conversation_v9'
+          OR platform.scheduling_chat_delivery_current(r,d) IS TRUE);""",
+        )
     )
     return functions
 
@@ -497,7 +630,7 @@ def profile_sql(owner_day, reschedule, holds, availability, replacements, caller
         )
     columns = []
     for table, sql in TABLES.items():
-        names = re.findall(r"^\s+([a-z_]+)\s+(?:uuid|text|jsonb|xid8|date)\b", sql, re.M)
+        names = re.findall(r"^\s+([a-z_]+)\s+(?:uuid|text|jsonb|xid8|date|integer)\b", sql, re.M)
         columns.append(f"('{table}',ARRAY[{','.join(repr(name) for name in names)}]::text[])")
     growth = len(FUNCTIONS) + 3
     return (
@@ -513,7 +646,7 @@ def profile_sql(owner_day, reschedule, holds, availability, replacements, caller
         .replace("'0036'", "'0037'")
         .replace(
             "fbb12c3304ea5d08d1b27b3cf5360839f040eac534ebb58cc0115d9a57521c72",
-            "08cd4c23b2f4977686ce29ace57f5811d88dcbd69470243185e6e0b7d7c2b239",
+            "6cf7f7e07901adba39b00776e99cd89f0583611717fa69e6bb622a08777bac4a",
         )
     )
 

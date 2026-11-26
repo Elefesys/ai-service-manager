@@ -1946,7 +1946,7 @@ def test_native_profile_is_separate_from_exact_historical_material_inventory():
     old = material_source_profile()
     native = egress.native_source_profile()
     assert len(old["functions"]) == 132 and len(old["columns"]) == 42
-    assert len(native["functions"]) == 449 and len(native["columns"]) == 99
+    assert len(native["functions"]) == 453 and len(native["columns"]) == 99
     assert sum(map(len, native["columns"].values())) == 1377
     assert set(old["columns"]) == egress.SCHEMA_TABLES["0012"]
     assert set(native["columns"]) == egress.SCHEMA_TABLES["0037"]
@@ -2078,7 +2078,7 @@ def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
     approval = provisioning.NativeHostApproval.model_validate(approved)
     if damage is None:
         _, profile = provisioning.native_host_source(approval)
-        assert len(profile["functions"]) == 449 and len(profile["columns"]) == 99
+        assert len(profile["functions"]) == 453 and len(profile["columns"]) == 99
     else:
         with pytest.raises(provisioning.ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
             provisioning.native_host_source(approval)

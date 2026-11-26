@@ -857,7 +857,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0034", "scheduling_appointment_schema_profile", 434, 433),
         ("0035", "scheduling_reschedule_schema_profile", 440, 439),
         ("0036", "scheduling_owner_day_schema_profile", 442, 441),
-        ("0037", "scheduling_intent_schema_profile", 449, 448),
+        ("0037", "scheduling_intent_schema_profile", 453, 452),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])

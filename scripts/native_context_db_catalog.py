@@ -120,7 +120,7 @@ SCHEDULING_NONFUNCTION_SHA256 = "b31332ca0d1cfb8298e6955cac0bb686746c3a6d7a2708a
 HOLD_NONFUNCTION_SHA256 = "7cddc57567ccbe5ce8d185b83b7b0205948b77ade4d7cbefa6f0bb313518fc88"
 APPOINTMENT_NONFUNCTION_SHA256 = "a4f5ebec5251129b25a4ecd7cb9de3cfd8ba00135d5f37628f44b4209d3fc2db"
 SCHEDULING_INTENT_NONFUNCTION_SHA256 = (
-    "08cd4c23b2f4977686ce29ace57f5811d88dcbd69470243185e6e0b7d7c2b239"
+    "6cf7f7e07901adba39b00776e99cd89f0583611717fa69e6bb622a08777bac4a"
 )
 RESCHEDULE_NONFUNCTION_SHA256 = "fbb12c3304ea5d08d1b27b3cf5360839f040eac534ebb58cc0115d9a57521c72"
 QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
@@ -578,7 +578,7 @@ def source_catalog(root, revision="0013"):
             "0034": 434,
             "0035": 440,
             "0036": 442,
-            "0037": 449,
+            "0037": 453,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -932,7 +932,7 @@ def compare_embedded_profile(expected):
             "0034": 433,
             "0035": 439,
             "0036": 441,
-            "0037": 448,
+            "0037": 452,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
