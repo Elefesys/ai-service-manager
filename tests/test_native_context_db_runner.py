@@ -118,7 +118,7 @@ def foundation_real_catalog_sink(foundation_git, monkeypatch, request):
     """Real migration expansion in an owned synthetic Git checkout; no database."""
     fixture = foundation_git
     paths = sorted((fixture.actual / "migrations/versions").glob("*.py"))
-    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 37)]
+    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 38)]
     for source in paths:
         target = fixture.root / source.relative_to(fixture.actual)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -172,8 +172,8 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    # Include the current catalog with the owner day privileges.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1490
+    # Include the current catalog with the scheduling intent privileges.
+    assert len(journal.catalog["nonfunction_ddl"]) == 1515
     journal.start(node)
     append = store.append
 
@@ -378,12 +378,14 @@ def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_g
     }
     assert len(jobs) - 1 + 6 == 12
     for job, digest in {
-        "browser": "e307c25b9c6ec819fc5d6d160358cbbd5c2e73d4469fee24552a5a50c89effcc",
+        "browser": "d509e1d93cd9fdaf00ee140faff13bfb403a3f1589e26c1584f05d69caa6d3dd",
         "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
         "connect5-migration": "940bc041722d35488f6bc5b148e87793eebda363df6aa572762f5ed4f2de2100",
         "native-context-db": "ab14f25d082e830a8be35422a7ae4f0fc7d8f7092ec992fcbde703751b2fe78b",
     }.items():
         assert lane.sha256(jobs[job].encode()) == digest
+    assert "timeout-minutes: 65" in jobs["browser"]
+    assert "step browser-tests 2880 sh -c" in (lane.ROOT / "scripts/test_browser.sh").read_text()
     assert (
         "timeout-minutes: ${{ matrix.boundary == 'state' && 30 || 25 }}"
         in jobs["connect5-migration"]
@@ -1437,7 +1439,7 @@ def test_foundation_durable_completeness_requires_current_six_lane_receipts(
     source = {
         "source_sha": head,
         "parents": [],
-        "expected_revision": "0036",
+        "expected_revision": "0037",
         "images": {k: {} for k in ("api", "worker", "scheduler", "fixture")},
     }
     if fault == "missing-lifecycle":

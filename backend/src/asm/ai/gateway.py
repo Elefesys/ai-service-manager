@@ -12,6 +12,7 @@ from asm.ai.contracts import (
     CONVERSATION_RESULT_V2,
     CONVERSATION_RESULT_V3,
     CONVERSATION_RESULT_V4,
+    CONVERSATION_RESULT_V5,
     AdapterRequest,
     AdapterResponse,
     AnyGatewayConfig,
@@ -26,6 +27,8 @@ from asm.ai.contracts import (
     IntakeGatewayResult,
     PortfolioDeliveryGatewayConfig,
     PortfolioDeliveryGatewayResult,
+    SchedulingIntentGatewayConfig,
+    SchedulingIntentGatewayResult,
     ServiceIntentGatewayConfig,
     ServiceIntentGatewayResult,
     ToolCall,
@@ -107,7 +110,13 @@ class ModelGateway:
             initial = Budget.model_validate(initial_budget)
             if (
                 self._config.prompt_revision
-                not in {"conversation_v5", "conversation_v6", "conversation_v7", "conversation_v8"}
+                not in {
+                    "conversation_v5",
+                    "conversation_v6",
+                    "conversation_v7",
+                    "conversation_v8",
+                    "conversation_v9",
+                }
                 or initial.calls_used
                 or initial.reads_reserved
                 or initial.tokens_reserved
@@ -129,7 +138,9 @@ class ModelGateway:
             .read_text("utf-8")
         )
         expected_schema = (
-            CONVERSATION_RESULT_V4
+            CONVERSATION_RESULT_V5
+            if isinstance(self._config, SchedulingIntentGatewayConfig)
+            else CONVERSATION_RESULT_V4
             if isinstance(self._config, ServiceIntentGatewayConfig)
             else CONVERSATION_RESULT_V3
             if isinstance(self._config, IntakeGatewayConfig)
@@ -143,7 +154,9 @@ class ModelGateway:
     @property
     def _result_type(self) -> type[AnyGatewayResult]:
         return (
-            ServiceIntentGatewayResult
+            SchedulingIntentGatewayResult
+            if isinstance(self._config, SchedulingIntentGatewayConfig)
+            else ServiceIntentGatewayResult
             if isinstance(self._config, ServiceIntentGatewayConfig)
             else IntakeGatewayResult
             if isinstance(self._config, IntakeGatewayConfig)
@@ -335,6 +348,14 @@ class ModelGateway:
                 self._config, strict_json(response.output_json or "")
             )
             self._closed = True
+            if isinstance(self._config, SchedulingIntentGatewayConfig):
+                return SchedulingIntentGatewayResult(
+                    kind="FINAL",
+                    result=CONVERSATION_RESULT_V5.validate_python(result),
+                    budget=self._budget,
+                    usage=usage,
+                    cost=cost,
+                )
             if isinstance(self._config, ServiceIntentGatewayConfig):
                 return ServiceIntentGatewayResult(
                     kind="FINAL",

@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.3B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-26
 
-Мастер видит в одном дне записи, удержания и блоки, открывает выбранную работу, управляет визитом и сверяет его историю. C5 ведёт экран, C1 — owner API. Единственное активное поручение — M7.3A в `c5/m7-3a-owner-calendar` от принятого `main` `bfb831c3132b2af79d2970f2ffe16b7beedc0857`. Выделена `migrations/versions/0036_scheduling_owner_day.py` поверх `0035` для чтения дня. [Пути и критерии S7](tasks/M7_HANDOFF.md#m73a-task).
+Клиент получает в переписке варианты для конкретного согласованного сеанса, явно выбирает один и видит подтверждение либо удержание до срока. Единственная активная задача — M7.3B в `c4/m7-3b-scheduling-intents` от `main` `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7`. C4 ведёт намерения, C3 — обработку сообщения и доставку, C1 — scheduling-команды. C0 выделил `migrations/versions/0037_scheduling_intents.py` поверх `0036`. [Поручение C4 и S8](tasks/M7_HANDOFF.md#m73b-task).
+
+## История — M7.3A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-26
+
+[PR #69](https://github.com/Elefesys/ai-service-manager/pull/69) слит в `main` `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7` с родителями `bfb831c3132b2af79d2970f2ffe16b7beedc0857` и `a27bceeaebd6d65d031aebafc7d7f384054cb83a`. Дерево `48047c951acde749da5f80e342c6e003f6770e42` совпало с принятым C8 кандидатом. [CI фактического main](https://github.com/Elefesys/ai-service-manager/actions/runs/45736967007) прошёл 12/12, попытка 1. Chromium 104/104, foundation 1 266 интеграционных тестов, каталог и readiness на `0036`, регрессионные группы runtime 160/160. Мастер закрывает пустую дату, различает две одноимённые работы и видит фактическое время после конфликта, переноса и истечения. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/69#pullrequestreview-6067356891) · [Итог C0 перед слиянием](https://github.com/Elefesys/ai-service-manager/blob/5e43a19e9cfc43e0a32613df162311453dd83179/docs/tasks/M7_HANDOFF.md#m73a-merge).
 
 ## История — M7.2B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 

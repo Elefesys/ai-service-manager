@@ -15,6 +15,7 @@ from asm.ai.contracts import (
     IntakePhoto,
     IntakeReply,
     Message,
+    SchedulingIntentResult,
     ServiceIntentName,
     ServiceIntentResult,
 )
@@ -49,7 +50,9 @@ class IntakeContextView(PortfolioDeliveryContextView):
 
 
 class ServiceIntentContextView(IntakeContextView):
-    available_intents: tuple[ServiceIntentName, ...]
+    available_intents: tuple[
+        ServiceIntentName | Literal["list_availability", "select_availability"], ...
+    ]
 
     def messages(self) -> tuple[Message, ...]:
         return super().messages() + (
@@ -263,3 +266,35 @@ class ServiceIntentConversationAgent(IntakeConversationAgent):
         return ServiceIntentContextView(
             **base.model_dump(), intake=intake, available_intents=available
         )
+
+
+class SchedulingIntentConversationAgent(ServiceIntentConversationAgent):
+    prompt_revision = "conversation_v9"
+
+    def _intake_view(
+        self, base: PortfolioDeliveryContextView, intake: ClientIntakeView
+    ) -> IntakeContextView:
+        view = super()._intake_view(base, intake)
+        assert isinstance(view, ServiceIntentContextView)
+        return view.model_copy(
+            update={
+                "available_intents": (
+                    *view.available_intents,
+                    "list_availability",
+                    "select_availability",
+                )
+            }
+        )
+
+    def _outcome(
+        self, *, reason: StopCode | None = None, candidate: AnyConversationResult | None = None
+    ) -> AnyAgentOutcome:
+        if not isinstance(candidate, SchedulingIntentResult):
+            return super()._outcome(reason=reason, candidate=candidate)
+        source = candidate.scheduling.source
+        if not any(
+            (source.message_id, source.source_version) == (item.message_id, item.source_version)
+            for item in self.candidate_sources
+        ):
+            return ConversationAgent._outcome(self, reason="INVALID_OUTPUT")
+        return ConversationAgent._outcome(self, reason=reason, candidate=candidate)

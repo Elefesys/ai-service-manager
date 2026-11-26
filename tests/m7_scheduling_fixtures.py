@@ -8,7 +8,7 @@ from asm.messaging.worker import Worker
 from asm.scheduling.commands import TrustedSchedulingClient
 from asm.scheduling.service import SelectedSession
 from sqlalchemy import text
-from test_m5_intake_postgres import next_turn, summary
+from test_m5_intake_postgres import application, next_turn, summary
 from test_m6_owner_decisions_postgres import FIXED_DURATION, contract
 from test_m6_pricing_postgres import draft_for_size, formula_price, price, publish, sign_in
 from test_m6_quote_acceptance_postgres import controlled_reply, process, read
@@ -38,7 +38,8 @@ async def scheduling_pg(approval_pg):
         async with approval_pg.migrator.begin() as connection:
             await connection.execute(
                 text(
-                    "TRUNCATE platform.scheduling_command_receipts,app.appointments,app.reservation_holds,"
+                    "TRUNCATE platform.scheduling_chat_codes,platform.scheduling_turn_actions,"
+                    "platform.scheduling_command_receipts,app.appointments,app.reservation_holds,"
                     "app.resource_allocations,app.availability_options,app.availability_offers,"
                     "app.scheduling_policy_activations,app.scheduling_policy_revisions,"
                     "app.availability_rules,app.availability_overrides,app.scheduling_resources"
@@ -137,20 +138,33 @@ async def accept_quote(harness, auth, url, quote):
     return Work(url, (await read(harness, auth, url))["agreement"])
 
 
-async def draft_work_pair(harness, auth, first_mode):
+async def draft_work_pair(harness, auth, first_mode, *, titles=None):
     await publish(harness, booking_contract(first_mode))
     token = await sign_in(auth)
-    conversation, intake, model, _, request = await draft_for_size(harness, auth, token, "20 mm")
+    if titles is None:
+        conversation, intake, model, _, request = await draft_for_size(
+            harness, auth, token, "20 mm"
+        )
+    else:
+        facts = dict(
+            idea=titles[0], placement="forearm", approximate_size="20 mm", style="linework"
+        )
+        conversation, intake, model, _, _ = await application(
+            harness, facts, message_text=" ".join(facts.values())
+        )
+        request = await create_draft(
+            auth, conversation, token, await summary(harness, conversation)
+        )
     left_url = f"{route(conversation)}/{request}"
     left_quote = await prepare_quote(harness, auth, token, left_url)
     model.values = {
-        "idea": "swallow",
+        "idea": "swallow" if titles is None else titles[1],
         "placement": "shoulder",
         "approximate_size": "21 mm",
         "style": "linework",
     }
     model.switch = True
-    await next_turn(harness, intake, "Separate swallow shoulder 21 mm linework")
+    await next_turn(harness, intake, "Separate " + " ".join(model.values.values()))
     other = await create_draft(auth, conversation, token, await summary(harness, conversation))
     return token, left_url, left_quote, f"{route(conversation)}/{other}"
 
@@ -175,8 +189,10 @@ async def accept_pair(harness, auth, prepared=None):
     return token, left, right
 
 
-async def accept_pair_with_modes(harness, auth, first_mode, second_mode):
-    token, left_url, left_quote, right_url = await draft_work_pair(harness, auth, first_mode)
+async def accept_pair_with_modes(harness, auth, first_mode, second_mode, *, titles=None):
+    token, left_url, left_quote, right_url = await draft_work_pair(
+        harness, auth, first_mode, titles=titles
+    )
     left = await accept_quote(harness, auth, left_url, left_quote)
     if second_mode != first_mode:
         await publish(harness, booking_contract(second_mode))

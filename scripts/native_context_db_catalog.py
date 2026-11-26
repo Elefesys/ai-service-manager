@@ -77,7 +77,7 @@ M4_PG_MODULES = (
 # Preserve default merge/main checkout, unconditional same-commit reusable call, pinned
 # owned lane and exact generic command. No fallback/embedded workflow is used.
 CI_INPUT_SHA256 = {
-    ".github/workflows/ci.yml": "106037a9be44fd8a5cb57c36051bd650d9282c84fd7e1b825960af36a9378590",
+    ".github/workflows/ci.yml": "27adfdd0c4715d6fff373bb1d82aba97db0fd64779f21bbe09e282175c59cfa9",
     ".github/workflows/native-context-db.yml": "ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd",
     "scripts/check_backend.sh": "1473e64b8ed0819b046b764f281072583271acd5f7b0929b3f8aa959c5d69330",
 }
@@ -119,6 +119,9 @@ SERVICE_INTENT_NONFUNCTION_SHA256 = (
 SCHEDULING_NONFUNCTION_SHA256 = "b31332ca0d1cfb8298e6955cac0bb686746c3a6d7a2708a7de50b9a4f81fc728"
 HOLD_NONFUNCTION_SHA256 = "7cddc57567ccbe5ce8d185b83b7b0205948b77ade4d7cbefa6f0bb313518fc88"
 APPOINTMENT_NONFUNCTION_SHA256 = "a4f5ebec5251129b25a4ecd7cb9de3cfd8ba00135d5f37628f44b4209d3fc2db"
+SCHEDULING_INTENT_NONFUNCTION_SHA256 = (
+    "6cf7f7e07901adba39b00776e99cd89f0583611717fa69e6bb622a08777bac4a"
+)
 RESCHEDULE_NONFUNCTION_SHA256 = "fbb12c3304ea5d08d1b27b3cf5360839f040eac534ebb58cc0115d9a57521c72"
 QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
 OWNER_DECISION_NONFUNCTION_SHA256 = (
@@ -329,6 +332,7 @@ def capture_source(root, revision="0013"):
             "0034",
             "0035",
             "0036",
+            "0037",
         },
         "Unsupported catalog revision",
     )
@@ -574,6 +578,7 @@ def source_catalog(root, revision="0013"):
             "0034": 434,
             "0035": 440,
             "0036": 442,
+            "0037": 453,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -607,6 +612,7 @@ def source_catalog(root, revision="0013"):
             "0034": 97,
             "0035": 97,
             "0036": 97,
+            "0037": 99,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -712,6 +718,11 @@ def source_catalog(root, revision="0013"):
                 else set()
             )
             | ({"app.appointments"} if revision >= "0034" else set())
+            | (
+                {"platform.scheduling_turn_actions", "platform.scheduling_chat_codes"}
+                if revision >= "0037"
+                else set()
+            )
         ),
         "Independent source column replay differs",
     )
@@ -827,11 +838,14 @@ def compare_embedded_profile(expected):
             "0034",
             "0035",
             "0036",
+            "0037",
         },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.scheduling_owner_day_schema_profile()"
+        "platform.scheduling_intent_schema_profile()"
+        if revision == "0037"
+        else "platform.scheduling_owner_day_schema_profile()"
         if revision == "0036"
         else "platform.scheduling_reschedule_schema_profile()"
         if revision == "0035"
@@ -918,6 +932,7 @@ def compare_embedded_profile(expected):
             "0034": 433,
             "0035": 439,
             "0036": 441,
+            "0037": 452,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -972,6 +987,7 @@ def compare_embedded_profile(expected):
             "0034": 97,
             "0035": 97,
             "0036": 97,
+            "0037": 99,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -1095,6 +1111,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0034",
             "0035",
             "0036",
+            "0037",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -1122,6 +1139,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0034": APPOINTMENT_NONFUNCTION_SHA256,
                 "0035": RESCHEDULE_NONFUNCTION_SHA256,
                 "0036": RESCHEDULE_NONFUNCTION_SHA256,
+                "0037": SCHEDULING_INTENT_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3238,7 +3256,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0036"),
+            source_catalog(ROOT, "0037"),
         )
 
     def persist_partition(self, work):
@@ -3422,7 +3440,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0036"
+            and source["expected_revision"] == "0037"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

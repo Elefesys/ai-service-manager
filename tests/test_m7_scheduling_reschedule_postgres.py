@@ -603,8 +603,8 @@ async def test_s6_upgrade_0034_preserves_appointment_hold_block_and_receipts(sch
         assert block.status_code == 200, block.text
         old_facts = await legacy_facts(h)
     finally:
-        await _migrate("upgrade", "0036")
-    assert (await scalar(h, "SELECT platform.scheduling_owner_day_schema_profile()"))["valid"]
+        await _migrate("upgrade", "0037")
+    assert (await scalar(h, "SELECT platform.scheduling_intent_schema_profile()"))["valid"]
     assert await legacy_facts(h) == old_facts
     first = await owner_booking(auth, work)
     assert first["history"] == [] and first["booking"]["appointment_id"] == original.appointment_id
