@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3B REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-26
+## CURRENT — M7.3B REVIEW · C0 и C8 PASS · ожидается решение владельца · 2026-11-26
 
-После правки исходного пожелания старая метка вызывает свежий подбор. Мастер видит одну запись после нового явного выбора. C0 принял R2 и закрыл замечания `C0-M7.3B-01`–`C0-M7.3B-07`. Единственная активная задача — независимая проверка C8 по S8 и R1/R2 в [Draft PR #70](https://github.com/Elefesys/ai-service-manager/pull/70). Head `894ab0b8c83655f0c1e5e381a20c97e38db34c38`, база `main` `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7`, схема `0037` поверх `0036`. [CI 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/45821677813) · [Поручение C8](tasks/M7_HANDOFF.md#m73b-c8).
+Мастер видит тот же результат выбора времени, что получил клиент. C0 принял заключение C8 по S8 и исправлениям R1/R2 на head `894ab0b8c83655f0c1e5e381a20c97e38db34c38` от `main` `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7`. CI кандидата прошёл 12/12 с первой попытки. PR #70 готов к слиянию по решению владельца. После слияния и зелёного `push/main` C0 выдаст M7.3C. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/70#pullrequestreview-6076027154) · [Решение C0](tasks/M7_HANDOFF.md#m73b-merge).
 
 ## История — M7.3A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-26
 
