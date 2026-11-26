@@ -790,7 +790,8 @@ class SchedulingSource(NamedTuple):
             path in self.paths
             or self.revision in {"0033", "0034", "0035", "0036", "0037"}
             and M7_SCHEDULING_MODULE_PATH.fullmatch(path)
-            or self.revision == "0037" and M7_SCHEDULING_INTENTS_MODULE_PATH.fullmatch(path)
+            or self.revision == "0037"
+            and M7_SCHEDULING_INTENTS_MODULE_PATH.fullmatch(path)
             for path in paths
         )
 

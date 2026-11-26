@@ -2043,7 +2043,8 @@ SCHEMA_TABLES["0034"] = SCHEMA_TABLES["0033"] | {"app.appointments"}
 SCHEMA_TABLES["0035"] = SCHEMA_TABLES["0034"]
 SCHEMA_TABLES["0036"] = SCHEMA_TABLES["0035"]
 SCHEMA_TABLES["0037"] = SCHEMA_TABLES["0036"] | {
-    "platform.scheduling_turn_actions", "platform.scheduling_chat_codes",
+    "platform.scheduling_turn_actions",
+    "platform.scheduling_chat_codes",
 }
 
 

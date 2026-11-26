@@ -540,7 +540,18 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0037",
         }:
             expected_tables.add("price_calculations")
-        if revision in {"0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037"}:
+        if revision in {
+            "0028",
+            "0029",
+            "0030",
+            "0031",
+            "0032",
+            "0033",
+            "0034",
+            "0035",
+            "0036",
+            "0037",
+        }:
             expected_tables.update(("approval_requests", "owner_decisions"))
         if revision in {"0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037"}:
             expected_tables.add("quotes")
@@ -1068,12 +1079,24 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                         }
                         and signature.startswith("platform.price_")
                         or revision
-                        in {"0028", "0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037"}
+                        in {
+                            "0028",
+                            "0029",
+                            "0030",
+                            "0031",
+                            "0032",
+                            "0033",
+                            "0034",
+                            "0035",
+                            "0036",
+                            "0037",
+                        }
                         and signature.startswith(("platform.approval_", "platform.owner_decision_"))
                         or revision
                         in {"0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037"}
                         and signature.startswith("platform.quote_")
-                        or revision in {"0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037"}
+                        or revision
+                        in {"0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037"}
                         and signature == "platform.telegram_ingest_own_text(text,jsonb,uuid)"
                         or revision in {"0031", "0032", "0033", "0034", "0035", "0036", "0037"}
                         and signature.startswith("platform.service_intent_")
