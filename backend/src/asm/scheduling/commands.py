@@ -19,6 +19,9 @@ from asm.scheduling.models import (
     ConfirmedBooking,
     Instant,
     LocalDate,
+    OwnerDay,
+    OwnerDayConflicts,
+    OwnerDayException,
     ScheduleSnapshot,
     SessionBooking,
     TimeWindow,
@@ -338,6 +341,31 @@ async def read_booking(unit: TenantUnitOfWork, selection: SelectedSession) -> Se
         booking=projection.booking,
         history=projection.history,
     )
+
+
+async def read_owner_day(unit: TenantUnitOfWork, business_id: UUID, day: date | None) -> OwnerDay:
+    await require_owner(unit)
+    return _stored(OwnerDay, await unit.scheduling_owner_day(business_id, day))
+
+
+async def change_owner_day_exception(
+    unit: TenantUnitOfWork, business_id: UUID, command: OwnerDayException
+) -> OwnerDay:
+    await require_owner(unit)
+    await unit.scheduling_owner_command(
+        business_id, "schedule", "exception", command.model_dump(mode="json")
+    )
+    return _stored(OwnerDay, await unit.scheduling_owner_day(business_id, command.date))
+
+
+async def read_owner_day_conflicts(
+    unit: TenantUnitOfWork, business_id: UUID, affected: list[AffectedAllocation]
+) -> OwnerDayConflicts:
+    await require_owner(unit)
+    rows = await unit.scheduling_owner_day(
+        business_id, None, [allocation.model_dump(mode="json") for allocation in affected]
+    )
+    return _stored(OwnerDayConflicts, rows)
 
 
 async def issue_reschedule_offer(

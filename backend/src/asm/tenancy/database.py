@@ -407,6 +407,21 @@ class TenantUnitOfWork:
             {"business": business, "service": service, "day": day},
         )
 
+    async def scheduling_owner_day(
+        self,
+        business: UUID,
+        day: date | None,
+        affected: list[dict[str, object]] | None = None,
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.scheduling_owner_day(:business,CAST(:day AS date),CAST(:affected AS jsonb))",
+            {
+                "business": business,
+                "day": day,
+                "affected": None if affected is None else json.dumps(affected, allow_nan=False),
+            },
+        )
+
     async def scheduling_owner_command(
         self, business: UUID, service: str, action: str, body: dict[str, object]
     ) -> Any:

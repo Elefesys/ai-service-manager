@@ -44,6 +44,7 @@ LocalDate = Annotated[date, BeforeValidator(calendar_date)]
 TimeZoneName = Annotated[str, Field(min_length=1, max_length=128), AfterValidator(zone_name)]
 Instant = Annotated[AwareDatetime, Field(strict=False)]
 ScheduleVersion = Annotated[int, Field(ge=0, le=9_007_199_254_740_991)]
+OWNER_CONFLICT_LOOKUP_LIMIT = 32
 AppointmentReason = Annotated[Nonblank, Field(max_length=300)]
 AvailabilityReason = Literal[
     "NO_WORKING_HOURS", "NO_ACTIVE_POLICY", "DURATION_UNAVAILABLE", "DATE_CLOSED", "NO_WINDOWS"
@@ -213,6 +214,69 @@ class SessionBooking(BookingProjection):
     order_id: CanonicalUUID
 
 
+class OwnerDaySelection(ConfigurationModel):
+    client_id: CanonicalUUID
+    conversation_id: CanonicalUUID
+    request_id: CanonicalUUID
+    quote_id: CanonicalUUID
+    order_id: CanonicalUUID
+    session_id: CanonicalUUID
+
+
+class OwnerDayWork(ConfigurationModel):
+    selection: OwnerDaySelection
+    work_label: Nonblank = Field(max_length=603)
+
+
+class OwnerDaySuccessor(ConfigurationModel):
+    appointment_id: CanonicalUUID
+    date: LocalDate
+
+
+class OwnerDayAppointment(OwnerDayWork):
+    kind: Literal["APPOINTMENT"]
+    booking: Annotated[ConfirmedBooking | CancelledBooking, Field(discriminator="outcome")]
+    successor: OwnerDaySuccessor | None
+
+
+class OwnerDayHold(OwnerDayWork):
+    kind: Literal["HOLD"]
+    booking: HeldBooking
+
+
+class OwnerDayBlock(ConfigurationModel):
+    kind: Literal["BLOCK"]
+    block_id: CanonicalUUID
+    start: Instant
+    end: Instant
+    timezone: TimeZoneName = Field(exclude=True)
+
+    @field_serializer("start", "end", when_used="json")
+    def local_time(self, value: datetime) -> datetime:
+        return value.astimezone(ZoneInfo(self.timezone))
+
+
+OwnerDayRow = Annotated[
+    OwnerDayAppointment | OwnerDayHold | OwnerDayBlock, Field(discriminator="kind")
+]
+
+
+class OwnerDay(ConfigurationModel):
+    date: LocalDate
+    now: Instant
+    timezone: TimeZoneName | None
+    resource_id: CanonicalUUID | None
+    schedule_version: ScheduleVersion
+    working_intervals: list[LocalSpan]
+    exception: DateException | None
+    entries: list[OwnerDayRow]
+    history: list[OwnerDayRow]
+
+
+class OwnerDayConflicts(ConfigurationModel):
+    entries: list[OwnerDayRow] = Field(max_length=OWNER_CONFLICT_LOOKUP_LIMIT)
+
+
 class AvailabilityPreview(ConfigurationModel):
     request_id: CanonicalUUID
     quote_id: CanonicalUUID
@@ -254,8 +318,7 @@ class PolicyCommand(PolicyInput):
     expected_version: ScheduleVersion
 
 
-class ExceptionCommand(ConfigurationModel):
-    action: Literal["exception"]
+class DayExceptionInput(ConfigurationModel):
     expected_version: ScheduleVersion
     date: LocalDate
     windows: list[LocalSpan] | None = Field(max_length=1440)
@@ -271,6 +334,14 @@ class ExceptionCommand(ConfigurationModel):
         ):
             raise ValueError("Date intervals must not overlap")
         return ordered
+
+
+class ExceptionCommand(DayExceptionInput):
+    action: Literal["exception"]
+
+
+class OwnerDayException(DayExceptionInput):
+    resource_id: CanonicalUUID
 
 
 AvailabilityCommand = Annotated[

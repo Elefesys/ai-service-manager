@@ -4714,10 +4714,10 @@
           }
         },
         "required": [
-          "action",
           "expected_version",
           "date",
-          "windows"
+          "windows",
+          "action"
         ],
         "title": "ExceptionCommand",
         "type": "object"
@@ -8206,6 +8206,405 @@
           "option_id"
         ],
         "title": "OfferedTime",
+        "type": "object"
+      },
+      "OwnerDay": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "APPOINTMENT": "#/components/schemas/OwnerDayAppointment",
+                  "BLOCK": "#/components/schemas/OwnerDayBlock",
+                  "HOLD": "#/components/schemas/OwnerDayHold"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/OwnerDayAppointment"
+                },
+                {
+                  "$ref": "#/components/schemas/OwnerDayHold"
+                },
+                {
+                  "$ref": "#/components/schemas/OwnerDayBlock"
+                }
+              ]
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "exception": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateException"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "history": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "APPOINTMENT": "#/components/schemas/OwnerDayAppointment",
+                  "BLOCK": "#/components/schemas/OwnerDayBlock",
+                  "HOLD": "#/components/schemas/OwnerDayHold"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/OwnerDayAppointment"
+                },
+                {
+                  "$ref": "#/components/schemas/OwnerDayHold"
+                },
+                {
+                  "$ref": "#/components/schemas/OwnerDayBlock"
+                }
+              ]
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "now": {
+            "format": "date-time",
+            "title": "Now",
+            "type": "string"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "schedule_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Schedule Version",
+            "type": "integer"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "working_intervals": {
+            "items": {
+              "$ref": "#/components/schemas/LocalSpan"
+            },
+            "title": "Working Intervals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date",
+          "now",
+          "timezone",
+          "resource_id",
+          "schedule_version",
+          "working_intervals",
+          "exception",
+          "entries",
+          "history"
+        ],
+        "title": "OwnerDay",
+        "type": "object"
+      },
+      "OwnerDayAppointment": {
+        "additionalProperties": false,
+        "properties": {
+          "booking": {
+            "discriminator": {
+              "mapping": {
+                "CANCELLED": "#/components/schemas/CancelledBooking",
+                "CONFIRMED": "#/components/schemas/ConfirmedBooking"
+              },
+              "propertyName": "outcome"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmedBooking"
+              },
+              {
+                "$ref": "#/components/schemas/CancelledBooking"
+              }
+            ],
+            "title": "Booking"
+          },
+          "kind": {
+            "const": "APPOINTMENT",
+            "title": "Kind",
+            "type": "string"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/OwnerDaySelection"
+          },
+          "successor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnerDaySuccessor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work_label": {
+            "maxLength": 603,
+            "title": "Work Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selection",
+          "work_label",
+          "kind",
+          "booking",
+          "successor"
+        ],
+        "title": "OwnerDayAppointment",
+        "type": "object"
+      },
+      "OwnerDayBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "block_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Block Id",
+            "type": "string"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "kind": {
+            "const": "BLOCK",
+            "title": "Kind",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "block_id",
+          "start",
+          "end"
+        ],
+        "title": "OwnerDayBlock",
+        "type": "object"
+      },
+      "OwnerDayConflicts": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "APPOINTMENT": "#/components/schemas/OwnerDayAppointment",
+                  "BLOCK": "#/components/schemas/OwnerDayBlock",
+                  "HOLD": "#/components/schemas/OwnerDayHold"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/OwnerDayAppointment"
+                },
+                {
+                  "$ref": "#/components/schemas/OwnerDayHold"
+                },
+                {
+                  "$ref": "#/components/schemas/OwnerDayBlock"
+                }
+              ]
+            },
+            "maxItems": 32,
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "OwnerDayConflicts",
+        "type": "object"
+      },
+      "OwnerDayException": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "resource_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "windows": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LocalSpan"
+                },
+                "maxItems": 1440,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Windows"
+          }
+        },
+        "required": [
+          "expected_version",
+          "date",
+          "windows",
+          "resource_id"
+        ],
+        "title": "OwnerDayException",
+        "type": "object"
+      },
+      "OwnerDayHold": {
+        "additionalProperties": false,
+        "properties": {
+          "booking": {
+            "$ref": "#/components/schemas/HeldBooking"
+          },
+          "kind": {
+            "const": "HOLD",
+            "title": "Kind",
+            "type": "string"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/OwnerDaySelection"
+          },
+          "work_label": {
+            "maxLength": 603,
+            "title": "Work Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selection",
+          "work_label",
+          "kind",
+          "booking"
+        ],
+        "title": "OwnerDayHold",
+        "type": "object"
+      },
+      "OwnerDaySelection": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Order Id",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "conversation_id",
+          "request_id",
+          "quote_id",
+          "order_id",
+          "session_id"
+        ],
+        "title": "OwnerDaySelection",
+        "type": "object"
+      },
+      "OwnerDaySuccessor": {
+        "additionalProperties": false,
+        "properties": {
+          "appointment_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Appointment Id",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "appointment_id",
+          "date"
+        ],
+        "title": "OwnerDaySuccessor",
         "type": "object"
       },
       "OwnerDecision": {
@@ -23526,6 +23925,256 @@
           }
         },
         "summary": "Release Calendar Block",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/conflicts": {
+      "get": {
+        "description": "Resolve up to 32 affected calendar identifiers in this business.",
+        "operationId": "read_calendar_conflicts_api_v1_workspaces__workspace_id__businesses__business_id__scheduling_conflicts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "appointment_id",
+            "required": false,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "maxItems": 32,
+              "title": "Appointment Id",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hold_id",
+            "required": false,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "maxItems": 32,
+              "title": "Hold Id",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "block_id",
+            "required": false,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "maxItems": 32,
+              "title": "Block Id",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDayConflicts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Calendar Conflicts",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/day": {
+      "get": {
+        "description": "Read this business's calendar day, defaulting to today in the resource time zone.",
+        "operationId": "read_calendar_day_api_v1_workspaces__workspace_id__businesses__business_id__scheduling_day_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDay"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Calendar Day",
+        "tags": [
+          "scheduling"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/businesses/{business_id}/scheduling/day/exception": {
+      "post": {
+        "description": "Save or remove a date exception for the displayed resource and version.",
+        "operationId": "change_calendar_day_exception_api_v1_workspaces__workspace_id__businesses__business_id__scheduling_day_exception_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerDayException"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDay"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulingConflictResponse"
+                }
+              }
+            },
+            "description": "Stale calendar revision or conflict with a protected booking"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Calendar Day Exception",
         "tags": [
           "scheduling"
         ]

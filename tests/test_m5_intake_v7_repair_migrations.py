@@ -98,7 +98,7 @@ async def at_0024(db):
     try:
         yield
     finally:
-        await _migrate("upgrade", "0035")
+        await _migrate("upgrade", "0036")
 
 
 @pytest.mark.integration
@@ -225,7 +225,7 @@ async def test_actual_populated_0023_upgrade_preserves_pending_unknown_and_fact_
         finally:
             await transaction.rollback()
     assert await retained(h) == before
-    await _migrate("upgrade", "0035")
+    await _migrate("upgrade", "0036")
     await h.runtime.check()
     from asm.messaging.errors import MessagingError
 

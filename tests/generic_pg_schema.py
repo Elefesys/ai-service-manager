@@ -24,12 +24,12 @@ _catalog = runpy.run_path(
 
 
 @cache
-def schema_source(revision="0035"):
+def schema_source(revision="0036"):
     return _catalog["source_catalog"](Path(__file__).resolve().parents[1], revision)
 
 
 async def assert_current_schema(c):
-    return await assert_schema(c, "0035", "scheduling_reschedule_schema_profile")
+    return await assert_schema(c, "0036", "scheduling_owner_day_schema_profile")
 
 
 async def assert_schema(c, revision, profile_name):
@@ -85,7 +85,7 @@ async def historical_schema(h, revision):
             await h.runtime.check()
         yield
     finally:
-        await _migrate("upgrade", "0035")
+        await _migrate("upgrade", "0036")
         await h.runtime.engine.dispose()
         await h.runtime.check()
         with pytest.raises(RuntimeError, match="schema"):

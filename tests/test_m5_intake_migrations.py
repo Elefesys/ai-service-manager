@@ -123,6 +123,7 @@ def downgrade_to_intake_schema(connection):
 
     scripts = ScriptDirectory("migrations")
     for revision, predecessor in (
+        ("0036", "0035"),
         ("0035", "0034"),
         ("0034", "0033"),
         ("0033", "0032"),

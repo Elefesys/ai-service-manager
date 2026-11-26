@@ -1,8 +1,11 @@
-import {useEffect,useLayoutEffect,useRef,useState,type MouseEvent} from 'react';
+import {useEffect,useId,useLayoutEffect,useRef,useState,type MouseEvent} from 'react';
+import type {ReactNode} from 'react';
 import type {ApprovalSelection} from './escalation-api';
 import type {OpenMessage} from './MessagingPanel';
 import {IntakeError,intakeApi} from './intake-api';
 import {SchedulingAvailability} from './SchedulingAvailability';
+import type {CalendarAvailability} from './SchedulingAvailability';
+import type {Booking, SchedulingScope} from './scheduling-api';
 import {SessionBooking} from './SessionBooking';
 import type {IntakeScope,QuoteAgreement,QuoteDelivery,QuoteReplyNotice,QuoteStatus,RequestQuote,ServiceRequestDraft} from './intake-api';
 
@@ -42,9 +45,12 @@ const reasonText:Record<string,string>={
  UNKNOWN_EXTERNAL_RESULT:'Сообщение могло быть доставлено. Автоматический повтор отключён.',
 };
 
+type CalendarAgreement = CalendarAvailability & {
+ expected: SchedulingScope; refresh: number; actions: (booking: Booking | null) => ReactNode;
+};
 type Props={
  scope:IntakeScope;draft:ServiceRequestDraft;refresh:string;csrf:string;
- approvalChange:ApprovalSelection|null;expired:()=>void;openMessage?:OpenMessage;
+ approvalChange:ApprovalSelection|null;expired:()=>void;openMessage?:OpenMessage;calendar?:CalendarAgreement;
 };
 
 function DeliveryStatus({status,reason}:Pick<QuoteDelivery,'status'|'reason'>){
@@ -83,9 +89,10 @@ const replyText:Record<QuoteReplyNotice['outcome'],string>={
  DECLINED:'Клиент отклонил предложение.',
 };
 
-function Agreement({agreement,draft,csrf,expired}:{agreement:QuoteAgreement;draft:ServiceRequestDraft;csrf:string;expired:()=>void}){
+function Agreement({agreement,draft,csrf,expired,calendar}:{agreement:QuoteAgreement;draft:ServiceRequestDraft;csrf:string;expired:()=>void;calendar?:CalendarAgreement}){
  const {source,quote}=agreement;
  const evidence=useRef<HTMLDetailsElement>(null);
+ const evidenceId=useId();
  const material=quote.material;
  const schedulingScope={workspace:material.workspace_id,business:material.business_id,conversation:material.conversation_id,
   client:material.client_id,request:material.request_id,quote:quote.quote_id,order:agreement.order_id,session:agreement.session_id};
@@ -96,11 +103,11 @@ function Agreement({agreement,draft,csrf,expired}:{agreement:QuoteAgreement;draf
    <dt>Согласие клиента</dt><dd><code data-testid="quote-acceptance-id">{agreement.acceptance_id}</code></dd>
    <dt>Сеанс на момент согласия</dt><dd>Запланирован без даты · {quote.material.occupied_minutes} мин <code data-testid="service-session-id">{agreement.session_id}</code></dd>
   </dl>
-  <p><a href={`#consent-${source.message_id}`} onClick={event=>{
+  <p><a href={`#${evidenceId}`} onClick={event=>{
    event.preventDefault();
    if(evidence.current){evidence.current.open=true;evidence.current.focus();}
   }}>Первая подтверждающая реплика</a></p>
-  <details id={`consent-${source.message_id}`} ref={evidence} tabIndex={-1}>
+  <details id={evidenceId} ref={evidence} tabIndex={-1}>
    <summary>Согласие на {quote.code}</summary>
    <p className="message-text">{source.status==='AVAILABLE'?source.text:
     source.status==='CHANGED'?'Версия подтверждающей реплики изменилась.':'Подтверждающая реплика недоступна.'}</p>
@@ -109,12 +116,12 @@ function Agreement({agreement,draft,csrf,expired}:{agreement:QuoteAgreement;draf
    <summary>Принятые условия · {quote.code}</summary>
    <QuoteTerms quote={quote} revision={draft.revision}/>
   </details>
-  <SessionBooking scope={schedulingScope} expired={expired}/>
-  <SchedulingAvailability scope={schedulingScope} csrf={csrf} expired={expired} workName={draft.facts.find(fact=>fact.field==='idea')?.value}/>
+  <SessionBooking scope={schedulingScope} expired={expired} refresh={calendar?.refresh} actions={calendar?.actions}/>
+  <SchedulingAvailability scope={schedulingScope} csrf={csrf} expired={expired} calendar={calendar} workName={draft.facts.find(fact=>fact.field==='idea')?.value}/>
  </section>;
 }
 
-export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,openMessage}:Props){
+export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,openMessage,calendar}:Props){
  const [delivery,setDelivery]=useState<QuoteDelivery|null>(null);
  const [error,setError]=useState('');
  const replyNavigation=useRef<AbortController|null>(null);
@@ -172,16 +179,18 @@ export function QuotePanel({scope,draft,refresh,csrf,approvalChange,expired,open
  const agreement=delivery?.agreement;
  const material=agreement?.quote.material;
  const selected=material?.request_id===draft.request_id&&material.workspace_id===scope.workspace&&
-  material.business_id===scope.business&&material.conversation_id===scope.conversation&&material.client_id===scope.client;
+  material.business_id===scope.business&&material.conversation_id===scope.conversation&&material.client_id===scope.client&&
+  (!calendar||(agreement?.quote.quote_id===calendar.expected.quote&&agreement.order_id===calendar.expected.order&&agreement.session_id===calendar.expected.session));
  return <section aria-label="Предложение клиенту" style={{overflowWrap:'anywhere'}}>
   <h4>Предложение клиенту</h4>
   {error&&<p role="alert">{error}</p>}
   {!error&&!delivery&&<p role="status">Проверяем статус предложения…</p>}
   {delivery&&<DeliveryStatus status={delivery.status} reason={delivery.reason}/>}
   {delivery?.quote&&<QuoteTerms quote={delivery.quote} revision={draft.revision}/>}
-  {agreement&&selected&&<Agreement key={agreement.acceptance_id} agreement={agreement} draft={draft} csrf={csrf} expired={expired}/>}
+  {calendar&&delivery&&!selected&&<p role="alert">Согласованные условия сеанса изменились. Откройте работу из календаря заново.</p>}
+  {agreement&&selected&&<Agreement key={agreement.acceptance_id} agreement={agreement} draft={draft} csrf={csrf} expired={expired} calendar={calendar}/>}
   {reply&&<p role="status">{replyText[reply.outcome]}{' '}
-   <a href={`#message-${reply.message_id}`} onClick={event=>openReply(event,reply.message_id)}>Ответ клиента</a></p>}
+   {calendar?'Ответ клиента':<a href={`#message-${reply.message_id}`} onClick={event=>openReply(event,reply.message_id)}>Ответ клиента</a>}</p>}
   {previous&&<section aria-label="Предыдущая версия">
    <h5>Предыдущая версия</h5>
    <DeliveryStatus status={previous.status} reason={previous.reason}/>

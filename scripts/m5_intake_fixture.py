@@ -81,7 +81,9 @@ INPUTS = {
 PILOT_QUESTION = (
     "Пришлите фото старой татуировки при дневном свете, чтобы мастер оценил перекрытие."
 )
-BOOKING_JOURNEYS = {"quote-booking", "quote-reschedule"}
+OWNER_DAY_R1_JOURNEYS = ("quote-day-r1-a", "quote-day-r1-b")
+SEED_OWNER_DAY_CLIENTS = "seed-owner-day-clients"
+BOOKING_JOURNEYS = {"quote-booking", "quote-reschedule", "quote-day", *OWNER_DAY_R1_JOURNEYS}
 QUOTE_JOURNEYS = {
     "quote-delivery",
     "quote-guard",
@@ -357,6 +359,68 @@ def target():
     ):
         raise IntakeFixtureRefused("ISOLATED_TEST_TARGET_REQUIRED")
     return url
+
+
+async def seed_owner_day_clients(args, diagnostic):
+    """Preseed only the two finite CONTROLLED identities that need a colliding UUID prefix."""
+    from m1_3_browser_fixture import guard as guard_provision
+    from m1_3_browser_fixture import target as provision_target
+
+    diagnostic.stage = "TARGET"
+    url = provision_target()
+    if make_url(url).host != "postgres":
+        raise IntakeFixtureRefused("ISOLATED_TEST_TARGET_REQUIRED")
+    actor, workspace, business = (
+        UUID(value) for value in (args.actor, args.workspace, args.business)
+    )
+    engine = create_async_engine(url, hide_parameters=True, connect_args={"connect_timeout": 3})
+    clients = []
+    try:
+        async with engine.begin() as connection:
+            diagnostic.stage = "GUARD"
+            await guard_provision(connection)
+            scoped = await connection.scalar(
+                text("""
+                    SELECT EXISTS (
+                      SELECT 1 FROM platform.workspace_memberships m
+                      JOIN app.channel_connections c ON c.workspace_id=m.workspace_id
+                      WHERE m.workspace_id=:workspace AND m.user_account_id=:actor
+                        AND m.role='OWNER' AND m.status='ACTIVE'
+                        AND c.business_id=:business AND c.provider='CONTROLLED'
+                        AND c.bot_identity=:bot AND c.external_connection_id=:route
+                    )
+                """),
+                dict(
+                    workspace=workspace,
+                    actor=actor,
+                    business=business,
+                    bot=bot("knowledge"),
+                    route=route("knowledge", 0),
+                ),
+            )
+            if not scoped:
+                raise IntakeFixtureRefused("OWNER_CONVERSATION_MISMATCH")
+            diagnostic.stage = "EXECUTE"
+            first = 1 if args.variant == "desktop" else 3
+            for offset, journey in enumerate(OWNER_DAY_R1_JOURNEYS):
+                scenario = f"{journey}-{args.variant}"
+                client = UUID(f"019afc43-0000-7000-8000-{first + offset:012x}")
+                identifier = event("knowledge", f"{scenario}-seed", conversation=scenario)
+                await connection.execute(
+                    text("INSERT INTO app.clients(workspace_id,id) VALUES (:ws,:client)"),
+                    dict(ws=workspace, client=client),
+                )
+                await connection.execute(
+                    text("""
+                        INSERT INTO app.client_identities(workspace_id,client_id,provider,external_user_id)
+                        VALUES (:ws,:client,'CONTROLLED',:external)
+                    """),
+                    dict(ws=workspace, client=client, external=identifier.sender_id),
+                )
+                clients.append(str(client))
+    finally:
+        await engine.dispose()
+    return {"client_ids": clients}
 
 
 async def run(args, diagnostic):
@@ -939,6 +1003,7 @@ def main():
                 *sorted(QUOTE_REPLIES),
                 QUOTE_HISTORY,
                 *sorted(BOOKING_OPERATIONS),
+                SEED_OWNER_DAY_CLIENTS,
                 "deliver-pilot-question",
             ),
             required=True,
@@ -979,6 +1044,16 @@ def main():
             raise IntakeFixtureRefused("INVALID_ARGUMENTS")
         if args.operation in BOOKING_OPERATIONS and args.journey not in BOOKING_JOURNEYS:
             raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+        if args.operation == SEED_OWNER_DAY_CLIENTS:
+            if (
+                args.journey != OWNER_DAY_R1_JOURNEYS[0]
+                or args.conversation
+                or args.request
+                or args.observe_dispatch
+            ):
+                raise IntakeFixtureRefused("INVALID_ARGUMENTS")
+            print(json.dumps(asyncio.run(seed_owner_day_clients(args, diagnostic)), sort_keys=True))
+            return 0
         if args.journey == "pilot-complex":
             if args.operation not in {"seed", "pilot-cover-up", "deliver-pilot-question"}:
                 raise IntakeFixtureRefused("INVALID_ARGUMENTS")

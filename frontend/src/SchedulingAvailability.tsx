@@ -1,7 +1,8 @@
 import {useEffect, useId, useRef, useState} from 'react';
 import type {FormEvent} from 'react';
+import {conflictMessage} from './owner-calendar-api';
 import {IntakeError} from './intake-api';
-import {policyFields, policyLimits, schedulingApi} from './scheduling-api';
+import {policyFields, policyLimits, SchedulingError, schedulingApi, timeInterval} from './scheduling-api';
 import type {Availability, DayInterval, PolicyField, PolicySettings, ScheduleChange, ScheduleCommand, SchedulingScope} from './scheduling-api';
 
 const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
@@ -24,7 +25,8 @@ const emptyMessage: Record<NonNullable<Availability['reason']>, string> = {
 
 type IntervalInput = {weekday: number; start: string; end: string};
 type SettingsProps = {view: Availability; busy: boolean; save: (change: ScheduleChange) => void};
-type Props = {scope: SchedulingScope; csrf: string; workName?: string; expired: () => void};
+export type CalendarAvailability = {date: string; version: string; changed: () => void};
+type Props = {scope: SchedulingScope; csrf: string; workName?: string; expired: () => void; calendar?: CalendarAvailability};
 
 function clockText(minute: number) {
   return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
@@ -135,30 +137,20 @@ function DateException({view, busy, save}: SettingsProps) {
   </div>;
 }
 
-export const utcOffset = (value: string) => `UTC${value.endsWith('Z') ? '+00:00' : value.slice(-6)}`;
-
-export function timeInterval(start: string, end: string, date: string) {
-  const time = (value: string) => `${value.startsWith(date) ? '' : `${value.slice(0, 10)} `}${value.slice(11, 16)}`;
-  const from = utcOffset(start);
-  const to = utcOffset(end);
-  return from === to ? `${time(start)}–${time(end)} · ${from}` : `${time(start)} ${from}–${time(end)} ${to}`;
-}
-
-function AvailabilityPanel({scope, workName, csrf, expired, id}: Props & {id: string}) {
+function AvailabilityPanel({scope, workName, csrf, expired, id, calendar}: Props & {id: string}) {
   const active = useRef<AbortController | null>(null);
   const [view, setView] = useState<Availability | null>(null);
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(calendar?.date ?? '');
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [formReset, setFormReset] = useState(0);
 
-  async function load(day?: string, command?: ScheduleCommand) {
+  async function load(day?: string, command?: ScheduleCommand, background = false) {
     if (active.current) return;
     const controller = new AbortController();
     active.current = controller;
     const {signal} = controller;
-    setBusy(true);
-    setError('');
+    if (!background) { setBusy(true); setError(''); }
     let reloading = false;
     try {
       let result: Availability;
@@ -182,6 +174,11 @@ function AvailabilityPanel({scope, workName, csrf, expired, id}: Props & {id: st
     } catch (cause) {
       if (signal.aborted) return;
       const status = cause instanceof IntakeError ? cause.status : null;
+      if (calendar && command && cause instanceof SchedulingError && cause.code === 'CALENDAR_CONFLICT' && day) {
+        const message = await conflictMessage(scope, cause.affected, signal);
+        if (!signal.aborted) setError(message);
+        return;
+      }
       if (!command || reloading || status !== 422) setView(null);
       if (status === 401) expired();
       setError(status === 403 || status === 404 ? 'Сеанс недоступен. Откройте карточку работы заново.' :
@@ -189,15 +186,21 @@ function AvailabilityPanel({scope, workName, csrf, expired, id}: Props & {id: st
     } finally {
       if (active.current === controller) {
         active.current = null;
-        if (!signal.aborted) setBusy(false);
+        if (!signal.aborted) {
+          setBusy(false);
+          if (command) calendar?.changed();
+        }
       }
     }
   }
 
   useEffect(() => {
-    void load();
+    void load(calendar?.date);
     return () => {active.current?.abort(); active.current = null;};
   }, []);
+  useEffect(() => {
+    if (calendar) void load(calendar.date, undefined, true);
+  }, [calendar?.version]);
 
   const save = (change: ScheduleChange) => {
     if (view && view.date === date) void load(view.date, {...change, expected_version: view.schedule_version});
@@ -206,11 +209,11 @@ function AvailabilityPanel({scope, workName, csrf, expired, id}: Props & {id: st
   return <section id={id} className="scheduling-availability" aria-label="Варианты времени выбранного сеанса" aria-busy={busy}>
     {view && <p>{workName && <><strong>{workName}</strong> · </>}{view.service_name}{view.occupied_minutes !== null && ` · ${view.occupied_minutes} мин`}</p>}
     <div className="scheduling-day">
-      <label>Дата вариантов<input type="date" disabled={busy} value={date} onChange={event => {
+      {!calendar && <label>Дата вариантов<input type="date" disabled={busy} value={date} onChange={event => {
         const day = event.target.value;
         setDate(day);
         if (day) void load(day);
-      }}/></label>
+      }}/></label>}
       {view?.timezone && <span>{view.timezone}</span>}
       <button className="secondary" disabled={busy} type="button" onClick={() => void load(date || undefined)}>Обновить варианты</button>
     </div>
@@ -237,6 +240,6 @@ export function SchedulingAvailability(props: Props) {
     <button className="secondary" type="button" aria-expanded={opened} aria-controls={opened ? id : undefined} onClick={() => setOpened(!opened)}>
       {opened ? 'Скрыть варианты времени' : 'Варианты времени'}
     </button>
-    {opened && <AvailabilityPanel {...props} id={id}/>}
+    {opened && <AvailabilityPanel key={props.calendar?.date} {...props} id={id}/>}
   </>;
 }

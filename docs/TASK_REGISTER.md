@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.2B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.3A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
 
-Мастер переносит подтверждённый визит с возможным пересечением прежнего интервала или явно отменяет его. Неудачный перенос сохраняет исходную запись и занятость. Единственная задача — M7.2B. C1 ведёт команды и owner API, C2 отвечает за PostgreSQL. База `main` `eb8d43e038fc5935a19771193c35ce275d517fac`, ветка `c1/m7-2b-reschedule-cancel`, миграция `0035_scheduling_reschedule_cancel.py` поверх `0034`. [Поручение, пути и критерии S6](tasks/M7_HANDOFF.md#m72b-task).
+Мастер видит в одном дне записи, удержания и блоки, открывает выбранную работу, управляет визитом и сверяет его историю. C5 ведёт экран, C1 — owner API. Единственное активное поручение — M7.3A в `c5/m7-3a-owner-calendar` от принятого `main` `bfb831c3132b2af79d2970f2ffe16b7beedc0857`. Выделена `migrations/versions/0036_scheduling_owner_day.py` поверх `0035` для чтения дня. [Пути и критерии S7](tasks/M7_HANDOFF.md#m73a-task).
+
+## История — M7.2B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
+
+PR #68 слит в `main` `bfb831c3132b2af79d2970f2ffe16b7beedc0857`. Первый родитель — прежний `main`, второй — принятый C8 head `1044251c7173eb228d35a8f3677c769dc2ae05dc`. Дерево слияния совпало с деревом кандидата. Отдельный `push/main` прошёл 12/12 с первой попытки. На `0035` прошли 160/160 runtime-проверок PostgreSQL, 9 сценариев S6 и тест R1 в foundation, 100 сценариев Chromium. `C0-M7.2B-01` закрыт. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/68#pullrequestreview-6056918888) · [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45607514786) · [PR #68](https://github.com/Elefesys/ai-service-manager/pull/68).
 
 ## История — M7.2A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 

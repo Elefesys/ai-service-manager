@@ -74,7 +74,7 @@ function factStatus(fact:Fact){
  return fact.status==='observed'?'Наблюдение изображения':'Со слов клиента';
 }
 
-function DraftCard({draft,children}:{draft:ServiceRequestDraft;children:ReactNode}){
+export function DraftCard({draft,children,linkedSources=true}:{draft:ServiceRequestDraft;children:ReactNode;linkedSources?:boolean}){
  return <section aria-label="Черновик заявки">
   <h4>Черновик заявки</h4>
   <article>
@@ -83,12 +83,12 @@ function DraftCard({draft,children}:{draft:ServiceRequestDraft;children:ReactNod
     <dt>Услуга</dt><dd>{draft.service_name}</dd>
     <dt>Ревизия</dt><dd data-testid="service-request-revision">{draft.revision}</dd>
     <dt>Начало работы</dt><dd>
-     <a href={`#message-${draft.intent_source.message_id}`}>Исходное сообщение</a> · версия <code>{draft.intent_source.source_version}</code>
+     {linkedSources?<a href={`#message-${draft.intent_source.message_id}`}>Исходное сообщение</a>:'Исходное сообщение'} · версия <code>{draft.intent_source.source_version}</code>
     </dd>
    </dl>
    {draft.facts.map(fact=><div key={fact.field}>
     <p><strong>{labels[fact.field]}</strong> · {fact.value} · {factStatus(fact)}{fact.conflict?' · есть противоречие':''}</p>
-    <p>Источник: <a href={`#message-${fact.source.message_id}`}>Сообщение для поля {labels[fact.field]}</a> · версия <code>{fact.source.source_version}</code></p>
+    <p>Источник: {linkedSources?<a href={`#message-${fact.source.message_id}`}>Сообщение для поля {labels[fact.field]}</a>:'Сообщение'} · версия <code>{fact.source.source_version}</code></p>
     {fact.source.analysis_id&&<p>Анализ <code>{fact.source.analysis_id}</code> · SHA-256 <code>{fact.source.analysis_sha256}</code></p>}
    </div>)}
    {draft.missing.length>0&&<p>Не хватает: {draft.missing.map(field=>labels[field]).join(', ')}</p>}

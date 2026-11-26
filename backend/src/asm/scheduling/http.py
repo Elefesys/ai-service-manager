@@ -1,17 +1,18 @@
 """Business Console routes on the owner session and CSRF boundaries."""
 
-from typing import Annotated
+from typing import Annotated, Self
 from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, Query, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import Field, model_validator
 
 from asm.auth.config import AuthSettings
 from asm.auth.http import mutation_token, required_cookie
 from asm.auth.models import EmptyRequest
 from asm.auth.service import AuthService
 from asm.billing.validation import CanonicalUUID
-from asm.configuration.http import body_as, command_key, command_schema
+from asm.configuration.http import body_as, command_key, command_schema, no_options
 from asm.configuration.models import ConfigurationModel
 from asm.scheduling.commands import (
     AppointmentChange,
@@ -20,18 +21,25 @@ from asm.scheduling.commands import (
     CalendarBlockInput,
     CalendarConflictResult,
     cancel_appointment,
+    change_owner_day_exception,
     create_block,
     issue_offer,
     issue_reschedule_offer,
     read_booking,
+    read_owner_day,
+    read_owner_day_conflicts,
     release_block,
     reschedule_appointment,
 )
 from asm.scheduling.models import (
+    OWNER_CONFLICT_LOOKUP_LIMIT,
     AppointmentReason,
     AvailabilityCommand,
     AvailabilityPreview,
     LocalDate,
+    OwnerDay,
+    OwnerDayConflicts,
+    OwnerDayException,
     SessionBooking,
 )
 from asm.scheduling.service import SelectedSession, preview_availability
@@ -51,6 +59,36 @@ class SessionReferences(ConfigurationModel):
 
 class AvailabilityQuery(SessionReferences):
     date: LocalDate | None = None
+
+
+class OwnerDayQuery(ConfigurationModel):
+    date: LocalDate | None = None
+
+
+class OwnerDayConflictsQuery(ConfigurationModel):
+    appointment_id: list[CanonicalUUID] = Field(
+        default_factory=list, max_length=OWNER_CONFLICT_LOOKUP_LIMIT
+    )
+    hold_id: list[CanonicalUUID] = Field(
+        default_factory=list, max_length=OWNER_CONFLICT_LOOKUP_LIMIT
+    )
+    block_id: list[CanonicalUUID] = Field(
+        default_factory=list, max_length=OWNER_CONFLICT_LOOKUP_LIMIT
+    )
+
+    @model_validator(mode="after")
+    def bounded(self) -> Self:
+        count = len(self.appointment_id) + len(self.hold_id) + len(self.block_id)
+        if not 1 <= count <= OWNER_CONFLICT_LOOKUP_LIMIT:
+            raise ValueError("Provide one to 32 affected identifiers")
+        return self
+
+    def affected(self) -> list[AffectedAllocation]:
+        return [
+            *(AffectedAllocation(kind="APPOINTMENT", id=value) for value in self.appointment_id),
+            *(AffectedAllocation(kind="HOLD", id=value) for value in self.hold_id),
+            *(AffectedAllocation(kind="BLOCK", id=value) for value in self.block_id),
+        ]
 
 
 class AppointmentCancellation(SessionReferences):
@@ -103,7 +141,7 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         "/service-requests/{request_id}/sessions/{session_id}",
         tags=["scheduling"],
     )
-    blocks = APIRouter(prefix=business_path + "/scheduling/blocks", tags=["scheduling"])
+    calendar = APIRouter(prefix=business_path + "/scheduling", tags=["scheduling"])
 
     @app.exception_handler(CalendarConflict)
     async def calendar_conflict_response(
@@ -334,8 +372,69 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
         async with auth.workspace(token, UUID(workspace_id)) as unit:
             return await cancel_appointment(unit, selection, UUID(appointment_id), body.reason, key)
 
-    @blocks.post(
-        "",
+    @calendar.get(
+        "/day",
+        response_model=OwnerDay,
+        description="Read this business's calendar day, defaulting to today in the resource time zone.",
+    )
+    async def read_calendar_day(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        query: Annotated[OwnerDayQuery, Query()],
+    ) -> OwnerDay:
+        check_query(request)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            return await read_owner_day(unit, UUID(business_id), query.date)
+
+    @calendar.post(
+        "/day/exception",
+        response_model=OwnerDay,
+        responses={
+            409: {
+                "model": SchedulingConflictResponse,
+                "description": "Stale calendar revision or conflict with a protected booking",
+            },
+        },
+        description="Save or remove a date exception for the displayed resource and version.",
+    )
+    async def change_calendar_day_exception(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        command: OwnerDayException,
+    ) -> OwnerDay:
+        no_options(request)
+        token = mutation_token(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            return await change_owner_day_exception(unit, UUID(business_id), command)
+
+    @calendar.get(
+        "/conflicts",
+        response_model=OwnerDayConflicts,
+        description="Resolve up to 32 affected calendar identifiers in this business.",
+    )
+    async def read_calendar_conflicts(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        query: Annotated[OwnerDayConflictsQuery, Query()],
+    ) -> OwnerDayConflicts:
+        if request.headers.getlist("if-match"):
+            raise ServiceRequestError(ServiceRequestCode.INVALID_INPUT)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            return await read_owner_day_conflicts(unit, UUID(business_id), query.affected())
+
+    @calendar.post(
+        "/blocks",
         response_model=CalendarBlock,
         openapi_extra=command_schema(CalendarBlockInput),
         responses={
@@ -361,8 +460,8 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
             raise CalendarConflict(result.affected)
         return result
 
-    @blocks.post(
-        "/{block_id}/release",
+    @calendar.post(
+        "/blocks/{block_id}/release",
         response_model=CalendarBlock,
         openapi_extra=command_schema(EmptyRequest),
     )
@@ -381,4 +480,4 @@ def install_scheduling(app: FastAPI, auth: AuthService, settings: AuthSettings) 
             return await release_block(unit, UUID(business_id), UUID(block_id), key)
 
     app.include_router(router)
-    app.include_router(blocks)
+    app.include_router(calendar)
