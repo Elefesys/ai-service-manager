@@ -2558,6 +2558,7 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
     return {
       body: await response.json(),
       key: response.request().headers()['idempotency-key'],
+      command: response.request().postDataJSON(),
     };
   }
   const oldPath = `${a.path}/booking/${first.appointment_id}`;
@@ -2591,6 +2592,19 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await postThrough(otherTab, `${blocksPath}/${block.block_id}/release`, () =>
     row(otherTab, block.block_id).getByRole('button', {name: 'Снять блок', exact: true}).click());
   await expect(row(otherTab, block.block_id)).toHaveCount(0);
+  // A retry after losing the refusal must preserve it even though the interval is free now.
+  const replay = await otherTab.request.post(`${oldPath}/reschedule`, {
+    data: conflict.command, headers: {...headers, 'Idempotency-Key': conflict.key},
+  });
+  expect(replay.status()).toBe(409);
+  const replayBody = await replay.json();
+  expect(replayBody).toEqual(conflict.body);
+  expect(await getBooking(otherTab, a)).toEqual(original);
+  const afterReplay = await getDay(otherTab);
+  expect(afterReplay.entries).toEqual(dayBefore.entries);
+  expect(afterReplay.history).toEqual(dayBefore.history);
+  await expect(current(ownerTab)).toHaveAttribute('data-booking-id', first.appointment_id);
+  await expect(current(ownerTab)).toContainText('10:00–11:05');
   await checkWork(otherTab, a, first.appointment_id, 'CONFIRMED');
   await current(otherTab).getByRole('button', {name: 'Отменить визит', exact: true}).click();
   await current(otherTab).getByLabel('Причина отмены', {exact: true}).fill('Устаревшая вкладка');
@@ -2670,6 +2684,8 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
 
   console.log('M7.3A S7 Chromium ' + info.project.name + ' ' + JSON.stringify({
     day, offDay, conversation, a, b, conflict: conflict.body, stale: stale.body,
+    replayAfterRelease: {http: replay.status(), body: replayBody, appointment: first.appointment_id,
+      allocation: first.allocation_id, newKeyForExplicitMove: moved.key !== conflict.key},
     original: original.booking, moved: moved.body.booking, cancelled: cancelled.body.booking,
     hold: {before: heldBefore.booking, expiryRead: expired.now},
     activeAfterCancellation: afterCancellation.entries.map(entry => entry.kind),

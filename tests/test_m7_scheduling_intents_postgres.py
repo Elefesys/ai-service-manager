@@ -952,6 +952,86 @@ async def test_s8_rose_none_swallow_deposit_worker_and_calendar(scheduling_pg, a
     )
 
 
+async def commitment_proof(h, auth, day, work, option, result, delivered_text):
+    card = await owner_get(auth, work.booking_url())
+    agreement = (await owner_get(auth, work.url + "/quote"))["agreement"]
+    assert agreement == work.agreement
+    selection = work.selection.model_dump()
+    (entry,) = [
+        row for row in day["entries"] if row["selection"]["session_id"] == selection["session_id"]
+    ]
+    assert entry["selection"] == {key: selection[key] for key in entry["selection"]}
+    assert card["booking"] == entry["booking"]
+    booking = card["booking"]
+    assert booking["outcome"] == result["outcome"]
+    assert (
+        booking["hold_id"] == result["hold_id"]
+        and booking["allocation_id"] == result["allocation_id"]
+    )
+    (stored,) = await query(
+        h,
+        """SELECT f.id AS offer_id, f.policy_id, f.schedule_version, f.terms_sha256,
+               f.client_id, f.request_id, f.quote_id, f.order_id, f.session_id, f.resource_id,
+               f.terms_sha256=q.terms_sha256 AND f.deposit=q.material->'deposit' AS terms_match,
+               p.hold_ttl_minutes, h.created_at, h.expires_at, clock_timestamp() AS checked_at,
+               a.kind, lower(a.occupied) AS busy_start, upper(a.occupied) AS busy_end,
+               (SELECT count(*) FROM app.appointments ap
+                 WHERE (ap.workspace_id,ap.session_id)=(h.workspace_id,h.session_id)) AS appointments
+           FROM app.reservation_holds h
+           JOIN app.resource_allocations a ON (a.workspace_id,a.business_id,a.resource_id,a.session_id,a.id)
+             =(h.workspace_id,h.business_id,h.resource_id,h.session_id,h.allocation_id)
+           JOIN app.availability_options o ON (o.workspace_id,o.business_id,o.id)=(h.workspace_id,h.business_id,h.option_id)
+           JOIN app.availability_offers f ON (f.workspace_id,f.business_id,f.session_id,f.id)
+             =(o.workspace_id,o.business_id,h.session_id,o.offer_id)
+           JOIN app.quotes q ON (q.workspace_id,q.id)=(f.workspace_id,f.quote_id)
+           JOIN app.scheduling_policy_revisions p ON (p.workspace_id,p.business_id,p.id)=(f.workspace_id,f.business_id,f.policy_id)
+           WHERE h.id=:hold AND h.option_id=:option AND h.allocation_id=:allocation AND a.released_at IS NULL""",
+        hold=UUID(result["hold_id"]),
+        option=UUID(option["option_id"]),
+        allocation=UUID(booking["allocation_id"]),
+    )
+    for key in ("client_id", "request_id", "quote_id", "order_id", "session_id"):
+        assert str(stored[key]) == selection[key]
+    assert str(stored["resource_id"]) == booking["resource_id"]
+    assert stored["terms_sha256"] == agreement["quote"]["terms_sha256"]
+    assert (
+        stored["terms_match"]
+        and stored["created_at"] <= stored["checked_at"] < stored["expires_at"]
+    )
+    assert stored["expires_at"] - stored["created_at"] == timedelta(
+        minutes=stored["hold_ttl_minutes"]
+    )
+    assert stored["busy_start"] == datetime.fromisoformat(booking["busy_start"])
+    assert stored["busy_end"] == datetime.fromisoformat(booking["busy_end"])
+    for field in ("visit_start", "visit_end"):
+        assert datetime.fromisoformat(booking[field]) == datetime.fromisoformat(option[field])
+        shown = datetime.fromisoformat(booking[field]).astimezone(ZoneInfo(booking["timezone"]))
+        assert shown.strftime("%d.%m.%Y %H:%M %z") in delivered_text
+    assert booking["timezone"] in delivered_text
+    if work.material["deposit"]["mode"] == "NONE":
+        assert stored["kind"] == "APPOINTMENT" and stored["appointments"] == 1
+        assert booking["appointment_id"] == result["appointment_id"]
+    else:
+        assert stored["kind"] == "HOLD" and stored["appointments"] == 0
+        assert stored["expires_at"] == datetime.fromisoformat(booking["expires_at"])
+        deadline = stored["expires_at"].astimezone(ZoneInfo(booking["timezone"]))
+        assert deadline.strftime("%d.%m.%Y %H:%M:%S %z") in delivered_text
+    return dict(
+        selection=selection,
+        acceptance=agreement["acceptance_id"],
+        accepted_at=agreement["accepted_at"],
+        quote_version=agreement["quote"]["version"],
+        deposit=work.material["deposit"],
+        deposit_terms_version=work.material["deposit_terms_version"],
+        duration=work.material["duration_reference_id"],
+        option=option,
+        booking=booking,
+        database=dict(stored),
+        amount_minor=work.material["amount_minor"],
+        currency=work.material["currency"],
+    )
+
+
 async def test_s8_returns_clickable_new_options_after_competition(scheduling_pg, auth):
     h = scheduling_pg
     token, rose, _, scope = await sample(h, auth)
@@ -979,6 +1059,8 @@ async def test_s8_returns_clickable_new_options_after_competition(scheduling_pg,
     _, _, rival_result = await competitor.say(f"Выбираю {rival['code']}")
     winner = rival_result["result"]
     assert winner["outcome"] == "HELD"
+    assert other.selection.client_id != rose.selection.client_id
+    winner_card = await owner_get(auth, other.booking_url())
     _, _, rejected = await chat.say(f"Выбираю {slot['code']}")
     alternatives = offered(rejected)
     assert rejected["result"]["outcome"] == "OPTION_UNAVAILABLE"
@@ -987,20 +1069,59 @@ async def test_s8_returns_clickable_new_options_after_competition(scheduling_pg,
     assert wall(initial["options"][0]["visit_start"]) == "16:00"
     assert all(wall(slot["visit_start"]) >= "16:00" for slot in alternatives["options"])
     assert rejected["selection"]["session_id"] == rose.selection.session_id
-    times = {o["visit_start"] for o in initial["options"]}
-    later = next(o for o in alternatives["options"] if o["visit_start"] not in times)
-    _, _, booked = await chat.say(f"Выбираю {later['code']}")
+    assert (await owner_get(auth, rose.booking_url()))["booking"] is None
+    assert await calendar_facts(h) == dict(holds=1, appointments=0, allocations=1)
+    assert await owner_get(auth, other.booking_url()) == winner_card
+    assert chat.wire.texts == [listed["text"], rejected["text"]]
+    public_code = re.findall(r"S-[A-Z0-9]{6}", chat.wire.texts[-1])[0]
+    later = next(o for o in alternatives["options"] if o["code"] == public_code)
+    assert later["visit_start"] not in {o["visit_start"] for o in initial["options"]}
+    _, _, booked = await chat.say(f"Выбираю {public_code}")
     assert (
         booked["option_id"] == UUID(later["option_id"])
         and booked["result"]["outcome"] == "CONFIRMED"
     )
     day = await chat.calendar(auth, initial["date"])
-    assert match_calendar(day, other, "hold_id", winner["hold_id"])
-    assert match_calendar(day, rose, "appointment_id", booked["result"]["appointment_id"])
+    assert len(day["entries"]) == 2
+    assert competitor.wire.texts == [foreign["text"], competitor_list["text"], rival_result["text"]]
+    assert chat.wire.texts == [listed["text"], rejected["text"], booked["text"]]
+    assert "Время удержано до" in rival_result["text"] and "Визит подтверждён" in booked["text"]
+    held = await commitment_proof(h, auth, day, other, rival, winner, competitor.wire.texts[-1])
+    confirmed = await commitment_proof(
+        h, auth, day, rose, later, booked["result"], chat.wire.texts[-1]
+    )
+    assert str(held["database"]["offer_id"]) == offered(competitor_list)["offer_id"]
+    assert str(confirmed["database"]["offer_id"]) == alternatives["offer_id"]
+    for participant, code, original in (
+        (competitor, rival["code"], winner),
+        (chat, public_code, booked["result"]),
+    ):
+        await participant.start()
+        _, _, replay = await participant.say(f"Выбираю {code}")
+        assert replay["outbox_id"] is None and replay["result"]["original"] == original
+    assert await owner_get(auth, other.booking_url()) == winner_card
+    assert (await chat.calendar(auth, initial["date"]))["entries"] == day["entries"]
+    assert (competitor.wire.calls, competitor.wire.effects) == (3, 3)
     assert (chat.wire.calls, chat.wire.effects) == (3, 3)
+    assert not await scalar(
+        h,
+        """SELECT count(*) FROM pg_tables WHERE schemaname='app' AND
+        tablename IN ('payment_requests','payment_sessions','payment_transactions','payment_refunds')""",
+    )
     report(
         "competition",
         winner_hold=winner["hold_id"],
+        held=held,
+        confirmed=confirmed,
+        initial_offer=initial["offer_id"],
+        winner_wire=competitor.wire.texts,
+        loser_wire=chat.wire.texts,
+        before_alternative={"loser_commitments": 0},
+        replay_new_calls=0,
+        replay_new_effects=0,
+        winner_calls=competitor.wire.calls,
+        winner_effects=competitor.wire.effects,
+        payment_effects=0,
         initial=initial["options"],
         declined_text=rejected["text"],
         new_choice=later,
