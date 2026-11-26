@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-26
+## CURRENT — M7.3B-R2 IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-26
 
-Клиент получает в переписке варианты для конкретного согласованного сеанса, явно выбирает один и видит подтверждение либо удержание до срока. Единственная активная задача — M7.3B в `c4/m7-3b-scheduling-intents` от `main` `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7`. C4 ведёт намерения, C3 — обработку сообщения и доставку, C1 — scheduling-команды. C0 выделил `migrations/versions/0037_scheduling_intents.py` поверх `0036`. [Поручение C4 и S8](tasks/M7_HANDOFF.md#m73b-task).
+После правки исходной реплики клиенту нужны актуальные варианты для своего сеанса. Единственная активная задача — M7.3B-R2 в [Draft PR #70](https://github.com/Elefesys/ai-service-manager/pull/70). Ветка `c4/m7-3b-scheduling-intents`, head `8128377aa4a4e87325b15cf1aae1ace8f004b34e`, база `main` `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7`, схема `0037` поверх `0036`. C4 ведёт диалог, C3 — доставку, C1 — связь вариантов с сеансом. C0 подтвердил остановку устаревших подтверждений и воспроизвёл три расхождения при выборе и отправке вариантов. [Поручение C4 и критерии R2](tasks/M7_HANDOFF.md#m73b-r2).
 
 ## История — M7.3A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-26
 
