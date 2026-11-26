@@ -3750,6 +3750,7 @@ SCHEDULING_FEATURES = {
     "reschedule",
     "owner_day",
     "scheduling_intents",
+    "scheduling_acceptance",
 }
 HOLD_PROOF_PATHS = {
     "backend/src/asm/scheduling/offer_store.py",
@@ -3761,6 +3762,11 @@ APPOINTMENT_PROOF_PATHS = HOLD_PROOF_PATHS | {
     "tests/test_m7_scheduling_appointments_postgres.py",
 }
 SCHEDULING_PROOF_PATHS = {
+    "scheduling_acceptance": {
+        "docs/tasks/M7_3C_ACCEPTANCE.md",
+        "scripts/m4_runtime_db.py",
+        "tests/test_m7_scheduling_acceptance_postgres.py",
+    },
     "scheduling_intents": {
         "backend/src/asm/scheduling/conversation.py",
         "backend/src/asm/messaging/database.py",
@@ -3789,6 +3795,14 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
     f = r["f"]
     prefix = ("M7_" if feature in SCHEDULING_FEATURES else "M6_") + feature.upper()
     branch = getattr(carrier, prefix + "_BRANCH")
+    migration_path = getattr(carrier, prefix + "_MIGRATION")
+    if migration_path is None:
+        existing = f.root / carrier.M7_SCHEDULING_INTENTS_MIGRATION
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_text(f"revision = '{revision}'\n")
+        f.git("add", str(existing))
+        f.git("commit", "-qm", "accepted scheduling schema")
+        r["source"] = f.git("rev-parse", "HEAD")
     monkeypatch.setattr(carrier, prefix + "_BASE", r["source"])
     base_tree = f.git("rev-parse", "HEAD^{tree}")
     monkeypatch.setattr(carrier, prefix + "_TREE", "f" * 40 if damage == "base_tree" else base_tree)
@@ -3806,9 +3820,12 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         prefix + "_ASSIGNMENT_TREE",
         "f" * 40 if damage == "assignment_tree" else assignment_tree,
     )
-    migration = f.root / getattr(carrier, prefix + "_MIGRATION")
-    migration.parent.mkdir(parents=True, exist_ok=True)
-    migration.write_text(f"revision = '{revision}'\n")
+    if migration_path is None:
+        (f.root / "docs/tasks/M7_3C_ACCEPTANCE.md").write_text("Calendar acceptance\n")
+    else:
+        migration = f.root / migration_path
+        migration.parent.mkdir(parents=True, exist_ok=True)
+        migration.write_text(f"revision = '{revision}'\n")
     if protected:
         handoff = "M7" if feature in SCHEDULING_FEATURES else "M6"
         (f.root / f"docs/tasks/{handoff}_HANDOFF.md").write_text("changed assignment\n")
@@ -3818,6 +3835,9 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         "other_migration": "migrations/versions/0034_scheduling_future.py",
         "frontend": "frontend/e2e/scheduling-holds.spec.ts",
         "unassigned_tests": "tests/test_m7_appointments.py",
+        "product": "backend/src/asm/scheduling/conversation.py",
+        "applied_schema": carrier.M7_SCHEDULING_INTENTS_MIGRATION,
+        "new_schema": "migrations/versions/0038_scheduling.py",
     }.get(damage)
     if outside:
         path = f.root / outside
@@ -3868,6 +3888,7 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         ("reschedule", "0035"),
         ("owner_day", "0036"),
         ("scheduling_intents", "0037"),
+        ("scheduling_acceptance", "0037"),
     ],
 )
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
@@ -3890,9 +3911,11 @@ def test_milestone_slice_admits_exact_assignment_and_selects_runtime(
         == source[candidate]
         == {"tree": tree, "sha": head, "merge_parents": [r["source"], head]}
     )
-    assert set(source["paths"]) == getattr(carrier, prefix + "_DOCS") | {
-        getattr(carrier, prefix + "_MIGRATION")
-    } | SCHEDULING_PROOF_PATHS.get(feature, set())
+    expected_paths = getattr(carrier, prefix + "_DOCS") | SCHEDULING_PROOF_PATHS.get(feature, set())
+    migration_path = getattr(carrier, prefix + "_MIGRATION")
+    if migration_path is not None:
+        expected_paths.add(migration_path)
+    assert set(source["paths"]) == expected_paths
     for key, val in {
         "SOURCE_SHA": merge,
         "SOURCE_TREE": tree,
@@ -3910,6 +3933,16 @@ def test_milestone_slice_admits_exact_assignment_and_selects_runtime(
         with pytest.raises(carrier.Refusal, match="^SOURCE_IDENTITY_WRITE_SET$"):
             carrier.source_tree_from_evidence(evidence / "source.json")
         source["paths"].pop()
+    if feature == "scheduling_acceptance":
+        paths = source["paths"]
+        for invalid_paths in (
+            sorted(getattr(carrier, prefix + "_DOCS")),
+            sorted(paths + ["backend/src/asm/scheduling/conversation.py"]),
+            sorted(paths + [carrier.M7_SCHEDULING_INTENTS_MIGRATION]),
+        ):
+            carrier.write(evidence / "source.json", {**source, "paths": invalid_paths})
+            with pytest.raises(carrier.Refusal, match="^SOURCE_IDENTITY_WRITE_SET$"):
+                carrier.source_tree_from_evidence(evidence / "source.json")
     source[candidate]["merge_parents"].reverse()
     carrier.write(evidence / "source.json", source)
     with pytest.raises(carrier.Refusal, match=f"SOURCE_IDENTITY_{prefix}_CANDIDATE"):
@@ -3985,6 +4018,7 @@ def test_m7_scheduling_refuses_ineligible_source(r11_event, monkeypatch, route, 
         ("reschedule", "0035"),
         ("owner_day", "0036"),
         ("scheduling_intents", "0037"),
+        ("scheduling_acceptance", "0037"),
     ],
 )
 def test_m7_booking_refuses_ineligible_source(
@@ -3998,6 +4032,18 @@ def test_m7_booking_refuses_ineligible_source(
         (carrier.Refusal, catalog.Refusal),
         match=f"^{reason.format(prefix='M7_' + feature.upper())}$",
     ):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+    assert not (r["root"] / "evidence/source-admission.json").exists()
+
+
+@pytest.mark.parametrize("damage", ["product", "applied_schema", "new_schema"])
+def test_m7_scheduling_acceptance_refuses_product_and_migration_changes(
+    r11_event, monkeypatch, damage
+):
+    r = r11_event
+    prepare_slice_event(r, monkeypatch, "main-push", "scheduling_acceptance", "0037", damage=damage)
+    with pytest.raises(carrier.Refusal, match="^M7_SCHEDULING_ACCEPTANCE_WRITE_SET$"):
         r["run"]()
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
     assert not (r["root"] / "evidence/source-admission.json").exists()

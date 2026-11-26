@@ -767,6 +767,34 @@ M7_SCHEDULING_MODULE_PATH = re.compile(
 )
 
 
+# The M7.3C acceptance branch starts on the verified 0037 catalog.
+M7_SCHEDULING_ACCEPTANCE_BASE = "60b1162e15f5d31cfa09d4a2976417aa833e82b4"
+M7_SCHEDULING_ACCEPTANCE_TREE = "3cd104b3da8199b7a9c845244cbfb163a5e08f2d"
+M7_SCHEDULING_ACCEPTANCE_ASSIGNMENT = "432e4985ce5da692b2840866c19316402ad03bae"
+M7_SCHEDULING_ACCEPTANCE_ASSIGNMENT_TREE = "546354a6e65181e6a2f481460e880e188feb50b1"
+M7_SCHEDULING_ACCEPTANCE_BRANCH = "c8/m7-3c-acceptance"
+M7_SCHEDULING_ACCEPTANCE_DOCS = M7_SCHEDULING_DOCS
+M7_SCHEDULING_ACCEPTANCE_MIGRATION = None
+M7_SCHEDULING_ACCEPTANCE_PATHS = {
+    ".github/workflows/ci.yml",
+    "docs/tasks/M7_3C_ACCEPTANCE.md",
+    "frontend/e2e/intake-duration.spec.ts",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "tests/m7_scheduling_fixtures.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m7_scheduling_acceptance_postgres.py",
+    "tests/test_m7_scheduling_appointments_postgres.py",
+    "tests/test_m7_scheduling_holds_postgres.py",
+    "tests/test_m7_scheduling_intents_postgres.py",
+    "tests/test_m7_scheduling_owner_day_postgres.py",
+    "tests/test_m7_scheduling_reschedule_api_postgres.py",
+    "tests/test_m7_scheduling_reschedule_postgres.py",
+    "tests/test_native_context_db_runner.py",
+}
+
+
 class SchedulingSource(NamedTuple):
     prefix: str
     base: str
@@ -775,7 +803,7 @@ class SchedulingSource(NamedTuple):
     assignment_tree: str
     branch: str
     docs: set[str]
-    migration: str
+    migration: str | None
     paths: set[str]
     revision: str
 
@@ -788,6 +816,8 @@ class SchedulingSource(NamedTuple):
         }
 
     def permits(self, paths: set[str]) -> bool:
+        if self.migration is None:
+            return paths <= self.paths
         return all(
             path in self.paths
             or self.revision in {"0033", "0034", "0035", "0036", "0037"}
@@ -2306,9 +2336,11 @@ def source_tree_from_evidence(path=None):
         "SOURCE_IDENTITY_SHAPE",
     )
     if scheduling:
+        changed = set(paths) - scheduling.docs
         require(
-            scheduling.docs | {scheduling.migration} <= set(paths)
-            and scheduling.permits(set(paths) - scheduling.docs),
+            scheduling.docs < set(paths)
+            and (scheduling.migration is None or scheduling.migration in changed)
+            and scheduling.permits(changed),
             "SOURCE_IDENTITY_WRITE_SET",
         )
     elif m6_4b:
@@ -3096,6 +3128,18 @@ def scheduling_source(*, branch=None, base=None) -> SchedulingSource | None:
             M7_SCHEDULING_INTENTS_DOCS,
             M7_SCHEDULING_INTENTS_MIGRATION,
             M7_SCHEDULING_INTENTS_PATHS,
+            "0037",
+        ),
+        SchedulingSource(
+            "m7_scheduling_acceptance",
+            M7_SCHEDULING_ACCEPTANCE_BASE,
+            M7_SCHEDULING_ACCEPTANCE_TREE,
+            M7_SCHEDULING_ACCEPTANCE_ASSIGNMENT,
+            M7_SCHEDULING_ACCEPTANCE_ASSIGNMENT_TREE,
+            M7_SCHEDULING_ACCEPTANCE_BRANCH,
+            M7_SCHEDULING_ACCEPTANCE_DOCS,
+            M7_SCHEDULING_ACCEPTANCE_MIGRATION,
+            M7_SCHEDULING_ACCEPTANCE_PATHS,
             "0037",
         ),
     )
