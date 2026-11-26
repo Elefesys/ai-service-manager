@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3A IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-25
+## CURRENT — M7.3A REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-26
 
-Мастер видит в одном дне записи, удержания и блоки, открывает выбранную работу, управляет визитом и сверяет его историю. C5 ведёт экран, C1 — owner API. Единственное активное поручение — M7.3A в `c5/m7-3a-owner-calendar` от принятого `main` `bfb831c3132b2af79d2970f2ffe16b7beedc0857`. Выделена `migrations/versions/0036_scheduling_owner_day.py` поверх `0035` для чтения дня. [Пути и критерии S7](tasks/M7_HANDOFF.md#m73a-task).
+Мастер закрывает пустой день из календаря, отличает одноимённые работы двух клиентов и видит участников конфликта на промежуточной дате блока. C0 принял R1 и закрыл `C0-M7.3A-01` и `C0-M7.3A-02`. [Кандидат PR #69](https://github.com/Elefesys/ai-service-manager/pull/69) — `a27bceeaebd6d65d031aebafc7d7f384054cb83a`, база `main` — `bfb831c3132b2af79d2970f2ffe16b7beedc0857`, схема `0036` поверх `0035`. [CI 12/12](https://github.com/Elefesys/ai-service-manager/actions/runs/45657982678), Chromium 104/104, runtime 160/160. Единственная активная задача — независимое заключение C8 по S7 и R1. [Поручение и доказательства](tasks/M7_HANDOFF.md#m73a-c8).
 
 ## История — M7.2B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-25
 
