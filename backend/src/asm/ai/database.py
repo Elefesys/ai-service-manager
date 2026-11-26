@@ -39,6 +39,8 @@ from asm.ai.contracts import (
     PortfolioPhoto,
     PortfolioPhotoSelection,
     Reply,
+    SchedulingIntentGatewayConfig,
+    SchedulingIntentResult,
     ServiceIntentGatewayConfig,
     ServiceIntentResult,
     validate_conversation_result,
@@ -162,7 +164,10 @@ class AIDatabase:
 
     def config(self, config: AnyGatewayConfig) -> AnyGatewayConfig:
         if self.intake:
-            if not isinstance(config, (IntakeGatewayConfig, ServiceIntentGatewayConfig)):
+            if not isinstance(
+                config,
+                (IntakeGatewayConfig, ServiceIntentGatewayConfig, SchedulingIntentGatewayConfig),
+            ):
                 raise MessagingError(Code.NOT_ALLOWED)
             return validate_gateway_config(config)
         if self.portfolio_delivery:
@@ -211,6 +216,7 @@ class AIDatabase:
                 PortfolioDeliveryGatewayConfig,
                 IntakeGatewayConfig,
                 ServiceIntentGatewayConfig,
+                SchedulingIntentGatewayConfig,
             ),
         ):
             if self.portfolio_session_id is None:
@@ -222,10 +228,18 @@ class AIDatabase:
             "conversation_v6",
             "conversation_v7",
             "conversation_v8",
+            "conversation_v9",
         }:
             run = (
                 decoded(PreparedIntakeRun, raw)
-                if isinstance(config, (IntakeGatewayConfig, ServiceIntentGatewayConfig))
+                if isinstance(
+                    config,
+                    (
+                        IntakeGatewayConfig,
+                        ServiceIntentGatewayConfig,
+                        SchedulingIntentGatewayConfig,
+                    ),
+                )
                 else decoded(PreparedPortfolioDeliveryRun, raw)
                 if isinstance(config, PortfolioDeliveryGatewayConfig)
                 else decoded(PreparedPortfolioRun, raw)
@@ -253,7 +267,7 @@ class AIDatabase:
         return PostgresAuthority(self, claim, run)
 
     def receipt(self, config: AnyGatewayConfig, raw: Any) -> AnyRuntimeReceipt:
-        if isinstance(config, ServiceIntentGatewayConfig):
+        if isinstance(config, (ServiceIntentGatewayConfig, SchedulingIntentGatewayConfig)):
             return decoded(ServiceIntentRuntimeReceipt, raw)
         if isinstance(config, IntakeGatewayConfig):
             return decoded(IntakeRuntimeReceipt, raw)
@@ -303,11 +317,15 @@ class AIDatabase:
     ) -> AnyRuntimeReceipt:
         result = validate_conversation_result(run.config, result)
         try:
-            return await self.replay(claim, run.config, result)
+            return await self.replay(
+                claim, run.config, None if isinstance(result, SchedulingIntentResult) else result
+            )
         except MessagingError as error:
             if error.code != Code.STALE_CLAIM:
                 raise
         try:
+            if isinstance(result, SchedulingIntentResult):
+                return await self._commit_scheduling_intent(claim, run, result)
             if isinstance(result, ServiceIntentResult):
                 return await self._commit_service_intents(claim, run, result)
             return self.receipt(
@@ -321,7 +339,25 @@ class AIDatabase:
                 raise
             # Admission may have waited behind the winning commit. Historical
             # replay still requires that winning capability, not just a run ID.
-            return await self.replay(claim, run.config, result)
+            return await self.replay(
+                claim, run.config, None if isinstance(result, SchedulingIntentResult) else result
+            )
+
+    async def _commit_scheduling_intent(
+        self, claim: JobClaim, run: AnyPreparedRun, result: SchedulingIntentResult
+    ) -> AnyRuntimeReceipt:
+        from asm.scheduling.conversation import finish_scheduling_intent
+
+        async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
+
+            async def command(stage: str, payload: dict[str, object]) -> Any:
+                return await unit.scheduling_intent(run.run_id, stage, payload)
+
+            raw = await finish_scheduling_intent(result, command)
+            receipt = self.receipt(run.config, raw)
+            await self.messaging.checkpoint("scheduling_intent_before_commit")
+        await self.messaging.checkpoint("scheduling_intent_after_commit")
+        return receipt
 
     async def _commit_service_intents(
         self, claim: JobClaim, run: AnyPreparedRun, result: ServiceIntentResult
@@ -391,10 +427,16 @@ class AIDatabase:
         if isinstance(run, (PreparedPortfolioDeliveryRun, PreparedIntakeRun)):
             if not isinstance(portfolio_data, PortfolioDeliveryQueryData):
                 raise MessagingError(Code.AI_STALE)
-            from asm.ai.intake import IntakeConversationAgent, ServiceIntentConversationAgent
+            from asm.ai.intake import (
+                IntakeConversationAgent,
+                SchedulingIntentConversationAgent,
+                ServiceIntentConversationAgent,
+            )
 
             agent_class = (
-                ServiceIntentConversationAgent
+                SchedulingIntentConversationAgent
+                if isinstance(config, SchedulingIntentGatewayConfig)
+                else ServiceIntentConversationAgent
                 if isinstance(config, ServiceIntentGatewayConfig)
                 else IntakeConversationAgent
                 if isinstance(run, PreparedIntakeRun)

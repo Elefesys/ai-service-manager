@@ -24,12 +24,12 @@ _catalog = runpy.run_path(
 
 
 @cache
-def schema_source(revision="0036"):
+def schema_source(revision="0037"):
     return _catalog["source_catalog"](Path(__file__).resolve().parents[1], revision)
 
 
 async def assert_current_schema(c):
-    return await assert_schema(c, "0036", "scheduling_owner_day_schema_profile")
+    return await assert_schema(c, "0037", "scheduling_intent_schema_profile")
 
 
 async def assert_schema(c, revision, profile_name):
@@ -66,7 +66,7 @@ async def current_snapshot(c):
         values = (await c.execute(text(f"SELECT to_jsonb(t) FROM {table} AS t"))).scalars()
         canonical = sorted(json.dumps(v, sort_keys=True, separators=(",", ":")) for v in values)
         rows[table] = (len(canonical), hashlib.sha256("\n".join(canonical).encode()).hexdigest())
-    assert len(rows) == 97
+    assert len(rows) == 99
     return rows, catalog
 
 
@@ -85,7 +85,7 @@ async def historical_schema(h, revision):
             await h.runtime.check()
         yield
     finally:
-        await _migrate("upgrade", "0036")
+        await _migrate("upgrade", "0037")
         await h.runtime.engine.dispose()
         await h.runtime.check()
         with pytest.raises(RuntimeError, match="schema"):

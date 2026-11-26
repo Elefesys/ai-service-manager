@@ -20,6 +20,7 @@ from asm.ai.contracts import (
     Money,
     PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
+    SchedulingIntentGatewayConfig,
     ServiceIntentGatewayConfig,
 )
 from asm.ai.polza import RuntimeRoute, fingerprint
@@ -215,7 +216,7 @@ class IntakeRuntimeSettings(DTO):
     expires_at: datetime
     max_calls: int = Field(ge=1, le=4)
     max_cost: Money
-    config: IntakeGatewayConfig | ServiceIntentGatewayConfig
+    config: IntakeGatewayConfig | ServiceIntentGatewayConfig | SchedulingIntentGatewayConfig
 
     @model_validator(mode="after")
     def finite(self) -> Self:
@@ -226,7 +227,7 @@ class IntakeRuntimeSettings(DTO):
             or self.config.limits.cost_budget > self.max_cost
             or self.config.limits.model_calls > self.max_calls
             or (self.data_profile == "SYNTHETIC_SERVICE_INTENTS_V1")
-            != isinstance(self.config, ServiceIntentGatewayConfig)
+            != isinstance(self.config, (ServiceIntentGatewayConfig, SchedulingIntentGatewayConfig))
         ):
             raise ValueError("INTAKE_ADMISSION_INVALID")
         return self

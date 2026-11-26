@@ -187,6 +187,13 @@ class ServiceIntentGatewayConfig(_IntakeGatewayConfig):
     schema_revision: Literal["conversation_result_v4"]
 
 
+class SchedulingIntentGatewayConfig(_IntakeGatewayConfig):
+    """Synthetic conversation proposals for accepted-session scheduling."""
+
+    prompt_revision: Literal["conversation_v9"]
+    schema_revision: Literal["conversation_result_v5"]
+
+
 AnyGatewayConfig = (
     GatewayConfig
     | KnowledgeGatewayConfig
@@ -195,10 +202,13 @@ AnyGatewayConfig = (
     | PortfolioDeliveryGatewayConfig
     | IntakeGatewayConfig
     | ServiceIntentGatewayConfig
+    | SchedulingIntentGatewayConfig
 )
 
 
 def validate_gateway_config(value: object) -> AnyGatewayConfig:
+    if isinstance(value, SchedulingIntentGatewayConfig):
+        return SchedulingIntentGatewayConfig.model_validate(value)
     if isinstance(value, ServiceIntentGatewayConfig):
         return ServiceIntentGatewayConfig.model_validate(value)
     if isinstance(value, IntakeGatewayConfig):
@@ -362,10 +372,38 @@ class ServiceIntentResult(IntakeNoReply):
 
 ConversationResultV4 = ConversationResultV3 | ServiceIntentResult
 CONVERSATION_RESULT_V4: TypeAdapter[ConversationResultV4] = TypeAdapter(ConversationResultV4)
-AnyConversationResult = ConversationResult | ConversationResultV2 | ConversationResultV4
+SchedulingPeriod = Literal["ANY", "MORNING", "AFTERNOON", "EVENING"]
+
+
+class ListAvailability(DTO):
+    name: Literal["list_availability"]
+    source: ServiceIntentSource
+    period: SchedulingPeriod | None
+
+
+class SelectAvailability(DTO):
+    name: Literal["select_availability"]
+    source: ServiceIntentSource
+
+
+class SchedulingIntentResult(NoReply):
+    scheduling: Annotated[ListAvailability | SelectAvailability, Field(discriminator="name")]
+
+
+ConversationResultV5 = ConversationResultV4 | SchedulingIntentResult
+CONVERSATION_RESULT_V5: TypeAdapter[ConversationResultV5] = TypeAdapter(ConversationResultV5)
+AnyConversationResult = ConversationResult | ConversationResultV2 | ConversationResultV5
 
 
 def validate_conversation_result(config: AnyGatewayConfig, value: object) -> AnyConversationResult:
+    if isinstance(config, SchedulingIntentGatewayConfig):
+        if isinstance(value, dict):
+            return CONVERSATION_RESULT_V5.validate_json(
+                json.dumps(value, ensure_ascii=False, allow_nan=False)
+            )
+        return CONVERSATION_RESULT_V5.validate_python(value)
+    if isinstance(value, SchedulingIntentResult):
+        raise ValueError("Scheduling intents require the v9 contract")
     if isinstance(config, ServiceIntentGatewayConfig):
         if isinstance(value, dict):
             return CONVERSATION_RESULT_V4.validate_json(
@@ -569,11 +607,16 @@ class ServiceIntentGatewayResult(_GatewayResult[ConversationResultV4]):
     """Typed proposals for the admitted v8 runtime."""
 
 
+class SchedulingIntentGatewayResult(_GatewayResult[ConversationResultV5]):
+    """Untrusted scheduling intent or an existing conversation result."""
+
+
 AnyGatewayResult = (
     GatewayResult
     | PortfolioDeliveryGatewayResult
     | IntakeGatewayResult
     | ServiceIntentGatewayResult
+    | SchedulingIntentGatewayResult
 )
 
 

@@ -71,6 +71,7 @@ class FakeAdapter:
                 "conversation_result_v2",
                 "conversation_result_v3",
                 "conversation_result_v4",
+                "conversation_result_v5",
             ),
             max_input_tokens=131072,
             max_output_tokens=8192,
@@ -132,6 +133,7 @@ class FakeAdapter:
         if request.config.prompt_revision in {
             "conversation_v7",
             "conversation_v8",
+            "conversation_v9",
         } and scenario not in {
             "invalid",
             "oversize",

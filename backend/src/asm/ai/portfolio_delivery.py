@@ -24,6 +24,7 @@ from asm.ai.contracts import (
     PortfolioPhoto,
     PortfolioPhotoSelection,
     ReadTool,
+    SchedulingIntentGatewayConfig,
     ServiceIntentGatewayConfig,
 )
 from asm.ai.gateway import ModelAdapter
@@ -195,7 +196,12 @@ class PortfolioDeliveryConversationAgent(PortfolioConversationAgent):
     ):
         if not isinstance(
             config,
-            (PortfolioDeliveryGatewayConfig, IntakeGatewayConfig, ServiceIntentGatewayConfig),
+            (
+                PortfolioDeliveryGatewayConfig,
+                IntakeGatewayConfig,
+                ServiceIntentGatewayConfig,
+                SchedulingIntentGatewayConfig,
+            ),
         ):
             raise ValueError("PORTFOLIO_DELIVERY_CONFIG_INVALID")
         self.eligible = DeliveryEligibility(references=delivery_eligible).references

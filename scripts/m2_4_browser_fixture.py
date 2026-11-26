@@ -374,12 +374,12 @@ async def native_policy(connection, params, preset, operation, source_tree):
         .one()
     )
     installed = (
-        await connection.execute(text("SELECT platform.scheduling_owner_day_schema_profile()"))
+        await connection.execute(text("SELECT platform.scheduling_intent_schema_profile()"))
     ).scalar_one()
     if (
         not isinstance(installed, dict)
         or set(installed) != {"schema_revision", "valid", "profile_sha256"}
-        or installed["schema_revision"] != "0036"
+        or installed["schema_revision"] != "0037"
         or installed["valid"] is not True
         or not isinstance(installed["profile_sha256"], str)
         or re.fullmatch("[0-9a-f]{64}", installed["profile_sha256"]) is None
@@ -393,7 +393,7 @@ async def native_policy(connection, params, preset, operation, source_tree):
     # no old writers are started by it. This is not an operator drain probe.
     profile = dict(
         source_tree=source_tree,
-        schema_revision="0036",
+        schema_revision="0037",
         profile_sha256=installed["profile_sha256"],
         drain_confirmed=True,
     )

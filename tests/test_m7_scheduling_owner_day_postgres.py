@@ -603,9 +603,27 @@ async def test_s7_upgrade_0035_keeps_operational_day_and_history(scheduling_pg, 
         original_a, original_b, original_c = [await owner_booking(auth, work) for work in (a, b, c)]
     finally:
         await _migrate("upgrade", "0036")
-    profile = await scalar(h, "SELECT platform.scheduling_owner_day_schema_profile()")
-    assert profile["schema_revision"] == "0036" and profile["valid"] is True
+    try:
+        profile = await scalar(h, "SELECT platform.scheduling_owner_day_schema_profile()")
+        assert profile["schema_revision"] == "0036" and profile["valid"] is True
+        assert await legacy_facts(h) == before
+        agreements = [
+            (await owner_get(auth, work.url + "/quote"))["agreement"] for work in (a, b, c)
+        ]
+    finally:
+        await _migrate("upgrade", "0037")
+    upgraded = await scalar(h, "SELECT platform.scheduling_intent_schema_profile()")
+    assert upgraded["schema_revision"] == "0037" and upgraded["valid"] is True
+    assert [
+        (await owner_get(auth, work.url + "/quote"))["agreement"] for work in (a, b, c)
+    ] == agreements
     assert await legacy_facts(h) == before
+    receipt(
+        "S8-0036-0037",
+        agreements=[work.proof() for work in (a, b, c)],
+        preserved={key: len(rows) for key, rows in before.items()},
+        schema=upgraded,
+    )
     previous = await owner_get(auth, day_route(day))
     following = await owner_get(auth, day_route(next_day))
     hold, kept_block = previous["entries"]

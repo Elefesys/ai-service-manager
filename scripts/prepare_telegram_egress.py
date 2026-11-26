@@ -2042,6 +2042,9 @@ SCHEMA_TABLES["0033"] = SCHEMA_TABLES["0032"] | {
 SCHEMA_TABLES["0034"] = SCHEMA_TABLES["0033"] | {"app.appointments"}
 SCHEMA_TABLES["0035"] = SCHEMA_TABLES["0034"]
 SCHEMA_TABLES["0036"] = SCHEMA_TABLES["0035"]
+SCHEMA_TABLES["0037"] = SCHEMA_TABLES["0036"] | {
+    "platform.scheduling_turn_actions", "platform.scheduling_chat_codes",
+}
 
 
 def native_source_profile():
@@ -2049,10 +2052,10 @@ def native_source_profile():
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT, "0036")
-    schema_inventory("0036", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0037")
+    schema_inventory("0037", profile["columns"])
     require(
-        len(profile["functions"]) == 442 and sum(map(len, profile["columns"].values())) == 1353,
+        len(profile["functions"]) == 449 and sum(map(len, profile["columns"].values())) == 1377,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -2080,7 +2083,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0036",
+            "schema_revision": "0037",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

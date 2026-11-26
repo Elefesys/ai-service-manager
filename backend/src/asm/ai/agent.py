@@ -34,6 +34,7 @@ from asm.ai.contracts import (
     ConversationResultV2,
     ConversationResultV3,
     ConversationResultV4,
+    ConversationResultV5,
     Cost,
     ErrorCode,
     GatewayRequest,
@@ -41,6 +42,7 @@ from asm.ai.contracts import (
     IntakeGatewayConfig,
     PortfolioDeliveryGatewayConfig,
     ReadTool,
+    SchedulingIntentGatewayConfig,
     ServiceIntentGatewayConfig,
     ToolResult,
     Usage,
@@ -162,8 +164,16 @@ class ServiceIntentAgentOutcome(_AgentOutcome[ConversationResultV4]):
     """An uncommitted proposal from the v8 agent."""
 
 
+class SchedulingIntentAgentOutcome(_AgentOutcome[ConversationResultV5]):
+    """The model cannot select an internal scheduling object."""
+
+
 AnyAgentOutcome = (
-    AgentOutcome | PortfolioDeliveryAgentOutcome | IntakeAgentOutcome | ServiceIntentAgentOutcome
+    AgentOutcome
+    | PortfolioDeliveryAgentOutcome
+    | IntakeAgentOutcome
+    | ServiceIntentAgentOutcome
+    | SchedulingIntentAgentOutcome
 )
 
 
@@ -220,7 +230,9 @@ class ConversationAgent:
             )
         )
         model = (
-            ServiceIntentAgentOutcome
+            SchedulingIntentAgentOutcome
+            if isinstance(self.config, SchedulingIntentGatewayConfig)
+            else ServiceIntentAgentOutcome
             if isinstance(self.config, ServiceIntentGatewayConfig)
             else IntakeAgentOutcome
             if isinstance(self.config, IntakeGatewayConfig)

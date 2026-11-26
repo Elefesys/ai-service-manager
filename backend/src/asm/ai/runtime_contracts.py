@@ -22,6 +22,7 @@ from asm.ai.contracts import (
     PortfolioDeliveryGatewayConfig,
     PortfolioGatewayConfig,
     PortfolioPhotoSelection,
+    SchedulingIntentGatewayConfig,
     SearchGatewayConfig,
     ServiceIntentGatewayConfig,
     ServiceIntentResult,
@@ -221,7 +222,9 @@ class PreparedPortfolioDeliveryRun(_PreparedRun):
 class PreparedIntakeRun(_PreparedRun):
     """One explicit synthetic intake run, scoped independently of older DTOs."""
 
-    config: IntakeGatewayConfig | ServiceIntentGatewayConfig = Field(repr=False)
+    config: IntakeGatewayConfig | ServiceIntentGatewayConfig | SchedulingIntentGatewayConfig = (
+        Field(repr=False)
+    )
     knowledge_pin: KnowledgePin = Field(repr=False)
     active_projection: ActiveProjection = Field(repr=False)
     search_pin: SearchPin = Field(repr=False)

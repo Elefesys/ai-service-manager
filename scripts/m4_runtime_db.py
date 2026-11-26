@@ -689,6 +689,76 @@ M7_OWNER_DAY_IMPLEMENTATION_PATHS = {
     "tests/test_telegram_egress_postgres.py",
     "tests/test_tenancy_postgres.py",
 }
+# M7.3B inherits the exact three-file C0 assignment on the verified M7.3A tree.
+M7_SCHEDULING_INTENTS_BASE = "fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7"
+M7_SCHEDULING_INTENTS_TREE = "48047c951acde749da5f80e342c6e003f6770e42"
+M7_SCHEDULING_INTENTS_ASSIGNMENT = "bebcaa2081f5c1eca41aae72e9219e86a6bbd536"
+M7_SCHEDULING_INTENTS_ASSIGNMENT_TREE = "b710c20376da3d834cd837f6c106eca50f2e3a1d"
+M7_SCHEDULING_INTENTS_BRANCH = "c4/m7-3b-scheduling-intents"
+M7_SCHEDULING_INTENTS_DOCS = M7_SCHEDULING_DOCS
+M7_SCHEDULING_INTENTS_MIGRATION = "migrations/versions/0037_scheduling_intents.py"
+M7_SCHEDULING_INTENTS_PATHS = {
+    M7_SCHEDULING_INTENTS_MIGRATION,
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/tenancy/database.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m2_4_browser_worker.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_intake_fixtures.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/m7_scheduling_fixtures.py",
+    "tests/test_foundation.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_agent_intents_postgres.py",
+    "tests/test_m6_pricing_postgres.py",
+    "tests/test_m6_quote_acceptance_postgres.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_intents_migrations.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_m7_scheduling_appointments_postgres.py",
+    "tests/test_m7_scheduling_holds_postgres.py",
+    "tests/test_m7_scheduling_intents.py",
+    "tests/test_m7_scheduling_intents_postgres.py",
+    "tests/test_m7_scheduling_owner_day_postgres.py",
+    "tests/test_m7_scheduling_postgres.py",
+    "tests/test_m7_scheduling_reschedule_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
+M7_SCHEDULING_INTENTS_MODULE_PATH = re.compile(
+    r"backend/src/asm/(?:ai|service_requests|messaging|conversations|telegram)/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.py"
+    r"|backend/src/asm/ai/(?:prompts/conversation_v9\.txt|schemas/conversation_result_v5\.json)"
+    r"|tests/(?:test_m4_(?:agent|gateway|runtime[A-Za-z0-9_]*)|test_m5_intake[A-Za-z0-9_]*|m5_intake_fixtures)\.py"
+)
 M7_SCHEDULING_MODULE_PATH = re.compile(
     r"backend/src/asm/scheduling/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.py"
     r"|tests/test_m7_scheduling[A-Za-z0-9_]*\.py"
@@ -718,8 +788,9 @@ class SchedulingSource(NamedTuple):
     def permits(self, paths: set[str]) -> bool:
         return all(
             path in self.paths
-            or self.revision in {"0033", "0034", "0035", "0036"}
+            or self.revision in {"0033", "0034", "0035", "0036", "0037"}
             and M7_SCHEDULING_MODULE_PATH.fullmatch(path)
+            or self.revision == "0037" and M7_SCHEDULING_INTENTS_MODULE_PATH.fullmatch(path)
             for path in paths
         )
 
@@ -3012,6 +3083,18 @@ def scheduling_source(*, branch=None, base=None) -> SchedulingSource | None:
             M7_OWNER_DAY_IMPLEMENTATION_PATHS,
             "0036",
         ),
+        SchedulingSource(
+            "m7_scheduling_intents",
+            M7_SCHEDULING_INTENTS_BASE,
+            M7_SCHEDULING_INTENTS_TREE,
+            M7_SCHEDULING_INTENTS_ASSIGNMENT,
+            M7_SCHEDULING_INTENTS_ASSIGNMENT_TREE,
+            M7_SCHEDULING_INTENTS_BRANCH,
+            M7_SCHEDULING_INTENTS_DOCS,
+            M7_SCHEDULING_INTENTS_MIGRATION,
+            M7_SCHEDULING_INTENTS_PATHS,
+            "0037",
+        ),
     )
     return next((row for row in candidates if row.branch == branch or row.base == base), None)
 
@@ -3950,7 +4033,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.scheduling_owner_day_schema_profile()"
+        "platform.scheduling_intent_schema_profile()"
+        if revision == "0037"
+        else "platform.scheduling_owner_day_schema_profile()"
         if revision == "0036"
         else "platform.scheduling_reschedule_schema_profile()"
         if revision == "0035"
@@ -4116,6 +4201,7 @@ def stock_catalog():
                 "0034",
                 "0035",
                 "0036",
+                "0037",
             },
             "CATALOG_REVISION",
         )
@@ -4144,6 +4230,7 @@ def stock_catalog():
             "0034",
             "0035",
             "0036",
+            "0037",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -4191,7 +4278,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.scheduling_owner_day_schema_profile()"
+            "platform.scheduling_intent_schema_profile()"
+            if revision == "0037"
+            else "platform.scheduling_owner_day_schema_profile()"
             if revision == "0036"
             else "platform.scheduling_reschedule_schema_profile()"
             if revision == "0035"

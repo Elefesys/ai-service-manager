@@ -803,6 +803,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0034", "scheduling_appointment_schema_profile"),
         ("0035", "scheduling_reschedule_schema_profile"),
         ("0036", "scheduling_owner_day_schema_profile"),
+        ("0037", "scheduling_intent_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -856,6 +857,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0034", "scheduling_appointment_schema_profile", 434, 433),
         ("0035", "scheduling_reschedule_schema_profile", 440, 439),
         ("0036", "scheduling_owner_day_schema_profile", 442, 441),
+        ("0037", "scheduling_intent_schema_profile", 449, 448),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -890,7 +892,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
-    profile_name = "platform.scheduling_owner_day_schema_profile()"
+    profile_name = "platform.scheduling_intent_schema_profile()"
     if not body_matches:
         expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
@@ -3741,7 +3743,14 @@ def test_planning_source_refuses_before_resources(
     assert not (r["root"] / "evidence/source-admission.json").exists()
 
 
-SCHEDULING_FEATURES = {"scheduling", "holds", "appointments", "reschedule", "owner_day"}
+SCHEDULING_FEATURES = {
+    "scheduling",
+    "holds",
+    "appointments",
+    "reschedule",
+    "owner_day",
+    "scheduling_intents",
+}
 HOLD_PROOF_PATHS = {
     "backend/src/asm/scheduling/offer_store.py",
     "tests/test_m7_scheduling_holds.py",
@@ -3752,6 +3761,13 @@ APPOINTMENT_PROOF_PATHS = HOLD_PROOF_PATHS | {
     "tests/test_m7_scheduling_appointments_postgres.py",
 }
 SCHEDULING_PROOF_PATHS = {
+    "scheduling_intents": {
+        "backend/src/asm/scheduling/conversation.py",
+        "backend/src/asm/messaging/database.py",
+        "backend/src/asm/ai/prompts/conversation_v9.txt",
+        "backend/src/asm/ai/schemas/conversation_result_v5.json",
+        "tests/test_m7_scheduling_intents_postgres.py",
+    },
     "owner_day": {
         "backend/src/asm/scheduling/commands.py",
         "frontend/src/OwnerCalendar.tsx",
@@ -3850,6 +3866,7 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         ("appointments", "0034"),
         ("reschedule", "0035"),
         ("owner_day", "0036"),
+        ("scheduling_intents", "0037"),
     ],
 )
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
@@ -3961,7 +3978,13 @@ def test_m7_scheduling_refuses_ineligible_source(r11_event, monkeypatch, route, 
 )
 @pytest.mark.parametrize(
     ("feature", "revision"),
-    [("holds", "0033"), ("appointments", "0034"), ("reschedule", "0035"), ("owner_day", "0036")],
+    [
+        ("holds", "0033"),
+        ("appointments", "0034"),
+        ("reschedule", "0035"),
+        ("owner_day", "0036"),
+        ("scheduling_intents", "0037"),
+    ],
 )
 def test_m7_booking_refuses_ineligible_source(
     r11_event, monkeypatch, route, damage, reason, feature, revision
