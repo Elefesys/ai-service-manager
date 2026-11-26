@@ -378,12 +378,14 @@ def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_g
     }
     assert len(jobs) - 1 + 6 == 12
     for job, digest in {
-        "browser": "e307c25b9c6ec819fc5d6d160358cbbd5c2e73d4469fee24552a5a50c89effcc",
+        "browser": "d509e1d93cd9fdaf00ee140faff13bfb403a3f1589e26c1584f05d69caa6d3dd",
         "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
         "connect5-migration": "940bc041722d35488f6bc5b148e87793eebda363df6aa572762f5ed4f2de2100",
         "native-context-db": "ab14f25d082e830a8be35422a7ae4f0fc7d8f7092ec992fcbde703751b2fe78b",
     }.items():
         assert lane.sha256(jobs[job].encode()) == digest
+    assert "timeout-minutes: 65" in jobs["browser"]
+    assert "step browser-tests 2880 sh -c" in (lane.ROOT / "scripts/test_browser.sh").read_text()
     assert (
         "timeout-minutes: ${{ matrix.boundary == 'state' && 30 || 25 }}"
         in jobs["connect5-migration"]

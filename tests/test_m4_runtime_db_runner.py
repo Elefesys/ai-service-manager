@@ -3766,6 +3766,7 @@ SCHEDULING_PROOF_PATHS = {
         "backend/src/asm/messaging/database.py",
         "backend/src/asm/ai/prompts/conversation_v9.txt",
         "backend/src/asm/ai/schemas/conversation_result_v5.json",
+        "scripts/test_browser.sh",
         "tests/test_m7_scheduling_intents_postgres.py",
     },
     "owner_day": {

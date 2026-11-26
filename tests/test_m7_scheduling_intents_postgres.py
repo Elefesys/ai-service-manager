@@ -256,7 +256,15 @@ class SchedulingChat:
         return await owner_get(auth, day_route(day))
 
 
-async def configure_wide(h, auth, token, work, *, hold_ttl=POLICY["hold_ttl_minutes"]):
+async def configure_wide(
+    h,
+    auth,
+    token,
+    work,
+    *,
+    hold_ttl=POLICY["hold_ttl_minutes"],
+    offer_ttl=POLICY["offer_ttl_minutes"],
+):
     preview = await owner_get(auth, work.preview_url())
     schedule = await owner_post(
         auth,
@@ -273,17 +281,24 @@ async def configure_wide(h, auth, token, work, *, hold_ttl=POLICY["hold_ttl_minu
         auth,
         work.preview_url(),
         token,
-        POLICY | {"expected_version": schedule["schedule_version"], "hold_ttl_minutes": hold_ttl},
+        POLICY
+        | {
+            "expected_version": schedule["schedule_version"],
+            "hold_ttl_minutes": hold_ttl,
+            "offer_ttl_minutes": offer_ttl,
+        },
     )
 
 
-async def sample(h, auth, *, hold_ttl=POLICY["hold_ttl_minutes"]):
+async def sample(
+    h, auth, *, hold_ttl=POLICY["hold_ttl_minutes"], offer_ttl=POLICY["offer_ttl_minutes"]
+):
     token, rose, swallow = await accept_pair_with_modes(
         h, auth, "NONE", "FIXED_DEPOSIT", titles=("роза", "ласточка")
     )
     scope = h.intake_scope.copy()
-    await configure_wide(h, auth, token, rose, hold_ttl=hold_ttl)
-    await configure_wide(h, auth, token, swallow, hold_ttl=hold_ttl)
+    await configure_wide(h, auth, token, rose, hold_ttl=hold_ttl, offer_ttl=offer_ttl)
+    await configure_wide(h, auth, token, swallow, hold_ttl=hold_ttl, offer_ttl=offer_ttl)
     return token, rose, swallow, scope
 
 
@@ -332,6 +347,254 @@ async def outgoing_status(h, outgoing):
             id=outgoing["outbox_id"],
         )
     )[0]
+
+
+async def compete_for_first(h, other, initial):
+    rival = SchedulingChat(
+        h,
+        UUID(other.selection.conversation_id),
+        await scope_for(h, UUID(other.selection.conversation_id)),
+    )
+    _, _, listed = await rival.say(
+        f"Когда можно {initial['date']} после обеда, но не раньше 16:00?"
+    )
+    picked = offered(listed)["options"][0]
+    assert picked["visit_start"] == initial["options"][0]["visit_start"]
+    _, _, held = await rival.say(f"Выбираю {picked['code']}")
+    assert held["result"]["outcome"] == "HELD"
+    assert (rival.wire.calls, rival.wire.effects) == (2, 2)
+    return held["result"]
+
+
+async def test_r2_alternative_becomes_stale_after_editing_original_request(scheduling_pg, auth):
+    h = scheduling_pg
+    token, rose, _, scope = await sample(h, auth)
+    other = await accept_work(h, auth, token, "23 mm")
+    chat = SchedulingChat(h, UUID(rose.selection.conversation_id), scope)
+    _, _, question = await chat.say("Когда можно завтра после обеда, но не раньше 16:00?")
+    assert question["text"].startswith("Для какой согласованной работы")
+    _, _, listed = await chat.say("На розу")
+    initial = offered(listed)
+    first = initial["options"][0]
+    assert wall(first["visit_start"]) == "16:00"
+    assert await calendar_facts(h) == dict(holds=0, appointments=0, allocations=0)
+    winner = await compete_for_first(h, other, initial)
+    _, _, conflict = await chat.say(f"Выбираю {first['code']}")
+    alternatives = offered(conflict)
+    alternate = alternatives["options"][0]
+    assert wall(alternate["visit_start"]) == "17:30"
+    before = await chat.calendar(auth, initial["date"])
+    winner_row = match_calendar(before, other, "hold_id", winner["hold_id"])
+    assert len(before["entries"]) == 1
+    facts = await calendar_facts(h)
+    counts = (chat.wire.calls, chat.wire.effects)
+    async with shared_controlled_apply(h, question["source_message_id"]) as mutate:
+        await mutate()
+    _, _, stale = await chat.say(f"Выбираю {alternate['code']}")
+    after = await chat.calendar(auth, initial["date"])
+    report(
+        "R2-alternative-after-edit",
+        session=rose.selection.session_id,
+        edited_message=question["source_message_id"],
+        initial=initial,
+        initial_text=listed["text"],
+        alternatives=alternatives,
+        alternatives_text=conflict["text"],
+        alternative_outbox=conflict["outbox_id"],
+        attempted=alternate,
+        reply=stale["text"],
+        reply_outbox=stale["outbox_id"],
+        occupancy_before=facts,
+        occupancy_after=await calendar_facts(h),
+        calendar_before=before["entries"],
+        calendar_after=after["entries"],
+        counts_before=counts,
+        counts_after=(chat.wire.calls, chat.wire.effects),
+    )
+    assert stale["option_id"] is None and "На какую дату подобрать свежие окна?" in stale["text"]
+    assert await calendar_facts(h) == facts == dict(holds=1, appointments=0, allocations=1)
+    assert after["entries"] == before["entries"]
+    assert (chat.wire.calls, chat.wire.effects) == (counts[0] + 1, counts[1] + 1)
+    assert chat.wire.texts[-1] == stale["text"]
+
+    _, _, refreshed = await chat.say(
+        f"Когда можно на розу {initial['date']} после обеда, но не раньше 16:00?"
+    )
+    fresh = offered(refreshed)
+    choice = fresh["options"][0]
+    assert fresh["offer_id"] != alternatives["offer_id"] and choice["code"] != alternate["code"]
+    assert await calendar_facts(h) == facts
+    _, _, booked = await chat.say(f"Выбираю {choice['code']}")
+    assert booked["result"]["outcome"] == "CONFIRMED"
+    assert booked["selection"]["session_id"] == rose.selection.session_id
+    current = await chat.calendar(auth, fresh["date"])
+    appointment = match_calendar(
+        current, rose, "appointment_id", booked["result"]["appointment_id"]
+    )
+    assert match_calendar(current, other, "hold_id", winner["hold_id"]) == winner_row
+    assert await calendar_facts(h) == dict(holds=2, appointments=1, allocations=2)
+    assert chat.wire.texts[-2:] == [refreshed["text"], booked["text"]]
+    assert (chat.wire.calls, chat.wire.effects) == (counts[0] + 3, counts[1] + 3)
+    report(
+        "R2-fresh-explicit-choice",
+        session=rose.selection.session_id,
+        fresh=fresh,
+        fresh_text=refreshed["text"],
+        fresh_outbox=refreshed["outbox_id"],
+        confirmed=booked["text"],
+        confirmation_outbox=booked["outbox_id"],
+        appointment=appointment,
+        competing_hold=winner_row,
+        counts=(chat.wire.calls, chat.wire.effects),
+    )
+
+
+@pytest.mark.parametrize("kind", ["INITIAL", "ALTERNATIVES"])
+async def test_r2_offer_expiry_at_first_send_and_restart(scheduling_pg, auth, kind):
+    h = scheduling_pg
+    token, rose, _, scope = await sample(h, auth, offer_ttl=1)
+    other = await accept_work(h, auth, token, "23 mm") if kind == "ALTERNATIVES" else None
+    chat = SchedulingChat(h, UUID(rose.selection.conversation_id), scope)
+    question = "Когда можно на розу завтра после обеда, но не раньше 16:00?"
+    message, generation, pending = await chat.say(question, send=other is not None)
+    winner = None
+    if other is not None:
+        original = offered(pending)
+        winner = await compete_for_first(h, other, original)
+        message, generation, pending = await chat.say(
+            f"Выбираю {original['options'][0]['code']}", send=False
+        )
+    offer = pending["result"]["offer"]
+    assert offer["options"]
+    assert pending["delivery_status"] == "PENDING"
+    assert await outgoing_status(h, pending) == dict(
+        status="PENDING", error_code=None, attempt_id=None, job="READY"
+    )
+    facts = await calendar_facts(h)
+    assert facts == dict(
+        holds=int(winner is not None), appointments=0, allocations=int(winner is not None)
+    )
+    before = await chat.calendar(auth, offer["date"])
+    if winner is not None:
+        assert match_calendar(before, other, "hold_id", winner["hold_id"])
+
+    deadline = datetime.fromisoformat(offer["expires_at"])
+    await scalar(
+        h,
+        "SELECT pg_sleep(greatest(extract(epoch FROM :deadline - clock_timestamp()),0)+0.02)",
+        deadline=deadline,
+    )
+    counts = (chat.wire.calls, chat.wire.effects)
+    first_send = await claim_job(h, pending["send_job_id"])
+    db_time = await scalar(h, "SELECT clock_timestamp()")
+    assert db_time >= deadline
+    await chat.worker.execute(first_send)
+    terminal = await outgoing_status(h, pending)
+    after_counts = (chat.wire.calls, chat.wire.effects)
+    after = await chat.calendar(auth, offer["date"])
+    fresh_wire = SchedulingWire()
+    restarted = Worker(h.kernel, fresh_wire, ai=chat.worker.ai)
+    await h.kernel.recover_expired()
+    await restarted.execute(generation)
+    with pytest.raises(MessagingError) as error:
+        await restarted.execute(first_send)
+    assert error.value.code == Code.STALE_CLAIM
+    await chat.repeat_input(message)
+    assert await outgoing_status(h, pending) == terminal
+    report(
+        "R2-expired-" + kind,
+        session=rose.selection.session_id,
+        offer=offer,
+        pending_text=pending["text"],
+        delivered=chat.wire.texts[counts[0] :],
+        outbox=pending["outbox_id"],
+        admitted_at=db_time,
+        terminal=terminal,
+        before_counts=counts,
+        after_counts=after_counts,
+        restart_counts=(fresh_wire.calls, fresh_wire.effects),
+        calendar_before=before["entries"],
+        calendar_after=after["entries"],
+    )
+    assert terminal == dict(status="FAILED", error_code="NOT_ALLOWED", attempt_id=None, job="DEAD")
+    assert after_counts == counts
+    assert (fresh_wire.calls, fresh_wire.effects, fresh_wire.texts) == (0, 0, [])
+    assert after["entries"] == before["entries"] and await calendar_facts(h) == facts
+
+    request = f"Когда можно на розу {offer['date']} после обеда, но не раньше 16:00?"
+    _, fresh_generation, fresh = await chat.say(request, send=False)
+    fresh_offer = fresh["result"]["offer"]
+    assert fresh_offer["offer_id"] != offer["offer_id"]
+    assert datetime.fromisoformat(fresh_offer["expires_at"]) > deadline
+    assert {o["code"] for o in fresh_offer["options"]}.isdisjoint(
+        o["code"] for o in offer["options"]
+    )
+    send = await claim_job(h, fresh["send_job_id"])
+    await chat.worker.execute(send)
+    assert (await outgoing_status(h, fresh))["status"] == "SENT"
+    assert (chat.wire.calls, chat.wire.effects) == (counts[0] + 1, counts[1] + 1)
+    assert chat.wire.texts[-1] == fresh["text"]
+    await restarted.execute(fresh_generation)
+    assert (fresh_wire.calls, fresh_wire.effects) == (0, 0)
+    assert await calendar_facts(h) == facts
+    report(
+        "R2-timely-after-" + kind,
+        offer=fresh_offer,
+        session=rose.selection.session_id,
+        outbox=fresh["outbox_id"],
+        delivered=fresh["text"],
+        calls=1,
+        effects=1,
+        occupancy=facts,
+    )
+
+
+async def test_r2_clarification_with_bound_and_polite_date(scheduling_pg, auth):
+    h = scheduling_pg
+    _, rose, _, scope = await sample(h, auth)
+    chat = SchedulingChat(h, UUID(rose.selection.conversation_id), scope)
+    today = await scalar(h, "SELECT (clock_timestamp() AT TIME ZONE 'Asia/Novosibirsk')::date")
+    midnight = datetime.combine(today + timedelta(days=1), datetime.min.time(), ZoneInfo(ZONE))
+    first = (
+        "Когда можно завтра после обеда?",
+        "Для какой согласованной работы",
+        "На розу, но не раньше 16:00",
+        ["16:00", "16:15", "16:30", "16:45"],
+    )
+    second = (
+        "Когда можно на розу завтра или послезавтра после обеда?",
+        "На какую дату",
+        "Завтра, пожалуйста",
+        ["12:00", "12:15", "12:30", "12:45"],
+    )
+    results = []
+    for question, expected_prompt, answer, starts in (first, second):
+        _, _, prompt = await chat.say(question, occurred_at=midnight - timedelta(seconds=1))
+        assert prompt["text"].startswith(expected_prompt)
+        counts = (chat.wire.calls, chat.wire.effects)
+        _, _, reply = await chat.say(answer, occurred_at=midnight + timedelta(seconds=1))
+        assert (chat.wire.calls, chat.wire.effects) == (counts[0] + 1, counts[1] + 1)
+        assert chat.wire.texts[-1] == reply["text"]
+        results.append((reply, starts))
+        report(
+            "R2-clarification",
+            session=rose.selection.session_id,
+            question=question,
+            prompt=prompt["text"],
+            answer=answer,
+            delivered=reply["text"],
+            outbox=reply["outbox_id"],
+            offer=reply["result"].get("offer"),
+            expected_date=midnight.date(),
+            calendar=(await chat.calendar(auth, midnight.date().isoformat()))["entries"],
+            counts=(chat.wire.calls, chat.wire.effects),
+        )
+    for reply, starts in results:
+        value = offered(reply)
+        assert reply["selection"]["session_id"] == rose.selection.session_id
+        assert value["date"] == midnight.date().isoformat()
+        assert [wall(o["visit_start"]) for o in value["options"]] == starts
+    assert await calendar_facts(h) == dict(holds=0, appointments=0, allocations=0)
 
 
 @pytest.mark.parametrize("stale", ["CANCELLED", "EXPIRED"])

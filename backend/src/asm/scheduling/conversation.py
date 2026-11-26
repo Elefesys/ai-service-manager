@@ -49,6 +49,7 @@ _LOWER_BOUND = re.compile(r"\bне\s+(?:раньше|ранее)\s+([01]?\d|2[0-
 _CLOCK = re.compile(r"\b\d{1,2}(?::\d{2}|\.\d{2}|\s*час(?:а|ов)?)\b")
 _OTHER_BOUND = re.compile(r"\b(?:не\s+(?:раньше|ранее|позже|позднее)|(?:с|до|после)\s+\d+)\b")
 _ANSWER_CLOCK = re.compile(r"(?:не\s+(?:раньше|ранее)\s+)?([01]?\d|2[0-3]):([0-5]\d)")
+_COURTESY_SUFFIX = re.compile(r"(?:,\s*|\s+)пожалуйста$")
 
 
 @dataclass(frozen=True)
@@ -136,12 +137,20 @@ def _clarification_answer(opened: dict[str, Any], timezone: str, text: str) -> _
         not_before_minute=saved["not_before_minute"],
     )
     question = saved["question"]
-    answer = text.casefold().strip().rstrip(".!").strip()
+    answer = _COURTESY_SUFFIX.sub("", text.casefold().strip().rstrip(".!").strip())
     if question == "WORK":
+        earliest = preference.not_before_minute
+        if clock := _LOWER_BOUND.search(answer):
+            if clock.end() != len(answer):
+                return None
+            earliest = _minute(clock)
+            answer = answer[: clock.start()].rstrip().removesuffix(" но").rstrip(", ")
         name = _words(answer).removeprefix("на ").removeprefix("для ")
         matches = [work for work in opened["works"] if name in _design_names(work["title"])]
         if len(matches) == 1:
-            return replace(preference, request_id=matches[0]["request_id"])
+            return replace(
+                preference, request_id=matches[0]["request_id"], not_before_minute=earliest
+            )
     elif question == "DATE":
         written_day = answer.removeprefix("на ")
         if _DATE.fullmatch(written_day):

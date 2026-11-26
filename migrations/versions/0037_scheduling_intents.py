@@ -93,12 +93,39 @@ FUNCTIONS = {
     "platform.scheduling_chat_sources_current(platform.scheduling_turn_actions)": r"""CREATE FUNCTION platform.scheduling_chat_sources_current(
       a platform.scheduling_turn_actions
     ) RETURNS boolean LANGUAGE sql STABLE SET search_path=pg_catalog,pg_temp AS $$
-      SELECT NOT EXISTS (
-        SELECT 1 FROM jsonb_array_elements(a.prior_sources||jsonb_build_array(
-          jsonb_build_object('message_id',a.source_message_id,'source_version',a.source_version)
-        )) refs(source)
-        WHERE platform.intake_source_current(a.workspace_id,a.business_id,a.conversation_id,a.client_id,refs.source) IS NOT TRUE
+      -- Each replacement points to the exact option that triggered it. Follow
+      -- the code's owning Outbox back to the original list, including its
+      -- clarification sources. A broken chain cannot authorize delivery or choice.
+      WITH RECURSIVE lineage(run_id) AS (
+        SELECT a.run_id
+        UNION
+        SELECT parent.run_id
+        FROM lineage
+        JOIN platform.scheduling_turn_actions child
+          ON (child.workspace_id,child.run_id)=(a.workspace_id,lineage.run_id)
+        JOIN platform.scheduling_chat_codes x
+          ON (x.workspace_id,x.business_id,x.conversation_id,x.client_id,x.option_id)
+            =(child.workspace_id,child.business_id,child.conversation_id,child.client_id,child.option_id)
+        JOIN platform.scheduling_turn_actions parent
+          ON (parent.workspace_id,parent.run_id)=(x.workspace_id,x.run_id)
+        JOIN app.outbox_events box ON (box.workspace_id,box.id)=(parent.workspace_id,parent.outbox_id)
+        WHERE child.result->>'outcome'='OPTION_UNAVAILABLE'
+          AND parent.phase='DONE' AND parent.result->>'outcome' IN ('LIST','OPTION_UNAVAILABLE')
+          AND box.status='SENT' AND box.kind='SEND_AI_TEXT'
+          AND (parent.selection,parent.local_date,parent.timezone,parent.period,parent.not_before_minute)
+            IS NOT DISTINCT FROM (child.selection,child.local_date,child.timezone,child.period,child.not_before_minute)
+      ), messages AS (
+        SELECT entry.result->>'outcome' AS outcome,entry.prior_sources||jsonb_build_array(
+          jsonb_build_object('message_id',entry.source_message_id,'source_version',entry.source_version)
+        ) AS sources
+        FROM lineage JOIN platform.scheduling_turn_actions entry
+          ON (entry.workspace_id,entry.run_id)=(a.workspace_id,lineage.run_id)
       )
+      SELECT EXISTS(SELECT 1 FROM messages WHERE outcome IS DISTINCT FROM 'OPTION_UNAVAILABLE')
+        AND NOT EXISTS (
+          SELECT 1 FROM messages CROSS JOIN LATERAL jsonb_array_elements(messages.sources) refs(source)
+          WHERE platform.intake_source_current(a.workspace_id,a.business_id,a.conversation_id,a.client_id,refs.source) IS NOT TRUE
+        )
     $$""",
     "platform.scheduling_pending_clarification(platform.ai_runs,app.messages)": r"""CREATE FUNCTION platform.scheduling_pending_clarification(
       r platform.ai_runs,m app.messages
@@ -165,6 +192,16 @@ FUNCTIONS = {
       IF (a.business_id,a.conversation_id,a.client_id,a.outbox_id,a.phase)
           IS DISTINCT FROM (r.business_id,r.conversation_id,r.client_id,d.outbox_id,'DONE')
         OR platform.scheduling_chat_sources_current(a) IS NOT TRUE THEN RETURN false; END IF;
+      IF jsonb_array_length(a.result->'offer'->'options')>0 THEN
+        RETURN EXISTS(
+          SELECT 1 FROM app.availability_offers f
+          WHERE (f.workspace_id,f.business_id,f.id,f.client_id,f.conversation_id,f.session_id)
+            =(a.workspace_id,a.business_id,(a.result->'offer'->>'offer_id')::uuid,a.client_id,a.conversation_id,
+              (a.selection->>'session_id')::uuid)
+            AND f.expires_at=(a.result->'offer'->>'expires_at')::timestamptz
+            AND f.expires_at>clock_timestamp()
+        );
+      END IF;
       outcome:=a.result->>'outcome';
       IF outcome NOT IN ('HELD','CONFIRMED','ALREADY_CONFIRMED') THEN RETURN true; END IF;
       current_booking:=platform.scheduling_session_commitment(r.workspace_id,r.business_id,(a.selection->>'session_id')::uuid);

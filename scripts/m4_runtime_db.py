@@ -699,6 +699,7 @@ M7_SCHEDULING_INTENTS_DOCS = M7_SCHEDULING_DOCS
 M7_SCHEDULING_INTENTS_MIGRATION = "migrations/versions/0037_scheduling_intents.py"
 M7_SCHEDULING_INTENTS_PATHS = {
     M7_SCHEDULING_INTENTS_MIGRATION,
+    ".github/workflows/ci.yml",
     "backend/src/asm/foundation.py",
     "backend/src/asm/tenancy/database.py",
     "backend/src/asm/telegram/provisioning.py",
@@ -708,6 +709,7 @@ M7_SCHEDULING_INTENTS_PATHS = {
     "scripts/m2_4_browser_worker.py",
     "scripts/m5_intake_fixture.py",
     "scripts/prepare_telegram_egress.py",
+    "scripts/test_browser.sh",
     "scripts/test_telegram_egress.sh",
     "tests/generic_pg_schema.py",
     "tests/m5_intake_fixtures.py",
