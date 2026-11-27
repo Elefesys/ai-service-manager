@@ -1,0 +1,374 @@
+"""P1 through the owner API, including durable replay on independent PG connections."""
+
+import asyncio
+from datetime import timedelta
+from uuid import UUID
+
+import httpx
+import pytest
+from asm.service_requests.errors import ServiceRequestError
+from generic_pg_schema import assert_current_schema, assert_schema
+from m5_knowledge_search_fixtures import owner_unit
+from m7_scheduling_fixtures import accept_pair
+from m8_payment_obligation_fixtures import (
+    accept_terms,
+    endpoint,
+    fixed_price,
+    get_path,
+    hold_work,
+    inspect_open,
+    money_counts,
+    post_open,
+    prepare_day,
+    proof,
+    terms,
+)
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+from test_m2_1_schema_postgres import _migrate
+from test_m3_1_native_context_postgres import scalar
+from test_m6_owner_decisions_postgres import owner_get
+from test_m6_pricing_postgres import formula_price, publish, sign_in
+from test_m7_scheduling_holds_postgres import (
+    backend_pid,
+    blocked_by,
+    client_effects,
+    compete,
+    offer,
+    release,
+)
+from test_m7_scheduling_owner_day_postgres import shorten_hold_fixture
+from test_m7_scheduling_postgres import approval_pg as approval_pg
+from test_m7_scheduling_postgres import assessment_pg as assessment_pg
+from test_m7_scheduling_postgres import auth as auth
+from test_m7_scheduling_postgres import db as db
+from test_m7_scheduling_postgres import intake_pg as intake_pg
+from test_m7_scheduling_postgres import portfolio_runtime_pg as portfolio_runtime_pg
+from test_m7_scheduling_postgres import pricing_pg as pricing_pg
+from test_m7_scheduling_postgres import scheduling_pg as scheduling_pg
+from test_m7_scheduling_postgres import search_pg as search_pg
+from test_m7_scheduling_postgres import seeded as seeded
+from test_m7_scheduling_postgres import service_request_pg as service_request_pg
+from test_m7_scheduling_reschedule_postgres import initial_appointment, legacy_facts, owner_booking
+from test_tenancy_postgres import BA, BA2, BB, A, B
+
+pytestmark = pytest.mark.integration
+
+
+def forbidden(response, status, error):
+    assert response.status_code == status, response.text
+    assert response.json() == {"error": {"code": error}}
+
+
+@pytest.mark.parametrize(
+    "mode,price,deposit,percent,expected,label",
+    [
+        ("FIXED_DEPOSIT", 400_000, 50_000, None, 50_000, "fixed"),
+        ("FULL_PREPAYMENT", 100_010, None, None, 100_010, "full"),
+        ("PERCENT_DEPOSIT", 100_010, None, 5, 5_001, "percent"),
+        ("FIXED_DEPOSIT", None, 50_000, None, 50_000, "range"),
+        ("FIXED_DEPOSIT", 40_000, 99, None, 99, "99-kopecks"),
+    ],
+    ids=["fixed", "full", "percent", "range", "99-kopecks"],
+)
+async def test_p1_opens_accepted_terms_via_owner_card(
+    scheduling_pg, auth, monkeypatch, mode, price, deposit, percent, expected, label
+):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    pricing = fixed_price(price) if price is not None else formula_price(range_add_minor=50_000)
+    work = await accept_terms(h, auth, token, mode, pricing, amount=deposit, percent=percent)
+    if mode == "PERCENT_DEPOSIT":
+        assert work.material["percent_prepayment"] == {
+            "amount_minor": 5_001,
+            "rounding_version": "HALF_UP_V1",
+        }
+        assert "Предоплата — 50,01 ₽ (5%)." in work.agreement["quote"]["text"]
+
+    newer = await publish(h, terms("NONE", fixed_price(900_000)))
+    assert newer["release_id"] != work.material["release_id"]
+    hold = await hold_work(h, work, await prepare_day(h, auth, token, work))
+    before = await client_effects(h)
+    calls = 0
+
+    async def external_http(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("Opening an obligation must never call external HTTP")
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", external_http)
+    path = get_path(work, hold.hold_id)
+    for _ in range(2):
+        read = await owner_get(auth, path)
+        assert read["obligation"] is None and read["hold_status"] == "HELD"
+    assert await money_counts(h) == {"obligations": 0, "receipts": 0}
+    url, body = endpoint(work, hold.hold_id)
+    denied = await auth.client.post(url, json=body, headers={"Idempotency-Key": "missing-csrf"})
+    assert denied.status_code == 403
+    assert await money_counts(h) == {"obligations": 0, "receipts": 0}
+
+    response = await post_open(auth, token, work, hold.hold_id, "open")
+    assert response.status_code == 200, response.text
+    result = response.json()
+    payment = inspect_open(result, work, hold, amount=expected, price=price)
+    assert (payment["percent"], payment["rounding_version"]) == (
+        percent,
+        "HALF_UP_V1" if percent is not None else None,
+    )
+    assert result == await owner_get(auth, path)
+    assert result == (await post_open(auth, token, work, hold.hold_id, "open")).json()
+    assert (await owner_get(auth, work.url + "/quote"))["agreement"] == work.agreement
+    assert (await owner_booking(auth, work))["booking"]["hold_id"] == hold.hold_id
+    assert await client_effects(h) == before and calls == 0
+    counts = await money_counts(h)
+    assert counts == {"obligations": 1, "receipts": 1}
+    proof(
+        label, **work.proof(), hold=result, counts=counts, new_appointments=0, external_calls=calls
+    )
+
+
+async def test_p1_concurrency_replay_replacement_and_scope(scheduling_pg, auth):
+    h = scheduling_pg
+    token, a, b = await accept_pair(h, auth)
+    assert a.selection.client_id == b.selection.client_id
+    other = await accept_terms(h, auth, token, "FIXED_DEPOSIT", fixed_price(300_000), amount=50_000)
+    assert other.selection.client_id != a.selection.client_id
+    date = await prepare_day(h, auth, token, a)
+    first = await hold_work(h, a, date)
+    second = await hold_work(h, b, date, at="12:00")
+    foreign_hold = await hold_work(h, other, date, at="14:00")
+    before = await client_effects(h)
+    pids = []
+
+    async def open_in_transaction(unit, key):
+        pids.append(await backend_pid(unit))
+        return await unit.payment_obligation_owner(
+            a.selection.model_dump(), UUID(first.hold_id), key
+        )
+
+    # Keep the first transaction's result in the database and lose its reply.
+    # The second real connection must wait for the first and see that commit.
+    original, replay, blocked_at = await compete(
+        h,
+        lambda unit: open_in_transaction(unit, "lost"),
+        lambda unit: open_in_transaction(unit, "parallel-key"),
+    )
+    assert len(set(pids)) == 2 and blocked_at < first.expires_at
+    assert original == replay
+    assert await money_counts(h) == {"obligations": 1, "receipts": 2}
+    saved = inspect_open(original, a, first, amount=50_000, price=a.material["amount_minor"])
+    await h.runtime.engine.dispose()
+    for key in ("lost", "new-key"):
+        result = await post_open(auth, token, a, first.hold_id, key)
+        assert result.status_code == 200 and result.json() == original
+    forbidden(
+        await post_open(auth, token, b, second.hold_id, "lost"), 409, "IDEMPOTENCY_KEY_CONFLICT"
+    )
+    for work, hold, overrides in (
+        (a, second, {}),
+        (a, foreign_hold, {}),
+        (a, first, {"client_id": other.selection.client_id}),
+        (b, first, {}),
+    ):
+        forbidden(
+            await post_open(auth, token, work, hold.hold_id, "foreign", **overrides),
+            404,
+            "NOT_FOUND",
+        )
+    path, command = endpoint(a, first.hold_id)
+    for altered, code in (
+        (path.replace(str(BA), str(BA2)), "NOT_FOUND"),
+        (path.replace(str(A), str(B)).replace(str(BA), str(BB)), "ACCESS_DENIED"),
+    ):
+        denied = await auth.client.post(
+            altered, json=command, headers=token | {"Idempotency-Key": "foreign"}
+        )
+        forbidden(denied, 403 if code == "ACCESS_DENIED" else 404, code)
+
+    await release(h, a, first, "release-first")
+    released = await post_open(auth, token, a, first.hold_id, "lost")
+    assert released.status_code == 200
+    assert released.json() == original | {"hold_status": "RELEASED"}
+    replacement = await hold_work(h, a, date, "replacement", at="10:15")
+    opened = await post_open(auth, token, a, replacement.hold_id, "another-hold")
+    assert opened.status_code == 200
+    assert (
+        inspect_open(opened.json(), a, replacement, amount=50_000, price=a.material["amount_minor"])
+        == saved
+    )
+    forbidden(
+        await post_open(auth, token, a, replacement.hold_id, "lost"),
+        409,
+        "IDEMPOTENCY_KEY_CONFLICT",
+    )
+    assert await money_counts(h) == {"obligations": 1, "receipts": 4}
+
+    new_work = await post_open(auth, token, b, second.hold_id, "separate-work")
+    assert new_work.status_code == 200
+    other_payment = inspect_open(
+        new_work.json(), b, second, amount=50_000, price=b.material["amount_minor"]
+    )
+    assert other_payment["id"] != saved["id"]
+    deadline = await shorten_hold_fixture(h, replacement)
+    async with h.migrator.begin() as db:
+        await db.execute(
+            text("SELECT pg_sleep(greatest(0, extract(epoch FROM (:until-clock_timestamp()))))"),
+            {"until": deadline},
+        )
+    expired = await post_open(auth, token, a, replacement.hold_id, "another-hold")
+    assert expired.status_code == 200
+    assert expired.json()["hold_status"] == "EXPIRED" and expired.json()["obligation"] == saved
+    assert await client_effects(h) == before
+    counts = await money_counts(h)
+    assert counts == {"obligations": 2, "receipts": 5}
+    proof(
+        "replay",
+        first=saved["id"],
+        pids=pids,
+        previous=first.hold_id,
+        replacement=replacement.hold_id,
+        second=other_payment["id"],
+        expired=expired.json(),
+        counts=counts,
+        new_appointments=0,
+    )
+
+
+async def test_p1_first_open_checks_deadline_after_resource_lock_and_released_allocation(
+    scheduling_pg, auth
+):
+    h = scheduling_pg
+    token, work, other = await accept_pair(h, auth)
+    day = await prepare_day(h, auth, token, work)
+    held = await hold_work(h, work, day)
+    removed = await hold_work(h, other, day, at="12:00")
+    await release(h, other, removed, "remove-unused")
+    forbidden(
+        await post_open(auth, token, other, removed.hold_id, "open-removed"), 409, "STALE_STATE"
+    )
+
+    pid = asyncio.get_running_loop().create_future()
+
+    async def open_while_blocked():
+        async with owner_unit(h) as unit:
+            pid.set_result(await backend_pid(unit))
+            return await unit.payment_obligation_owner(
+                work.selection.model_dump(), UUID(held.hold_id), "on-deadline"
+            )
+
+    deadline = await shorten_hold_fixture(h, held, seconds=1)
+    async with h.migrator.begin() as lock:
+        locker = (await lock.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+        await lock.execute(
+            text("SELECT id FROM app.scheduling_resources WHERE business_id=:id FOR UPDATE"),
+            {"id": BA},
+        )
+        waiter = asyncio.create_task(open_while_blocked())
+        try:
+            blocked = await blocked_by(h, await asyncio.wait_for(pid, 1), locker)
+            assert blocked < deadline
+            released_at = (
+                await lock.execute(
+                    text("""
+                SELECT clock_timestamp() FROM pg_sleep(greatest(0, extract(epoch FROM (:until-clock_timestamp()))))
+            """),
+                    {"until": deadline},
+                )
+            ).scalar_one()
+            assert released_at >= deadline
+        except BaseException:
+            waiter.cancel()
+            await asyncio.gather(waiter, return_exceptions=True)
+            raise
+    with pytest.raises(ServiceRequestError) as rejected:
+        await waiter
+    assert rejected.value.code == "STALE_STATE"
+    expired = await owner_get(auth, get_path(work, held.hold_id))
+    assert expired["hold_status"] == "EXPIRED" and expired["obligation"] is None
+    counts = await money_counts(h)
+    assert counts == {"obligations": 0, "receipts": 0}
+    proof(
+        "deadline",
+        hold=held.hold_id,
+        allocation=held.allocation_id,
+        blocked=blocked,
+        deadline=deadline,
+        released_at=released_at,
+        removed=removed.hold_id,
+        counts=counts,
+    )
+
+
+async def test_p1_upgrade_preserves_0037_agreements_holds_and_none_appointment(scheduling_pg, auth):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    await _migrate("downgrade", "0037")
+    try:
+        exact = await accept_terms(
+            h, auth, token, "PERCENT_DEPOSIT", fixed_price(100_000), percent=5
+        )
+        fractional = await accept_terms(
+            h, auth, token, "PERCENT_DEPOSIT", fixed_price(100_010), percent=5
+        )
+        tiny = await accept_terms(h, auth, token, "PERCENT_DEPOSIT", fixed_price(1), percent=5)
+        none = await accept_terms(h, auth, token, "NONE", fixed_price(400_000))
+        day = await prepare_day(h, auth, token, exact)
+        live = [
+            (exact, await hold_work(h, exact, day)),
+            (fractional, await hold_work(h, fractional, day, at="11:15")),
+            (tiny, await hold_work(h, tiny, day, at="12:30")),
+        ]
+        for work, _ in live:
+            assert "percent_prepayment" not in work.material
+            assert "Предоплата — 5% от указанной цены." in work.agreement["quote"]["text"]
+        appointment, _ = await initial_appointment(
+            h, none, await offer(h, none, day + timedelta(days=1), "none")
+        )
+        before_booking = await owner_booking(auth, none)
+        before = await legacy_facts(h)
+        async with h.migrator.connect() as connection:
+            await assert_schema(connection, "0037", "scheduling_intent_schema_profile")
+    finally:
+        await _migrate("upgrade", "0038")
+
+    async with h.migrator.connect() as connection:
+        await assert_current_schema(connection)
+    await h.runtime.check()
+    assert await legacy_facts(h) == before
+    assert await owner_booking(auth, none) == before_booking
+    for work in (exact, fractional, tiny, none):
+        assert (await owner_get(auth, work.url + "/quote"))["agreement"] == work.agreement
+
+    assert appointment.hold_id is not None
+    without = await post_open(auth, token, none, appointment.hold_id, "no-prepayment")
+    assert without.status_code == 200, without.text
+    assert without.json()["hold_status"] == "CONFIRMED"
+    assert without.json()["requires_prepayment"] is False and without.json()["obligation"] is None
+    for work, hold in live[1:]:
+        forbidden(
+            await post_open(auth, token, work, hold.hold_id, "clarify"), 409, "NEEDS_CLARIFICATION"
+        )
+    assert await money_counts(h) == {"obligations": 0, "receipts": 0}
+    result = await post_open(auth, token, exact, live[0][1].hold_id, "legacy-exact")
+    assert result.status_code == 200
+    payment = inspect_open(result.json(), exact, live[0][1], amount=5_000, price=100_000)
+    assert payment["percent"] == 5 and payment["rounding_version"] is None
+    assert await legacy_facts(h) == before
+
+    async with h.runtime.engine.connect() as connection:
+        for table in ("app.payment_obligations", "platform.payment_obligation_receipts"):
+            with pytest.raises(DBAPIError) as denied:
+                await connection.execute(text(f"SELECT * FROM {table}"))
+            assert denied.value.orig.sqlstate == "42501"
+            await connection.rollback()
+    assert await scalar(h, "SELECT count(*) FROM app.appointments") == 1
+    proof(
+        "upgrade",
+        revision="0038",
+        none=before_booking["booking"],
+        exact=result.json(),
+        clarification=[work.proof() | {"hold": hold.hold_id} for work, hold in live[1:]],
+        counts=await money_counts(h),
+        none_money=0,
+        new_appointments=0,
+    )

@@ -38,7 +38,8 @@ async def scheduling_pg(approval_pg):
         async with approval_pg.migrator.begin() as connection:
             await connection.execute(
                 text(
-                    "TRUNCATE platform.scheduling_chat_codes,platform.scheduling_turn_actions,"
+                    "TRUNCATE platform.payment_obligation_receipts,app.payment_obligations,"
+                    "platform.scheduling_chat_codes,platform.scheduling_turn_actions,"
                     "platform.scheduling_command_receipts,app.appointments,app.reservation_holds,"
                     "app.resource_allocations,app.availability_options,app.availability_offers,"
                     "app.scheduling_policy_activations,app.scheduling_policy_revisions,"

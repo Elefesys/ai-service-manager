@@ -47,8 +47,8 @@ async def delivery(pg):
         yield pg
     finally:
         await current.close()
-        await migrate("upgrade", "0037")
-        pg.schema_revision = "0037"
+        await migrate("upgrade", "0038")
+        pg.schema_revision = "0038"
 
 
 async def source_turn(h, *, native=False, workspace=A, telegram=False, message_text=None):
@@ -153,7 +153,7 @@ def application(h, script=("reply",), *, adapter=None, telegram=None, fake=None,
             "0031",
             "0033",
             "0034",
-            "0037",
+            "0038",
         }
         and cfg.prompt_revision == "conversation_v2"
     ):

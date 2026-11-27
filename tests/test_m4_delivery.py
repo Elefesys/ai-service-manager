@@ -483,7 +483,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     availability = catalog.source_catalog(catalog.ROOT, "0032")
     holds = catalog.source_catalog(catalog.ROOT, "0033")
     appointments = catalog.source_catalog(catalog.ROOT, "0034")
-    current = catalog.source_catalog(catalog.ROOT, "0037")
+    current = catalog.source_catalog(catalog.ROOT, "0038")
     assert (len(request["functions"]), len(request["columns"])) == (331, 75)
     assert (len(intake["functions"]), len(intake["columns"])) == (318, 73)
     assert (len(v7_repair["functions"]), len(v7_repair["columns"])) == (321, 73)
@@ -506,7 +506,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         416,
         430,
         434,
-        453,
+        456,
     )
     assert (
         len(old["columns"]),
@@ -518,7 +518,7 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         len(holds["columns"]),
         len(appointments["columns"]),
         len(current["columns"]),
-    ) == (45, 47, 49, 59, 86, 91, 96, 97, 99)
+    ) == (45, 47, 49, 59, 86, 91, 96, 97, 101)
     assert (
         current["functions"]["platform.intake_schema_profile()"]
         == intake["functions"]["platform.intake_schema_profile()"]
@@ -573,11 +573,11 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
         current["functions"]["platform.scheduling_appointment_schema_profile()"]
         == appointments["functions"]["platform.scheduling_appointment_schema_profile()"]
     )
-    body = current["functions"]["platform.scheduling_intent_schema_profile()"]["body"]
+    body = current["functions"]["platform.payment_obligation_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 452,
-        "tables": 99,
+        "other_functions": 455,
+        "tables": 101,
         "result": "PASS",
     }
     assert (

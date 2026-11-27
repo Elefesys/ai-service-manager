@@ -160,6 +160,8 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                             "platform.scheduling_command_receipts",
                             "app.appointments",
                             "app.reservation_holds",
+                            "app.payment_obligations",
+                            "platform.payment_obligation_receipts",
                             "app.resource_allocations",
                             "app.availability_options",
                             "app.availability_offers",

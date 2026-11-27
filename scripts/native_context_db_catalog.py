@@ -122,6 +122,7 @@ APPOINTMENT_NONFUNCTION_SHA256 = "a4f5ebec5251129b25a4ecd7cb9de3cfd8ba00135d5f37
 SCHEDULING_INTENT_NONFUNCTION_SHA256 = (
     "6cf7f7e07901adba39b00776e99cd89f0583611717fa69e6bb622a08777bac4a"
 )
+PAYMENT_OBLIGATION_NONFUNCTION_SHA256 = "47979fec991896acf7e6eff01631b2007143a8b14add0aee2f921827bba468c7"
 RESCHEDULE_NONFUNCTION_SHA256 = "fbb12c3304ea5d08d1b27b3cf5360839f040eac534ebb58cc0115d9a57521c72"
 QUOTE_NONFUNCTION_SHA256 = "aaef3e6283c30f4713c4400672cc410dd3309e18da0f345aa8eff4935798c0db"
 OWNER_DECISION_NONFUNCTION_SHA256 = (
@@ -333,6 +334,7 @@ def capture_source(root, revision="0013"):
             "0035",
             "0036",
             "0037",
+            "0038",
         },
         "Unsupported catalog revision",
     )
@@ -579,6 +581,7 @@ def source_catalog(root, revision="0013"):
             "0035": 440,
             "0036": 442,
             "0037": 453,
+            "0038": 456,
         }[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
@@ -613,6 +616,7 @@ def source_catalog(root, revision="0013"):
             "0035": 97,
             "0036": 97,
             "0037": 99,
+            "0038": 101,
         }[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
@@ -721,6 +725,11 @@ def source_catalog(root, revision="0013"):
             | (
                 {"platform.scheduling_turn_actions", "platform.scheduling_chat_codes"}
                 if revision >= "0037"
+                else set()
+            )
+            | (
+                {"app.payment_obligations", "platform.payment_obligation_receipts"}
+                if revision >= "0038"
                 else set()
             )
         ),
@@ -839,11 +848,14 @@ def compare_embedded_profile(expected):
             "0035",
             "0036",
             "0037",
+            "0038",
         },
         "EMBEDDED_REVISION",
     )
     profile = (
-        "platform.scheduling_intent_schema_profile()"
+        "platform.payment_obligation_schema_profile()"
+        if revision == "0038"
+        else "platform.scheduling_intent_schema_profile()"
         if revision == "0037"
         else "platform.scheduling_owner_day_schema_profile()"
         if revision == "0036"
@@ -933,6 +945,7 @@ def compare_embedded_profile(expected):
             "0035": 439,
             "0036": 441,
             "0037": 452,
+            "0038": 455,
         }[revision]
         and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
@@ -988,6 +1001,7 @@ def compare_embedded_profile(expected):
             "0035": 97,
             "0036": 97,
             "0037": 99,
+            "0038": 101,
         }[revision]
         and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
@@ -1112,6 +1126,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
             "0035",
             "0036",
             "0037",
+            "0038",
         }
         and sha256(nonfunction_text.encode("utf-8"))
         == (
@@ -1140,6 +1155,7 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
                 "0035": RESCHEDULE_NONFUNCTION_SHA256,
                 "0036": RESCHEDULE_NONFUNCTION_SHA256,
                 "0037": SCHEDULING_INTENT_NONFUNCTION_SHA256,
+                "0038": PAYMENT_OBLIGATION_NONFUNCTION_SHA256,
             }[revision]
         ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
@@ -3256,7 +3272,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0037"),
+            source_catalog(ROOT, "0038"),
         )
 
     def persist_partition(self, work):
@@ -3440,7 +3456,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0037"
+            and source["expected_revision"] == "0038"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

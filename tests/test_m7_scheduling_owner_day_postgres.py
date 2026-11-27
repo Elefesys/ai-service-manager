@@ -89,7 +89,7 @@ async def create_hold(h, work, day, *, start="12:00"):
     return hold
 
 
-async def shorten_hold_fixture(h, hold):
+async def shorten_hold_fixture(h, hold, *, seconds=2):
     # The read must use PostgreSQL's clock while the allocation is still stored
     # as active. Move the synthetic deadline close without scheduling a job.
     async with h.migrator.begin() as connection:
@@ -99,10 +99,10 @@ async def shorten_hold_fixture(h, hold):
         shortened = (
             await connection.execute(
                 text("""
-                    UPDATE app.reservation_holds SET expires_at=clock_timestamp()+interval '2 seconds'
+                    UPDATE app.reservation_holds SET expires_at=clock_timestamp()+make_interval(secs=>:seconds)
                     WHERE (workspace_id,business_id,id)=(:ws,:business,:id) RETURNING expires_at
                 """),
-                {"ws": A, "business": BA, "id": UUID(hold.hold_id)},
+                {"ws": A, "business": BA, "id": UUID(hold.hold_id), "seconds": seconds},
             )
         ).scalar_one()
         await connection.execute(
@@ -612,8 +612,11 @@ async def test_s7_upgrade_0035_keeps_operational_day_and_history(scheduling_pg, 
         ]
     finally:
         await _migrate("upgrade", "0037")
-    upgraded = await scalar(h, "SELECT platform.scheduling_intent_schema_profile()")
-    assert upgraded["schema_revision"] == "0037" and upgraded["valid"] is True
+    try:
+        upgraded = await scalar(h, "SELECT platform.scheduling_intent_schema_profile()")
+        assert upgraded["schema_revision"] == "0037" and upgraded["valid"] is True
+    finally:
+        await _migrate("upgrade", "0038")
     assert [
         (await owner_get(auth, work.url + "/quote"))["agreement"] for work in (a, b, c)
     ] == agreements

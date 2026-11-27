@@ -823,6 +823,87 @@ M7_SCHEDULING_ACCEPTANCE_PATHS = {
 }
 
 
+# M8.1A starts at the verified M8 plan merge and the exact C0 assignment.
+M8_PAYMENT_OBLIGATION_BASE = "5ea3a1dabf108652c8e9f5891ca1719a8617a115"
+M8_PAYMENT_OBLIGATION_TREE = "da4e77b39c741e75802203aa2b777807b201e791"
+M8_PAYMENT_OBLIGATION_ASSIGNMENT = "eb215b316ef8f5fc4fadb30c7cae80b5390be503"
+M8_PAYMENT_OBLIGATION_ASSIGNMENT_TREE = "be36c86accedb5087f23317a04c7e33e353efddd"
+M8_PAYMENT_OBLIGATION_BRANCH = "c7/m8-1a-payment-obligation"
+M8_PAYMENT_OBLIGATION_DOCS = {"AGENTS.md", "docs/TASK_REGISTER.md", "docs/tasks/M8_HANDOFF.md"}
+M8_PAYMENT_OBLIGATION_MIGRATION = "migrations/versions/0038_payment_obligations.py"
+M8_PAYMENT_OBLIGATION_PATHS = {
+    "backend/src/asm/client_payments/__init__.py",
+    "backend/src/asm/client_payments/http.py",
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/service_requests/quotes.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/src/PaymentObligation.tsx",
+    "frontend/src/QuotePanel.tsx",
+    "frontend/src/SessionBooking.tsx",
+    "frontend/src/client-payments-api.ts",
+    "frontend/src/intake-api.ts",
+    "frontend/src/scheduling-api.ts",
+    "migrations/versions/0038_payment_obligations.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_browser.sh",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/m7_scheduling_fixtures.py",
+    "tests/m8_payment_obligation_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_owner_decisions_postgres.py",
+    "tests/test_m6_pricing_postgres.py",
+    "tests/test_m6_quote_acceptance_postgres.py",
+    "tests/test_m6_quote_delivery_postgres.py",
+    "tests/test_m6_quote_terms.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_intents_migrations.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_m7_scheduling_appointments_postgres.py",
+    "tests/test_m7_scheduling_holds_postgres.py",
+    "tests/test_m7_scheduling_owner_day_postgres.py",
+    "tests/test_m7_scheduling_postgres.py",
+    "tests/test_m7_scheduling_reschedule_postgres.py",
+    "tests/test_m8_payment_obligation_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
+
+
 class SchedulingSource(NamedTuple):
     prefix: str
     base: str
@@ -3170,11 +3251,23 @@ def scheduling_source(*, branch=None, base=None) -> SchedulingSource | None:
             M7_SCHEDULING_ACCEPTANCE_PATHS,
             "0037",
         ),
+        SchedulingSource(
+            "m8_payment_obligation",
+            M8_PAYMENT_OBLIGATION_BASE,
+            M8_PAYMENT_OBLIGATION_TREE,
+            M8_PAYMENT_OBLIGATION_ASSIGNMENT,
+            M8_PAYMENT_OBLIGATION_ASSIGNMENT_TREE,
+            M8_PAYMENT_OBLIGATION_BRANCH,
+            M8_PAYMENT_OBLIGATION_DOCS,
+            M8_PAYMENT_OBLIGATION_MIGRATION,
+            M8_PAYMENT_OBLIGATION_PATHS,
+            "0038",
+        ),
     )
     return next((row for row in candidates if row.branch == branch or row.base == base), None)
 
 
-def m7_scheduling_event(event) -> SchedulingSource | None:
+def scheduling_event(event) -> SchedulingSource | None:
     if event.get("event") == "push" and event["ref"] == "refs/heads/main":
         parents = commit_parents("HEAD")
         return scheduling_source(base=parents[0]) if parents else None
@@ -3646,7 +3739,7 @@ def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
-    if scheduling := m7_scheduling_event(event):
+    if scheduling := scheduling_event(event):
         admit_m6_slice_source(event, evidence, scheduling=scheduling)
         return event, manifest
     if m6_4b_event(event):
@@ -4108,7 +4201,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.scheduling_intent_schema_profile()"
+        "platform.payment_obligation_schema_profile()"
+        if revision == "0038"
+        else "platform.scheduling_intent_schema_profile()"
         if revision == "0037"
         else "platform.scheduling_owner_day_schema_profile()"
         if revision == "0036"
@@ -4158,6 +4253,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0037":
+        profile_pin = "91923a224190e212d3731ba2821bb58889a40a4a2a69d254268fb0b40a866608"
+        body_pin = "e2764dac3006d15df4c8b92212daa3889262cc93bb22c5f3a575f7c28c4aa3eb"
     if revision == "0035":
         profile_pin = "7cbed2658b9da13d3a1d2d824db38a661688db5726979a79c12ea09cd29b4a9c"
         body_pin = "96d5725c3f8115f0b5ae57d21971d20114bd2c592e370e078faea014349c251c"
@@ -4277,6 +4375,7 @@ def stock_catalog():
                 "0035",
                 "0036",
                 "0037",
+                "0038",
             },
             "CATALOG_REVISION",
         )
@@ -4306,6 +4405,7 @@ def stock_catalog():
             "0035",
             "0036",
             "0037",
+            "0038",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -4353,7 +4453,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.scheduling_intent_schema_profile()"
+            "platform.payment_obligation_schema_profile()"
+            if revision == "0038"
+            else "platform.scheduling_intent_schema_profile()"
             if revision == "0037"
             else "platform.scheduling_owner_day_schema_profile()"
             if revision == "0036"
@@ -4792,7 +4894,7 @@ def run(root):
         900
         if mode == "runtime"
         and (
-            m7_scheduling_event(event)
+            scheduling_event(event)
             or m6_4b_event(event)
             or m6_intents_event(event)
             or m6_acceptance_event(event)
@@ -4830,7 +4932,7 @@ def run_admitted(root, event, manifest, mode, *, sql_test_budget_seconds=600):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    scheduling = m7_scheduling_event(event)
+    scheduling = scheduling_event(event)
     m6_4b = not scheduling and m6_4b_event(event)
     m6_intents = not m6_4b and m6_intents_event(event)
     m6_acceptance = not m6_intents and m6_acceptance_event(event)

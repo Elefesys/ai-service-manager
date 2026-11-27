@@ -41,6 +41,11 @@ class QuoteCondition(Rule):
         return self
 
 
+class PercentPrepayment(ConfigurationModel):
+    amount_minor: PriceMinor
+    rounding_version: Literal["HALF_UP_V1"]
+
+
 class QuoteMaterial(ConfigurationModel):
     workspace_id: CanonicalUUID
     business_id: CanonicalUUID
@@ -70,6 +75,9 @@ class QuoteMaterial(ConfigurationModel):
     deposit_terms_version: CanonicalUUID
     deposit: DepositPolicy
     conditions: list[QuoteCondition] = Field(max_length=12)
+    percent_prepayment: PercentPrepayment | None = Field(
+        default=None, exclude_if=lambda terms: terms is None
+    )
 
     @model_validator(mode="after")
     def coherent_terms(self) -> Self:
@@ -103,6 +111,14 @@ class QuoteMaterial(ConfigurationModel):
                     and self.amount_minor is not None
                 )
             )
+        prepayment = self.percent_prepayment
+        if prepayment is not None and (
+            deposit.mode != "PERCENT_DEPOSIT"
+            or self.amount_minor is None
+            or deposit.percent is None
+            or prepayment.amount_minor != (self.amount_minor * deposit.percent + 50) // 100
+        ):
+            raise ValueError("Percent prepayment differs from the quote price")
         if not valid:
             raise ValueError("Quote price conflicts with the published prepayment terms")
         if (
@@ -258,7 +274,11 @@ def render_quote(quote: QuoteInput) -> str:
     if deposit.mode == "FIXED_DEPOSIT" and deposit.amount_minor is not None:
         lines.append(f"Предоплата — {_money(deposit.amount_minor)} ₽.")
     elif deposit.mode == "PERCENT_DEPOSIT":
-        lines.append(f"Предоплата — {deposit.percent}% от указанной цены.")
+        prepayment = material.percent_prepayment
+        if prepayment is not None:
+            lines.append(f"Предоплата — {_money(prepayment.amount_minor)} ₽ ({deposit.percent}%).")
+        else:
+            lines.append(f"Предоплата — {deposit.percent}% от указанной цены.")
     elif deposit.mode == "FULL_PREPAYMENT":
         lines.append("Предоплата — полная стоимость работы.")
     else:

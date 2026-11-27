@@ -455,6 +455,18 @@ class TenantUnitOfWork:
             },
         )
 
+    async def payment_obligation_owner(
+        self, selection: dict[str, object], hold: UUID, key: str | None
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.payment_obligation_owner(CAST(:selection AS jsonb),:hold,:key)",
+            {
+                "selection": json.dumps(selection, ensure_ascii=False, allow_nan=False),
+                "hold": hold,
+                "key": key,
+            },
+        )
+
     async def scheduling_owner_booking(self, selection: dict[str, object]) -> Any:
         return await self._service_request_execute(
             "SELECT platform.scheduling_owner_booking(CAST(:selection AS jsonb))",

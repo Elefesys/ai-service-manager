@@ -162,6 +162,8 @@ async def test_real_postgres_capabilities_and_roles(database):
             "messaging_jobs",
             "outbox_events",
             "owner_decisions",
+            "payment_obligation_receipts",
+            "payment_obligations",
             "plan_entitlements",
             "portfolio_ai_sessions",
             "portfolio_asset_versions",
@@ -205,7 +207,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "The material tables must match schema 0037"
+        ], "The material tables must match schema 0038"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

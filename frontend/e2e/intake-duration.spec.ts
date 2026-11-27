@@ -2433,6 +2433,8 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await expect(settings).toBeVisible();
   await settings.getByRole('combobox', {name: 'Режим предоплаты 1', exact: true}).selectOption('FIXED_DEPOSIT');
   await settings.getByLabel('Предоплата, копейки 1', {exact: true}).fill('50000');
+  await settings.getByLabel('Режим цены 1', {exact: true}).selectOption('FIXED');
+  await settings.getByLabel('Цена, копейки 1', {exact: true}).fill('400000');
   await publishIntakeService(settings, serviceName);
   await refreshIntake(inbox, intake);
   await workSelector.selectOption(secondId);
@@ -2539,15 +2541,40 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
     return booking;
   }
   await expect(ownerTab.getByText('Выберите диалог.', {exact: true})).toBeVisible();
+  const paymentRequests: Request[] = [];
+  ownerTab.on('request', request => {
+    if (new URL(request.url()).pathname.endsWith('/payment-obligation')) paymentRequests.push(request);
+  });
+  const paymentPanel = current(ownerTab).getByTestId('payment-obligation');
   const original = await checkWork(ownerTab, a, first.appointment_id, 'CONFIRMED');
+  await expect(paymentPanel).toHaveCount(0);
+  expect(paymentRequests).toHaveLength(0);
   const heldBefore = await checkWork(ownerTab, b, held.hold_id, 'HELD');
   expect(Date.parse(rowTime(heldBefore.booking))).toBe(Date.parse(held.expires_at));
   await expect(current(ownerTab)).toContainText('13:00–14:05');
+  await expect(paymentPanel).toContainText('Цена 4 000 ₽ · фиксированная предоплата 500 ₽ · удержано до');
+  await expect(paymentPanel).toContainText('оплата ещё не получена');
+  const obligation = await paymentPanel.getAttribute('data-obligation-id');
+  expect(obligation).toBeTruthy();
+  await expect(paymentPanel).toHaveAttribute('data-payment-status', 'UNPAID');
+  const holdDeadline = await paymentPanel.locator('time').getAttribute('datetime');
+  expect(Date.parse(holdDeadline!)).toBe(Date.parse(held.expires_at));
+  await expect(paymentPanel.locator('time')).toHaveText(await current(ownerTab).locator('time').first().textContent() ?? '');
   await selectDay(ownerTab, offDay);
   await expect(open(ownerTab).getByText('На этот день нет действующей занятости.', {exact: true})).toBeVisible();
   await ownerTab.reload();
   await openCalendar(ownerTab);
   await selectDay(ownerTab, day);
+  await checkWork(ownerTab, b, held.hold_id, 'HELD');
+  await expect(paymentPanel).toHaveAttribute('data-obligation-id', obligation!);
+  await expect(paymentPanel.locator('time')).toHaveAttribute('datetime', holdDeadline!);
+  await expect(paymentPanel).toContainText('Цена 4 000 ₽ · фиксированная предоплата 500 ₽');
+  const image = `m8-1a-${info.project.name}.png`;
+  const path = process.env.ASM_BROWSER_REPORT_DIR
+    ? resolve(process.env.ASM_BROWSER_REPORT_DIR, image)
+    : info.outputPath(image);
+  await current(ownerTab).screenshot({path});
+  await info.attach(image, {path, contentType: 'image/png'});
   await checkWork(ownerTab, a, first.appointment_id, 'CONFIRMED');
 
   async function postThrough(tab: Page, path: string, trigger: () => Promise<unknown>, status = 200) {
@@ -2680,6 +2707,15 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await workCard(ownerTab).getByRole('button', {name: 'Варианты времени', exact: true}).click();
   await expect(preview.getByRole('list', {name: 'Подходящие окна'})).toContainText('Визит 13:00–14:05');
   expect(await outgoing()).toEqual(sentBefore);
+  expect(paymentRequests.filter(request => request.method() === 'POST')).toHaveLength(1);
+  await expect(paymentPanel).toHaveAttribute('data-obligation-id', obligation!);
+  await expect(paymentPanel).toContainText('оплата ещё не получена');
+  await expect(paymentPanel.locator('time')).toHaveCount(0);
+  console.log('M8.1A P1 Chromium ' + info.project.name + ' ' + JSON.stringify({
+    hold: held.hold_id, allocation: held.allocation_id, quote: b.refs.quote_id, order: b.refs.order_id,
+    session: b.session, obligation, price_minor: 400000, amount_minor: 50000,
+    expires_at: holdDeadline, mutation_requests: 1, reloaded: true, none_appointment: first.appointment_id,
+  }));
   for (const tab of [ownerTab, otherTab]) expect(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 
   console.log('M7.3A S7 Chromium ' + info.project.name + ' ' + JSON.stringify({
