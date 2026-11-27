@@ -13,6 +13,7 @@ from m5_knowledge_search_fixtures import owner_unit
 from m7_scheduling_fixtures import Work, accept_pair, prepare_quote
 from m8_payment_obligation_fixtures import (
     accept_terms,
+    draft_terms,
     endpoint,
     fixed_price,
     get_path,
@@ -23,6 +24,7 @@ from m8_payment_obligation_fixtures import (
     prepare_day,
     proof,
     quote_deliveries,
+    run_pending_quote_deliveries,
     send_terms,
     terms,
 )
@@ -520,9 +522,7 @@ async def test_r2_owner_replay_preserves_sent_percent_quote(scheduling_pg, auth,
     triples = await counts(h)
     # Process any second delivery only after the client has answered the original
     # code, so a new pending version cannot hide behind its eventual send result.
-    for queued in after:
-        if queued["status"] == "PENDING":
-            await run_quote(h, worker, {"quote_id": str(queued["quote_id"])})
+    await run_pending_quote_deliveries(h, worker, after)
     proof(
         f"r2-{command}",
         command_result_id=original_result[
@@ -556,6 +556,98 @@ async def test_r2_owner_replay_preserves_sent_percent_quote(scheduling_pg, auth,
     charges = await money_counts(h)
     assert charges == {"obligations": 1, "receipts": 1}
     proof(f"r2-{command}-opened", hold=opened.json(), counts=charges)
+
+
+@pytest.mark.parametrize(
+    "state,original_status,final_status,additional",
+    [
+        ("PENDING", "PENDING", "SENT", 1),
+        ("UNKNOWN", "UNKNOWN", "UNKNOWN", 0),
+        ("DECLINED", "SENT", "SENT", 0),
+    ],
+    ids=["pending", "unknown", "declined"],
+)
+async def test_r3_legacy_percent_replay_preserves_delivery_and_decline(
+    scheduling_pg, auth, state, original_status, final_status, additional
+):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    first_wire = DeliveryWire(h, lose_reply=state == "UNKNOWN")
+    first_worker = Worker(h.kernel, first_wire)
+    declined = None
+    await _migrate("downgrade", "0037")
+    try:
+        url = await draft_terms(h, auth, token, "PERCENT_DEPOSIT", fixed_price(100_000), percent=5)
+        await price(auth, url + "/pricing", token)
+        await request_assessment(auth, url + "/assessment", token)
+        old = (await read(h, auth, url))["quote"]
+        assert "percent_prepayment" not in old["material"]
+        if state != "PENDING":
+            await run_quote(h, first_worker, old)
+        if state == "DECLINED":
+            declined = await worker_reply(h, first_worker, f"Отклоняю {old['code']}")
+            assert declined["outcome"] == "DECLINED"
+        original = await delivery(h, old)
+        before = await quote_deliveries(h, old)
+        assert len(before) == 1 and before[0]["outbox_id"] == original["outbox_id"]
+        assert original["status"] == original_status and original["text"] == old["text"]
+        before_view = await read(h, auth, url)
+        if declined:
+            assert before_view["reply_notice"] == {
+                "outcome": "DECLINED",
+                "message_id": declined["message_id"],
+            }
+        command = await price(auth, url + "/pricing", token)
+        assert await read(h, auth, url) == before_view
+        assert await quote_deliveries(h, old) == before
+        assert await delivery(h, old) == original
+        assert await counts(h) == (0, 0, 0)
+    finally:
+        await _migrate("upgrade", "0038")
+
+    assert await price(auth, url + "/pricing", token) == command
+    view = await read(h, auth, url)
+    after = await quote_deliveries(h, old)
+    wire = DeliveryWire(h)
+    worker = Worker(h.kernel, wire)
+    await run_pending_quote_deliveries(h, worker, after)
+    final = await quote_deliveries(h, old)
+    settled_view = await read(h, auth, url)
+    rejected = None
+    if declined or state == "UNKNOWN":
+        rejected = await worker_reply(h, worker, f"Принимаю {old['code']}")
+    triples = await counts(h)
+    money = await money_counts(h)
+    proof(
+        f"r3-{state.lower()}",
+        original=old,
+        visible=view["quote"],
+        before=before,
+        after=after,
+        final=final,
+        decline=declined,
+        notice=settled_view.get("reply_notice"),
+        attempted_acceptance=rejected,
+        before_calls=first_wire.calls,
+        before_effects=first_wire.effects,
+        calls=wire.calls,
+        effects=wire.effects,
+        sent_texts=[p.text for p in wire.permits],
+        counts=dict(zip(("acceptances", "orders", "sessions"), triples, strict=True)),
+        money=money,
+    )
+    assert view == before_view and settled_view["quote"] == old
+    assert before == after and final == [before[0] | {"status": final_status}]
+    previous_calls = 0 if state == "PENDING" else 1
+    assert (first_wire.calls, first_wire.effects) == (previous_calls, previous_calls)
+    assert (wire.calls, wire.effects) == (additional, additional)
+    if additional:
+        assert [p.text for p in wire.permits] == [old["text"]]
+    else:
+        assert await delivery(h, old) == original
+        assert rejected["outcome"] == ("DECLINED" if declined else "DELIVERY_UNCONFIRMED")
+    assert settled_view.get("reply_notice") == before_view.get("reply_notice")
+    assert triples == (0, 0, 0) and money == {"obligations": 0, "receipts": 0}
 
 
 @pytest.mark.parametrize("status", ["RELEASED", "EXPIRED"])

@@ -11,6 +11,7 @@ from test_m2_1_postgres import query
 from test_m3_1_native_context_postgres import scalar
 from test_m6_owner_decisions_postgres import FIXED_DURATION, contract
 from test_m6_pricing_postgres import draft_for_size, publish
+from test_m6_quote_delivery_postgres import run_quote
 from test_m6_service_requests_api_postgres import route
 from test_m7_scheduling_holds_postgres import configure, offer, pick
 from test_m7_scheduling_reschedule_postgres import NO_BUFFERS, option_at
@@ -26,10 +27,14 @@ def terms(mode, price, *, amount=None, percent=None):
     return bundle
 
 
-async def send_terms(h, auth, token, mode, price, *, amount=None, percent=None):
+async def draft_terms(h, auth, token, mode, price, *, amount=None, percent=None):
     await publish(h, terms(mode, price, amount=amount, percent=percent))
     conversation, _, _, _, request = await draft_for_size(h, auth, token, "21 mm")
-    url = f"{route(conversation)}/{request}"
+    return f"{route(conversation)}/{request}"
+
+
+async def send_terms(h, auth, token, mode, price, *, amount=None, percent=None):
+    url = await draft_terms(h, auth, token, mode, price, amount=amount, percent=percent)
     return url, await prepare_quote(h, auth, token, url)
 
 
@@ -101,6 +106,12 @@ async def quote_deliveries(h, quote):
         request=UUID(quote["material"]["request_id"]),
     )
     return [dict(row) for row in rows]
+
+
+async def run_pending_quote_deliveries(h, worker, deliveries):
+    for queued in deliveries:
+        if queued["status"] == "PENDING":
+            await run_quote(h, worker, {"quote_id": str(queued["quote_id"])})
 
 
 def inspect_open(reply, work, hold, *, amount, price, status="HELD"):

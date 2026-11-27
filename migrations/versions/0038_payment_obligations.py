@@ -244,6 +244,12 @@ def quote_basis_sql(original):
     )
 
 
+def exact_percent_minor_sql(material):
+    price = f"({material}->>'amount_minor')::bigint"
+    percent = f"({material}->'deposit'->>'percent')::integer"
+    return f"({price}*{percent})%100=0"
+
+
 def quote_material_matches_sql(moment):
     # A historical offer can omit the rounded amount only if the original
     # price and percentage determine an exact number of kopecks.
@@ -253,20 +259,21 @@ def quote_material_matches_sql(moment):
             basis.material ? 'percent_prepayment'
             AND q.material=basis.material-'percent_prepayment'
             AND q.material->'deposit'->>'mode'='PERCENT_DEPOSIT'
-            AND ((q.material->>'amount_minor')::bigint*(q.material->'deposit'->>'percent')::integer)%100=0
+            AND {exact_percent_minor_sql("q.material")}
           ))"""
 
 
-def sent_quote_replay_sql(material):
-    # Locate the historical fingerprint through the same unique key. The open
-    # offer predicate checks the exact amount, current version and delivery.
+def legacy_quote_replay_sql(material):
+    # Match the immutable snapshot through the existing unique key. Delivery
+    # and client decisions are checked by the respective commands.
     return f"""
-      IF NOT FOUND AND {material} ? 'percent_prepayment' THEN
-        DECLARE legacy_basis text:=platform.quote_hash({material}-'percent_prepayment');
+      IF NOT FOUND AND {material} ? 'percent_prepayment' AND {exact_percent_minor_sql(material)} THEN
+        DECLARE legacy_material jsonb:={material}-'percent_prepayment';
         BEGIN
-          SELECT sent.* INTO q FROM app.quotes sent
-            WHERE (sent.workspace_id,sent.request_id,sent.basis_sha256)=(d.workspace_id,d.id,legacy_basis)
-              AND platform.quote_open_at(sent,clock_timestamp());
+          SELECT saved.* INTO q FROM app.quotes saved
+            WHERE (saved.workspace_id,saved.request_id,saved.basis_sha256)
+              =(d.workspace_id,d.id,platform.quote_hash(legacy_material))
+              AND saved.material=legacy_material;
         END;
       END IF;"""
 
@@ -295,7 +302,7 @@ def quote_changes(originals):
         .replace(open_at, quote_material_matches_sql("moment"), 1),
         QUOTE_PREPARE: originals[QUOTE_PREPARE]
         .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
-        .replace(prepare_lookup, prepare_lookup + sent_quote_replay_sql("current_material"), 1)
+        .replace(prepare_lookup, prepare_lookup + legacy_quote_replay_sql("current_material"), 1)
         .replace(
             "'material',current_material", "'material',coalesce(q.material,current_material)", 1
         ),
@@ -304,7 +311,7 @@ def quote_changes(originals):
         .replace(
             record_guard + "\n" + record_lookup,
             record_lookup
-            + sent_quote_replay_sql("material")
+            + legacy_quote_replay_sql("material")
             + "\n"
             + record_guard.replace("IF material ", "IF coalesce(q.material,material) ", 1),
             1,
