@@ -3,7 +3,7 @@
 Modular monolith; architecture v0.28. Stack decision: `docs/decisions/IMPL-001-stack.md`.
 M6 and M7 are integrated and verified in synthetic LOCAL/TEST. Each accepted offer is linked to its request, order and next session. Each business has one primary scheduling resource. A client's explicit slot choice confirms an appointment under `NONE` or holds the time until expiry when prepayment is required. A rejected reschedule preserves the original appointment. The owner calendar and the session card show the same time. [M6 agreement](docs/tasks/M6_HANDOFF.md) · [M7 verification](docs/tasks/M7_HANDOFF.md#m7-final) · [Handoff to M8](docs/tasks/M7_HANDOFF.md#m7-to-m8) · [Task register](docs/TASK_REGISTER.md).
 
-The [M8 pilot plan](docs/tasks/M8_HANDOFF.md) and [proposed client payment decisions](docs/decisions/IMPL-008-m8-pilot-payments.md) are under review. First deliverable after acceptance: show the amount due for an accepted session and its hold, without contacting a provider.
+C0 accepted the [M8 pilot plan](docs/tasks/M8_HANDOFF.md) and [client payment decisions](docs/decisions/IMPL-008-m8-pilot-payments.md). After the approved merge and successful main CI, M8.1A will show the owner the deposit due for a held session, the agreed basis and whether money has been received.
 All eleven canonical architecture documents are in `docs/architecture/`, byte-identical to the approved project attachments. Their historical pre-implementation/Freeze-pending wording is preserved; current implementation status belongs in the task register, not in a rewritten historical snapshot.
 
 ## Scope

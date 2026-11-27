@@ -3630,13 +3630,20 @@ def prepare_plan_event(r, monkeypatch, route, milestone, *, damage=None):
         base_tree="f" * 40 if damage == "base_tree" else base_tree,
         initial=initial,
     )
-    monkeypatch.setattr(carrier, name, plan)
+    monkeypatch.setattr(
+        carrier,
+        "PLANNING_SOURCES",
+        tuple(plan if source.prefix == name else source for source in carrier.PLANNING_SOURCES),
+    )
     if damage == "lineage":
         f.git("checkout", "--detach", r["source"])
     changed = {
         "application": "backend/src/asm/ai/runtime.py",
         "migration": "migrations/versions/future.py",
-        "history": "docs/tasks/M6_HANDOFF.md" if milestone == "M7" else "docs/tasks/M5_HANDOFF.md",
+        "history": next(path for path in plan.inherited_paths if path.startswith("docs/tasks/")),
+        "decision": next(
+            path for path in plan.inherited_paths if path.startswith("docs/decisions/")
+        ),
         "other_workflow": ".github/workflows/other.yml",
     }.get(damage, "scripts/m4_runtime_db.py")
     path = f.root / changed
@@ -3666,7 +3673,7 @@ def prepare_plan_event(r, monkeypatch, route, milestone, *, damage=None):
     return plan, head, merge
 
 
-@pytest.mark.parametrize("milestone,revision", [("M6", "0024"), ("M7", "0031")])
+@pytest.mark.parametrize("milestone,revision", [("M6", "0024"), ("M7", "0031"), ("M8", "0037")])
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
 def test_planning_source_runs_accepted_schema(
     aggregate_driver, monkeypatch, route, milestone, revision
@@ -3711,7 +3718,7 @@ def test_planning_source_runs_accepted_schema(
     assert summary["result"] == "PASS" and summary["sql_test_budget_seconds"] == 900
 
 
-@pytest.mark.parametrize("milestone", ["M6", "M7"])
+@pytest.mark.parametrize("milestone", ["M6", "M7", "M8"])
 @pytest.mark.parametrize(
     "route,damage,reason",
     [
@@ -3724,6 +3731,7 @@ def test_planning_source_runs_accepted_schema(
         ("same-repository-pr-merge", "application", "{prefix}_REVIEW_WRITE_SET"),
         ("main-push", "migration", "{prefix}_REVIEW_WRITE_SET"),
         ("main-push", "history", "{prefix}_REVIEW_WRITE_SET"),
+        ("same-repository-pr-merge", "decision", "{prefix}_REVIEW_WRITE_SET"),
         ("main-push", "other_workflow", "{prefix}_REVIEW_WRITE_SET"),
         ("main-push", "lineage", "{prefix}_ASSIGNMENT_ANCESTRY"),
         ("main-push", "single_parent", "{prefix}_MERGE_PARENTS"),
