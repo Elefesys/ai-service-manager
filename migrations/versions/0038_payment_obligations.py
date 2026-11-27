@@ -14,6 +14,8 @@ THIS_PROFILE = "platform.payment_obligation_schema_profile()"
 OWNER = "platform.payment_obligation_owner(jsonb,uuid,text)"
 ROUND = "platform.percent_prepayment_minor(bigint,integer)"
 QUOTE_BASIS = "platform.quote_basis(app.service_requests,timestamptz)"
+QUOTE_AUTHORITY = "platform.quote_authority(app.quotes,app.conversations,bigint)"
+QUOTE_OPEN_AT = "platform.quote_open_at(app.quotes,timestamptz)"
 PREVIOUS_NONFUNCTION = "6cf7f7e07901adba39b00776e99cd89f0583611717fa69e6bb622a08777bac4a"
 NONFUNCTION = "47979fec991896acf7e6eff01631b2007143a8b14add0aee2f921827bba468c7"
 
@@ -156,8 +158,12 @@ FUNCTIONS = {
         WHERE (payment.workspace_id,payment.business_id,payment.session_id,payment.terms_sha256)
           =(ws,business,session,q.terms_sha256);
       IF p_key IS NOT NULL AND mode<>'NONE' THEN
+        -- An obligation is shared by the session, while a successful opening is specific to a Hold.
+        IF hold_status<>'HELD' AND NOT EXISTS(
+          SELECT 1 FROM platform.payment_obligation_receipts r
+          WHERE (r.workspace_id,r.business_id,r.hold_id,r.obligation_id)=(ws,business,p_hold,obligation.id)
+        ) THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
         IF obligation.id IS NULL THEN
-          IF hold_status<>'HELD' THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;
           price:=(q.material->>'amount_minor')::bigint;
           price_lower:=(q.material->'price_range'->>'lower_minor')::bigint;
           price_upper:=(q.material->'price_range'->>'upper_minor')::bigint;
@@ -236,6 +242,36 @@ def quote_basis_sql(original):
     )
 
 
+def quote_material_matches_sql(moment):
+    # A historical offer can omit the rounded amount only if the original
+    # price and percentage determine an exact number of kopecks.
+    return f"""EXISTS(
+          WITH basis AS MATERIALIZED (SELECT platform.quote_basis(d,{moment})->'material' AS material)
+          SELECT 1 FROM basis WHERE q.material=basis.material OR (
+            basis.material ? 'percent_prepayment'
+            AND q.material=basis.material-'percent_prepayment'
+            AND q.material->'deposit'->>'mode'='PERCENT_DEPOSIT'
+            AND ((q.material->>'amount_minor')::bigint*(q.material->'deposit'->>'percent')::integer)%100=0
+          ))"""
+
+
+def quote_changes(originals):
+    authority = "q.material IS DISTINCT FROM platform.quote_basis(d,clock_timestamp())->'material'"
+    open_at = "q.material=platform.quote_basis(d,moment)->'material'"
+    assert (
+        originals[QUOTE_AUTHORITY].count(authority) == originals[QUOTE_OPEN_AT].count(open_at) == 1
+    )
+    return {
+        QUOTE_BASIS: quote_basis_sql(originals[QUOTE_BASIS]),
+        QUOTE_AUTHORITY: originals[QUOTE_AUTHORITY]
+        .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+        .replace(authority, "NOT " + quote_material_matches_sql("clock_timestamp()"), 1),
+        QUOTE_OPEN_AT: originals[QUOTE_OPEN_AT]
+        .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+        .replace(open_at, quote_material_matches_sql("moment"), 1),
+    }
+
+
 def dependencies():
     scripts = op.get_context().script
     if scripts is None:
@@ -244,12 +280,17 @@ def dependencies():
         from alembic.script import ScriptDirectory
 
         scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1]))
-    quote = scripts.get_revision("0029").module
+    delivery = scripts.get_revision("0029").module
+    acceptance = scripts.get_revision("0030").module
     scheduling = scripts.get_revision(down_revision).module
-    return quote, scheduling
+    return {
+        QUOTE_BASIS: delivery.FUNCTIONS[QUOTE_BASIS],
+        QUOTE_AUTHORITY: acceptance.FUNCTIONS[QUOTE_AUTHORITY],
+        QUOTE_OPEN_AT: acceptance.FUNCTIONS[QUOTE_OPEN_AT],
+    }, scheduling
 
 
-def schema_sql(scheduling, original_quote_basis):
+def schema_sql(scheduling, quotes):
     owner_day, reschedule, appointments, holds, availability, intents, portfolio = (
         scheduling.dependencies()
     )
@@ -267,10 +308,8 @@ def schema_sql(scheduling, original_quote_basis):
     callers = holds.callers_sql(availability, THIS_PROFILE, "'0038'")
     changes = (
         FUNCTIONS
-        | {
-            QUOTE_BASIS: quote_basis_sql(original_quote_basis),
-            scheduling.THIS_PROFILE: previous_profile,
-        }
+        | quotes
+        | {scheduling.THIS_PROFILE: previous_profile}
         | dict(zip(holds.PROFILE_CALLERS, callers, strict=True))
     )
     profile = previous_profile.replace(scheduling.THIS_PROFILE, THIS_PROFILE)
@@ -318,8 +357,7 @@ def schema_sql(scheduling, original_quote_basis):
 
 
 def upgrade():
-    quote, scheduling = dependencies()
-    original = quote.FUNCTIONS[QUOTE_BASIS]
+    originals, scheduling = dependencies()
     for relation, name, columns in REFERENCE_KEYS:
         op.execute(f"ALTER TABLE {relation} ADD CONSTRAINT {name} UNIQUE ({columns})")
     for table, sql in TABLES.items():
@@ -336,8 +374,10 @@ def upgrade():
         op.execute(sql)
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC,asm_runtime")
     op.execute(f"GRANT EXECUTE ON FUNCTION {OWNER} TO asm_runtime")
-    op.execute(quote_basis_sql(original))
-    profile, callers, _ = schema_sql(scheduling, original)
+    quotes = quote_changes(originals)
+    for sql in quotes.values():
+        op.execute(sql)
+    profile, callers, _ = schema_sql(scheduling, quotes)
     for sql in callers:
         op.execute(sql)
     op.execute(profile)
@@ -345,19 +385,19 @@ def upgrade():
 
 
 def downgrade():
-    quote, scheduling = dependencies()
-    original = quote.FUNCTIONS[QUOTE_BASIS]
+    originals, scheduling = dependencies()
     op.execute("LOCK TABLE app.payment_obligations,app.quotes IN ACCESS EXCLUSIVE MODE")
     op.execute("""DO $$ BEGIN
       IF EXISTS(SELECT 1 FROM app.payment_obligations)
         OR EXISTS(SELECT 1 FROM app.quotes WHERE material ? 'percent_prepayment')
         THEN RAISE EXCEPTION 'PAYMENT_OBLIGATION_DURABLE_DATA' USING ERRCODE='55000'; END IF;
       END $$""")
-    _, _, previous_callers = schema_sql(scheduling, original)
+    _, _, previous_callers = schema_sql(scheduling, quote_changes(originals))
     for sql in previous_callers:
         op.execute(sql)
     op.execute(f"DROP FUNCTION {THIS_PROFILE}")
-    op.execute(original.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1))
+    for sql in originals.values():
+        op.execute(sql.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1))
     for signature in reversed(FUNCTIONS):
         op.execute(f"DROP FUNCTION {signature}")
     for table in reversed(TABLES):

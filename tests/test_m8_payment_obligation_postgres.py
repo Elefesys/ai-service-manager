@@ -6,10 +6,11 @@ from uuid import UUID
 
 import httpx
 import pytest
+from asm.messaging.worker import Worker
 from asm.service_requests.errors import ServiceRequestError
 from generic_pg_schema import assert_current_schema, assert_schema
 from m5_knowledge_search_fixtures import owner_unit
-from m7_scheduling_fixtures import accept_pair
+from m7_scheduling_fixtures import Work, accept_pair, prepare_quote
 from m8_payment_obligation_fixtures import (
     accept_terms,
     endpoint,
@@ -21,14 +22,17 @@ from m8_payment_obligation_fixtures import (
     post_open,
     prepare_day,
     proof,
+    send_terms,
     terms,
 )
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_schema_postgres import _migrate
-from test_m3_1_native_context_postgres import scalar
+from test_m3_1_native_context_postgres import claim_job, scalar
 from test_m6_owner_decisions_postgres import owner_get
 from test_m6_pricing_postgres import formula_price, publish, sign_in
+from test_m6_quote_acceptance_postgres import controlled_reply, counts, outcome, process, read
+from test_m6_quote_delivery_postgres import DeliveryWire, delivery
 from test_m7_scheduling_holds_postgres import (
     backend_pid,
     blocked_by,
@@ -371,4 +375,176 @@ async def test_p1_upgrade_preserves_0037_agreements_holds_and_none_appointment(s
         counts=await money_counts(h),
         none_money=0,
         new_appointments=0,
+    )
+
+
+@pytest.mark.parametrize(
+    "case,price_minor", [("exact", 100_000), ("fractional", 100_010), ("changed", 100_000)]
+)
+async def test_r1_sent_percent_quote_after_upgrade(scheduling_pg, auth, case, price_minor):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    await _migrate("downgrade", "0037")
+    try:
+        url, old = await send_terms(
+            h, auth, token, "PERCENT_DEPOSIT", fixed_price(price_minor), percent=5
+        )
+        sent = await delivery(h, old)
+        assert sent["status"] == "SENT" and sent["text"] == old["text"]
+        assert "Предоплата — 5% от указанной цены." in old["text"]
+        assert "percent_prepayment" not in old["material"]
+        assert await counts(h) == (0, 0, 0)
+    finally:
+        await _migrate("upgrade", "0038")
+
+    assert (await read(h, auth, url))["quote"] == old
+    assert await delivery(h, old) == sent
+    if case == "changed":
+        await publish(h, terms("PERCENT_DEPOSIT", fixed_price(200_000), percent=5))
+
+    worker = Worker(h.kernel, DeliveryWire(h))
+
+    async def answer(phrase):
+        receipt = await controlled_reply(h, phrase)
+        claim = await claim_job(h, receipt.job_id)
+        await worker.execute(claim)
+        reply = (await h.kernel.process_inbox(claim)).quote_reply
+        return reply.model_dump(mode="json", exclude_none=True) if reply else None
+
+    ambiguous = None
+    if case == "exact":
+        ambiguous = outcome(await process(h, await controlled_reply(h, "да")))
+    decision = await answer(f"Принимаю {old['code']}")
+    legacy_view = await read(h, auth, url)
+    triples = await counts(h)
+    proof(
+        f"r1-sent-{case}",
+        quote_id=old["quote_id"],
+        code=old["code"],
+        terms_sha256=old["terms_sha256"],
+        delivered="SENT",
+        ambiguous=ambiguous,
+        worker_reply=decision,
+        counts=dict(zip(("acceptances", "orders", "sessions"), triples, strict=True)),
+        money=await money_counts(h),
+    )
+    assert legacy_view["quote"] == old
+    if case != "exact":
+        assert decision["outcome"] == "STALE"
+        assert triples == (0, 0, 0)
+        assert await money_counts(h) == {"obligations": 0, "receipts": 0}
+        if case == "changed":
+            return
+        quote = await prepare_quote(h, auth, token, url)
+        assert quote["code"] != old["code"]
+        assert (await delivery(h, quote))["status"] == "SENT"
+        assert "Предоплата — 50,01 ₽ (5%)." in quote["text"]
+        assert quote["material"]["percent_prepayment"] == {
+            "amount_minor": 5_001,
+            "rounding_version": "HALF_UP_V1",
+        }
+        amount, rounding = 5_001, "HALF_UP_V1"
+    else:
+        assert decision["outcome"] == "ACCEPTED" and triples == (1, 1, 1)
+        assert ambiguous == "NEEDS_CLARIFICATION"
+        quote, amount, rounding = old, 5_000, None
+
+    accepted = await answer(f"Принимаю {quote['code']}")
+    assert accepted["outcome"] == "ACCEPTED"
+    agreement = (await read(h, auth, url))["agreement"]
+    assert agreement["quote"] == quote
+    if case == "exact":
+        assert agreement == legacy_view["agreement"]
+        assert accepted == decision
+    assert await counts(h) == (1, 1, 1)
+    work = Work(url, agreement)
+    hold = await hold_work(h, work, await prepare_day(h, auth, token, work))
+    response = await post_open(auth, token, work, hold.hold_id, "sent-before-upgrade")
+    assert response.status_code == 200, response.text
+    payment = inspect_open(response.json(), work, hold, amount=amount, price=price_minor)
+    assert payment["rounding_version"] == rounding
+    charges = await money_counts(h)
+    assert charges == {"obligations": 1, "receipts": 1}
+    proof(
+        f"r1-sent-{case}-opened",
+        **work.proof(),
+        worker_reply=accepted,
+        hold=response.json(),
+        counts=charges,
+        acceptances=1,
+        orders=1,
+        sessions=1,
+    )
+
+
+@pytest.mark.parametrize("status", ["RELEASED", "EXPIRED"])
+async def test_r1_first_open_of_inactive_replacement(scheduling_pg, auth, monkeypatch, status):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    work = await accept_terms(h, auth, token, "FIXED_DEPOSIT", fixed_price(400_000), amount=50_000)
+    day = await prepare_day(h, auth, token, work)
+    a = await hold_work(h, work, day)
+    effects = await client_effects(h)
+    calls = 0
+
+    async def external_http(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("Opening an obligation must never call external HTTP")
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", external_http)
+    first = await post_open(auth, token, work, a.hold_id, "open-a")
+    assert first.status_code == 200, first.text
+    payment = inspect_open(first.json(), work, a, amount=50_000, price=400_000)
+    await release(h, work, a, "release-a")
+    b = await hold_work(h, work, day, "replacement-b", at="11:15")
+    if status == "RELEASED":
+        await release(h, work, b, "release-b")
+    else:
+        deadline = await shorten_hold_fixture(h, b, seconds=1)
+        async with h.migrator.begin() as db:
+            await db.execute(
+                text(
+                    "SELECT pg_sleep(greatest(0, extract(epoch FROM (:until-clock_timestamp()))))"
+                ),
+                {"until": deadline},
+            )
+    assert (await owner_get(auth, get_path(work, b.hold_id)))["hold_status"] == status
+    before_first_b = await money_counts(h)
+    first_b = await post_open(auth, token, work, b.hold_id, "open-b")
+    after_first_b = await money_counts(h)
+    proof(
+        f"r1-replacement-{status.lower()}",
+        hold_a=a.hold_id,
+        hold_b=b.hold_id,
+        obligation_id=payment["id"],
+        response={"status": first_b.status_code, "body": first_b.json()},
+        before=before_first_b,
+        after=after_first_b,
+    )
+    forbidden(first_b, 409, "STALE_STATE")
+    assert before_first_b == after_first_b == {"obligations": 1, "receipts": 1}
+    replay = await post_open(auth, token, work, a.hold_id, "open-a")
+    assert replay.status_code == 200
+    assert replay.json() == first.json() | {"hold_status": "RELEASED"}
+    assert await owner_get(auth, get_path(work, a.hold_id)) == replay.json()
+    forbidden(
+        await post_open(auth, token, work, b.hold_id, "open-a"), 409, "IDEMPOTENCY_KEY_CONFLICT"
+    )
+    assert await money_counts(h) == after_first_b
+    active = await hold_work(h, work, day, "active-replacement", at="10:30")
+    opened = await post_open(auth, token, work, active.hold_id, "active-replacement")
+    assert opened.status_code == 200, opened.text
+    assert inspect_open(opened.json(), work, active, amount=50_000, price=400_000) == payment
+    final = await money_counts(h)
+    assert final == {"obligations": 1, "receipts": 2}
+    assert await client_effects(h) == effects and calls == 0
+    proof(
+        f"r1-sequence-{status.lower()}",
+        obligation_id=payment["id"],
+        replay_a={"status": replay.status_code, "body": replay.json()},
+        active={"status": opened.status_code, "body": opened.json()},
+        counts=final,
+        new_appointments=0,
+        external_calls=calls,
     )

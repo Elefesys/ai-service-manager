@@ -6,10 +6,11 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 from asm.scheduling.commands import HoldResult
-from m7_scheduling_fixtures import Work, accept_work
+from m7_scheduling_fixtures import Work, accept_quote, prepare_quote
 from test_m3_1_native_context_postgres import scalar
 from test_m6_owner_decisions_postgres import FIXED_DURATION, contract
-from test_m6_pricing_postgres import publish
+from test_m6_pricing_postgres import draft_for_size, publish
+from test_m6_service_requests_api_postgres import route
 from test_m7_scheduling_holds_postgres import configure, offer, pick
 from test_m7_scheduling_reschedule_postgres import NO_BUFFERS, option_at
 
@@ -24,9 +25,16 @@ def terms(mode, price, *, amount=None, percent=None):
     return bundle
 
 
-async def accept_terms(h, auth, token, mode, price, *, amount=None, percent=None):
+async def send_terms(h, auth, token, mode, price, *, amount=None, percent=None):
     await publish(h, terms(mode, price, amount=amount, percent=percent))
-    return await accept_work(h, auth, token, "21 mm")
+    conversation, _, _, _, request = await draft_for_size(h, auth, token, "21 mm")
+    url = f"{route(conversation)}/{request}"
+    return url, await prepare_quote(h, auth, token, url)
+
+
+async def accept_terms(h, auth, token, mode, price, *, amount=None, percent=None):
+    url, quote = await send_terms(h, auth, token, mode, price, amount=amount, percent=percent)
+    return await accept_quote(h, auth, url, quote)
 
 
 def endpoint(work: Work, hold_id: str, **overrides):
