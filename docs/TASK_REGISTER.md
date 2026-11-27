@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3B IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-26
+## CURRENT — M7.3C IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-27
 
-Клиент получает в переписке варианты для конкретного согласованного сеанса, явно выбирает один и видит подтверждение либо удержание до срока. Единственная активная задача — M7.3B в `c4/m7-3b-scheduling-intents` от `main` `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7`. C4 ведёт намерения, C3 — обработку сообщения и доставку, C1 — scheduling-команды. C0 выделил `migrations/versions/0037_scheduling_intents.py` поверх `0036`. [Поручение C4 и S8](tasks/M7_HANDOFF.md#m73b-task).
+Мастер видит единственное обязательство на спорное время и сохранённый визит после отказа в переносе. Единственная активная задача — M7.3C, сквозная приёмка C8 на `c8/m7-3c-acceptance` от `main` `60b1162e15f5d31cfa09d4a2976417aa833e82b4`. Схема `0037`, новых миграций — 0. Результат — GJ-D/GJ-F, таблица S1–S8 и передача M8. Принимает C0. [Поручение C8 и разрешённые пути](tasks/M7_HANDOFF.md#m73c-task).
+
+## История — M7.3B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-27
+
+PR #70 слит в `main` `60b1162e15f5d31cfa09d4a2976417aa833e82b4` с родителями `fa12eb8e10b92607ceba9d9b71d86f0f74a7ced7` и `894ab0b8c83655f0c1e5e381a20c97e38db34c38`. Дерево `3cd104b3da8199b7a9c845244cbfb163a5e08f2d` совпало с проверенным кандидатом. Отдельный `push/main` прошёл 12/12 после повтора `foundation`, который в первой попытке исчерпал 90 минут. Приняты S8, R1 и R2, каталог и готовность `0037`, 160/160 регрессионных проверок runtime. [Заключение C8](https://github.com/Elefesys/ai-service-manager/pull/70#pullrequestreview-6076027154) · [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45842370126/attempts/2).
 
 ## История — M7.3A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-26
 

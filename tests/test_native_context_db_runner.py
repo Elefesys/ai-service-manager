@@ -393,7 +393,7 @@ def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_g
     assert "needs: [foundation-durable]" in jobs["foundation"]
     for job, cap, route in (
         ("foundation-durable", 25, "normal-durable"),
-        ("foundation", 90, "foundation-core"),
+        ("foundation", 120, "foundation-core"),
     ):
         block = jobs[job]
         assert (
