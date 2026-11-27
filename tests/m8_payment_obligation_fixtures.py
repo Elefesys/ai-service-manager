@@ -7,6 +7,7 @@ from uuid import UUID
 
 from asm.scheduling.commands import HoldResult
 from m7_scheduling_fixtures import Work, accept_quote, prepare_quote
+from test_m2_1_postgres import query
 from test_m3_1_native_context_postgres import scalar
 from test_m6_owner_decisions_postgres import FIXED_DURATION, contract
 from test_m6_pricing_postgres import draft_for_size, publish
@@ -83,6 +84,23 @@ async def money_counts(h):
           'receipts',(SELECT count(*) FROM platform.payment_obligation_receipts))
     """,
     )
+
+
+async def quote_deliveries(h, quote):
+    rows = await query(
+        h,
+        """
+        SELECT q.id AS quote_id, q.code, q.version, o.id AS outbox_id, o.status
+        FROM app.quotes q
+        LEFT JOIN platform.quote_delivery_intents i ON (i.workspace_id,i.quote_id)=(q.workspace_id,q.id)
+        LEFT JOIN app.outbox_events o ON (o.workspace_id,o.id)=(i.workspace_id,i.outbox_id)
+        WHERE (q.workspace_id,q.request_id)=(:workspace,:request)
+        ORDER BY q.version
+        """,
+        workspace=UUID(quote["material"]["workspace_id"]),
+        request=UUID(quote["material"]["request_id"]),
+    )
+    return [dict(row) for row in rows]
 
 
 def inspect_open(reply, work, hold, *, amount, price, status="HELD"):

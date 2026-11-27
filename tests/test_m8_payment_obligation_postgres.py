@@ -22,6 +22,7 @@ from m8_payment_obligation_fixtures import (
     post_open,
     prepare_day,
     proof,
+    quote_deliveries,
     send_terms,
     terms,
 )
@@ -30,9 +31,10 @@ from sqlalchemy.exc import DBAPIError
 from test_m2_1_schema_postgres import _migrate
 from test_m3_1_native_context_postgres import claim_job, scalar
 from test_m6_owner_decisions_postgres import owner_get
-from test_m6_pricing_postgres import formula_price, publish, sign_in
+from test_m6_pricing_postgres import formula_price, price, publish, sign_in
 from test_m6_quote_acceptance_postgres import controlled_reply, counts, outcome, process, read
-from test_m6_quote_delivery_postgres import DeliveryWire, delivery
+from test_m6_quote_delivery_postgres import DeliveryWire, delivery, run_quote
+from test_m6_service_assessments_api_postgres import request_assessment
 from test_m7_scheduling_holds_postgres import (
     backend_pid,
     blocked_by,
@@ -62,6 +64,14 @@ pytestmark = pytest.mark.integration
 def forbidden(response, status, error):
     assert response.status_code == status, response.text
     assert response.json() == {"error": {"code": error}}
+
+
+async def worker_reply(h, worker, phrase):
+    receipt = await controlled_reply(h, phrase)
+    claim = await claim_job(h, receipt.job_id)
+    await worker.execute(claim)
+    reply = (await h.kernel.process_inbox(claim)).quote_reply
+    return reply.model_dump(mode="json", exclude_none=True) if reply else None
 
 
 @pytest.mark.parametrize(
@@ -404,17 +414,10 @@ async def test_r1_sent_percent_quote_after_upgrade(scheduling_pg, auth, case, pr
 
     worker = Worker(h.kernel, DeliveryWire(h))
 
-    async def answer(phrase):
-        receipt = await controlled_reply(h, phrase)
-        claim = await claim_job(h, receipt.job_id)
-        await worker.execute(claim)
-        reply = (await h.kernel.process_inbox(claim)).quote_reply
-        return reply.model_dump(mode="json", exclude_none=True) if reply else None
-
     ambiguous = None
     if case == "exact":
         ambiguous = outcome(await process(h, await controlled_reply(h, "да")))
-    decision = await answer(f"Принимаю {old['code']}")
+    decision = await worker_reply(h, worker, f"Принимаю {old['code']}")
     legacy_view = await read(h, auth, url)
     triples = await counts(h)
     proof(
@@ -433,11 +436,18 @@ async def test_r1_sent_percent_quote_after_upgrade(scheduling_pg, auth, case, pr
         assert decision["outcome"] == "STALE"
         assert triples == (0, 0, 0)
         assert await money_counts(h) == {"obligations": 0, "receipts": 0}
-        if case == "changed":
-            return
         quote = await prepare_quote(h, auth, token, url)
         assert quote["code"] != old["code"]
         assert (await delivery(h, quote))["status"] == "SENT"
+        if case == "changed":
+            assert quote["material"]["amount_minor"] == 200_000
+            assert quote["material"]["percent_prepayment"] == {
+                "amount_minor": 10_000,
+                "rounding_version": "HALF_UP_V1",
+            }
+            assert await counts(h) == (0, 0, 0)
+            proof("r2-changed-terms", original=old["code"], current=quote)
+            return
         assert "Предоплата — 50,01 ₽ (5%)." in quote["text"]
         assert quote["material"]["percent_prepayment"] == {
             "amount_minor": 5_001,
@@ -449,7 +459,7 @@ async def test_r1_sent_percent_quote_after_upgrade(scheduling_pg, auth, case, pr
         assert ambiguous == "NEEDS_CLARIFICATION"
         quote, amount, rounding = old, 5_000, None
 
-    accepted = await answer(f"Принимаю {quote['code']}")
+    accepted = await worker_reply(h, worker, f"Принимаю {quote['code']}")
     assert accepted["outcome"] == "ACCEPTED"
     agreement = (await read(h, auth, url))["agreement"]
     assert agreement["quote"] == quote
@@ -475,6 +485,77 @@ async def test_r1_sent_percent_quote_after_upgrade(scheduling_pg, auth, case, pr
         orders=1,
         sessions=1,
     )
+
+
+@pytest.mark.parametrize("command", ["pricing", "assessment"])
+async def test_r2_owner_replay_preserves_sent_percent_quote(scheduling_pg, auth, command):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    repeat = {"pricing": price, "assessment": request_assessment}[command]
+    await _migrate("downgrade", "0037")
+    try:
+        url, old = await send_terms(
+            h, auth, token, "PERCENT_DEPOSIT", fixed_price(100_000), percent=5
+        )
+        sent = await delivery(h, old)
+        assert sent["status"] == "SENT" and sent["attempt_id"] is not None
+        assert sent["text"] == old["text"] and "percent_prepayment" not in old["material"]
+        before = await quote_deliveries(h, old)
+        assert len(before) == 1 and before[0]["outbox_id"] == sent["outbox_id"]
+        original_result = await repeat(auth, f"{url}/{command}", token)
+        assert (await read(h, auth, url))["quote"] == old
+        assert await quote_deliveries(h, old) == before
+        assert await counts(h) == (0, 0, 0)
+    finally:
+        await _migrate("upgrade", "0038")
+
+    assert await repeat(auth, f"{url}/{command}", token) == original_result
+    view = await read(h, auth, url)
+    after = await quote_deliveries(h, old)
+    transport = DeliveryWire(h)
+    worker = Worker(h.kernel, transport)
+    phrase = f"Принимаю {old['code']}"
+    first = await worker_reply(h, worker, phrase)
+    replay = await worker_reply(h, worker, phrase)
+    triples = await counts(h)
+    # Process any second delivery only after the client has answered the original
+    # code, so a new pending version cannot hide behind its eventual send result.
+    for queued in after:
+        if queued["status"] == "PENDING":
+            await run_quote(h, worker, {"quote_id": str(queued["quote_id"])})
+    proof(
+        f"r2-{command}",
+        command_result_id=original_result[
+            "calculation_id" if command == "pricing" else "assessment_id"
+        ],
+        original=old,
+        visible=view["quote"],
+        before=before,
+        after=after,
+        final=await quote_deliveries(h, old),
+        worker_reply=first,
+        replay=replay,
+        counts=dict(zip(("acceptances", "orders", "sessions"), triples, strict=True)),
+        additional_sends=transport.calls,
+        additional_effects=transport.effects,
+    )
+    assert view["status"] == "SENT" and view["quote"] == old
+    assert before == after == await quote_deliveries(h, old)
+    assert await delivery(h, old) == sent
+    assert (transport.calls, transport.effects) == (0, 0)
+    assert first["outcome"] == "ACCEPTED" and replay == first and triples == (1, 1, 1)
+
+    agreement = (await read(h, auth, url))["agreement"]
+    assert agreement["quote"] == old
+    work = Work(url, agreement)
+    hold = await hold_work(h, work, await prepare_day(h, auth, token, work))
+    opened = await post_open(auth, token, work, hold.hold_id, "replayed-legacy-percent")
+    assert opened.status_code == 200, opened.text
+    payment = inspect_open(opened.json(), work, hold, amount=5_000, price=100_000)
+    assert payment["percent"] == 5 and payment["rounding_version"] is None
+    charges = await money_counts(h)
+    assert charges == {"obligations": 1, "receipts": 1}
+    proof(f"r2-{command}-opened", hold=opened.json(), counts=charges)
 
 
 @pytest.mark.parametrize("status", ["RELEASED", "EXPIRED"])

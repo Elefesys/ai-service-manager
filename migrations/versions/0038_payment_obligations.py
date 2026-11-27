@@ -16,6 +16,8 @@ ROUND = "platform.percent_prepayment_minor(bigint,integer)"
 QUOTE_BASIS = "platform.quote_basis(app.service_requests,timestamptz)"
 QUOTE_AUTHORITY = "platform.quote_authority(app.quotes,app.conversations,bigint)"
 QUOTE_OPEN_AT = "platform.quote_open_at(app.quotes,timestamptz)"
+QUOTE_PREPARE = "platform.quote_prepare_scoped(app.service_requests)"
+QUOTE_RECORD = "platform.quote_record_scoped(app.service_requests,uuid,uuid,boolean,jsonb)"
 PREVIOUS_NONFUNCTION = "6cf7f7e07901adba39b00776e99cd89f0583611717fa69e6bb622a08777bac4a"
 NONFUNCTION = "47979fec991896acf7e6eff01631b2007143a8b14add0aee2f921827bba468c7"
 
@@ -255,12 +257,34 @@ def quote_material_matches_sql(moment):
           ))"""
 
 
+def sent_quote_replay_sql(material):
+    # Locate the historical fingerprint through the same unique key. The open
+    # offer predicate checks the exact amount, current version and delivery.
+    return f"""
+      IF NOT FOUND AND {material} ? 'percent_prepayment' THEN
+        DECLARE legacy_basis text:=platform.quote_hash({material}-'percent_prepayment');
+        BEGIN
+          SELECT sent.* INTO q FROM app.quotes sent
+            WHERE (sent.workspace_id,sent.request_id,sent.basis_sha256)=(d.workspace_id,d.id,legacy_basis)
+              AND platform.quote_open_at(sent,clock_timestamp());
+        END;
+      END IF;"""
+
+
 def quote_changes(originals):
     authority = "q.material IS DISTINCT FROM platform.quote_basis(d,clock_timestamp())->'material'"
     open_at = "q.material=platform.quote_basis(d,moment)->'material'"
+    prepare_lookup = """      SELECT * INTO q FROM app.quotes WHERE (workspace_id,request_id,basis_sha256)
+        =(d.workspace_id,d.id,platform.quote_hash(current_material));"""
+    record_lookup = """      basis:=platform.quote_hash(material);
+      SELECT * INTO q FROM app.quotes WHERE (workspace_id,request_id,basis_sha256)=(d.workspace_id,d.id,basis);"""
+    record_guard = """      IF material IS DISTINCT FROM p_payload->'material'
+        THEN RAISE EXCEPTION 'STALE_STATE' USING ERRCODE='P3101'; END IF;"""
     assert (
         originals[QUOTE_AUTHORITY].count(authority) == originals[QUOTE_OPEN_AT].count(open_at) == 1
     )
+    assert originals[QUOTE_PREPARE].count(prepare_lookup) == 1
+    assert originals[QUOTE_RECORD].count(record_guard + "\n" + record_lookup) == 1
     return {
         QUOTE_BASIS: quote_basis_sql(originals[QUOTE_BASIS]),
         QUOTE_AUTHORITY: originals[QUOTE_AUTHORITY]
@@ -269,6 +293,22 @@ def quote_changes(originals):
         QUOTE_OPEN_AT: originals[QUOTE_OPEN_AT]
         .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
         .replace(open_at, quote_material_matches_sql("moment"), 1),
+        QUOTE_PREPARE: originals[QUOTE_PREPARE]
+        .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+        .replace(prepare_lookup, prepare_lookup + sent_quote_replay_sql("current_material"), 1)
+        .replace(
+            "'material',current_material", "'material',coalesce(q.material,current_material)", 1
+        ),
+        QUOTE_RECORD: originals[QUOTE_RECORD]
+        .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+        .replace(
+            record_guard + "\n" + record_lookup,
+            record_lookup
+            + sent_quote_replay_sql("material")
+            + "\n"
+            + record_guard.replace("IF material ", "IF coalesce(q.material,material) ", 1),
+            1,
+        ),
     }
 
 
@@ -282,11 +322,18 @@ def dependencies():
         scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1]))
     delivery = scripts.get_revision("0029").module
     acceptance = scripts.get_revision("0030").module
+    intents = scripts.get_revision("0031").module
     scheduling = scripts.get_revision(down_revision).module
+    scoped_quotes = {
+        name: body
+        for name, body, _ in intents._agent_shared_bodies()
+        if name in {QUOTE_PREPARE, QUOTE_RECORD}
+    }
     return {
         QUOTE_BASIS: delivery.FUNCTIONS[QUOTE_BASIS],
         QUOTE_AUTHORITY: acceptance.FUNCTIONS[QUOTE_AUTHORITY],
         QUOTE_OPEN_AT: acceptance.FUNCTIONS[QUOTE_OPEN_AT],
+        **scoped_quotes,
     }, scheduling
 
 
