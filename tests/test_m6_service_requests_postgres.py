@@ -59,7 +59,9 @@ async def clear_quote_rows(connection):
         ).scalar_one():
             tables += ",platform.scheduling_chat_codes,platform.scheduling_turn_actions"
         if (
-            await connection.execute(text("SELECT to_regclass('app.payment_obligations') IS NOT NULL"))
+            await connection.execute(
+                text("SELECT to_regclass('app.payment_obligations') IS NOT NULL")
+            )
         ).scalar_one():
             tables += ",app.payment_obligations,platform.payment_obligation_receipts"
         await connection.execute(text(f"TRUNCATE {tables}"))

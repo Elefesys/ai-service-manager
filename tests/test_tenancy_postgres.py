@@ -557,7 +557,18 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "0038",
         }:
             expected_tables.update(("approval_requests", "owner_decisions"))
-        if revision in {"0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037", "0038"}:
+        if revision in {
+            "0029",
+            "0030",
+            "0031",
+            "0032",
+            "0033",
+            "0034",
+            "0035",
+            "0036",
+            "0037",
+            "0038",
+        }:
             expected_tables.add("quotes")
         if revision in {"0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037", "0038"}:
             expected_tables.update(("quote_acceptances", "service_orders", "service_sessions"))
@@ -1109,17 +1120,31 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                         }
                         and signature.startswith(("platform.approval_", "platform.owner_decision_"))
                         or revision
-                        in {"0029", "0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037", "0038"}
+                        in {
+                            "0029",
+                            "0030",
+                            "0031",
+                            "0032",
+                            "0033",
+                            "0034",
+                            "0035",
+                            "0036",
+                            "0037",
+                            "0038",
+                        }
                         and signature.startswith("platform.quote_")
                         or revision
                         in {"0030", "0031", "0032", "0033", "0034", "0035", "0036", "0037", "0038"}
                         and signature == "platform.telegram_ingest_own_text(text,jsonb,uuid)"
-                        or revision in {"0031", "0032", "0033", "0034", "0035", "0036", "0037", "0038"}
+                        or revision
+                        in {"0031", "0032", "0033", "0034", "0035", "0036", "0037", "0038"}
                         and signature.startswith("platform.service_intent_")
                         or revision in {"0032", "0033", "0034", "0035", "0036", "0037", "0038"}
                         and signature.startswith("platform.scheduling_")
                         or revision == "0038"
-                        and signature.startswith(("platform.payment_obligation_", "platform.percent_prepayment_"))
+                        and signature.startswith(
+                            ("platform.payment_obligation_", "platform.percent_prepayment_")
+                        )
                     ):
                         native_profiles[signature] = (
                             function["security_definer"],

@@ -4071,10 +4071,18 @@ def test_m7_booking_refuses_ineligible_source(
         ("main-push", "historical_migration", "M8_PAYMENT_OBLIGATION_WRITE_SET"),
     ],
 )
-def test_m8_payment_obligation_refuses_ineligible_source(r11_event, monkeypatch, route, damage, reason):
+def test_m8_payment_obligation_refuses_ineligible_source(
+    r11_event, monkeypatch, route, damage, reason
+):
     r = r11_event
     prepare_slice_event(
-        r, monkeypatch, route, "payment_obligation", "0038", protected=damage == "protected", damage=damage
+        r,
+        monkeypatch,
+        route,
+        "payment_obligation",
+        "0038",
+        protected=damage == "protected",
+        damage=damage,
     )
     with pytest.raises((carrier.Refusal, catalog.Refusal), match=f"^{reason}$"):
         r["run"]()

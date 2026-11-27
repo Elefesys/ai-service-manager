@@ -2049,7 +2049,8 @@ SCHEMA_TABLES["0037"] = SCHEMA_TABLES["0036"] | {
 
 
 SCHEMA_TABLES["0038"] = SCHEMA_TABLES["0037"] | {
-    "app.payment_obligations", "platform.payment_obligation_receipts",
+    "app.payment_obligations",
+    "platform.payment_obligation_receipts",
 }
 
 

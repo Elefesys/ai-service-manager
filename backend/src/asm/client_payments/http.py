@@ -94,7 +94,9 @@ def install_client_payments(app: FastAPI, auth: AuthService, settings: AuthSetti
         response_model=HoldPaymentObligation,
         openapi_extra=command_schema(HoldReferences),
         responses={
-            409: {"description": "Expired or released hold, conflicting key, or clarification required"},
+            409: {
+                "description": "Expired or released hold, conflicting key, or clarification required"
+            },
         },
         description=(
             "Open the agreed prepayment obligation for an active hold. "
