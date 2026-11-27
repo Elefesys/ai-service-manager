@@ -118,7 +118,7 @@ def foundation_real_catalog_sink(foundation_git, monkeypatch, request):
     """Real migration expansion in an owned synthetic Git checkout; no database."""
     fixture = foundation_git
     paths = sorted((fixture.actual / "migrations/versions").glob("*.py"))
-    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 38)]
+    assert [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 39)]
     for source in paths:
         target = fixture.root / source.relative_to(fixture.actual)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -172,8 +172,8 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    # Include the current catalog with the scheduling intent privileges.
-    assert len(journal.catalog["nonfunction_ddl"]) == 1515
+    # Include the current catalog with the payment obligation capabilities.
+    assert len(journal.catalog["nonfunction_ddl"]) == 1535
     journal.start(node)
     append = store.append
 
