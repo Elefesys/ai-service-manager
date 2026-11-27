@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M8.0 REVIEW · реализация M8 TODO · 2026-11-27
+## CURRENT — M8.1A IN_PROGRESS · 2026-11-27
 
-C0 принял [план M8](tasks/M8_HANDOFF.md) и [решения IMPL-008](decisions/IMPL-008-m8-pilot-payments.md). В [PR #72](https://github.com/Elefesys/ai-service-manager/pull/72) включено исправление допуска плановой ветки к PostgreSQL на принятой схеме 0037. После разрешённого слияния и успешного CI фактического main — только M8.1A (ведущий C7, C1/C2/C5 по границам). Синтетические проверки, настоящий тестовый магазин и допуск к live фиксируются раздельно. Финал M7 и сданный код сохранены ниже.
+Единственная выдача — точное обязательство по предоплате для удержанного согласованного сеанса. Ведущий C7, согласованные условия C1, БД C2, карточка C5. Ветка `c7/m8-1a-payment-obligation`, база `main` `5ea3a1dabf108652c8e9f5891ca1719a8617a115`, миграция `0038_payment_obligations.py` поверх `0037`. Первый показ в synthetic LOCAL/TEST — сумма, основание, срок Hold и «ещё не получена». При `NONE` денежных записей ноль. [Поручение и критерии P1](tasks/M8_HANDOFF.md#m8-1a) · [Разрешённые пути](tasks/M8_HANDOFF.md#m8-1a-paths).
+
+## История — M8.0 INTEGRATED / VERIFIED · приёмка плана
+
+Владелец слил [PR #72](https://github.com/Elefesys/ai-service-manager/pull/72) в `main` `5ea3a1dabf108652c8e9f5891ca1719a8617a115`. Родители — прежний `main` `c698025b866746455b5873575431f12315a28ec2` и принятый `c72ccd5aaef194cef8a278e2baebb61c3fcbc474`. Дерево `da4e77b39c741e75802203aa2b777807b201e791` совпало с кандидатом. Отдельный `push/main` прошёл 12/12 с первой попытки. Для схемы `0037` прошли каталог и готовность, а регрессионный набор runtime выполнил 160/160 проверок. Приняты [решения IMPL-008](decisions/IMPL-008-m8-pilot-payments.md). [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45960485133) · [Артефакт PostgreSQL](https://github.com/Elefesys/ai-service-manager/actions/runs/45960485133/artifacts/15181127743).
 
 ## История — M7 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-27
 
