@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7.3C IN_PROGRESS · synthetic LOCAL/TEST · 2026-11-27
+## CURRENT — M7.3C REVIEW · ожидает решения владельца о слиянии · synthetic LOCAL/TEST · 2026-11-27
 
-Мастер видит единственное обязательство на спорное время и сохранённый визит после отказа в переносе. Единственная активная задача — M7.3C, сквозная приёмка C8 на `c8/m7-3c-acceptance` от `main` `60b1162e15f5d31cfa09d4a2976417aa833e82b4`. Схема `0037`, новых миграций — 0. Результат — GJ-D/GJ-F, таблица S1–S8 и передача M8. Принимает C0. [Поручение C8 и разрешённые пути](tasks/M7_HANDOFF.md#m73c-task).
+C0 принял GJ-D, GJ-F, S1–S8 и передачу M8 на `318880b571d55a72895d60f2fc4ee91065f71e02`, база `main` `60b1162e15f5d31cfa09d4a2976417aa833e82b4`. При конфликте второй клиент выбрал новую метку и получил один визит по `NONE`. После отказа в переносе исходный визит остался на 10:00 до нового явного действия мастера. Схема `0037`, CI кандидата 12/12 с первой попытки. Владелец решает вопрос слияния PR #71. Итог M7 требует отдельной проверки `push/main` после слияния. [Решение C0](tasks/M7_HANDOFF.md#m73c-merge) · [Отчёт C8](https://github.com/Elefesys/ai-service-manager/blob/318880b571d55a72895d60f2fc4ee91065f71e02/docs/tasks/M7_3C_ACCEPTANCE.md) · [CI кандидата](https://github.com/Elefesys/ai-service-manager/actions/runs/45876830438).
 
 ## История — M7.3B INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-27
 
