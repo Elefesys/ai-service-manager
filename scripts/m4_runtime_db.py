@@ -372,6 +372,34 @@ M7_PLAN = PlanningSource(
         }
     ),
 )
+M8_PLAN = PlanningSource(
+    prefix="M8_PLAN",
+    pr=72,
+    branch="c0/m8-pilot-plan-20261127",
+    base="c698025b866746455b5873575431f12315a28ec2",
+    base_tree="d89a0297f9e89cb575cdbd666a8845d77c6f1515",
+    initial="d9bb3b83d791b03425c4db4c2515579bdc0b75ea",
+    revision="0037",
+    review_paths=frozenset(
+        {
+            "AGENTS.md",
+            "README.md",
+            "docs/TASK_REGISTER.md",
+            "docs/tasks/M8_HANDOFF.md",
+            "docs/decisions/IMPL-008-m8-pilot-payments.md",
+            "scripts/m4_runtime_db.py",
+            "tests/test_m4_runtime_db_runner.py",
+        }
+    ),
+    inherited_paths=frozenset(
+        {
+            "docs/tasks/M7_HANDOFF.md",
+            "docs/decisions/IMPL-007-m7-pilot-scheduling.md",
+        }
+    ),
+)
+PLANNING_SOURCES = (M6_PLAN, M7_PLAN, M8_PLAN)
+
 # M7.1A handoff scope on the accepted M7.0 base. Historical lanes stay closed.
 M7_SCHEDULING_BASE = "ac30da7897cbf088cd8c9fb9262a52d67a278582"
 M7_SCHEDULING_TREE = "a6d1536ed6974e994a59b4fd790eb4dd85de481e"
@@ -2904,13 +2932,13 @@ def v7_fix_candidate(event):
 
 
 def plan_for_branch(branch):
-    return next((plan for plan in (M6_PLAN, M7_PLAN) if plan.branch == branch), None)
+    return next((plan for plan in PLANNING_SOURCES if plan.branch == branch), None)
 
 
 def plan_for_event(event):
     if event.get("event") == "push" and event["ref"] == "refs/heads/main":
         parents = commit_parents("HEAD")
-        return next((plan for plan in (M6_PLAN, M7_PLAN) if parents[:1] == [plan.base]), None)
+        return next((plan for plan in PLANNING_SOURCES if parents[:1] == [plan.base]), None)
     return plan_for_branch(event.get("head_ref"))
 
 
