@@ -2,7 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M7 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-27
+## CURRENT — M8.0 REVIEW · реализация M8 TODO · 2026-11-27
+
+C0 рассматривает [план M8 и первую выдачу](tasks/M8_HANDOFF.md) и [решения IMPL-008](decisions/IMPL-008-m8-pilot-payments.md). Исполнителям работа ещё не выдана. После согласования, разрешённого слияния и успешного CI фактического main — только M8.1A (ведущий C7, C1/C2/C5 по границам). Синтетические проверки, настоящий тестовый магазин и допуск к live фиксируются раздельно. Финал M7 и сданный код сохранены ниже.
+
+## История — M7 INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-27
 
 C0 закрыл M7 на `main` `c698025b866746455b5873575431f12315a28ec2` после слияния PR #71. Дерево совпало с принятым кандидатом `318880b571d55a72895d60f2fc4ee91065f71e02`. Отдельный `push/main` прошёл 12/12 с первой попытки. Схема `0037`, каталог и готовность прошли, runtime 160/160. [Финальная запись C0](tasks/M7_HANDOFF.md#m7-final) · [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/45928316460).
 
