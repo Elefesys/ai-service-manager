@@ -165,6 +165,12 @@ async def accept_work(h, auth, *, amount=50_000):
 async def accept_telegram_work(h, auth):
     token = await sign_in(auth)
     await publish(h, terms("FIXED_DEPOSIT", fixed_price(400_000), amount=50_000))
+    work = await accept_telegram_agreement(h, auth, token)
+    await configure_wide(h, auth, token, work)
+    return token, work
+
+
+async def accept_telegram_agreement(h, auth, token):
     conversation, _, _, _, request = await draft_for_size(h, auth, token, "21 mm", telegram=True)
     url = f"{route(conversation)}/{request}"
     await price(auth, url + "/pricing", token)
@@ -173,9 +179,7 @@ async def accept_telegram_work(h, auth):
     await telegram_send(h, quote)
     reply = await new_reply(h, f"Принимаю {quote['code']}")
     assert reply.quote_reply.outcome == "ACCEPTED"
-    work = Work(url, (await read(h, auth, url))["agreement"])
-    await configure_wide(h, auth, token, work)
-    return token, work
+    return Work(url, (await read(h, auth, url))["agreement"])
 
 
 async def chat_choice(h, work):

@@ -420,7 +420,17 @@ FUNCTIONS = {
             IS DISTINCT FROM (p_claim,p_generation,p_version)
             THEN RAISE EXCEPTION 'STALE_CLAIM' USING ERRCODE='P2001'; END IF;
           observation:=platform.telegram_save_observation(a.workspace_id,a.connection_id,p_generation,p_version,p_observation);
-          IF observation->>'code' IS DISTINCT FROM 'OBSERVED'
+          IF observation->>'code'='UNAVAILABLE'
+            AND (observation->>'generation')::bigint=p_generation
+            AND (observation->>'observation_version')::bigint>p_version THEN
+            -- A newer observation on this generation may have won the write.
+            -- Recheck eligibility and let the leased job obtain fresh rights.
+            problem:=platform.payment_checkout_delivery_block(a);
+            IF problem IS NULL THEN
+              RETURN jsonb_build_object('code','UNAVAILABLE','status',
+                platform.messaging_reschedule(j.id,'DEPENDENCY_UNAVAILABLE',true)->>'status');
+            END IF;
+          ELSIF observation->>'code' IS DISTINCT FROM 'OBSERVED'
             OR platform.telegram_can_send(a.workspace_id,a.connection_id,a.conversation_id,true) IS NOT TRUE
             THEN problem:='CHANNEL_RIGHTS_UNAVAILABLE'; END IF;
         END IF;
