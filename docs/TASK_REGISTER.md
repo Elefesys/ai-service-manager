@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M8.1B IN_PROGRESS · C7 · 2026-11-28
+## CURRENT — M8.1B REVIEW · C8 · 2026-11-28
 
-Одна активная выдача — ссылка на предоплату за выбранное время. Для первого показа клиент получает ссылку на 500 ₽ в своём диалоге. Повтор возвращает ту же попытку, а после истечения Hold отложенное сообщение со ссылкой не уходит. Ветка `c7/m8-1b-hosted-checkout`, база `main` `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, миграция `0039_payment_checkout_attempts.py` поверх `0038`. Ведущий C7, доставка C3, C6 по необходимости. [Поручение P2](tasks/M8_HANDOFF.md#m8-1b) · [Пути](tasks/M8_HANDOFF.md#m8-1b-paths) · [Инструкция для тестового магазина](tasks/M8_HANDOFF.md#m8-1b-test-shop).
+C0 принял R1 в synthetic LOCAL/TEST. При действующем удержании клиент получил одну ссылку на 500 ₽ в тестовом диалоге Telegram. Повтор сохранил попытку и срок. При отзыве права ответа и при истечении срока во время проверки отправок было ноль. Единственная активная задача — независимое ревью C8 в [Draft PR #74](https://github.com/Elefesys/ai-service-manager/pull/74). Ветка `c7/m8-1b-hosted-checkout`, head `b98906e0a7edcc0db7fe40f721a85f6f7db81147`, база `main` `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, миграция `0039` поверх `0038`. CI 12/12, настоящий тестовый магазин ЮKassa — `NOT RUN`. [Поручение C8](tasks/M8_HANDOFF.md#m8-1b-c8).
 
 ## История — M8.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-28
 
