@@ -2,9 +2,13 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M8.1A IN_PROGRESS · 2026-11-27
+## CURRENT — M8.1B IN_PROGRESS · C7 · 2026-11-28
 
-Единственная выдача — точное обязательство по предоплате для удержанного согласованного сеанса. Ведущий C7, согласованные условия C1, БД C2, карточка C5. Ветка `c7/m8-1a-payment-obligation`, база `main` `5ea3a1dabf108652c8e9f5891ca1719a8617a115`, миграция `0038_payment_obligations.py` поверх `0037`. Первый показ в synthetic LOCAL/TEST — сумма, основание, срок Hold и «ещё не получена». При `NONE` денежных записей ноль. [Поручение и критерии P1](tasks/M8_HANDOFF.md#m8-1a) · [Разрешённые пути](tasks/M8_HANDOFF.md#m8-1a-paths).
+Одна активная выдача — ссылка на предоплату за выбранное время. Для первого показа клиент получает ссылку на 500 ₽ в своём диалоге. Повтор возвращает ту же попытку, а после истечения Hold отложенное сообщение со ссылкой не уходит. Ветка `c7/m8-1b-hosted-checkout`, база `main` `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, миграция `0039_payment_checkout_attempts.py` поверх `0038`. Ведущий C7, доставка C3, C6 по необходимости. [Поручение P2](tasks/M8_HANDOFF.md#m8-1b) · [Пути](tasks/M8_HANDOFF.md#m8-1b-paths) · [Инструкция для тестового магазина](tasks/M8_HANDOFF.md#m8-1b-test-shop).
+
+## История — M8.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-28
+
+PR #73 слит на `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, родители `5ea3a1dabf108652c8e9f5891ca1719a8617a115` и принятый `cf01c3f6fa1e1d8559e060c94353953e0dcbb807`. Дерево `a89a66d0c56596837b4f04989f2fb451dea235ce` совпало с проверенным кандидатом. Отдельный `push/main` прошёл 12/12 с первой попытки, в `foundation` прошёл 21 из 21 сценария P1. `m4-runtime-db` проверил каталог `0038` и готовность приложения. На удержании мастер видит согласованные 500 ₽ от цены 4 000 ₽, основание и «оплата ещё не получена». Повтор сохраняет ID, при `NONE` денежных строк ноль. C8 закрыл `C8-M8.1A-01`. [Ревью C8](https://github.com/Elefesys/ai-service-manager/pull/73#pullrequestreview-6096066071) · [CI слияния](https://github.com/Elefesys/ai-service-manager/actions/runs/46113927951) · [P1](https://github.com/Elefesys/ai-service-manager/actions/runs/46113927951/job/140886866033) · [Схема и источник](https://github.com/Elefesys/ai-service-manager/actions/runs/46113927951/artifacts/15250343877).
 
 ## История — M8.0 INTEGRATED / VERIFIED · приёмка плана
 
