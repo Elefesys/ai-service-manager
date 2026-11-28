@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M8.1A IN_PROGRESS · 2026-11-27
+## CURRENT — M8.1A-R4 REVIEW · C8 · synthetic LOCAL/TEST · 2026-11-28
 
-Единственная выдача — точное обязательство по предоплате для удержанного согласованного сеанса. Ведущий C7, согласованные условия C1, БД C2, карточка C5. Ветка `c7/m8-1a-payment-obligation`, база `main` `5ea3a1dabf108652c8e9f5891ca1719a8617a115`, миграция `0038_payment_obligations.py` поверх `0037`. Первый показ в synthetic LOCAL/TEST — сумма, основание, срок Hold и «ещё не получена». При `NONE` денежных записей ноль. [Поручение и критерии P1](tasks/M8_HANDOFF.md#m8-1a) · [Разрешённые пути](tasks/M8_HANDOFF.md#m8-1a-paths).
+На PostgreSQL 18.6 C0 принял исправление R4. При округлении предоплаты до нуля мастер видит просьбу уточнить её условия и исходную доставку в истории. Единственная активная задача — адресная проверка C8 по `C8-M8.1A-01` в Draft PR #73, ветка `c7/m8-1a-payment-obligation`, head `cf01c3f6fa1e1d8559e060c94353953e0dcbb807`, база `main` `5ea3a1dabf108652c8e9f5891ca1719a8617a115`, схема `0038` поверх `0037`. [Поручение C8](tasks/M8_HANDOFF.md#m8-1a-r4-c8) · [Исходное замечание](https://github.com/Elefesys/ai-service-manager/pull/73#pullrequestreview-6095421116).
 
 ## История — M8.0 INTEGRATED / VERIFIED · приёмка плана
 
