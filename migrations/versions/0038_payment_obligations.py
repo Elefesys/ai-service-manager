@@ -17,9 +17,37 @@ QUOTE_BASIS = "platform.quote_basis(app.service_requests,timestamptz)"
 QUOTE_AUTHORITY = "platform.quote_authority(app.quotes,app.conversations,bigint)"
 QUOTE_OPEN_AT = "platform.quote_open_at(app.quotes,timestamptz)"
 QUOTE_PREPARE = "platform.quote_prepare_scoped(app.service_requests)"
+QUOTE_READ = "platform.quote_owner_read(uuid,uuid,uuid)"
 QUOTE_RECORD = "platform.quote_record_scoped(app.service_requests,uuid,uuid,boolean,jsonb)"
 PREVIOUS_NONFUNCTION = "6cf7f7e07901adba39b00776e99cd89f0583611717fa69e6bb622a08777bac4a"
 NONFUNCTION = "47979fec991896acf7e6eff01631b2007143a8b14add0aee2f921827bba468c7"
+
+# The installed 0030 definition, restored on downgrade to 0037.
+PREVIOUS_QUOTE_READ = r"""CREATE OR REPLACE FUNCTION platform.quote_owner_read(
+      p_business uuid,p_conversation uuid,p_request uuid
+    ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+    DECLARE d app.service_requests%ROWTYPE; c app.conversations%ROWTYPE; q app.quotes%ROWTYPE; reason text;
+      delivery jsonb; agreement jsonb;
+    BEGIN
+      d:=platform.service_assessment_scope(p_business,p_conversation,p_request);
+      agreement:=platform.quote_agreement_owner_read(p_business,p_conversation,p_request);
+      agreement:=CASE WHEN agreement->'agreement'<>'null'::jsonb THEN agreement-'reply_notice'
+        WHEN agreement->'reply_notice'<>'null'::jsonb THEN agreement-'agreement' ELSE '{}'::jsonb END;
+      reason:=platform.quote_basis(d,clock_timestamp())->>'reason';
+      SELECT * INTO q FROM app.quotes WHERE (workspace_id,request_id)=(d.workspace_id,d.id)
+        ORDER BY version DESC LIMIT 1;
+      IF FOUND THEN
+        SELECT * INTO STRICT c FROM app.conversations WHERE (workspace_id,id)=(d.workspace_id,d.conversation_id);
+        delivery:=platform.quote_view(q,c);
+        IF reason='EXACT_PRICE_REQUIRED' THEN
+          RETURN jsonb_build_object('quote',NULL,'status','NEEDS_CLARIFICATION','reason',reason,'previous',delivery)||agreement;
+        END IF;
+        RETURN delivery||agreement;
+      END IF;
+      RETURN jsonb_build_object('quote',NULL,'reason',reason,'status',CASE
+        WHEN reason IN ('EXACT_PRICE_REQUIRED','DEPOSIT_TERMS_UNCLEAR','APPROVAL_CLARIFICATION')
+          THEN 'NEEDS_CLARIFICATION' END)||agreement;
+    END $$"""
 
 # These keys bind each edge of the accepted quote, order and session.
 REFERENCE_KEYS = (
@@ -306,6 +334,11 @@ def quote_changes(originals):
         .replace(
             "'material',current_material", "'material',coalesce(q.material,current_material)", 1
         ),
+        QUOTE_READ: originals[QUOTE_READ].replace(
+            "IF reason='EXACT_PRICE_REQUIRED' THEN",
+            "IF reason IN ('EXACT_PRICE_REQUIRED','DEPOSIT_TERMS_UNCLEAR') THEN",
+            1,
+        ),
         QUOTE_RECORD: originals[QUOTE_RECORD]
         .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
         .replace(
@@ -340,6 +373,7 @@ def dependencies():
         QUOTE_BASIS: delivery.FUNCTIONS[QUOTE_BASIS],
         QUOTE_AUTHORITY: acceptance.FUNCTIONS[QUOTE_AUTHORITY],
         QUOTE_OPEN_AT: acceptance.FUNCTIONS[QUOTE_OPEN_AT],
+        QUOTE_READ: PREVIOUS_QUOTE_READ,
         **scoped_quotes,
     }, scheduling
 
@@ -374,8 +408,8 @@ def schema_sql(scheduling, quotes):
         language = "plpgsql" if "LANGUAGE plpgsql" in header else "sql"
         volatility = "s" if " STABLE " in header else "i" if " IMMUTABLE " in header else "v"
         definer = str("SECURITY DEFINER" in header).lower()
-        execute = str(signature == OWNER or signature in holds.PROFILE_CALLERS).lower()
-        if signature in holds.PROFILE_CALLERS:
+        execute = str(signature == OWNER).lower()
+        if signature == QUOTE_READ or signature in holds.PROFILE_CALLERS:
             previous = re.search(r"\('" + re.escape(signature) + r"',[^\n]+\)", previous_profile)
             assert previous is not None
             execute = previous.group().rsplit(",", 1)[-1].rstrip(")")

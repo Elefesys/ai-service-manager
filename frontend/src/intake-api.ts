@@ -302,7 +302,7 @@ export function parseQuoteDelivery(value:unknown,scope:IntakeScope,requestId:str
  if((response.quote!==null)!==quoteExpected)return invalid();
  if(quoteExpected)checkQuote(response.quote,scope,requestId);
  if(has('previous')){
-  if(response.status!=='NEEDS_CLARIFICATION'||response.reason!=='EXACT_PRICE_REQUIRED')return invalid();
+  if(response.status!=='NEEDS_CLARIFICATION'||!one(response.reason,['EXACT_PRICE_REQUIRED','DEPOSIT_TERMS_UNCLEAR']))return invalid();
   const previous=object(response.previous,['quote','status','reason']);
   if(!one(previous.status,quoteDeliveryStatuses)||!quoteReason(previous.reason))return invalid();
   checkQuote(previous.quote,scope,requestId);

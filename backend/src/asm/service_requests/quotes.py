@@ -225,11 +225,11 @@ class QuoteDeliveryView(ConfigurationModel):
     def coherent_status(self) -> Self:
         if (self.quote is None) != (self.status in {None, "NEEDS_CLARIFICATION"}):
             raise ValueError("Delivery status requires a quote version")
-        if self.previous is not None and (self.status, self.reason) != (
-            "NEEDS_CLARIFICATION",
-            "EXACT_PRICE_REQUIRED",
+        if self.previous is not None and (
+            self.status != "NEEDS_CLARIFICATION"
+            or self.reason not in {"EXACT_PRICE_REQUIRED", "DEPOSIT_TERMS_UNCLEAR"}
         ):
-            raise ValueError("Previous delivery requires an exact price clarification")
+            raise ValueError("Previous delivery requires a price or prepayment clarification")
         if self.agreement is not None and self.reply_notice is not None:
             raise ValueError("An accepted work cannot require a new client reply")
         return self

@@ -1479,7 +1479,7 @@ test('@narrow M6.3B sends each selected work once, including the later owner dec
 });
 
 test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after restart',async({page},info)=>{
- test.setTimeout(120000);
+ test.setTimeout(150000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const app=await beginQuoteJourney(page,variant,'quote-guard');
  const {conversation,intake,inbox,settings,serviceName,panel,firstId,execute,read,evaluateAndPrice}=app;
@@ -1516,6 +1516,58 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  const clarification=variant==='narrow'?await confirmExactQuote(page,app,range,'UNKNOWN','FULL_PREPAYMENT'):null;
  console.log('M6.3B R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,request:firstId,held,checkpoints,unknown,restarted,clarification}));
+
+ await test.step('M8.1A-R4 shows deposit clarification with the sent quote in history',async()=>{
+  if(variant==='desktop')await resumeQuote(page);
+  if(!await settings.isVisible())await page.getByRole('button',{name:/Synthetic business/}).click();
+  await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('FIXED');
+  const amount=settings.getByLabel('Цена, копейки 1',{exact:true});
+  await amount.fill('100000');
+  await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('PERCENT_DEPOSIT');
+  await settings.getByLabel('Предоплата, процент 1',{exact:true}).fill('5');
+  await publishIntakeService(settings,serviceName);
+  await refreshIntake(inbox,intake);
+  const previous=await evaluateAndPrice(firstId);
+  expect(previous.material).toMatchObject({amount_minor:100000,deposit:{mode:'PERCENT_DEPOSIT',percent:5},
+   percent_prepayment:{amount_minor:5000,rounding_version:'HALF_UP_V1'}});
+  expect(await execute('deliver-quote',firstId)).toMatchObject({quote_id:previous.quote_id,status:'SENT',calls:1,effects:1,text:previous.text});
+  const sentView=await read(firstId,'SENT');
+  expect(sentView).toEqual({quote:previous,status:'SENT',reason:null});
+  const before=(await app.readHistory()).filter(message=>message.direction==='OUTBOUND');
+
+  await amount.fill('9');
+  await publishIntakeService(settings,serviceName);
+  await refreshIntake(inbox,intake);
+  const expected={quote:null,status:'NEEDS_CLARIFICATION',reason:'DEPOSIT_TERMS_UNCLEAR',previous:sentView};
+  for(let repeat=0;repeat<2;repeat++){
+   for(const command of ['pricing','assessment']){
+    const posted=page.waitForResponse(response=>response.request().method()==='POST'
+     &&new URL(response.url()).pathname===`${app.endpoint}/${firstId}/${command}`);
+    await (command==='pricing'?app.price:app.work.getByRole('button',{name:/^(Оценить заявку|Пересчитать оценку)$/})).click();
+    const response=await posted;
+    expect(response.status()).toBe(200);
+    if(command==='pricing')expect(await response.json()).toMatchObject({amount_minor:9});
+   }
+   expect(await read(firstId,'NEEDS_CLARIFICATION')).toEqual(expected);
+  }
+  const prior=panel.getByRole('region',{name:'Предыдущая версия',exact:true});
+  await expect(panel.getByText('Уточните условия предоплаты.',{exact:true})).toBeVisible();
+  await expect(prior.getByText(previous.code,{exact:true})).toBeVisible();
+  await expect(prior.getByRole('status')).toHaveText('Предложение отправлено клиенту');
+  expect(await prior.getByTestId('quote-text').textContent()).toBe(previous.text);
+  const replay=await execute('deliver-quote',firstId);
+  expect(replay).toMatchObject({quote_id:previous.quote_id,status:'SENT',job_claimed:false,calls:0,effects:0,text:null});
+  expect((await app.readHistory()).filter(message=>message.direction==='OUTBOUND')).toEqual(before);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  const image=`m8-1a-r4-${info.project.name}.png`;
+  const path=process.env.ASM_BROWSER_REPORT_DIR?resolve(process.env.ASM_BROWSER_REPORT_DIR,image):info.outputPath(image);
+  await panel.screenshot({path});
+  await info.attach(image,{path,contentType:'image/png'});
+  console.log('M8.1A-R4 Chromium '+info.project.name+' '+JSON.stringify({
+   request:firstId,quote:previous.quote_id,code:previous.code,expires_at:previous.expires_at,
+   status:expected.status,reason:expected.reason,previous_status:sentView.status,replay,
+  }));
+ });
 });
 
 test('@narrow M6.3C agrees B before A and preserves the first reply and planned session',async({page,context},info)=>{

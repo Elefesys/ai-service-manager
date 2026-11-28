@@ -650,6 +650,84 @@ async def test_r3_legacy_percent_replay_preserves_delivery_and_decline(
     assert triples == (0, 0, 0) and money == {"obligations": 0, "receipts": 0}
 
 
+@pytest.mark.parametrize("legacy", [True, False], ids=["upgrade", "reprice"])
+async def test_r4_deposit_clarification_preserves_sent_delivery(scheduling_pg, auth, legacy):
+    h = scheduling_pg
+    token = await sign_in(auth)
+    if legacy:
+        await _migrate("downgrade", "0037")
+    try:
+        url, old = await send_terms(
+            h, auth, token, "PERCENT_DEPOSIT", fixed_price(9 if legacy else 100_000), percent=5
+        )
+        sent = await read(h, auth, url)
+        issued = await delivery(h, old)
+        before = await quote_deliveries(h, old)
+        assert sent == {"quote": old, "status": "SENT", "reason": None}
+        assert len(before) == 1 and before[0]["outbox_id"] == issued["outbox_id"]
+    finally:
+        if legacy:
+            await _migrate("upgrade", "0038")
+    if not legacy:
+        await publish(h, terms("PERCENT_DEPOSIT", fixed_price(9), percent=5))
+
+    views = []
+    for _ in range(2):
+        assert (await price(auth, url + "/pricing", token))["amount_minor"] == 9
+        await request_assessment(auth, url + "/assessment", token)
+        response = await auth.client.get(url + "/quote")
+        views.append({"http": response.status_code, "body": response.json()})
+
+    transport = DeliveryWire(h)
+    worker = Worker(h.kernel, transport)
+    after = await quote_deliveries(h, old)
+    await run_pending_quote_deliveries(h, worker, after)
+    reply = await worker_reply(h, worker, f"Принимаю {old['code']}")
+    agreements = await counts(h)
+    money = await money_counts(h)
+    proof(
+        "r4-upgrade" if legacy else "r4-reprice",
+        original=old,
+        before=before,
+        after=after,
+        view=views[0],
+        reply=reply,
+        calls=transport.calls,
+        effects=transport.effects,
+        counts=dict(zip(("acceptances", "orders", "sessions"), agreements, strict=True)),
+        money=money,
+    )
+    expected = {
+        "quote": None,
+        "status": "NEEDS_CLARIFICATION",
+        "reason": "DEPOSIT_TERMS_UNCLEAR",
+        "previous": sent,
+    }
+    assert views == [{"http": 200, "body": expected}] * 2
+    assert await read(h, auth, url) == expected | {
+        "reply_notice": {"outcome": "STALE", "message_id": reply["message_id"]},
+    }
+    assert reply["outcome"] == "STALE" and reply["quote_id"] == old["quote_id"]
+    assert before == after == await quote_deliveries(h, old)
+    assert await delivery(h, old) == issued
+    assert (transport.calls, transport.effects) == (0, 0)
+    assert agreements == (0, 0, 0) and money == {"obligations": 0, "receipts": 0}
+
+
+async def test_r4_deposit_clarification_without_previous_quote(scheduling_pg, auth):
+    token = await sign_in(auth)
+    url = await draft_terms(
+        scheduling_pg, auth, token, "PERCENT_DEPOSIT", fixed_price(9), percent=5
+    )
+    await price(auth, url + "/pricing", token)
+    await request_assessment(auth, url + "/assessment", token)
+    assert await read(scheduling_pg, auth, url) == {
+        "quote": None,
+        "status": "NEEDS_CLARIFICATION",
+        "reason": "DEPOSIT_TERMS_UNCLEAR",
+    }
+
+
 @pytest.mark.parametrize("status", ["RELEASED", "EXPIRED"])
 async def test_r1_first_open_of_inactive_replacement(scheduling_pg, auth, monkeypatch, status):
     h = scheduling_pg
