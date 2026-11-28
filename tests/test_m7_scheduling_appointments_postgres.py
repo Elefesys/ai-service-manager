@@ -503,7 +503,7 @@ async def test_s4_legacy_hold_expires_while_waiting_for_resource(scheduling_pg, 
         legacy = await pick(h, first, choice(first_offer, 0), "legacy-choice")
         assert isinstance(legacy, HoldResult) and legacy.outcome == "HELD"
     finally:
-        await _migrate("upgrade", "0037")
+        await _migrate("upgrade", "0038")
     before = await client_effects(h)
     assert (await booking(auth, first))["outcome"] == "HELD"
     expiry = legacy.expires_at
@@ -604,8 +604,8 @@ async def test_s5_0033_upgrade_preserves_operational_facts(scheduling_pg, auth):
         assert isinstance(block, CalendarBlock)
         original = await durable_calendar(h)
     finally:
-        await _migrate("upgrade", "0037")
-    assert (await scalar(h, "SELECT platform.scheduling_intent_schema_profile()"))["valid"]
+        await _migrate("upgrade", "0038")
+    assert (await scalar(h, "SELECT platform.payment_obligation_schema_profile()"))["valid"]
     assert await durable_calendar(h) == original
     assert not await scalar(
         h,

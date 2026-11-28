@@ -55,9 +55,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0037"
-NATIVE_CONTEXT_PROFILE_SHA256 = "91923a224190e212d3731ba2821bb58889a40a4a2a69d254268fb0b40a866608"
-NATIVE_PROFILE_BODY_SHA256 = "e2764dac3006d15df4c8b92212daa3889262cc93bb22c5f3a575f7c28c4aa3eb"
+DATABASE_SCHEMA_REVISION = "0038"
+NATIVE_CONTEXT_PROFILE_SHA256 = "04ff0becf89d4d64797d6fa9dd9dccc95d32456f2b30638d63db9bd078a3d8f1"
+NATIVE_PROFILE_BODY_SHA256 = "98159969ac96c1a4859404a3ac916a8ae784facdde2696b946dec14533a83738"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -94,7 +94,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.scheduling_intent_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.payment_obligation_schema_profile()')
             """)
             )
         )
@@ -282,6 +282,7 @@ def create_app(
     portfolio_vision: "VisionClient | None" = None,
     portfolio_embeddings: "EmbeddingClient | None" = None,
 ) -> FastAPI:
+    from asm.client_payments.http import install_client_payments
     from asm.configuration.http import install_configuration
     from asm.conversations.escalation_http import install_escalations
     from asm.conversations.http import install_control
@@ -375,6 +376,7 @@ def create_app(
     install_intake(app, auth, config)
     install_service_requests(app, auth, config)
     install_scheduling(app, auth, config)
+    install_client_payments(app, auth, config)
     install_knowledge(app, auth, config, embeddings=knowledge_embeddings)
     app.state.portfolio_service = portfolio
     install_portfolio(app, portfolio, config)

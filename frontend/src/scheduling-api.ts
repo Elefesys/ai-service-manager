@@ -204,7 +204,10 @@ export function sessionPath(scope: SchedulingScope) {
 export const sessionReferences = ({client, quote, order}: SchedulingScope) =>
   ({client_id: client, quote_id: quote, order_id: order});
 
-export async function schedulingRequest(path: string, signal: AbortSignal, init?: RequestInit): Promise<unknown> {
+export async function schedulingRequest(
+  path: string, signal: AbortSignal, init?: RequestInit,
+  conflictCodes: readonly string[] = ['STALE_STATE', 'CALENDAR_CONFLICT'],
+): Promise<unknown> {
   const response = await fetch(path, {
     ...init, credentials: 'include', cache: 'no-store',
     signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
@@ -215,7 +218,7 @@ export async function schedulingRequest(path: string, signal: AbortSignal, init?
     const affected = error?.affected;
     const safe = Array.isArray(affected) ? affected.filter((item): item is AffectedAllocation =>
       record(item) && uuid(item.id) && (item.kind === 'BLOCK' || item.kind === 'APPOINTMENT' || item.kind === 'HOLD')) : [];
-    const code = response.status === 409 && (error?.code === 'STALE_STATE' || error?.code === 'CALENDAR_CONFLICT')
+    const code = response.status === 409 && typeof error?.code === 'string' && conflictCodes.includes(error.code)
       ? error.code : 'SCHEDULING_REQUEST_FAILED';
     throw new SchedulingError(response.status, code, safe);
   }
@@ -248,6 +251,10 @@ export const schedulingApi = {
 };
 
 export const utcOffset = (value: string) => `UTC${value.endsWith('Z') ? '+00:00' : value.slice(-6)}`;
+
+export function deadlineText(value: string) {
+  return `${value.slice(0, 10)} ${value.slice(11, 19)} · ${utcOffset(value)}`;
+}
 
 export function timeInterval(start: string, end: string, date: string) {
   const time = (value: string) => `${value.startsWith(date) ? '' : `${value.slice(0, 10)} `}${value.slice(11, 16)}`;

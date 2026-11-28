@@ -262,16 +262,26 @@ function checkQuote(value:unknown,scope:IntakeScope,requestId:string){
    ||typeof quote.code!=='string'||!/^Q-[0-9A-F]{10}$/.test(quote.code)
    ||!instant(quote.created_at)||!instant(quote.expires_at)||quote.created_at>=quote.expires_at
    ||!text(quote.text,4096)||typeof quote.text!=='string'||!quote.text.endsWith(`\nПринимаю ${quote.code}`))return invalid();
+ const hasPrepayment = typeof quote.material === 'object' && quote.material !== null && Object.hasOwn(quote.material, 'percent_prepayment');
  const basis=object(quote.material,['workspace_id','business_id','conversation_id','client_id','request_id','request_revision',
   'service_id','service_name','facts','intent_source','complex_work','release_id','activation_version','assessment_id',
   'assessment_reason','price_calculation_id','price_reason','approval_id','decision_id','price_reference_id',
-  'duration_reference_id','currency','amount_minor','price_range','occupied_minutes','deposit_terms_version','deposit','conditions']);
+  'duration_reference_id','currency','amount_minor','price_range','occupied_minutes','deposit_terms_version','deposit','conditions',
+  ...(hasPrepayment ? ['percent_prepayment'] : [])]);
  if(!inConversation(basis,scope)||basis.request_id!==requestId||!uuid(basis.request_id)||!decimal(basis.request_revision,false)
    ||!uuid(basis.price_calculation_id)||!uuid(basis.assessment_id)||!nullable(basis.decision_id,uuid)
    ||!uuid(basis.price_reference_id)||![basis.price_calculation_id,basis.decision_id].includes(basis.price_reference_id)
    ||!uuid(basis.duration_reference_id)||![basis.assessment_id,basis.decision_id].includes(basis.duration_reference_id)
    ||basis.currency!=='RUB'||!positiveWithin(basis.occupied_minutes,10080)
    ||(basis.amount_minor===null)===(basis.price_range===null))return invalid();
+ if (hasPrepayment) {
+  const prepayment = object(basis.percent_prepayment, ['amount_minor', 'rounding_version']);
+  const deposit = object(basis.deposit, ['mode', 'amount_minor', 'percent']);
+  if (prepayment.rounding_version !== 'HALF_UP_V1' || !positiveWithin(prepayment.amount_minor, 100000000000) ||
+    deposit.mode !== 'PERCENT_DEPOSIT' || !positiveWithin(deposit.percent, 100) ||
+    !positiveWithin(basis.amount_minor, 100000000000) ||
+    prepayment.amount_minor !== Math.floor(((basis.amount_minor as number) * (deposit.percent as number) + 50) / 100)) return invalid();
+ }
  checkIntentSource(basis.intent_source);
  if(basis.price_range===null){
   if(!positiveWithin(basis.amount_minor,100000000000))return invalid();
@@ -292,7 +302,7 @@ export function parseQuoteDelivery(value:unknown,scope:IntakeScope,requestId:str
  if((response.quote!==null)!==quoteExpected)return invalid();
  if(quoteExpected)checkQuote(response.quote,scope,requestId);
  if(has('previous')){
-  if(response.status!=='NEEDS_CLARIFICATION'||response.reason!=='EXACT_PRICE_REQUIRED')return invalid();
+  if(response.status!=='NEEDS_CLARIFICATION'||!one(response.reason,['EXACT_PRICE_REQUIRED','DEPOSIT_TERMS_UNCLEAR']))return invalid();
   const previous=object(response.previous,['quote','status','reason']);
   if(!one(previous.status,quoteDeliveryStatuses)||!quoteReason(previous.reason))return invalid();
   checkQuote(previous.quote,scope,requestId);

@@ -116,7 +116,7 @@ function Agreement({agreement,draft,csrf,expired,calendar}:{agreement:QuoteAgree
    <summary>Принятые условия · {quote.code}</summary>
    <QuoteTerms quote={quote} revision={draft.revision}/>
   </details>
-  <SessionBooking scope={schedulingScope} expired={expired} refresh={calendar?.refresh} actions={calendar?.actions}/>
+  <SessionBooking scope={schedulingScope} expired={expired} refresh={calendar?.refresh} csrf={calendar ? csrf : undefined} actions={calendar?.actions}/>
   <SchedulingAvailability scope={schedulingScope} csrf={csrf} expired={expired} calendar={calendar} workName={draft.facts.find(fact=>fact.field==='idea')?.value}/>
  </section>;
 }

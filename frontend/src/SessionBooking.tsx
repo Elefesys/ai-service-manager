@@ -1,15 +1,14 @@
 import {useEffect, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
+import {PaymentObligation} from './PaymentObligation';
 import {IntakeError} from './intake-api';
-import {schedulingApi, timeInterval, utcOffset} from './scheduling-api';
+import {deadlineText, schedulingApi, timeInterval} from './scheduling-api';
 import type {Booking, SessionBookingView, SchedulingScope} from './scheduling-api';
 
-type Props = {scope: SchedulingScope; expired: () => void; refresh?: number; actions?: (booking: Booking | null) => ReactNode};
+type Props = {scope: SchedulingScope; expired: () => void; refresh?: number; csrf?: string; actions?: (booking: Booking | null) => ReactNode};
 type Reading = {key: string} & ({view: SessionBookingView} | {error: string});
 
-export function deadlineText(value: string) {
-  return `${value.slice(0, 10)} ${value.slice(11, 19)} · ${utcOffset(value)}`;
-}
+export {deadlineText} from './scheduling-api';
 
 function BookingDetails({booking}: {booking: Booking | null}) {
   if (booking === null) return <p>Время визита ещё не назначено.</p>;
@@ -42,7 +41,7 @@ function BookingHistory({history}: Pick<SessionBookingView, 'history'>) {
   </details>;
 }
 
-export function SessionBooking({scope: {workspace, business, conversation, client, request, quote, order, session}, expired, refresh = 0, actions}: Props) {
+export function SessionBooking({scope: {workspace, business, conversation, client, request, quote, order, session}, expired, refresh = 0, csrf, actions}: Props) {
   const key = [workspace, business, conversation, client, request, quote, order, session].join('/');
   const [reading, setReading] = useState<Reading | null>(null);
 
@@ -83,6 +82,10 @@ export function SessionBooking({scope: {workspace, business, conversation, clien
       {current === null ? <p>Проверяем состояние записи…</p> :
         'error' in current ? <p role="alert">{current.error}</p> : <>
           <BookingDetails booking={current.view.booking}/>
+          {csrf && booking && 'expires_at' in booking &&
+            <PaymentObligation key={`${key}/${booking.hold_id}`}
+              scope={{workspace, business, conversation, client, request, quote, order, session}}
+              booking={booking} csrf={csrf} expired={expired}/>}
           <BookingHistory history={current.view.history}/>
           {actions?.(current.view.booking)}
         </>}

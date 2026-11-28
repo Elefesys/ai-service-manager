@@ -157,36 +157,45 @@ EXACT_PRICE_CLARIFICATION = {
     "status": "NEEDS_CLARIFICATION",
     "reason": "EXACT_PRICE_REQUIRED",
 }
+DEPOSIT_CLARIFICATION = EXACT_PRICE_CLARIFICATION | {"reason": "DEPOSIT_TERMS_UNCLEAR"}
 
 
+@pytest.mark.parametrize("clarification", [EXACT_PRICE_CLARIFICATION, DEPOSIT_CLARIFICATION])
 @pytest.mark.parametrize(
     ("status", "reason"),
     [("DISPATCHING", None), ("SENT", None), ("UNKNOWN", "UNKNOWN_EXTERNAL_RESULT")],
 )
-def test_read_quote_preserves_delivery_separately_from_current_clarification(status, reason):
+def test_read_quote_preserves_delivery_separately_from_current_clarification(
+    status, reason, clarification
+):
     snapshot = delivery_snapshot(status, reason)
     current = QuoteDeliveryView.model_validate(snapshot)
     assert current.model_dump(mode="json") == snapshot
-    blocked = EXACT_PRICE_CLARIFICATION | {"previous": snapshot}
+    blocked = clarification | {"previous": snapshot}
     assert QuoteDeliveryView.model_validate(blocked).model_dump(mode="json") == blocked
 
 
-def test_previous_snapshot_requires_current_exact_price_clarification():
+def test_previous_snapshot_requires_supported_clarification():
     previous = delivery_snapshot("SENT")
-    with pytest.raises(ValidationError, match="Previous delivery requires an exact price"):
+    with pytest.raises(ValidationError, match="Previous delivery requires"):
         QuoteDeliveryView.model_validate(previous | {"previous": previous})
+    with pytest.raises(ValidationError, match="Previous delivery requires"):
+        QuoteDeliveryView.model_validate(
+            EXACT_PRICE_CLARIFICATION | {"reason": "APPROVAL_CLARIFICATION", "previous": previous}
+        )
     with pytest.raises(ValidationError):
         QuoteDeliveryView.model_validate(
             EXACT_PRICE_CLARIFICATION | {"previous": EXACT_PRICE_CLARIFICATION}
         )
 
 
-async def test_owner_read_rejects_previous_quote_from_a_different_work():
+@pytest.mark.parametrize("clarification", [EXACT_PRICE_CLARIFICATION, DEPOSIT_CLARIFICATION])
+async def test_owner_read_rejects_previous_quote_from_a_different_work(clarification):
     previous = delivery_snapshot("SENT")
     previous["quote"]["material"]["request_id"] = uuid(11)
     unit = SimpleNamespace(
         context=SimpleNamespace(workspace_id=UUID(uuid(1))),
-        quote_owner_read=AsyncMock(return_value=EXACT_PRICE_CLARIFICATION | {"previous": previous}),
+        quote_owner_read=AsyncMock(return_value=clarification | {"previous": previous}),
     )
     repository = ServiceRequestRepository(unit)
     with pytest.raises(ServiceRequestError) as caught:

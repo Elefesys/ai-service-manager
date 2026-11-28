@@ -804,6 +804,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0035", "scheduling_reschedule_schema_profile"),
         ("0036", "scheduling_owner_day_schema_profile"),
         ("0037", "scheduling_intent_schema_profile"),
+        ("0038", "payment_obligation_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -858,6 +859,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0035", "scheduling_reschedule_schema_profile", 440, 439),
         ("0036", "scheduling_owner_day_schema_profile", 442, 441),
         ("0037", "scheduling_intent_schema_profile", 453, 452),
+        ("0038", "payment_obligation_schema_profile", 456, 455),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -892,7 +894,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
-    profile_name = "platform.scheduling_intent_schema_profile()"
+    profile_name = "platform.payment_obligation_schema_profile()"
     if not body_matches:
         expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
@@ -3770,6 +3772,11 @@ APPOINTMENT_PROOF_PATHS = HOLD_PROOF_PATHS | {
     "tests/test_m7_scheduling_appointments_postgres.py",
 }
 SCHEDULING_PROOF_PATHS = {
+    "payment_obligation": {
+        "backend/src/asm/client_payments/http.py",
+        "frontend/e2e/intake-duration.spec.ts",
+        "tests/test_m8_payment_obligation_postgres.py",
+    },
     "scheduling_acceptance": {
         "docs/tasks/M7_3C_ACCEPTANCE.md",
         "scripts/m4_runtime_db.py",
@@ -3799,9 +3806,15 @@ SCHEDULING_PROOF_PATHS = {
 }
 
 
+def slice_prefix(feature):
+    if feature == "payment_obligation":
+        return "M8_PAYMENT_OBLIGATION"
+    return ("M7_" if feature in SCHEDULING_FEATURES else "M6_") + feature.upper()
+
+
 def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=False, damage=None):
     f = r["f"]
-    prefix = ("M7_" if feature in SCHEDULING_FEATURES else "M6_") + feature.upper()
+    prefix = slice_prefix(feature)
     branch = getattr(carrier, prefix + "_BRANCH")
     migration_path = getattr(carrier, prefix + "_MIGRATION")
     if migration_path is None:
@@ -3835,7 +3848,7 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         migration.parent.mkdir(parents=True, exist_ok=True)
         migration.write_text(f"revision = '{revision}'\n")
     if protected:
-        handoff = "M7" if feature in SCHEDULING_FEATURES else "M6"
+        handoff = prefix.split("_", 1)[0]
         (f.root / f"docs/tasks/{handoff}_HANDOFF.md").write_text("changed assignment\n")
     outside = {
         "extra_file": "outside-scope.md",
@@ -3897,6 +3910,7 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         ("owner_day", "0036"),
         ("scheduling_intents", "0037"),
         ("scheduling_acceptance", "0037"),
+        ("payment_obligation", "0038"),
     ],
 )
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
@@ -3910,7 +3924,7 @@ def test_milestone_slice_admits_exact_assignment_and_selects_runtime(
     admitted = json.loads((evidence / "source-admission.json").read_text())
     source = json.loads((evidence / "source.json").read_text())
     tree = r["f"].git("rev-parse", head + "^{tree}")
-    prefix = ("M7_" if feature in SCHEDULING_FEATURES else "M6_") + feature.upper()
+    prefix = slice_prefix(feature)
     assignment = prefix.lower() + "_assignment"
     candidate = prefix.lower() + "_candidate"
     assert admitted[assignment] == source[assignment]
@@ -4040,6 +4054,37 @@ def test_m7_booking_refuses_ineligible_source(
         (carrier.Refusal, catalog.Refusal),
         match=f"^{reason.format(prefix='M7_' + feature.upper())}$",
     ):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+    assert not (r["root"] / "evidence/source-admission.json").exists()
+
+
+@pytest.mark.parametrize(
+    "route,damage,reason",
+    [
+        ("same-repository-pr-merge", "branch", "POLZA_RUNTIME_EVENT_BRANCH"),
+        ("same-repository-pr-merge", "base", "M8_PAYMENT_OBLIGATION_EVENT"),
+        ("same-repository-pr-merge", "protected", "M8_PAYMENT_OBLIGATION_WRITE_SET"),
+        ("main-push", "single_parent", "M8_PAYMENT_OBLIGATION_MERGE_PARENTS"),
+        ("main-push", "merge_tree", "M8_PAYMENT_OBLIGATION_MERGE_TREE"),
+        ("main-push", "assignment_tree", "M8_PAYMENT_OBLIGATION_ASSIGNMENT_IDENTITY"),
+        ("main-push", "historical_migration", "M8_PAYMENT_OBLIGATION_WRITE_SET"),
+    ],
+)
+def test_m8_payment_obligation_refuses_ineligible_source(
+    r11_event, monkeypatch, route, damage, reason
+):
+    r = r11_event
+    prepare_slice_event(
+        r,
+        monkeypatch,
+        route,
+        "payment_obligation",
+        "0038",
+        protected=damage == "protected",
+        damage=damage,
+    )
+    with pytest.raises((carrier.Refusal, catalog.Refusal), match=f"^{reason}$"):
         r["run"]()
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
     assert not (r["root"] / "evidence/source-admission.json").exists()

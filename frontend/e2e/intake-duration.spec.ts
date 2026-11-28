@@ -1479,7 +1479,7 @@ test('@narrow M6.3B sends each selected work once, including the later owner dec
 });
 
 test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after restart',async({page},info)=>{
- test.setTimeout(120000);
+ test.setTimeout(150000);
  const variant=info.project.name==='chromium-narrow'?'narrow':'desktop';
  const app=await beginQuoteJourney(page,variant,'quote-guard');
  const {conversation,intake,inbox,settings,serviceName,panel,firstId,execute,read,evaluateAndPrice}=app;
@@ -1516,6 +1516,58 @@ test('@narrow M6.3B shows a takeover hold and an unconfirmed delivery after rest
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  const clarification=variant==='narrow'?await confirmExactQuote(page,app,range,'UNKNOWN','FULL_PREPAYMENT'):null;
  console.log('M6.3B R1 Chromium '+info.project.name+' '+JSON.stringify({conversation,request:firstId,held,checkpoints,unknown,restarted,clarification}));
+
+ await test.step('M8.1A-R4 shows deposit clarification with the sent quote in history',async()=>{
+  if(variant==='desktop')await resumeQuote(page);
+  if(!await settings.isVisible())await page.getByRole('button',{name:/Synthetic business/}).click();
+  await settings.getByLabel('Режим цены 1',{exact:true}).selectOption('FIXED');
+  const amount=settings.getByLabel('Цена, копейки 1',{exact:true});
+  await amount.fill('100000');
+  await settings.getByRole('combobox',{name:'Режим предоплаты 1',exact:true}).selectOption('PERCENT_DEPOSIT');
+  await settings.getByLabel('Предоплата, процент 1',{exact:true}).fill('5');
+  await publishIntakeService(settings,serviceName);
+  await refreshIntake(inbox,intake);
+  const previous=await evaluateAndPrice(firstId);
+  expect(previous.material).toMatchObject({amount_minor:100000,deposit:{mode:'PERCENT_DEPOSIT',percent:5},
+   percent_prepayment:{amount_minor:5000,rounding_version:'HALF_UP_V1'}});
+  expect(await execute('deliver-quote',firstId)).toMatchObject({quote_id:previous.quote_id,status:'SENT',calls:1,effects:1,text:previous.text});
+  const sentView=await read(firstId,'SENT');
+  expect(sentView).toEqual({quote:previous,status:'SENT',reason:null});
+  const before=(await app.readHistory()).filter(message=>message.direction==='OUTBOUND');
+
+  await amount.fill('9');
+  await publishIntakeService(settings,serviceName);
+  await refreshIntake(inbox,intake);
+  const expected={quote:null,status:'NEEDS_CLARIFICATION',reason:'DEPOSIT_TERMS_UNCLEAR',previous:sentView};
+  for(let repeat=0;repeat<2;repeat++){
+   for(const command of ['pricing','assessment']){
+    const posted=page.waitForResponse(response=>response.request().method()==='POST'
+     &&new URL(response.url()).pathname===`${app.endpoint}/${firstId}/${command}`);
+    await (command==='pricing'?app.price:app.work.getByRole('button',{name:/^(Оценить заявку|Пересчитать оценку)$/})).click();
+    const response=await posted;
+    expect(response.status()).toBe(200);
+    if(command==='pricing')expect(await response.json()).toMatchObject({amount_minor:9});
+   }
+   expect(await read(firstId,'NEEDS_CLARIFICATION')).toEqual(expected);
+  }
+  const prior=panel.getByRole('region',{name:'Предыдущая версия',exact:true});
+  await expect(panel.getByText('Уточните условия предоплаты.',{exact:true})).toBeVisible();
+  await expect(prior.getByText(previous.code,{exact:true})).toBeVisible();
+  await expect(prior.getByRole('status')).toHaveText('Предложение отправлено клиенту');
+  expect(await prior.getByTestId('quote-text').textContent()).toBe(previous.text);
+  const replay=await execute('deliver-quote',firstId);
+  expect(replay).toMatchObject({quote_id:previous.quote_id,status:'SENT',job_claimed:false,calls:0,effects:0,text:null});
+  expect((await app.readHistory()).filter(message=>message.direction==='OUTBOUND')).toEqual(before);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  const image=`m8-1a-r4-${info.project.name}.png`;
+  const path=process.env.ASM_BROWSER_REPORT_DIR?resolve(process.env.ASM_BROWSER_REPORT_DIR,image):info.outputPath(image);
+  await panel.screenshot({path});
+  await info.attach(image,{path,contentType:'image/png'});
+  console.log('M8.1A-R4 Chromium '+info.project.name+' '+JSON.stringify({
+   request:firstId,quote:previous.quote_id,code:previous.code,expires_at:previous.expires_at,
+   status:expected.status,reason:expected.reason,previous_status:sentView.status,replay,
+  }));
+ });
 });
 
 test('@narrow M6.3C agrees B before A and preserves the first reply and planned session',async({page,context},info)=>{
@@ -2433,6 +2485,8 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await expect(settings).toBeVisible();
   await settings.getByRole('combobox', {name: 'Режим предоплаты 1', exact: true}).selectOption('FIXED_DEPOSIT');
   await settings.getByLabel('Предоплата, копейки 1', {exact: true}).fill('50000');
+  await settings.getByLabel('Режим цены 1', {exact: true}).selectOption('FIXED');
+  await settings.getByLabel('Цена, копейки 1', {exact: true}).fill('400000');
   await publishIntakeService(settings, serviceName);
   await refreshIntake(inbox, intake);
   await workSelector.selectOption(secondId);
@@ -2539,15 +2593,40 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
     return booking;
   }
   await expect(ownerTab.getByText('Выберите диалог.', {exact: true})).toBeVisible();
+  const paymentRequests: Request[] = [];
+  ownerTab.on('request', request => {
+    if (new URL(request.url()).pathname.endsWith('/payment-obligation')) paymentRequests.push(request);
+  });
+  const paymentPanel = current(ownerTab).getByTestId('payment-obligation');
   const original = await checkWork(ownerTab, a, first.appointment_id, 'CONFIRMED');
+  await expect(paymentPanel).toHaveCount(0);
+  expect(paymentRequests).toHaveLength(0);
   const heldBefore = await checkWork(ownerTab, b, held.hold_id, 'HELD');
   expect(Date.parse(rowTime(heldBefore.booking))).toBe(Date.parse(held.expires_at));
   await expect(current(ownerTab)).toContainText('13:00–14:05');
+  await expect(paymentPanel).toContainText('Цена 4 000 ₽ · фиксированная предоплата 500 ₽ · удержано до');
+  await expect(paymentPanel).toContainText('оплата ещё не получена');
+  const obligation = await paymentPanel.getAttribute('data-obligation-id');
+  expect(obligation).toBeTruthy();
+  await expect(paymentPanel).toHaveAttribute('data-payment-status', 'UNPAID');
+  const holdDeadline = await paymentPanel.locator('time').getAttribute('datetime');
+  expect(Date.parse(holdDeadline!)).toBe(Date.parse(held.expires_at));
+  await expect(paymentPanel.locator('time')).toHaveText(await current(ownerTab).locator('time').first().textContent() ?? '');
   await selectDay(ownerTab, offDay);
   await expect(open(ownerTab).getByText('На этот день нет действующей занятости.', {exact: true})).toBeVisible();
   await ownerTab.reload();
   await openCalendar(ownerTab);
   await selectDay(ownerTab, day);
+  await checkWork(ownerTab, b, held.hold_id, 'HELD');
+  await expect(paymentPanel).toHaveAttribute('data-obligation-id', obligation!);
+  await expect(paymentPanel.locator('time')).toHaveAttribute('datetime', holdDeadline!);
+  await expect(paymentPanel).toContainText('Цена 4 000 ₽ · фиксированная предоплата 500 ₽');
+  const image = `m8-1a-${info.project.name}.png`;
+  const path = process.env.ASM_BROWSER_REPORT_DIR
+    ? resolve(process.env.ASM_BROWSER_REPORT_DIR, image)
+    : info.outputPath(image);
+  await current(ownerTab).screenshot({path});
+  await info.attach(image, {path, contentType: 'image/png'});
   await checkWork(ownerTab, a, first.appointment_id, 'CONFIRMED');
 
   async function postThrough(tab: Page, path: string, trigger: () => Promise<unknown>, status = 200) {
@@ -2680,6 +2759,15 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await workCard(ownerTab).getByRole('button', {name: 'Варианты времени', exact: true}).click();
   await expect(preview.getByRole('list', {name: 'Подходящие окна'})).toContainText('Визит 13:00–14:05');
   expect(await outgoing()).toEqual(sentBefore);
+  expect(paymentRequests.filter(request => request.method() === 'POST')).toHaveLength(1);
+  await expect(paymentPanel).toHaveAttribute('data-obligation-id', obligation!);
+  await expect(paymentPanel).toContainText('оплата ещё не получена');
+  await expect(paymentPanel.locator('time')).toHaveCount(0);
+  console.log('M8.1A P1 Chromium ' + info.project.name + ' ' + JSON.stringify({
+    hold: held.hold_id, allocation: held.allocation_id, quote: b.refs.quote_id, order: b.refs.order_id,
+    session: b.session, obligation, price_minor: 400000, amount_minor: 50000,
+    expires_at: holdDeadline, mutation_requests: 1, reloaded: true, none_appointment: first.appointment_id,
+  }));
   for (const tab of [ownerTab, otherTab]) expect(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 
   console.log('M7.3A S7 Chromium ' + info.project.name + ' ' + JSON.stringify({
