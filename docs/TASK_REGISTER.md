@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M8.1B IN_PROGRESS · C7 · 2026-11-28
+## CURRENT — M8.1B-R1 IN_PROGRESS · C7 · 2026-11-28
 
-Одна активная выдача — ссылка на предоплату за выбранное время. Для первого показа клиент получает ссылку на 500 ₽ в своём диалоге. Повтор возвращает ту же попытку, а после истечения Hold отложенное сообщение со ссылкой не уходит. Ветка `c7/m8-1b-hosted-checkout`, база `main` `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, миграция `0039_payment_checkout_attempts.py` поверх `0038`. Ведущий C7, доставка C3, C6 по необходимости. [Поручение P2](tasks/M8_HANDOFF.md#m8-1b) · [Пути](tasks/M8_HANDOFF.md#m8-1b-paths) · [Инструкция для тестового магазина](tasks/M8_HANDOFF.md#m8-1b-test-shop).
+В [Draft PR #74](https://github.com/Elefesys/ai-service-manager/pull/74) C7 и C3 исправляют выдачу одной ссылки на 500 ₽ в тестовый Telegram-диалог. На head `819d5a297e7c62d3683ad8f807fd652ef3d924da` штатный CI прошёл 12/12. Воркер требует подтверждения прав в новой транзакции ещё до того, как запросит их у Telegram. База `main` — `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, ветка `c7/m8-1b-hosted-checkout`, миграция кандидата `0039` поверх `0038`. Внешний тестовый магазин — `NOT RUN`. [Поручение C7 и критерии R1](tasks/M8_HANDOFF.md#m8-1b-r1).
 
 ## История — M8.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-28
 
