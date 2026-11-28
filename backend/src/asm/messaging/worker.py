@@ -281,12 +281,21 @@ class Worker:
         # If start commit ACK is lost, no permit reaches this code: recovery
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
         transport = self.telegram
+        if (
+            claim.kind in ("SEND_PAYMENT_LINK", "SEND_QUOTE_TEXT")
+            and transport is not None
+            and (not transport.synthetic_ai or transport.provider_runtime is not None)
+        ):
+            transport = None
         permit: SendPermit | TerminalRejection | ContextWorkResultBase
         if claim.kind == "SEND_PAYMENT_LINK":
+            telegram_allowed = transport is not None
             if self.checkout is None:
-                await self.database.checkout_provider_begin(claim, {})
+                await self.database.checkout_provider_begin(
+                    claim, {}, telegram_allowed=telegram_allowed
+                )
                 return
-            if not await self.checkout.prepare_link(claim):
+            if not await self.checkout.prepare_link(claim, telegram_allowed=telegram_allowed):
                 return
             await self.adapter.checkpoint("checkout_before_send")
             payment_probe = await self.database.checkout_send_probe(claim)
@@ -302,10 +311,6 @@ class Worker:
             )
             probe = None
         elif isinstance(claim, QuoteSendJobClaim):
-            if transport is not None and (
-                not transport.synthetic_ai or transport.provider_runtime is not None
-            ):
-                transport = None
             quote_probe = await self.database.quote_send_probe(claim)
             quote_observation = None
             if quote_probe is not None and transport is not None:

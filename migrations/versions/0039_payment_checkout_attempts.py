@@ -17,7 +17,7 @@ KIND = "SEND_PAYMENT_LINK"
 SCOPED = "platform.payment_obligation_scoped(uuid,jsonb,uuid,text,boolean)"
 REGISTER = "platform.payment_checkout_register_test_shop(uuid,uuid,text,text)"
 OWNER = "platform.payment_checkout_owner(jsonb,uuid,text,uuid)"
-PROVIDER_BEGIN = "platform.payment_checkout_provider_begin(uuid,uuid,jsonb)"
+PROVIDER_BEGIN = "platform.payment_checkout_provider_begin(uuid,uuid,jsonb,boolean)"
 PROVIDER_FINISH = "platform.payment_checkout_provider_finish(uuid,uuid,jsonb)"
 PROBE = "platform.payment_checkout_send_probe(uuid,uuid)"
 SEND = "platform.payment_checkout_send_begin(uuid,uuid,bigint,bigint,jsonb)"
@@ -267,6 +267,7 @@ FUNCTIONS = {
     GUARD: r"""CREATE FUNCTION platform.payment_checkout_delivery_block(a app.payment_checkout_attempts)
     RETURNS text LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
     DECLARE c app.conversations%ROWTYPE; conn app.channel_connections%ROWTYPE;
+      rights platform.telegram_connection_state%ROWTYPE;
       pick platform.scheduling_turn_actions%ROWTYPE;
     BEGIN
       PERFORM 1 FROM app.businesses WHERE (workspace_id,id,status)=(a.workspace_id,a.business_id,'ACTIVE') FOR SHARE;
@@ -275,7 +276,7 @@ FUNCTIONS = {
         WHERE (workspace_id,business_id,id,status)=(a.workspace_id,a.business_id,a.connection_id,'ACTIVE') FOR SHARE;
       IF NOT FOUND THEN RETURN 'CHANNEL_RIGHTS_UNAVAILABLE'; END IF;
       PERFORM platform.messaging_lock_billing_workspace(a.workspace_id);
-      PERFORM 1 FROM platform.telegram_connection_state
+      SELECT * INTO rights FROM platform.telegram_connection_state
         WHERE (workspace_id,connection_id)=(a.workspace_id,a.connection_id) FOR NO KEY UPDATE;
       SELECT * INTO c FROM app.conversations
         WHERE (workspace_id,business_id,id,client_id,connection_id)
@@ -296,8 +297,14 @@ FUNCTIONS = {
           THEN RETURN 'CONTEXT_CHANGED'; END IF;
       END IF;
       IF platform.payment_checkout_hold_live(a) IS NOT TRUE THEN RETURN 'HOLD_INACTIVE'; END IF;
+      -- Before a Telegram probe or an owner replay, use the last known rights on
+      -- this generation. The dispatch transaction separately requires a fresh observation.
       IF platform.messaging_manual_send_allowed(a.workspace_id) IS NOT TRUE
-        OR (conn.provider='TELEGRAM' AND platform.telegram_can_send(a.workspace_id,a.connection_id,c.id,true) IS NOT TRUE)
+        OR (conn.provider='TELEGRAM' AND (
+          rights.observed_generation IS DISTINCT FROM rights.generation OR rights.error_code IS NOT NULL
+          OR rights.is_enabled IS NOT TRUE OR rights.can_reply IS NOT TRUE
+          OR c.last_client_inbound_at IS NULL OR clock_timestamp()>=c.last_client_inbound_at+interval '24 hours'
+        ))
         THEN RETURN 'CHANNEL_RIGHTS_UNAVAILABLE'; END IF;
       RETURN NULL;
     EXCEPTION WHEN SQLSTATE 'P2301' THEN RETURN 'CHANNEL_RIGHTS_UNAVAILABLE';
@@ -315,13 +322,18 @@ FUNCTIONS = {
         FOR NO KEY UPDATE;
       RETURN a;
     END $$""",
-    PROVIDER_BEGIN: r"""CREATE FUNCTION platform.payment_checkout_provider_begin(p_job uuid,p_claim uuid,p_shops jsonb)
+    PROVIDER_BEGIN: r"""CREATE FUNCTION platform.payment_checkout_provider_begin(
+      p_job uuid,p_claim uuid,p_shops jsonb,p_telegram_allowed boolean
+    )
     RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
     DECLARE j platform.messaging_jobs%ROWTYPE:=platform.messaging_guard(p_job,p_claim);
       a app.payment_checkout_attempts%ROWTYPE:=platform.payment_checkout_job_attempt(j); problem text;
       moment timestamptz;
     BEGIN
       IF a.shop_id IS DISTINCT FROM p_shops->>a.business_id::text THEN problem:='STORE_UNAVAILABLE';
+      ELSIF p_telegram_allowed IS NOT TRUE AND EXISTS(SELECT 1 FROM app.channel_connections
+        WHERE (workspace_id,id,provider)=(a.workspace_id,a.connection_id,'TELEGRAM'))
+        THEN problem:='CHANNEL_RIGHTS_UNAVAILABLE';
       ELSIF a.status IN ('NO_LINK','CANCELED','BLOCKED') THEN
         PERFORM platform.messaging_reschedule(j.id,'NOT_ALLOWED',false); RETURN NULL;
       ELSIF a.status<>'WAITING' THEN
@@ -408,7 +420,9 @@ FUNCTIONS = {
             IS DISTINCT FROM (p_claim,p_generation,p_version)
             THEN RAISE EXCEPTION 'STALE_CLAIM' USING ERRCODE='P2001'; END IF;
           observation:=platform.telegram_save_observation(a.workspace_id,a.connection_id,p_generation,p_version,p_observation);
-          IF observation->>'code' IS DISTINCT FROM 'OBSERVED' THEN problem:='CHANNEL_RIGHTS_UNAVAILABLE'; END IF;
+          IF observation->>'code' IS DISTINCT FROM 'OBSERVED'
+            OR platform.telegram_can_send(a.workspace_id,a.connection_id,a.conversation_id,true) IS NOT TRUE
+            THEN problem:='CHANNEL_RIGHTS_UNAVAILABLE'; END IF;
         END IF;
       END IF;
       IF problem IS NULL THEN problem:=platform.payment_checkout_delivery_block(a); END IF;

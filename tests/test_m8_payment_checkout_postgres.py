@@ -1,14 +1,18 @@
 """P2 through real PostgreSQL, Console auth, scheduling and the messaging worker."""
 
 import asyncio
+import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
+from asm.messaging.database import worker_active
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.worker import Worker
+from asm.telegram.client import TelegramClient
 from generic_pg_schema import assert_current_schema, assert_schema
 from m5_knowledge_search_fixtures import owner_unit
 from m7_scheduling_fixtures import ZONE
@@ -16,6 +20,7 @@ from m8_payment_checkout_fixtures import (
     PaymentWire,
     ProviderWire,
     SimulatedCrash,
+    accept_telegram_work,
     accept_work,
     chat_choice,
     checkout_path,
@@ -30,7 +35,9 @@ from sqlalchemy import text
 from test_m2_1_models import event
 from test_m2_1_postgres import query
 from test_m2_1_schema_postgres import _migrate
+from test_m2_3_db_postgres import EXTERNAL
 from test_m3_1_native_context_postgres import claim_job, scalar
+from test_m4_reply_rights_postgres import connection, telegram
 from test_m4_runtime_postgres import owner
 from test_m7_scheduling_holds_postgres import backend_pid, command_http, offer, release
 from test_m7_scheduling_intents_postgres import (
@@ -108,6 +115,190 @@ async def modify(h, sql, **values):
 
 async def no_appointment(h):
     assert await scalar(h, "SELECT count(*) FROM app.appointments") == 0
+
+
+@pytest.mark.parametrize(
+    "scenario,post,observe,send,reason",
+    [
+        ("sent", 1, 1, 1, None),
+        ("denied", 1, 1, 0, "CHANNEL_RIGHTS_UNAVAILABLE"),
+        ("expired", 1, 1, 0, "HOLD_INACTIVE"),
+        ("transport", 0, 0, 0, "CHANNEL_RIGHTS_UNAVAILABLE"),
+        ("generation", 0, 0, 0, "CHANNEL_RIGHTS_UNAVAILABLE"),
+        ("window", 0, 0, 0, "CHANNEL_RIGHTS_UNAVAILABLE"),
+    ],
+)
+async def test_r1_telegram_checkout(scheduling_pg, auth, scenario, post, observe, send, reason):
+    h = scheduling_pg
+    token, work = await accept_telegram_work(h, auth)
+    hold = await hold_work(h, work, datetime.now(ZoneInfo(ZONE)).date() + timedelta(days=1))
+    deadline = hold.expires_at
+    provider = ProviderWire()
+    methods, messages = [], []
+
+    async def handler(request):
+        assert not worker_active()
+        assert request.method == "POST"
+        method = request.url.path.rsplit("/", 1)[-1]
+        methods.append(method)
+        body = json.loads(request.content)
+        assert body["business_connection_id"] == EXTERNAL
+        if method == "getBusinessConnection":
+            assert provider.objects
+            if scenario == "expired":
+                await scalar(
+                    h,
+                    "SELECT pg_sleep(greatest(extract(epoch FROM :deadline - clock_timestamp()),0)+0.02)",
+                    deadline=deadline,
+                )
+            return connection(reply=scenario != "denied")
+        assert method == "sendMessage" and body["chat_id"] == h.intake_scope["chat"]
+        messages.append(body["text"])
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "result": {
+                    "message_id": 91239,
+                    "chat": {"id": int(body["chat_id"]), "type": "private"},
+                    "business_connection_id": EXTERNAL,
+                },
+            },
+        )
+
+    client = telegram(handler)
+    if scenario == "transport":
+
+        class UnapprovedTransport(httpx.MockTransport):
+            pass
+
+        await client.aclose()
+        client = TelegramClient(client.settings, transport=UnapprovedTransport(handler))
+        assert not client.synthetic_ai
+    worker, adapter = await checkout_worker(h, provider, telegram_client=client)
+    try:
+        assert await scalar(
+            h,
+            """SELECT observed_generation=generation AND is_enabled AND can_reply
+                       AND observation_xid<>pg_current_xact_id()
+                 FROM platform.telegram_connection_state WHERE connection_id=:id""",
+            id=h.telegram_connection,
+        )
+        if scenario == "generation":
+            await modify(
+                h,
+                "UPDATE platform.telegram_connection_state SET generation=generation+1 WHERE connection_id=:id",
+                id=h.telegram_connection,
+            )
+        if scenario == "window":
+            await modify(
+                h,
+                "UPDATE app.conversations SET last_client_inbound_at=clock_timestamp()-interval '25 hours' WHERE id=:id",
+                id=UUID(work.selection.conversation_id),
+            )
+        if scenario == "expired":
+            # Leave time to start the probe, then cross the deadline within its budget.
+            deadline = await shorten_hold_fixture(h, hold, seconds=4)
+        initial = await open_checkout(auth, token, work, hold.hold_id, "telegram-r1")
+        assert initial.status_code == 200
+        (queued,) = await attempts(h)
+        assert (
+            queued["status"],
+            queued["delivery"],
+            queued["expires_at"],
+            queued["amount_minor"],
+        ) == ("QUEUED", "PENDING", deadline, 50_000)
+        await run_checkout(h, worker, queued)
+        (row,) = await attempts(h)
+        replay = await open_checkout(auth, token, work, hold.hold_id, "telegram-r1")
+        assert replay.status_code == 200
+        view = (await read_checkout(auth, work, hold.hold_id)).json()
+        assert view["checkout"] == replay.json()["checkout"]
+        link = replay.json()["confirmation_url"]
+        totals = provider.counters(worker.adapter)
+        proof(
+            f"telegram-{scenario}",
+            **row,
+            **totals,
+            get_business_connection=methods.count("getBusinessConnection"),
+            send_message=methods.count("sendMessage"),
+            telegram_delivered=len(messages),
+            replay_has_link=bool(link),
+        )
+        assert (row["reason"], row["delivery"]) == (reason, "SENT" if send else "FAILED")
+        assert totals == dict(
+            post=post, payment_get=0, shop_get=1, objects=post, send_calls=0, delivered=0
+        )
+        assert methods == ["getBusinessConnection"] * observe + ["sendMessage"] * send
+        assert len(messages) == send
+        assert row["id"] == queued["id"] and row["expires_at"] == deadline
+        assert replay.json()["checkout"]["id"] == str(queued["id"])
+        await no_appointment(h)
+        if not send:
+            assert link is None
+            if scenario == "denied":
+                assert await scalar(
+                    h,
+                    "SELECT can_reply IS FALSE FROM platform.telegram_connection_state WHERE connection_id=:id",
+                    id=h.telegram_connection,
+                )
+            return
+
+        label = deadline.astimezone(ZoneInfo(ZONE)).strftime("%d.%m.%Y %H:%M:%S")
+        assert bool(
+            link
+            and messages
+            == [f"Предоплата 500 ₽. Время удержано до {label} ({ZONE}).\nСсылка на оплату: {link}"]
+        )
+        assert "[скрыта]" in row["masked"] and "https://" not in row["masked"]
+        await modify(
+            h,
+            "UPDATE platform.telegram_connection_state SET observed_at=clock_timestamp()-interval '31 seconds' WHERE connection_id=:id",
+            id=h.telegram_connection,
+        )
+        await h.runtime.engine.dispose()
+        fresh_client = telegram(handler)
+        fresh, fresh_adapter = await checkout_worker(h, provider, telegram_client=fresh_client)
+        try:
+            repeated = await open_checkout(auth, token, work, hold.hold_id, "telegram-r1-new-key")
+            assert repeated.status_code == 200
+            assert bool(repeated.json()["confirmation_url"] == link)
+            assert repeated.json()["checkout"] == view["checkout"]
+            await fresh.database.recover_expired()
+            await fresh.run_once()
+            assert await attempts(h) == [row]
+            assert (
+                await scalar(
+                    h,
+                    "SELECT count(*) FROM platform.messaging_jobs WHERE kind='SEND_PAYMENT_LINK' AND status IN ('READY','RUNNING')",
+                )
+                == 0
+            )
+            await no_appointment(h)
+            restarted = provider.counters(fresh.adapter)
+            assert restarted == totals | {"shop_get": 2}
+            assert methods == ["getBusinessConnection", "sendMessage"] and len(messages) == 1
+            proof(
+                "telegram-restart",
+                id=row["id"],
+                outbox_id=row["outbox_id"],
+                expires_at=deadline,
+                post=0,
+                payment_get=0,
+                shop_get=1,
+                objects=0,
+                get_business_connection=0,
+                send_message=0,
+                telegram_delivered=0,
+                appointments=0,
+                replay_same_link=True,
+            )
+        finally:
+            await fresh_adapter.aclose()
+            await fresh_client.aclose()
+    finally:
+        await adapter.aclose()
+        await client.aclose()
 
 
 async def test_p2_choice_queues_while_owner_card_is_closed(scheduling_pg, auth):

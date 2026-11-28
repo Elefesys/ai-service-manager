@@ -13,9 +13,13 @@ from asm.messaging.database import worker_active
 from asm.messaging.errors import Code
 from asm.messaging.models import OutcomeKind, SendOutcome
 from asm.messaging.worker import Worker
-from m8_payment_obligation_fixtures import accept_terms, endpoint, fixed_price
+from m7_scheduling_fixtures import Work
+from m8_payment_obligation_fixtures import accept_terms, endpoint, fixed_price, terms
 from test_m3_1_native_context_postgres import claim_job
-from test_m6_pricing_postgres import sign_in
+from test_m6_pricing_postgres import draft_for_size, price, publish, sign_in
+from test_m6_quote_acceptance_postgres import new_reply, read, telegram_send
+from test_m6_service_assessments_api_postgres import request_assessment
+from test_m6_service_requests_api_postgres import route
 from test_m7_scheduling_holds_postgres import command_http
 from test_m7_scheduling_intents_postgres import SchedulingChat, configure_wide, offered, scope_for
 from test_tenancy_postgres import BA, A
@@ -128,12 +132,12 @@ class PaymentWire(ControlledAdapter):
         return outcome
 
 
-async def checkout_worker(h, provider, *, transport=None):
+async def checkout_worker(h, provider, *, transport=None, telegram_client=None):
     wire = transport or PaymentWire()
     adapter = YooKassa(environment="TEST", transport=httpx.MockTransport(provider.call))
     checkout = Checkout(h.kernel, adapter)
     assert await checkout.register((SHOP,)) == int(provider.confirmed)
-    return Worker(h.kernel, wire, checkout=checkout), adapter
+    return Worker(h.kernel, wire, telegram=telegram_client, checkout=checkout), adapter
 
 
 def checkout_path(work, hold, **overrides):
@@ -154,6 +158,22 @@ async def read_checkout(auth, work, hold, **overrides):
 async def accept_work(h, auth, *, amount=50_000):
     token = await sign_in(auth)
     work = await accept_terms(h, auth, token, "FIXED_DEPOSIT", fixed_price(400_000), amount=amount)
+    await configure_wide(h, auth, token, work)
+    return token, work
+
+
+async def accept_telegram_work(h, auth):
+    token = await sign_in(auth)
+    await publish(h, terms("FIXED_DEPOSIT", fixed_price(400_000), amount=50_000))
+    conversation, _, _, _, request = await draft_for_size(h, auth, token, "21 mm", telegram=True)
+    url = f"{route(conversation)}/{request}"
+    await price(auth, url + "/pricing", token)
+    await request_assessment(auth, url + "/assessment", token)
+    quote = (await read(h, auth, url))["quote"]
+    await telegram_send(h, quote)
+    reply = await new_reply(h, f"Принимаю {quote['code']}")
+    assert reply.quote_reply.outcome == "ACCEPTED"
+    work = Work(url, (await read(h, auth, url))["agreement"])
     await configure_wide(h, auth, token, work)
     return token, work
 

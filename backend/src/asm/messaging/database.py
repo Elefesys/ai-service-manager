@@ -558,11 +558,13 @@ class MessagingDatabase:
             )
             return registered is True
 
-    async def checkout_provider_begin(self, claim: JobClaim, shops: dict[str, str]) -> Any:
+    async def checkout_provider_begin(
+        self, claim: JobClaim, shops: dict[str, str], *, telegram_allowed: bool
+    ) -> Any:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             return await unit._execute(
-                "SELECT platform.payment_checkout_provider_begin(:job,:token,CAST(:shops AS jsonb))",
-                {"shops": json.dumps(shops)},
+                "SELECT platform.payment_checkout_provider_begin(:job,:token,CAST(:shops AS jsonb),:telegram_allowed)",
+                {"shops": json.dumps(shops), "telegram_allowed": telegram_allowed},
             )
 
     async def checkout_provider_finish(

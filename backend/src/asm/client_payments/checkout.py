@@ -21,13 +21,15 @@ class Checkout:
                 self.shops[shop.scope] = shop
         return len(self.shops)
 
-    async def prepare_link(self, claim: JobClaim) -> bool:
+    async def prepare_link(self, claim: JobClaim, *, telegram_allowed: bool) -> bool:
         registered = {
             str(business): shop.shop_id
             for (workspace, business), shop in self.shops.items()
             if workspace == claim.workspace_id
         }
-        operation = await self.database.checkout_provider_begin(claim, registered)
+        operation = await self.database.checkout_provider_begin(
+            claim, registered, telegram_allowed=telegram_allowed
+        )
         if operation is None:
             return False
         if operation["action"] == "SEND":
