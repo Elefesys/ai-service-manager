@@ -124,6 +124,8 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/availability-offers",
         f"GET {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/booking",
         f"GET {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/payment-obligation",
+        f"GET {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/payment-checkout",
+        f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/payment-checkout",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/payment-obligation",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/booking/{{appointment_id}}/reschedule-offers",
         f"POST {intake_prefix}/conversations/{{conversation_id}}/service-requests/{{request_id}}/sessions/{{session_id}}/booking/{{appointment_id}}/reschedule",

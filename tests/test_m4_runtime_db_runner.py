@@ -805,6 +805,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         ("0036", "scheduling_owner_day_schema_profile"),
         ("0037", "scheduling_intent_schema_profile"),
         ("0038", "payment_obligation_schema_profile"),
+        ("0039", "payment_checkout_schema_profile"),
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason, revision, name):
@@ -860,6 +861,7 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
         ("0036", "scheduling_owner_day_schema_profile", 442, 441),
         ("0037", "scheduling_intent_schema_profile", 453, 452),
         ("0038", "payment_obligation_schema_profile", 456, 455),
+        ("0039", "payment_checkout_schema_profile", 470, 469),
     ],
 )
 @pytest.mark.parametrize("field", ["functions", "others", "tables"])
@@ -894,7 +896,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
     from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
 
     expected = catalog.source_catalog(catalog.ROOT, DATABASE_SCHEMA_REVISION)
-    profile_name = "platform.payment_obligation_schema_profile()"
+    profile_name = "platform.payment_checkout_schema_profile()"
     if not body_matches:
         expected["functions"][profile_name]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
@@ -3772,6 +3774,12 @@ APPOINTMENT_PROOF_PATHS = HOLD_PROOF_PATHS | {
     "tests/test_m7_scheduling_appointments_postgres.py",
 }
 SCHEDULING_PROOF_PATHS = {
+    "payment_checkout": {
+        "backend/src/asm/client_payments/checkout.py",
+        "backend/src/asm/messaging/worker.py",
+        "frontend/src/PaymentReturn.tsx",
+        "tests/test_m8_payment_checkout_postgres.py",
+    },
     "payment_obligation": {
         "backend/src/asm/client_payments/http.py",
         "frontend/e2e/intake-duration.spec.ts",
@@ -3807,8 +3815,8 @@ SCHEDULING_PROOF_PATHS = {
 
 
 def slice_prefix(feature):
-    if feature == "payment_obligation":
-        return "M8_PAYMENT_OBLIGATION"
+    if feature in {"payment_obligation", "payment_checkout"}:
+        return "M8_" + feature.upper()
     return ("M7_" if feature in SCHEDULING_FEATURES else "M6_") + feature.upper()
 
 
@@ -3911,6 +3919,7 @@ def prepare_slice_event(r, monkeypatch, route, feature, revision, *, protected=F
         ("scheduling_intents", "0037"),
         ("scheduling_acceptance", "0037"),
         ("payment_obligation", "0038"),
+        ("payment_checkout", "0039"),
     ],
 )
 @pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
@@ -4060,6 +4069,9 @@ def test_m7_booking_refuses_ineligible_source(
 
 
 @pytest.mark.parametrize(
+    "feature,revision", [("payment_obligation", "0038"), ("payment_checkout", "0039")]
+)
+@pytest.mark.parametrize(
     "route,damage,reason",
     [
         ("same-repository-pr-merge", "branch", "POLZA_RUNTIME_EVENT_BRANCH"),
@@ -4071,19 +4083,20 @@ def test_m7_booking_refuses_ineligible_source(
         ("main-push", "historical_migration", "M8_PAYMENT_OBLIGATION_WRITE_SET"),
     ],
 )
-def test_m8_payment_obligation_refuses_ineligible_source(
-    r11_event, monkeypatch, route, damage, reason
+def test_m8_payment_slices_refuse_ineligible_source(
+    r11_event, monkeypatch, route, damage, reason, feature, revision
 ):
     r = r11_event
     prepare_slice_event(
         r,
         monkeypatch,
         route,
-        "payment_obligation",
-        "0038",
+        feature,
+        revision,
         protected=damage == "protected",
         damage=damage,
     )
+    reason = reason.replace("M8_PAYMENT_OBLIGATION", slice_prefix(feature))
     with pytest.raises((carrier.Refusal, catalog.Refusal), match=f"^{reason}$"):
         r["run"]()
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())

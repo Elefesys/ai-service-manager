@@ -55,9 +55,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0038"
-NATIVE_CONTEXT_PROFILE_SHA256 = "04ff0becf89d4d64797d6fa9dd9dccc95d32456f2b30638d63db9bd078a3d8f1"
-NATIVE_PROFILE_BODY_SHA256 = "98159969ac96c1a4859404a3ac916a8ae784facdde2696b946dec14533a83738"
+DATABASE_SCHEMA_REVISION = "0039"
+NATIVE_CONTEXT_PROFILE_SHA256 = "37314a7ecc2df31574e3ed5496af26d6d8b2e74d7adda7e8d773578e77383160"
+NATIVE_PROFILE_BODY_SHA256 = "2f084682c2b38ce55b2d48a5121946c20859cee126ab1e235d01f02981f61606"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -94,7 +94,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.payment_obligation_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.payment_checkout_schema_profile()')
             """)
             )
         )
@@ -540,6 +540,8 @@ async def serve(
     *,
     synthetic: "Callable[[MessagingDatabase], SyntheticRuntime] | None" = None,
 ) -> None:
+    from asm.client_payments.checkout import Checkout
+    from asm.client_payments.yookassa import YooKassa, read_test_shops
     from asm.files.config import StorageSettings
     from asm.files.database import FileDatabase
     from asm.files.provider import ChannelImageProvider, ControlledImageProvider
@@ -561,6 +563,8 @@ async def serve(
     storage = None
     files = None
     telegram = None
+    checkout = None
+    yookassa = None
     try:
         from asm.ai.provider_runtime import ProviderRuntime
         from asm.ai.runtime_settings import load_settings
@@ -595,6 +599,11 @@ async def serve(
                 key_file=Path(key_path),
                 telegram=telegram,
             )
+        shop_config = os.environ.get("ASM_YOOKASSA_TEST_CONFIG") if role == "worker" else None
+        if shop_config is not None:
+            yookassa = YooKassa(environment=settings.environment)
+            checkout = Checkout(kernel, yookassa)
+            await checkout.register(read_test_shops(Path(shop_config)))
         storage_settings = StorageSettings()
         if storage_settings.environment != settings.environment:
             raise RuntimeError("Storage environment mismatch")
@@ -624,8 +633,11 @@ async def serve(
             portfolio_cleanup=PortfolioCleanupSweep(kernel, storage),
             telegram=telegram,
             ai=ai,
+            checkout=checkout,
         )
     finally:
+        if yookassa is not None:
+            await yookassa.aclose()
         if telegram is not None:
             await telegram.aclose()
         if files is not None:

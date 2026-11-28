@@ -39,6 +39,25 @@ function intakeChildFailure(error:unknown,operation:FixtureOperation,journey:Int
  return new Error(`E2E_INTAKE_RUNTIME_REFUSED:exit=${exit};${request};${diagnostic?.slice(prefix.length)??`diagnostic=UNAVAILABLE;timeout=${timeout}`}`);
 }
 
+async function checkoutFixture(action: 'checkout-register' | 'checkout-deliver', since?: string) {
+  const envFile = process.env.ASM_BROWSER_ENV_FILE;
+  if (!envFile) throw new Error('E2E_CHECKOUT_RUNTIME_REQUIRED');
+  const args = ['compose', '--env-file', envFile, '-f', 'compose.yaml', '-f', 'compose.browser.yaml',
+    '--profile', 'browser', 'run', '--no-deps', '--rm', '-T', '--user', `${process.getuid!()}:${process.getgid!()}`,
+    'browser-runtime', 'python', 'scripts/m2_4_browser_worker.py', '--preset', 'knowledge', '--action', action,
+    '--checkout-scope', owner.workspace_id, owner.business_id, owner.user_account_id,
+    ...(since ? ['--checkout-since', since] : [])];
+  try {
+    const result = await promisify(execFile)('docker', args,
+      {cwd: resolve(process.cwd(), '..'), timeout: 30_000, maxBuffer: 16_384});
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    const {stderr} = error as {stderr?: string};
+    const bounded = stderr?.split(/\r?\n/).find(line => line.startsWith('M2_4_BROWSER_WORKER_REFUSED:'));
+    throw new Error(`E2E_CHECKOUT_${action.toUpperCase()}_FAILED${bounded ? ' ' + bounded : ''}`);
+  }
+}
+
 async function openWorkspace(page:Page){
  await expect(page.getByText('ACTIVE SESSION',{exact:true})).toBeVisible();
  const workspace=page.getByLabel('Workspace',{exact:true});
@@ -2526,6 +2545,7 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
     expect(option, JSON.stringify(offer)).toBeDefined();
     return intakeFixture<T>('booking-select', journey, variant, conversation, work.request, undefined, {optionId: option!.option_id});
   }
+  expect(await checkoutFixture('checkout-register')).toEqual({registered: true});
   const first = await choose<{appointment_id: string; allocation_id: string}>(a, '10:00');
   const open = (tab: Page) => tab.getByRole('region', {name: 'Календарь мастера', exact: true});
   const dayPath = `/api/v1/workspaces/${owner.workspace_id}/businesses/${owner.business_id}/scheduling/day`;
@@ -2568,7 +2588,10 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await ownerTab.route(url => url.pathname === `/api/v1/workspaces/${owner.workspace_id}/conversations`, route => route.abort());
   await Promise.all([ownerTab.goto('/'), otherTab.goto('/')]);
   await Promise.all([openCalendar(ownerTab), openCalendar(otherTab)]);
+  const since = new Date().toISOString();
   const held = await choose<{hold_id: string; allocation_id: string; expires_at: string}>(b, '13:00');
+  const proof = await checkoutFixture('checkout-deliver', since);
+  expect(proof).toEqual({provider_post: 1, objects: 1, delivered: 1, link: 'masked'});
   await Promise.all([selectDay(ownerTab, day), selectDay(otherTab, day)]);
   const dayBefore = await getDay(ownerTab);
   expect(dayBefore.timezone).toBe(timezone);
@@ -2606,6 +2629,10 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await expect(current(ownerTab)).toContainText('13:00–14:05');
   await expect(paymentPanel).toContainText('Цена 4 000 ₽ · фиксированная предоплата 500 ₽ · удержано до');
   await expect(paymentPanel).toContainText('оплата ещё не получена');
+  const checkoutStatus = current(ownerTab).getByTestId('payment-checkout');
+  await expect(checkoutStatus).toHaveText('Ссылка на предоплату отправлена клиенту.');
+  const attemptId = await checkoutStatus.getAttribute('data-attempt-id');
+  expect(attemptId).toBeTruthy();
   const obligation = await paymentPanel.getAttribute('data-obligation-id');
   expect(obligation).toBeTruthy();
   await expect(paymentPanel).toHaveAttribute('data-payment-status', 'UNPAID');
@@ -2621,12 +2648,30 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   await expect(paymentPanel).toHaveAttribute('data-obligation-id', obligation!);
   await expect(paymentPanel.locator('time')).toHaveAttribute('datetime', holdDeadline!);
   await expect(paymentPanel).toContainText('Цена 4 000 ₽ · фиксированная предоплата 500 ₽');
-  const image = `m8-1a-${info.project.name}.png`;
+  await expect(checkoutStatus).toHaveAttribute('data-attempt-id', attemptId!);
+  await expect(checkoutStatus).toHaveText('Ссылка на предоплату отправлена клиенту.');
+  const image = `m8-1b-${info.project.name}.png`;
   const path = process.env.ASM_BROWSER_REPORT_DIR
     ? resolve(process.env.ASM_BROWSER_REPORT_DIR, image)
     : info.outputPath(image);
   await current(ownerTab).screenshot({path});
   await info.attach(image, {path, contentType: 'image/png'});
+  const returnTab = await context.newPage();
+  try {
+    await returnTab.goto('/payment-return?status=succeeded&payment_id=untrusted');
+    await expect(returnTab.getByRole('heading', {name: 'Проверяем результат', exact: true})).toBeVisible();
+    const caption = `m8-1b-return-${info.project.name}.png`;
+    const returnPath = process.env.ASM_BROWSER_REPORT_DIR
+      ? resolve(process.env.ASM_BROWSER_REPORT_DIR, caption) : info.outputPath(caption);
+    await returnTab.screenshot({path: returnPath});
+    await info.attach(caption, {path: returnPath, contentType: 'image/png'});
+    await expect(paymentPanel).toHaveAttribute('data-payment-status', 'UNPAID');
+    expect((await getBooking(ownerTab, b)).booking).toMatchObject({outcome: 'HELD'});
+    console.log('M8.1B P2 Chromium', JSON.stringify({viewport: info.project.name, attempt: attemptId, hold: held.hold_id,
+      obligation, deadline: holdDeadline, ...proof, return: 'Проверяем результат', new_appointments: 0}));
+  } finally {
+    await returnTab.close();
+  }
   await checkWork(ownerTab, a, first.appointment_id, 'CONFIRMED');
 
   async function postThrough(tab: Page, path: string, trigger: () => Promise<unknown>, status = 200) {
@@ -2758,15 +2803,16 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
   expect((await getBooking(ownerTab, b)).booking).toMatchObject({outcome: 'EXPIRED', hold_id: held.hold_id, allocation_id: held.allocation_id});
   await workCard(ownerTab).getByRole('button', {name: 'Варианты времени', exact: true}).click();
   await expect(preview.getByRole('list', {name: 'Подходящие окна'})).toContainText('Визит 13:00–14:05');
-  expect(await outgoing()).toEqual(sentBefore);
-  expect(paymentRequests.filter(request => request.method() === 'POST')).toHaveLength(1);
+  const sentAfter = await outgoing();
+  expect(sentAfter.filter(id => !sentBefore.includes(id))).toHaveLength(1);
+  expect(paymentRequests.filter(request => request.method() === 'POST')).toHaveLength(0);
   await expect(paymentPanel).toHaveAttribute('data-obligation-id', obligation!);
   await expect(paymentPanel).toContainText('оплата ещё не получена');
   await expect(paymentPanel.locator('time')).toHaveCount(0);
   console.log('M8.1A P1 Chromium ' + info.project.name + ' ' + JSON.stringify({
     hold: held.hold_id, allocation: held.allocation_id, quote: b.refs.quote_id, order: b.refs.order_id,
     session: b.session, obligation, price_minor: 400000, amount_minor: 50000,
-    expires_at: holdDeadline, mutation_requests: 1, reloaded: true, none_appointment: first.appointment_id,
+    expires_at: holdDeadline, mutation_requests: paymentRequests.filter(request => request.method() === 'POST').length, reloaded: true, none_appointment: first.appointment_id,
   }));
   for (const tab of [ownerTab, otherTab]) expect(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 
@@ -2777,7 +2823,7 @@ test('@narrow M7.3A opens the owner day and follows two works through conflict, 
     original: original.booking, moved: moved.body.booking, cancelled: cancelled.body.booking,
     hold: {before: heldBefore.booking, expiryRead: expired.now},
     activeAfterCancellation: afterCancellation.entries.map(entry => entry.kind),
-    historyAfterExpiry: expired.history.map(entry => entry.booking.outcome), newOutbound: 0,
+    historyAfterExpiry: expired.history.map(entry => entry.booking.outcome), newOutbound: sentAfter.length - sentBefore.length,
   }));
 });
 

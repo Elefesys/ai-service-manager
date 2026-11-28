@@ -8,7 +8,7 @@ import httpx
 import pytest
 from asm.messaging.worker import Worker
 from asm.service_requests.errors import ServiceRequestError
-from generic_pg_schema import assert_current_schema, assert_schema
+from generic_pg_schema import assert_schema
 from m5_knowledge_search_fixtures import owner_unit
 from m7_scheduling_fixtures import Work, accept_pair, prepare_quote
 from m8_payment_obligation_fixtures import (
@@ -348,8 +348,7 @@ async def test_p1_upgrade_preserves_0037_agreements_holds_and_none_appointment(s
         await _migrate("upgrade", "0038")
 
     async with h.migrator.connect() as connection:
-        await assert_current_schema(connection)
-    await h.runtime.check()
+        await assert_schema(connection, "0038", "payment_obligation_schema_profile")
     assert await legacy_facts(h) == before
     assert await owner_booking(auth, none) == before_booking
     for work in (exact, fractional, tiny, none):

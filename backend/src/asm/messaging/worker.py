@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         PortfolioSyntheticRuntime,
         SyntheticRuntime,
     )
+    from asm.client_payments.checkout import Checkout
     from asm.files.transfer import CleanupSweep, FetchTransfer
     from asm.portfolio.storage import PortfolioCleanupSweep
     from asm.telegram.client import TelegramClient
@@ -50,6 +51,7 @@ class Worker:
         telegram: "TelegramClient | None" = None,
         ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | IntakeSyntheticRuntime | ProviderRuntime | None" = None,
         portfolio_delivery: PortfolioDelivery | None = None,
+        checkout: "Checkout | None" = None,
     ) -> None:
         if not 0 < deadline < 30:
             raise MessagingError(Code.INVALID_INPUT)
@@ -68,6 +70,9 @@ class Worker:
         ):
             raise MessagingError(Code.NOT_ALLOWED)
         self.portfolio_delivery = portfolio_delivery
+        if checkout is not None and checkout.database is not database:
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.checkout = checkout
         self.worker_id = "controlled-" + str(uuid4())
 
     async def _finish(self, permit: SendPermit, outcome: SendOutcome) -> None:
@@ -277,7 +282,26 @@ class Worker:
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
         transport = self.telegram
         permit: SendPermit | TerminalRejection | ContextWorkResultBase
-        if isinstance(claim, QuoteSendJobClaim):
+        if claim.kind == "SEND_PAYMENT_LINK":
+            if self.checkout is None:
+                await self.database.checkout_provider_begin(claim, {})
+                return
+            if not await self.checkout.prepare_link(claim):
+                return
+            await self.adapter.checkpoint("checkout_before_send")
+            payment_probe = await self.database.checkout_send_probe(claim)
+            payment_observation = None
+            if payment_probe is not None and transport is not None:
+                payment_observation = await transport.observe(
+                    payment_probe.bot_identity,
+                    payment_probe.external_connection_id,
+                    payment_probe.owner_user_id,
+                )
+            permit = await self.database.begin_checkout_send(
+                claim, payment_probe, payment_observation
+            )
+            probe = None
+        elif isinstance(claim, QuoteSendJobClaim):
             if transport is not None and (
                 not transport.synthetic_ai or transport.provider_runtime is not None
             ):
@@ -345,7 +369,8 @@ class Worker:
             return
         try:
             async with asyncio.timeout(self.deadline):
-                await self.adapter.checkpoint("before_call")
+                if claim.kind != "SEND_PAYMENT_LINK":
+                    await self.adapter.checkpoint("before_call")
                 if permit.provider == "TELEGRAM":
                     if transport is None:
                         raise MessagingError(Code.DEPENDENCY_UNAVAILABLE)
@@ -420,6 +445,7 @@ async def run(
     portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
     ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | IntakeSyntheticRuntime | ProviderRuntime | None" = None,
+    checkout: "Checkout | None" = None,
 ) -> None:
     if role == "worker" and ai is not None:
         async with asyncio.TaskGroup() as group:
@@ -435,6 +461,7 @@ async def run(
                     portfolio_cleanup=portfolio_cleanup,
                     telegram=telegram,
                     ai=ai,
+                    checkout=checkout,
                 )
             )
         return
@@ -447,6 +474,7 @@ async def run(
         cleanup=cleanup,
         portfolio_cleanup=portfolio_cleanup,
         telegram=telegram,
+        checkout=checkout,
     )
 
 
@@ -483,8 +511,9 @@ async def _run(
     portfolio_cleanup: "PortfolioCleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
     ai: "SyntheticRuntime | PortfolioSyntheticRuntime | PortfolioDeliverySyntheticRuntime | IntakeSyntheticRuntime | ProviderRuntime | None" = None,
+    checkout: "Checkout | None" = None,
 ) -> None:
-    worker = Worker(database, adapter, files=files, telegram=telegram, ai=ai)
+    worker = Worker(database, adapter, files=files, telegram=telegram, ai=ai, checkout=checkout)
     while not stop.is_set():
         try:
             if role == "worker":

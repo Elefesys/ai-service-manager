@@ -542,6 +542,63 @@ class MessagingDatabase:
             result = await unit._execute("SELECT platform.telegram_worker_probe(:job, :token)")
             return TelegramProbe.model_validate(result) if result is not None else None
 
+    async def register_checkout_shop(
+        self, workspace: UUID, business: UUID, shop: str, return_url: str
+    ) -> bool:
+        async with self._transaction() as connection:
+            return await call(
+                connection,
+                "SELECT platform.payment_checkout_register_test_shop(:workspace,:business,:shop,:return_url)",
+                {
+                    "workspace": workspace,
+                    "business": business,
+                    "shop": shop,
+                    "return_url": return_url,
+                },
+            )
+
+    async def checkout_provider_begin(self, claim: JobClaim, shops: dict[str, str]) -> Any:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            return await unit._execute(
+                "SELECT platform.payment_checkout_provider_begin(:job,:token,CAST(:shops AS jsonb))",
+                {"shops": json.dumps(shops)},
+            )
+
+    async def checkout_provider_finish(
+        self, claim: JobClaim, result: dict[str, str | None] | None
+    ) -> bool:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            return await unit._execute(
+                "SELECT platform.payment_checkout_provider_finish(:job,:token,CAST(:result AS jsonb))",
+                {"result": json.dumps(result) if result is not None else None},
+            )
+
+    async def checkout_send_probe(self, claim: JobClaim) -> "TelegramProbe | None":
+        from asm.telegram.database import TelegramProbe
+
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute("SELECT platform.payment_checkout_send_probe(:job,:token)")
+            return TelegramProbe.model_validate(raw) if raw is not None else None
+
+    async def begin_checkout_send(
+        self, claim: JobClaim, probe: "TelegramProbe | None", observation: dict[str, object] | None
+    ) -> SendPermit | TerminalRejection:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute(
+                "SELECT platform.payment_checkout_send_begin(:job,:token,:generation,:version,CAST(:observation AS jsonb))",
+                {
+                    "generation": probe.generation if probe else None,
+                    "version": probe.observation_version if probe else None,
+                    "observation": json.dumps(observation) if observation is not None else None,
+                },
+            )
+            result = (
+                SendPermit.model_validate(raw)
+                if raw["code"] == "PERMITTED"
+                else TerminalRejection.model_validate(raw)
+            )
+        return result
+
     async def quote_send_probe(self, claim: QuoteSendJobClaim) -> "TelegramProbe | None":
         from asm.telegram.database import TelegramProbe
 

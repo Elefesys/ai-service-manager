@@ -4,12 +4,13 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, Query, Request, Response
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator
 
 from asm.auth.config import AuthSettings
 from asm.auth.http import mutation_token, required_cookie
 from asm.auth.service import AuthService
 from asm.billing.validation import CanonicalUUID, PositiveDecimal, Timestamp
+from asm.client_payments.yookassa import checkout_url
 from asm.configuration.http import body_as, command_key, command_schema
 from asm.configuration.models import ConfigurationModel, PriceMinor
 from asm.intake.models import Digest
@@ -46,6 +47,46 @@ class HoldPaymentObligation(ConfigurationModel):
     hold_status: Literal["HELD", "EXPIRED", "RELEASED", "CONFIRMED"]
     requires_prepayment: bool
     obligation: PaymentObligation | None
+
+
+class CheckoutReferences(HoldReferences):
+    replace_attempt_id: CanonicalUUID | None = None
+
+
+class PaymentCheckout(ConfigurationModel):
+    id: CanonicalUUID
+    obligation_id: CanonicalUUID
+    hold_id: CanonicalUUID
+    expires_at: Timestamp
+    status: Literal["QUEUED", "UNKNOWN", "WAITING", "READY", "NO_LINK", "CANCELED", "BLOCKED"]
+    reason: (
+        Literal[
+            "CARD_MINIMUM",
+            "STORE_UNAVAILABLE",
+            "HOLD_INACTIVE",
+            "CONTEXT_CHANGED",
+            "CHANNEL_RIGHTS_UNAVAILABLE",
+            "PROVIDER_UNKNOWN",
+            "IDEMPOTENCE_EXPIRED",
+        ]
+        | None
+    )
+    delivery: Literal["PENDING", "DISPATCHING", "SENT", "FAILED", "UNKNOWN"] | None
+
+
+class HoldCheckout(ConfigurationModel):
+    checkout: PaymentCheckout | None
+
+
+class OpenCheckout(HoldCheckout):
+    confirmation_url: str | None = Field(repr=False)
+
+    @field_validator("confirmation_url")
+    @classmethod
+    def validated_url(cls, value: str | None) -> str | None:
+        if value is not None and checkout_url(value) is None:
+            raise ValueError("Invalid checkout origin")
+        return value
 
 
 def install_client_payments(app: FastAPI, auth: AuthService, settings: AuthSettings) -> None:
@@ -120,5 +161,68 @@ def install_client_payments(app: FastAPI, auth: AuthService, settings: AuthSetti
             workspace_id, business_id, conversation_id, request_id, session_id, references
         )
         return await load(token, selection, references.hold_id, key)
+
+    @router.get("/payment-checkout", response_model=HoldCheckout)
+    async def read_payment_checkout(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        session_id: CanonicalUUID,
+        query: Annotated[HoldReferences, Query()],
+    ) -> HoldCheckout:
+        check_query(request)
+        token = required_cookie(request, settings)
+        response.headers["Cache-Control"] = "no-store"
+        selection = selected_session(
+            workspace_id, business_id, conversation_id, request_id, session_id, query
+        )
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            raw = await unit.payment_checkout_owner(
+                selection.model_dump(mode="json"), UUID(query.hold_id), None, None
+            )
+            try:
+                return HoldCheckout.model_validate(raw)
+            except ValidationError:
+                raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
+
+    @router.post(
+        "/payment-checkout",
+        response_model=OpenCheckout,
+        openapi_extra=command_schema(CheckoutReferences),
+        responses={
+            409: {"description": "Stale hold, conflicting key, or unconfirmed cancellation"}
+        },
+        description="Open or replay the checkout for the selected hold. Replacement requires a verified canceled payment.",
+    )
+    async def open_payment_checkout(
+        request: Request,
+        response: Response,
+        workspace_id: CanonicalUUID,
+        business_id: CanonicalUUID,
+        conversation_id: CanonicalUUID,
+        request_id: CanonicalUUID,
+        session_id: CanonicalUUID,
+    ) -> OpenCheckout:
+        token = mutation_token(request, settings)
+        key = command_key(request)
+        ref = await body_as(request, CheckoutReferences)
+        response.headers["Cache-Control"] = "no-store"
+        selection = selected_session(
+            workspace_id, business_id, conversation_id, request_id, session_id, ref
+        )
+        async with auth.workspace(token, UUID(workspace_id)) as unit:
+            raw = await unit.payment_checkout_owner(
+                selection.model_dump(mode="json"),
+                UUID(ref.hold_id),
+                key,
+                UUID(ref.replace_attempt_id) if ref.replace_attempt_id is not None else None,
+            )
+            try:
+                return OpenCheckout.model_validate(raw)
+            except ValidationError:
+                raise ServiceRequestError(ServiceRequestCode.UNAVAILABLE) from None
 
     app.include_router(router)

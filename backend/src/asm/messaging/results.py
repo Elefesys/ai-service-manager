@@ -94,6 +94,7 @@ class JobClaim(Result):
         "SEND_AI_TEXT",
         "SEND_AI_PHOTO",
         "SEND_QUOTE_TEXT",
+        "SEND_PAYMENT_LINK",
         "FETCH_IMAGE",
         "PROCESS_TURN",
         "ESCALATION_TIMER",

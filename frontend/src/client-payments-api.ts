@@ -59,7 +59,47 @@ export function parseHoldPayment(value: unknown, hold: Hold): HoldPayment {
   return view as HoldPayment;
 }
 
+const checkoutStatuses = ['QUEUED', 'UNKNOWN', 'WAITING', 'READY', 'NO_LINK', 'CANCELED', 'BLOCKED'] as const;
+const checkoutReasons = ['CARD_MINIMUM', 'STORE_UNAVAILABLE', 'HOLD_INACTIVE', 'CONTEXT_CHANGED',
+  'CHANNEL_RIGHTS_UNAVAILABLE', 'PROVIDER_UNKNOWN', 'IDEMPOTENCE_EXPIRED'] as const;
+const deliveryStatuses = ['PENDING', 'DISPATCHING', 'SENT', 'FAILED', 'UNKNOWN'] as const;
+
+export type Checkout = {
+  id: string;
+  obligation_id: string;
+  hold_id: string;
+  expires_at: string;
+  status: typeof checkoutStatuses[number];
+  reason: typeof checkoutReasons[number] | null;
+  delivery: typeof deliveryStatuses[number] | null;
+};
+
+function parseCheckout(value: unknown, hold: Hold, opening: boolean): Checkout | null {
+  const response = object(value, opening ? ['checkout', 'confirmation_url'] : ['checkout']);
+  if (response.checkout === null) return null;
+  const view = object(response.checkout, ['id', 'obligation_id', 'hold_id', 'expires_at', 'status', 'reason', 'delivery']);
+  if (!uuid(view.id) || !uuid(view.obligation_id) || view.hold_id !== hold.hold_id || !instant(view.expires_at) ||
+      !checkoutStatuses.some(status => status === view.status) ||
+      (view.reason !== null && !checkoutReasons.some(reason => reason === view.reason)) ||
+      (view.delivery !== null && !deliveryStatuses.some(status => status === view.delivery))) return invalid();
+  return view as Checkout;
+}
+
 export const clientPaymentsApi = {
+  async checkout(scope: SchedulingScope, hold: Hold, signal: AbortSignal) {
+    const query = new URLSearchParams({...sessionReferences(scope), hold_id: hold.hold_id});
+    return parseCheckout(await schedulingRequest(`${sessionPath(scope)}/payment-checkout?${query}`, signal), hold, false);
+  },
+  async replaceCheckout(
+    scope: SchedulingScope, hold: Hold, attemptId: string, key: string, csrf: string, signal: AbortSignal,
+  ) {
+    const response = await schedulingRequest(`${sessionPath(scope)}/payment-checkout`, signal, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'Idempotency-Key': key},
+      body: JSON.stringify({...sessionReferences(scope), hold_id: hold.hold_id, replace_attempt_id: attemptId}),
+    }, ['STALE_STATE']);
+    return parseCheckout(response, hold, true);
+  },
   async read(scope: SchedulingScope, hold: Hold, signal: AbortSignal) {
     const query = new URLSearchParams({...sessionReferences(scope), hold_id: hold.hold_id});
     return parseHoldPayment(await schedulingRequest(`${sessionPath(scope)}/payment-obligation?${query}`, signal), hold);

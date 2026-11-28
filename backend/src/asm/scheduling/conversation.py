@@ -396,4 +396,6 @@ async def _select(
         return _list_text(work, offered, conflict=True)
     if selected["kind"] == "ALTERNATIVES":
         return _list_text(work, selected["offer"], conflict=True)
+    if selected["result"].get("checkout_queued"):
+        return None
     return _result_text(work, selected["result"])

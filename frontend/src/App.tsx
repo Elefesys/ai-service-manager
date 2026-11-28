@@ -8,12 +8,14 @@ import { ReferencePortfolio } from './PortfolioPanel';
 import { MessagingPanel } from './MessagingPanel';
 import { OwnerCalendar } from './OwnerCalendar';
 import { EscalationsPanel } from './EscalationsPanel';
+import { PaymentReturn } from './PaymentReturn';
 import type { ApprovalSelection, EscalationContext } from './escalation-api';
 
 type Phase = 'checking' | 'anonymous' | 'authenticated' | 'recovering' | 'uncertain';
 const message = (error: unknown) => error instanceof ApiError && error.code === 'RATE_LIMITED' ? `Слишком много запросов. Повторите позже${error.retryAfter ? ` (${error.retryAfter})` : ''}.` : 'Сервис временно недоступен. Повторите проверку.';
 
 export function App({ pathname = window.location.pathname }: { pathname?: string }) {
+  if (pathname === '/payment-return') return <PaymentReturn />;
   if (pathname.startsWith('/ops')) return <Ops />;
   return <Console />;
 }
