@@ -56,6 +56,6 @@ async def test_0031_preserves_populated_0030_v7_run(intake_pg):
         assert await query(h, rows, cid=cid) == before
         assert await summary(h, cid) == projection
     finally:
-        await _migrate("upgrade", "0038")
-        h.schema_revision = "0038"
+        await _migrate("upgrade", "0039")
+        h.schema_revision = "0039"
         await h.runtime.check()

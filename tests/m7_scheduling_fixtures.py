@@ -35,10 +35,20 @@ async def scheduling_pg(approval_pg):
     try:
         yield approval_pg
     finally:
+        async with approval_pg.migrator.connect() as connection:
+            revision = (
+                await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+            ).scalar_one()
+        if revision == "0038":
+            from test_m2_1_schema_postgres import _migrate
+
+            await _migrate("upgrade", "0039")
         async with approval_pg.migrator.begin() as connection:
             await connection.execute(
                 text(
-                    "TRUNCATE platform.payment_obligation_receipts,app.payment_obligations,"
+                    "TRUNCATE platform.payment_checkout_receipts,app.payment_checkout_attempts,"
+                    "platform.payment_checkout_test_shops,platform.payment_obligation_receipts,"
+                    "app.payment_obligations,"
                     "platform.scheduling_chat_codes,platform.scheduling_turn_actions,"
                     "platform.scheduling_command_receipts,app.appointments,app.reservation_holds,"
                     "app.resource_allocations,app.availability_options,app.availability_offers,"

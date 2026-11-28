@@ -854,7 +854,7 @@ async def test_s4_changed_schedule_and_upgrade_preserve_agreement(clients, auth)
             await _migrate("upgrade", "0033")
             assert (await scalar(h, "SELECT platform.scheduling_hold_schema_profile()"))["valid"]
         finally:
-            await _migrate("upgrade", "0038")
+            await _migrate("upgrade", "0039")
     assert await owner_get(auth, endpoint) == closed
     assert (await owner_get(auth, a.url + "/quote"))["agreement"] == a.agreement
     before = await client_effects(h)

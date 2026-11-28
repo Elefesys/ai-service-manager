@@ -46,8 +46,8 @@ async def native_runtime(native, request):
     if request.node.name.startswith("test_native_host"):
         from test_m3_1_native_context_postgres import migrate
 
-        await migrate("upgrade", "0038")
-        native.schema_revision = "0038"
+        await migrate("upgrade", "0039")
+        native.schema_revision = "0039"
     native.kernel = MessagingDatabase(native.runtime.engine, environment="TEST")
     return native
 
@@ -1172,7 +1172,7 @@ async def native_host_request(h, *, operation="ENABLE", key="host-enable", expec
             },
             "source_profile": {
                 "source_tree": tree,
-                "schema_revision": "0038",
+                "schema_revision": "0039",
                 "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
                 "drain_confirmed": True,
             },

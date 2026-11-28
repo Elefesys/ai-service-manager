@@ -1,7 +1,6 @@
 """Finite CONTROLLED browser runner using real asm_runtime/PostgreSQL/private S3.
 
-No migrator capability, HTTP test endpoint, arbitrary payload, host, or Workspace
-argument. CALL/EFFECT files are private instrumentation, never a replacement queue.
+No migrator capability, HTTP test endpoint, arbitrary payload or host. CALL/EFFECT files are private instrumentation, never a replacement queue.
 """
 
 import asyncio
@@ -17,12 +16,15 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
 
+import httpx
 from asm.ai.contracts import DTO, KnowledgeGatewayConfig, Limits, Route, strict_json
 from asm.ai.database import AIDatabase
 from asm.ai.fake import FakeAdapter
 from asm.ai.knowledge import KnowledgeView, project_knowledge
 from asm.ai.runtime import SyntheticRuntime
 from asm.ai.runtime_contracts import KnowledgeRuntimeReceipt, PreparedKnowledgeRun
+from asm.client_payments.checkout import Checkout
+from asm.client_payments.yookassa import TestShop, YooKassa
 from asm.conversations.escalations import MARKER
 from asm.conversations.guards import parse_guarded_snapshot
 from asm.conversations.turns import parse_snapshot
@@ -36,10 +38,12 @@ from asm.foundation import DATABASE_SCHEMA_REVISION
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import MessagingError
+from asm.messaging.http_service import OwnerAPIRepository
 from asm.messaging.models import EventKind, NormalizedEventV1, OutcomeKind
 from asm.messaging.results import AIJobClaim, FinalizeResult, ScanStep
 from asm.messaging.worker import Worker
 from asm.telegram.database import TelegramIngress
+from asm.tenancy import AuthenticatedAccount, TenantDatabase
 from m2_4_browser_fixture import (
     ESCALATION_PRESETS,
     MATERIAL_PHOTOS,
@@ -56,6 +60,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+CHECKOUT_ACTIONS = ("checkout-register", "checkout-deliver")
 MATERIAL_ACTIONS = ("material-edit", "material-delete") + tuple(
     f"material-{label}-{step}" for label in MATERIAL_PHOTOS for step in ("caption", "change")
 )
@@ -70,6 +75,7 @@ ACTIONS = (
     "escalate-main",
     "escalate-alternate",
     "knowledge-answer",
+    *CHECKOUT_ACTIONS,
 )
 COUNTER_DIRECTORY = Path("/run/m2-browser-counters")
 
@@ -175,8 +181,8 @@ def validate_operation(preset, operation):
         and preset not in ("esc_happy", "esc_narrow")
     ):
         raise ProvisioningError("Invalid finite Escalation runner action")
-    if (operation == "knowledge-answer" and preset != "knowledge") or (
-        preset == "knowledge" and operation not in {"knowledge-answer", "stats"}
+    if (operation in {"knowledge-answer", *CHECKOUT_ACTIONS} and preset != "knowledge") or (
+        preset == "knowledge" and operation not in {"knowledge-answer", "stats", *CHECKOUT_ACTIONS}
     ):
         raise ProvisioningError("Finite knowledge browser action required")
 
@@ -1008,7 +1014,110 @@ async def knowledge_answer(engine, barrier):
     raise ProvisioningError("Bounded knowledge browser result not observed")
 
 
-async def action(preset, operation):
+async def payment_fixture(engine, operation, scope, since):
+    workspace, business, actor = scope
+    async with TenantDatabase(engine).transaction(
+        AuthenticatedAccount(actor), workspace, uuid4()
+    ) as unit:
+        page = await OwnerAPIRepository(unit).connections(100, None)
+        connections = [
+            item.connection_id
+            for item in page.items
+            if (item.business_id, item.provider, item.state)
+            == (str(business), "CONTROLLED", "AVAILABLE")
+        ]
+        if len(connections) != 1:
+            raise ProvisioningError("Exclusive controlled checkout fixture required")
+    connection_id = UUID(connections[0])
+    kernel = MessagingDatabase(engine, environment="TEST")
+    shop = TestShop(
+        workspace,
+        business,
+        "100500",
+        "https://console.example.test/payment-return",
+        "test_browser_synthetic",
+    )
+    post_calls = 0
+    provider_id = str(uuid4())
+    link = "https://yoomoney.ru/checkout/" + provider_id
+
+    async def mock(request):
+        nonlocal post_calls
+        if engine.pool.checkedout() != 0:
+            raise ProvisioningError("Checkout I/O holds a database connection")
+        if request.method == "GET":
+            return httpx.Response(200, json={"type": "list", "items": []})
+        post_calls += 1
+        data = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "id": provider_id,
+                "test": True,
+                "status": "pending",
+                "paid": False,
+                "recipient": {"account_id": shop.shop_id},
+                "amount": data["amount"],
+                "metadata": data["metadata"],
+                "confirmation": {"type": "redirect", "confirmation_url": link},
+            },
+        )
+
+    class Wire(ControlledAdapter):
+        async def send(self, permit):
+            if (
+                engine.pool.checkedout() != 0
+                or permit.workspace_id != workspace
+                or permit.connection_id != connection_id
+                or permit.external_connection_id != route("knowledge")
+                or "Предоплата 500 ₽" not in permit.text
+                or "Время удержано до" not in permit.text
+                or not permit.text.endswith(link)
+            ):
+                raise ProvisioningError("Scoped checkout delivery required")
+            return await super().send(permit)
+
+    provider = YooKassa(environment="TEST", transport=httpx.MockTransport(mock))
+    try:
+        checkout = Checkout(kernel, provider)
+        if await checkout.register((shop,)) != 1:
+            raise ProvisioningError("Controlled checkout test shop required")
+        if operation == "checkout-register":
+            return {"registered": True}
+        now = datetime.now(UTC)
+        if not now - timedelta(minutes=2) <= since <= now:
+            raise ProvisioningError("Recent checkout choice required")
+        wire = Wire(environment="TEST")
+        worker = Worker(kernel, wire, checkout=checkout)
+        kernel._claim_scan[worker.worker_id] = ScanStep.model_validate(
+            {
+                "step": "BUSY",
+                "scan_until": now,
+                "at": since,
+                "id": UUID(int=0),
+            }
+        )
+        claim = await kernel.claim_job(worker.worker_id)
+        if claim is None or (claim.kind, claim.workspace_id, claim.connection_id) != (
+            "SEND_PAYMENT_LINK",
+            workspace,
+            connection_id,
+        ):
+            raise ProvisioningError("Fresh scoped checkout job required")
+        await worker.execute(claim)
+        if (post_calls, wire.calls, wire.effects) != (1, 1, 1):
+            raise ProvisioningError("One controlled provider checkout and delivery required")
+        return {
+            "provider_post": post_calls,
+            "objects": 1,
+            "delivered": wire.effects,
+            "link": "masked",
+        }
+    finally:
+        await provider.aclose()
+
+
+async def action(preset, operation, *, checkout_scope=None, checkout_since=None):
     global _diagnostic
     _diagnostic = BrowserDiagnostic(stage="TARGET")
     validate_operation(preset, operation)
@@ -1025,6 +1134,8 @@ async def action(preset, operation):
             _diagnostic.ready = True
             if operation == "stats":
                 return counters(preset)
+            if operation in CHECKOUT_ACTIONS:
+                return await payment_fixture(engine, operation, checkout_scope, checkout_since)
 
             async def no_transaction(_):
                 if engine.pool.checkedout() != 0:
@@ -1100,9 +1211,25 @@ def main():
         parser = PrivateArgumentParser()
         parser.add_argument("--preset", choices=PRESETS)
         parser.add_argument("--action", required=True, choices=ACTIONS)
+        parser.add_argument("--checkout-scope", type=UUID, nargs=3)
+        parser.add_argument("--checkout-since", type=datetime.fromisoformat)
         args = parser.parse_args()
         preset = args.preset
-        print(json.dumps(asyncio.run(action(args.preset, args.action)), sort_keys=True))
+        if (args.action in CHECKOUT_ACTIONS) != (args.checkout_scope is not None) or (
+            (args.action == "checkout-deliver") != (args.checkout_since is not None)
+            or args.checkout_since is not None
+            and args.checkout_since.tzinfo is None
+        ):
+            raise ProvisioningError("Invalid checkout fixture arguments")
+        result = asyncio.run(
+            action(
+                args.preset,
+                args.action,
+                checkout_scope=args.checkout_scope,
+                checkout_since=args.checkout_since,
+            )
+        )
+        print(json.dumps(result, sort_keys=True))
         return 0
     except Exception as error:
         if _diagnostic.stage != "ARGS":

@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {clientPaymentsApi} from './client-payments-api';
-import type {HoldPayment} from './client-payments-api';
+import type {Checkout, HoldPayment} from './client-payments-api';
 import {IntakeError} from './intake-api';
 import type {Booking, SchedulingScope} from './scheduling-api';
 import {deadlineText} from './scheduling-api';
@@ -19,6 +19,24 @@ function money(minor: number) {
   return kopecks ? `${rubles},${String(kopecks).padStart(2, '0')}` : rubles;
 }
 
+function checkoutMessage(attempt: Checkout) {
+  if (attempt.delivery === 'SENT') return 'Ссылка на предоплату отправлена клиенту.';
+  if (attempt.delivery === 'UNKNOWN') return 'Доставка ссылки не подтверждена.';
+  switch (attempt.reason) {
+    case 'CARD_MINIMUM': return 'Для оплаты банковской картой нужна сумма от 1 ₽.';
+    case 'STORE_UNAVAILABLE': return 'Тестовый магазин недоступен.';
+    case 'HOLD_INACTIVE': return 'Удержание больше не действует. Ссылка не отправлена.';
+    case 'CONTEXT_CHANGED': return 'Диалог изменился. Ссылка не отправлена.';
+    case 'CHANNEL_RIGHTS_UNAVAILABLE': return 'У канала нет права отправить ссылку.';
+    case 'IDEMPOTENCE_EXPIRED':
+    case 'PROVIDER_UNKNOWN': return 'Результат создания оплаты не подтверждён.';
+  }
+  if (attempt.status === 'CANCELED') return 'ЮKassa отменила оплату.';
+  if (attempt.status === 'NO_LINK') return 'Платёж у ЮKassa без доступной ссылки.';
+  if (attempt.delivery === 'FAILED') return 'Ссылка на предоплату не отправлена.';
+  return 'Готовим ссылку на предоплату.';
+}
+
 export function PaymentObligation({
   scope: {workspace, business, conversation, client, request, quote, order, session},
   booking: {hold_id, allocation_id, outcome, expires_at}, expired, csrf,
@@ -26,6 +44,11 @@ export function PaymentObligation({
   const [state, setState] = useState<State | null>(null);
   const [retry, setRetry] = useState(0);
   const key = useRef<string>(null);
+  const [attempt, setAttempt] = useState<Checkout | null>(null);
+  const [checkoutError, setCheckoutError] = useState('');
+  const [replacing, setReplacing] = useState(false);
+  const replaceKey = useRef<{attempt: string; key: string} | null>(null);
+  const checkoutScope = useRef<AbortController | null>(null);
   const onExpired = useRef(expired);
   onExpired.current = expired;
 
@@ -63,6 +86,55 @@ export function PaymentObligation({
     return () => controller.abort();
   }, [workspace, business, conversation, client, request, quote, order, session, hold_id, allocation_id, outcome, csrf, retry]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    checkoutScope.current = controller;
+    const {signal} = controller;
+    const scope = {workspace, business, conversation, client, request, quote, order, session};
+    let timer: number | undefined;
+    async function read() {
+      try {
+        const view = await clientPaymentsApi.checkout(scope, {hold_id, allocation_id}, signal);
+        if (signal.aborted) return;
+        setAttempt(view);
+        if (view?.delivery === 'PENDING' || view?.delivery === 'DISPATCHING') {
+          timer = window.setTimeout(() => void read(), 1500);
+        }
+      } catch (cause) {
+        if (!signal.aborted && cause instanceof IntakeError && cause.status === 401) onExpired.current();
+      }
+    }
+    setAttempt(null);
+    setCheckoutError('');
+    setReplacing(false);
+    void read();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [workspace, business, conversation, client, request, quote, order, session, hold_id, allocation_id, outcome, retry]);
+
+  async function replace(attempt: Checkout) {
+    const signal = checkoutScope.current?.signal;
+    if (!signal || signal.aborted || replacing) return;
+    setReplacing(true);
+    setCheckoutError('');
+    if (replaceKey.current?.attempt !== attempt.id) {
+      replaceKey.current = {attempt: attempt.id, key: crypto.randomUUID()};
+    }
+    try {
+      const scope = {workspace, business, conversation, client, request, quote, order, session};
+      await clientPaymentsApi.replaceCheckout(scope, {hold_id, allocation_id}, attempt.id, replaceKey.current.key, csrf, signal);
+      if (!signal.aborted) setRetry(value => value + 1);
+    } catch (cause) {
+      if (signal.aborted) return;
+      if (cause instanceof IntakeError && cause.status === 401) onExpired.current();
+      setCheckoutError('Не удалось создать новую ссылку.');
+    } finally {
+      if (!signal.aborted) setReplacing(false);
+    }
+  }
+
   if (state === null) return outcome === 'HELD' ? <p role="status">Проверяем предоплату…</p> : null;
   if ('error' in state) return <div>
     <p role="alert">{state.error}</p>
@@ -80,9 +152,19 @@ export function PaymentObligation({
   }[payment.mode];
   const active = outcome === 'HELD' && state.hold_status === 'HELD';
   const deadline = Date.parse(expires_at) === Date.parse(state.expires_at) ? expires_at : state.expires_at;
-  return <p data-testid="payment-obligation" data-obligation-id={payment.id} data-payment-status={payment.status}>
+  const checkout = attempt?.obligation_id === payment.id && attempt.hold_id === hold_id ? attempt : null;
+  return <><p data-testid="payment-obligation" data-obligation-id={payment.id} data-payment-status={payment.status}>
     {price} · {deposit} {money(payment.amount_minor)} ₽ · {active && <>
       удержано до <time dateTime={state.expires_at}>{deadlineText(deadline)}</time> · </>
     }оплата ещё не получена
-  </p>;
+  </p>
+    {checkout && <div data-testid="payment-checkout" data-attempt-id={checkout.id}>
+      <p role="status">{checkoutMessage(checkout)}</p>
+      {active && checkout.status === 'CANCELED' &&
+        <button type="button" className="secondary" disabled={replacing} onClick={() => void replace(checkout)}>
+          Создать новую ссылку
+        </button>}
+      {checkoutError && <p role="alert">{checkoutError}</p>}
+    </div>}
+  </>;
 }

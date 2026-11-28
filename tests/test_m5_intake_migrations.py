@@ -119,33 +119,14 @@ def execute_migration(connection, direction):
 
 
 def downgrade_to_intake_schema(connection):
-    from test_m5_intake_v7_repair_migrations import execute_repair
-
     scripts = ScriptDirectory("migrations")
-    for revision, predecessor in (
-        ("0038", "0037"),
-        ("0036", "0035"),
-        ("0037", "0036"),
-        ("0035", "0034"),
-        ("0034", "0033"),
-        ("0033", "0032"),
-        ("0032", "0031"),
-        ("0031", "0030"),
-        ("0030", "0029"),
-        ("0029", "0028"),
-        ("0028", "0027"),
-        ("0027", "0026"),
-        ("0026", "0025"),
-        ("0025", "0024"),
-    ):
-        script = scripts.get_revision(revision)
+    for script in scripts.iterate_revisions("head", "0023"):
         with Operations.context(MigrationContext.configure(connection)):
             script.module.downgrade()
         connection.execute(
             text("UPDATE platform.alembic_version SET version_num=:revision"),
-            {"revision": predecessor},
+            {"revision": script.down_revision},
         )
-    execute_repair(connection, "downgrade")
 
 
 @pytest.mark.integration

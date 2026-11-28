@@ -467,6 +467,19 @@ class TenantUnitOfWork:
             },
         )
 
+    async def payment_checkout_owner(
+        self, selection: dict[str, object], hold: UUID, key: str | None, replace: UUID | None
+    ) -> Any:
+        return await self._service_request_execute(
+            "SELECT platform.payment_checkout_owner(CAST(:selection AS jsonb),:hold,:key,:replace)",
+            {
+                "selection": json.dumps(selection, allow_nan=False),
+                "hold": hold,
+                "key": key,
+                "replace": replace,
+            },
+        )
+
     async def scheduling_owner_booking(self, selection: dict[str, object]) -> Any:
         return await self._service_request_execute(
             "SELECT platform.scheduling_owner_booking(CAST(:selection AS jsonb))",

@@ -616,7 +616,7 @@ async def test_s7_upgrade_0035_keeps_operational_day_and_history(scheduling_pg, 
         upgraded = await scalar(h, "SELECT platform.scheduling_intent_schema_profile()")
         assert upgraded["schema_revision"] == "0037" and upgraded["valid"] is True
     finally:
-        await _migrate("upgrade", "0038")
+        await _migrate("upgrade", "0039")
     assert [
         (await owner_get(auth, work.url + "/quote"))["agreement"] for work in (a, b, c)
     ] == agreements

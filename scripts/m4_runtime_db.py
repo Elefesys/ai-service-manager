@@ -904,6 +904,95 @@ M8_PAYMENT_OBLIGATION_PATHS = {
 }
 
 
+M8_PAYMENT_CHECKOUT_BASE = "e35e99a4df570d47b2af7b99ddf96e2f75eb849f"
+M8_PAYMENT_CHECKOUT_TREE = "a89a66d0c56596837b4f04989f2fb451dea235ce"
+M8_PAYMENT_CHECKOUT_ASSIGNMENT = "89decdb922c8b52b7e7131ddabed34136cbae357"
+M8_PAYMENT_CHECKOUT_ASSIGNMENT_TREE = "ba5401ea6783697f02037aa2eb54c3c432c0e8df"
+M8_PAYMENT_CHECKOUT_BRANCH = "c7/m8-1b-hosted-checkout"
+M8_PAYMENT_CHECKOUT_DOCS = M8_PAYMENT_OBLIGATION_DOCS
+M8_PAYMENT_CHECKOUT_MIGRATION = "migrations/versions/0039_payment_checkout_attempts.py"
+M8_PAYMENT_CHECKOUT_PATHS = {
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/service_requests/agent.py",
+    "backend/src/asm/telegram/adapter.py",
+    "backend/src/asm/telegram/client.py",
+    "backend/src/asm/telegram/provisioning.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "frontend/e2e/intake-duration.spec.ts",
+    "frontend/e2e/payment-checkout.spec.ts",
+    "frontend/src/App.tsx",
+    "frontend/src/PaymentObligation.tsx",
+    "frontend/src/PaymentReturn.tsx",
+    "frontend/src/SessionBooking.tsx",
+    "frontend/src/client-payments-api.ts",
+    "migrations/versions/0039_payment_checkout_attempts.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/m2_4_browser_worker.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m5_intake_fixture.py",
+    "scripts/m8_yookassa_test_shop.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_browser.sh",
+    "scripts/test_telegram_egress.sh",
+    "tests/generic_pg_schema.py",
+    "tests/m5_knowledge_search_fixtures.py",
+    "tests/m5_portfolio_fixtures.py",
+    "tests/m7_scheduling_fixtures.py",
+    "tests/m8_payment_checkout_fixtures.py",
+    "tests/m8_payment_obligation_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_foundation.py",
+    "tests/test_m1_3_c0_acceptance.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_intake_migrations.py",
+    "tests/test_m5_intake_v7_repair_migrations.py",
+    "tests/test_m5_knowledge_runtime_postgres.py",
+    "tests/test_m5_portfolio_delivery_postgres.py",
+    "tests/test_m6_owner_decisions_postgres.py",
+    "tests/test_m6_pricing_postgres.py",
+    "tests/test_m6_quote_acceptance_postgres.py",
+    "tests/test_m6_service_assessments_postgres.py",
+    "tests/test_m6_service_intents_migrations.py",
+    "tests/test_m6_service_requests_postgres.py",
+    "tests/test_m7_scheduling_appointments_postgres.py",
+    "tests/test_m7_scheduling_holds_postgres.py",
+    "tests/test_m7_scheduling_owner_day_postgres.py",
+    "tests/test_m7_scheduling_postgres.py",
+    "tests/test_m7_scheduling_reschedule_postgres.py",
+    "tests/test_m8_payment_obligation_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_postgres.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_tenancy_postgres.py",
+}
+M8_PAYMENT_CHECKOUT_MODULE_PATH = re.compile(
+    r"backend/src/asm/(?:client_payments/[a-z_][a-z_0-9]*|"
+    r"scheduling/(?:conversation|commands|service|repository|offer_store)|"
+    r"messaging/(?:worker|database|results|models|commands|adapter))\.py"
+    r"|tests/test_m(?:8_payment_checkout|7_scheduling_intents)[a-z_0-9]*\.py"
+    r"|frontend/src/(?:PaymentObligation|PaymentReturn|SessionBooking|App)\.test\.tsx"
+    r"|frontend/src/client-payments-api\.test\.ts"
+)
+
+
 class SchedulingSource(NamedTuple):
     prefix: str
     base: str
@@ -933,6 +1022,8 @@ class SchedulingSource(NamedTuple):
             and M7_SCHEDULING_MODULE_PATH.fullmatch(path)
             or self.revision == "0037"
             and M7_SCHEDULING_INTENTS_MODULE_PATH.fullmatch(path)
+            or self.revision == "0039"
+            and M8_PAYMENT_CHECKOUT_MODULE_PATH.fullmatch(path)
             for path in paths
         )
 
@@ -3263,6 +3354,18 @@ def scheduling_source(*, branch=None, base=None) -> SchedulingSource | None:
             M8_PAYMENT_OBLIGATION_PATHS,
             "0038",
         ),
+        SchedulingSource(
+            "m8_payment_checkout",
+            M8_PAYMENT_CHECKOUT_BASE,
+            M8_PAYMENT_CHECKOUT_TREE,
+            M8_PAYMENT_CHECKOUT_ASSIGNMENT,
+            M8_PAYMENT_CHECKOUT_ASSIGNMENT_TREE,
+            M8_PAYMENT_CHECKOUT_BRANCH,
+            M8_PAYMENT_CHECKOUT_DOCS,
+            M8_PAYMENT_CHECKOUT_MIGRATION,
+            M8_PAYMENT_CHECKOUT_PATHS,
+            "0039",
+        ),
     )
     return next((row for row in candidates if row.branch == branch or row.base == base), None)
 
@@ -4201,7 +4304,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.payment_obligation_schema_profile()"
+        "platform.payment_checkout_schema_profile()"
+        if revision == "0039"
+        else "platform.payment_obligation_schema_profile()"
         if revision == "0038"
         else "platform.scheduling_intent_schema_profile()"
         if revision == "0037"
@@ -4253,6 +4358,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         and type(declared.get("valid")) is bool
     )
     profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0038":
+        profile_pin = "04ff0becf89d4d64797d6fa9dd9dccc95d32456f2b30638d63db9bd078a3d8f1"
+        body_pin = "98159969ac96c1a4859404a3ac916a8ae784facdde2696b946dec14533a83738"
     if revision == "0037":
         profile_pin = "91923a224190e212d3731ba2821bb58889a40a4a2a69d254268fb0b40a866608"
         body_pin = "e2764dac3006d15df4c8b92212daa3889262cc93bb22c5f3a575f7c28c4aa3eb"
@@ -4376,6 +4484,7 @@ def stock_catalog():
                 "0036",
                 "0037",
                 "0038",
+                "0039",
             },
             "CATALOG_REVISION",
         )
@@ -4406,6 +4515,7 @@ def stock_catalog():
             "0036",
             "0037",
             "0038",
+            "0039",
         }:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
@@ -4453,7 +4563,9 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.payment_obligation_schema_profile()"
+            "platform.payment_checkout_schema_profile()"
+            if revision == "0039"
+            else "platform.payment_obligation_schema_profile()"
             if revision == "0038"
             else "platform.scheduling_intent_schema_profile()"
             if revision == "0037"
