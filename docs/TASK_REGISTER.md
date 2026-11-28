@@ -2,9 +2,9 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M8.1B REVIEW · C8 · 2026-11-28
+## CURRENT — M8.1B-R2 IN_PROGRESS · C7 · 2026-11-28
 
-C0 принял R1 в synthetic LOCAL/TEST. При действующем удержании клиент получил одну ссылку на 500 ₽ в тестовом диалоге Telegram. Повтор сохранил попытку и срок. При отзыве права ответа и при истечении срока во время проверки отправок было ноль. Единственная активная задача — независимое ревью C8 в [Draft PR #74](https://github.com/Elefesys/ai-service-manager/pull/74). Ветка `c7/m8-1b-hosted-checkout`, head `b98906e0a7edcc0db7fe40f721a85f6f7db81147`, база `main` `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, миграция `0039` поверх `0038`. CI 12/12, настоящий тестовый магазин ЮKassa — `NOT RUN`. [Поручение C8](tasks/M8_HANDOFF.md#m8-1b-c8).
+C0 принял замечание `C8-M8.1B-01` из [ревью PR #74](https://github.com/Elefesys/ai-service-manager/pull/74#pullrequestreview-6099052946). Два воркера одновременно готовили ссылки по удержаниям разных клиентов одного Telegram-подключения. Имитатор магазина создал два платежа по 500 ₽. Ссылку получил только второй клиент, хотя Telegram разрешил ответить обоим. Единственная активная задача — [M8.1B-R2 для C7 и C3](tasks/M8_HANDOFF.md#m8-1b-r2) в том же Draft PR. Ветка `c7/m8-1b-hosted-checkout`, исходный head `b98906e0a7edcc0db7fe40f721a85f6f7db81147`, база `main` `e35e99a4df570d47b2af7b99ddf96e2f75eb849f`, схема `0039` поверх `0038`. R1 принят в synthetic LOCAL/TEST. Штатный CI исходного кандидата — 12/12. Настоящий тестовый магазин ЮKassa — `NOT RUN`.
 
 ## История — M8.1A INTEGRATED / VERIFIED · synthetic LOCAL/TEST · 2026-11-28
 
