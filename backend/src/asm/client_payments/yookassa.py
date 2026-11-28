@@ -8,8 +8,8 @@ import re
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
-from urllib.parse import urlsplit
+from typing import Any, Literal
+from urllib.parse import SplitResult, urlsplit
 from uuid import UUID
 
 import httpx
@@ -46,7 +46,7 @@ def rubles(minor: int) -> str:
     return f"{units}.{kopecks:02}"
 
 
-def https_parts(url: str):
+def https_parts(url: str) -> SplitResult:
     if not 1 <= len(url) <= 2048 or not url.isascii() or re.search(r"[\x00-\x20\x7f\\]", url):
         raise ValueError("Invalid HTTPS URL")
     parsed = urlsplit(url)
@@ -147,7 +147,7 @@ class CheckoutRequest:
     amount_minor: int
 
     @classmethod
-    def from_job(cls, data: dict) -> "CheckoutRequest":
+    def from_job(cls, data: dict[str, Any]) -> "CheckoutRequest":
         return cls(
             UUID(data["attempt_id"]),
             UUID(data["idempotence_key"]),
@@ -212,7 +212,7 @@ class YooKassa:
         *,
         body: str | None = None,
         key: UUID | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         headers = {"Idempotence-Key": str(key), "Content-Type": "application/json"} if key else {}
         try:
             async with (
@@ -241,7 +241,7 @@ class YooKassa:
             return None
 
     @staticmethod
-    def _belongs_to_test_shop(shop: TestShop, value: dict) -> bool:
+    def _belongs_to_test_shop(shop: TestShop, value: dict[str, Any]) -> bool:
         recipient = value.get("recipient")
         return (
             value.get("test") is True

@@ -546,7 +546,7 @@ class MessagingDatabase:
         self, workspace: UUID, business: UUID, shop: str, return_url: str
     ) -> bool:
         async with self._transaction() as connection:
-            return await call(
+            registered = await call(
                 connection,
                 "SELECT platform.payment_checkout_register_test_shop(:workspace,:business,:shop,:return_url)",
                 {
@@ -556,6 +556,7 @@ class MessagingDatabase:
                     "return_url": return_url,
                 },
             )
+            return registered is True
 
     async def checkout_provider_begin(self, claim: JobClaim, shops: dict[str, str]) -> Any:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
@@ -568,10 +569,11 @@ class MessagingDatabase:
         self, claim: JobClaim, result: dict[str, str | None] | None
     ) -> bool:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
-            return await unit._execute(
+            ready = await unit._execute(
                 "SELECT platform.payment_checkout_provider_finish(:job,:token,CAST(:result AS jsonb))",
                 {"result": json.dumps(result) if result is not None else None},
             )
+            return ready is True
 
     async def checkout_send_probe(self, claim: JobClaim) -> "TelegramProbe | None":
         from asm.telegram.database import TelegramProbe
